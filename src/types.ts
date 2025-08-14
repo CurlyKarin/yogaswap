@@ -1,0 +1,20 @@
+export type User = {
+  nickname: string;
+  email: string;
+  password: string; // nur für lokalen Fake-Login
+  enrolledCourseIds: number[]; // in welchen Kursen ist der User?
+};
+
+export type Course = {
+  id: number;
+  name: string;
+  weekday: string; // z.B. "Mon", "Tue", ...
+  time: string;    // z.B. "18:30"
+  capacity: number;
+  participants: string[]; // Nicknames
+};
+
+export type UserActions = {
+  absences: number[];       // courseIds, die der User abgesagt hat
+  swapRequests: number[];   // courseIds, für die der User einen Tausch angefragt hat
+};

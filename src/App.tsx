@@ -1,35 +1,88 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useEffect, useState } from "react";
+import "./App.css";
+import Login from "./components/Login";
+import CourseList from "./components/CourseList";
+import type { User } from "./types";
+import {
+  getCurrentUser,
+  clearCurrentUser,
+  getUserActions,
+  toggleAbsence,
+  toggleSwap,
+} from "./lib/storage";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [absences, setAbsences] = useState<number[]>([]);
+  const [swapRequests, setSwapRequests] = useState<number[]>([]);
+
+  // Beim Laden schauen, ob ein User in localStorage ist
+  useEffect(() => {
+    const u = getCurrentUser();
+    if (u) {
+      setCurrentUser(u);
+      const a = getUserActions(u.email);
+      setAbsences(a.absences);
+      setSwapRequests(a.swapRequests);
+    }
+  }, []);
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+    const a = getUserActions(user.email);
+    setAbsences(a.absences);
+    setSwapRequests(a.swapRequests);
+  };
+
+  const handleLogout = () => {
+    clearCurrentUser();
+    setCurrentUser(null);
+    setAbsences([]);
+    setSwapRequests([]);
+  };
+
+  const onToggleAbsence = (courseId: number) => {
+    if (!currentUser) return;
+    toggleAbsence(currentUser.email, courseId);
+    const a = getUserActions(currentUser.email);
+    setAbsences(a.absences);
+  };
+
+  const onToggleSwap = (courseId: number) => {
+    if (!currentUser) return;
+    toggleSwap(currentUser.email, courseId);
+    const a = getUserActions(currentUser.email);
+    setSwapRequests(a.swapRequests);
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    <div className="app-container">
+      <header className="app-top">
+        <h1>YogaSwap</h1>
+        {currentUser && (
+          <div className="userbox">
+            <span>Hi, {currentUser.nickname}</span>
+            <button onClick={handleLogout}>Logout</button>
+          </div>
+        )}
+      </header>
 
-export default App
+      {!currentUser ? (
+        <Login onLogin={handleLogin} />
+      ) : (
+        <>
+          <p className="muted" style={{ textAlign: "center", marginBottom: 16 }}>
+            Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
+          </p>
+          <CourseList
+            currentUser={currentUser}
+            absences={absences}
+            swapRequests={swapRequests}
+            onToggleAbsence={onToggleAbsence}
+            onToggleSwap={onToggleSwap}
+          />
+        </>
+      )}
+    </div>
+  );
+}
