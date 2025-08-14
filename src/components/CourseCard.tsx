@@ -8,6 +8,7 @@ type Props = {
   swapRequested: boolean;
   onToggleAbsence: (courseId: number) => void;
   onToggleSwap: (courseId: number) => void;
+  dates: Date[]; // Neues Propertie für die Datumsliste
 };
 
 export default function CourseCard({
@@ -18,6 +19,7 @@ export default function CourseCard({
   swapRequested,
   onToggleAbsence,
   onToggleSwap,
+  dates,
 }: Props) {
   return (
     <div className="course-card">
@@ -29,6 +31,17 @@ export default function CourseCard({
       <div className="course-row">
         <div className="muted">Capacity</div>
         <div>{course.participants.length} / {course.capacity}</div>
+      </div>
+
+      <div className="course-row">
+        <div className="muted">Termine:</div>
+        <select>
+          {dates.map((date, index) => (
+            <option key={index} value={date.toISOString()}>
+              {date.toLocaleDateString()}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="course-row">
