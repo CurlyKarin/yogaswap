@@ -77,6 +77,14 @@ body {
   padding: 4px 8px;
   font-size: 12px;
 }
+.chip.swapped {
+  background-color: #ffd54f; /* Gelb für Tausch */
+}
+.chip.free {
+  background-color: #c8e6c9; /* Grün für frei */
+  font-style: italic;
+}
+
 
 .actions {
   display: flex;

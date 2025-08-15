@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { Course, User } from "../types";
+import { courseDateOverrides } from "../data/courseOverrides";
 
 type Props = {
   course: Course;
@@ -11,6 +13,15 @@ type Props = {
   dates: Date[]; // Neues Propertie für die Datumsliste
 };
 
+function datesAreEqual(d1: Date, d2: Date) {
+  return (
+    d1.getUTCFullYear() === d2.getUTCFullYear() &&
+    d1.getUTCMonth() === d2.getUTCMonth() &&
+    d1.getUTCDate() === d2.getUTCDate()
+  );
+}
+
+
 export default function CourseCard({
   course,
   currentUser,
@@ -21,6 +32,19 @@ export default function CourseCard({
   onToggleSwap,
   dates,
 }: Props) {
+  // Start mit erstem Termin
+  const [selectedDate, setSelectedDate] = useState(dates[0]?.toISOString() || "");
+
+  // Teilnehmer abhängig vom gewählten Termin berechnen
+  const override = courseDateOverrides.find(
+    (o) =>
+      o.courseId === course.id &&
+      datesAreEqual(new Date(o.date), new Date(selectedDate))
+  );
+  const participants = override ? override.participants : course.participants;
+  const swapped = override?.swapped || [];
+  const capacityReached = participants.length >= course.capacity;
+
   return (
     <div className="course-card">
       <div className="course-head">
@@ -30,12 +54,18 @@ export default function CourseCard({
 
       <div className="course-row">
         <div className="muted">Capacity</div>
-        <div>{course.participants.length} / {course.capacity}</div>
+        <div>
+          {participants.length} / {course.capacity}
+          {!capacityReached && <span className="free-slot"> · Platz frei!</span>}
+        </div>
       </div>
 
       <div className="course-row">
         <div className="muted">Termine:</div>
-        <select>
+        <select
+          value={selectedDate}
+          onChange={e => setSelectedDate(e.target.value)}
+        >
           {dates.map((date, index) => (
             <option key={index} value={date.toISOString()}>
               {date.toLocaleDateString()}
@@ -47,9 +77,14 @@ export default function CourseCard({
       <div className="course-row">
         <div className="muted">Participants</div>
         <div className="chips">
-          {course.participants.length === 0 && <span className="chip">—</span>}
-          {course.participants.map(n => (
-            <span className="chip" key={n}>{n}</span>
+          {participants.length === 0 && <span className="chip">—</span>}
+          {participants.map(name => (
+            <span
+              key={name}
+              className={`chip ${swapped.includes(name) ? "swapped" : ""}`}
+            >
+              {name}
+            </span>
           ))}
         </div>
       </div>
