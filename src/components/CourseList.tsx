@@ -21,15 +21,13 @@ export default function CourseList({
   onToggleSwap,
 }: Props) {
   function getCourseDates(course: Course) {
-        // Hier können wir die Terminliste für den Kurs zurückgeben
-        // Zum Beispiel aus einer Datenbank oder einem API-Call
-        return [
-            new Date('2023-03-01'),
-            new Date('2023-03-08'),
-            new Date('2023-03-15'),
-            // ...
-        ];
-    }
+  const now = new Date();
+  const [hours, minutes] = course.time.split(":").map(Number);
+
+  return course.dates
+    .map(date => new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes))
+    .filter(date => date >= now);
+}
 
   return (
     <div className="grid">

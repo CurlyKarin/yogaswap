@@ -12,6 +12,7 @@ export type Course = {
   time: string;    // z.B. "18:30"
   capacity: number;
   participants: string[]; // Nicknames
+  dates: Date[]; // Liste der Termine
 };
 
 export type UserActions = {
