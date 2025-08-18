@@ -22,3 +22,7 @@ export type CourseDateOverride = {
   swapped?: string[];
 };
 
+export type SwapSettings = {
+  minOffsetDays: number; // frühestens X Tage nach Referenzdatum
+  maxOffsetDays: number; // spätestens X Tage nach Referenzdatum
+};
