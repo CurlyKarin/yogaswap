@@ -3,56 +3,24 @@ import "./App.css";
 import Login from "./components/Login";
 import CourseList from "./components/CourseList";
 import type { User } from "./types";
-import {
-  getCurrentUser,
-  clearCurrentUser,
-  getUserActions,
-  toggleAbsence,
-  toggleSwap,
-} from "./lib/storage";
+import { getCurrentUser, clearCurrentUser } from "./lib/storage";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [absences, setAbsences] = useState<number[]>([]);
-  const [swapRequests, setSwapRequests] = useState<number[]>([]);
 
   // Beim Laden schauen, ob ein User in localStorage ist
   useEffect(() => {
     const u = getCurrentUser();
-    if (u) {
-      setCurrentUser(u);
-      const a = getUserActions(u.email);
-      setAbsences(a.absences);
-      setSwapRequests(a.swapRequests);
-    }
+    if (u) setCurrentUser(u);
   }, []);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    const a = getUserActions(user.email);
-    setAbsences(a.absences);
-    setSwapRequests(a.swapRequests);
   };
 
   const handleLogout = () => {
     clearCurrentUser();
     setCurrentUser(null);
-    setAbsences([]);
-    setSwapRequests([]);
-  };
-
-  const onToggleAbsence = (courseId: number) => {
-    if (!currentUser) return;
-    toggleAbsence(currentUser.email, courseId);
-    const a = getUserActions(currentUser.email);
-    setAbsences(a.absences);
-  };
-
-  const onToggleSwap = (courseId: number) => {
-    if (!currentUser) return;
-    toggleSwap(currentUser.email, courseId);
-    const a = getUserActions(currentUser.email);
-    setSwapRequests(a.swapRequests);
   };
 
   return (
@@ -74,13 +42,7 @@ export default function App() {
           <p className="muted" style={{ textAlign: "center", marginBottom: 16 }}>
             Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
           </p>
-          <CourseList
-            currentUser={currentUser}
-            absences={absences}
-            swapRequests={swapRequests}
-            onToggleAbsence={onToggleAbsence}
-            onToggleSwap={onToggleSwap}
-          />
+          <CourseList currentUser={currentUser} />
         </>
       )}
     </div>
