@@ -110,6 +110,10 @@ button.danger {
   border-color: #ffc0c0;
   background: #fff0f0;
 }
+button:disabled { 
+  opacity: 0.6; 
+  cursor: not-allowed; 
+}
 
 .not-enrolled {
   margin-top: 8px;

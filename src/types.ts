@@ -15,11 +15,6 @@ export type Course = {
   dates: Date[]; // Liste der Termine
 };
 
-export type UserActions = {
-  absences: number[];       // courseIds, die der User abgesagt hat
-  swapRequests: number[];   // courseIds, für die der User einen Tausch angefragt hat
-};
-
 export type CourseDateOverride = {
   courseId: number;
   date: string; // ISO-String
