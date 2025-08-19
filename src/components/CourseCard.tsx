@@ -28,14 +28,17 @@ export default function CourseCard({
   onToggleAbsence,
   onToggleSwap
 }: Props) {
-  // vorauswahl: nächster Termin
+  // Vorauswahl: nächster zukünftiger Termin
   const [selectedDate, setSelectedDate] = useState<string>(
     dates[0]?.toISOString() || ""
   );
+  const [showSwapModal, setShowSwapModal] = useState(false);
 
-  // aktuellen Override ermitteln
+  // passenden Override für den aktuell gewählten Termin suchen
   const override = overrides.find(
-    (o) => o.courseId === course.id && sameDayUTC(new Date(o.date), new Date(selectedDate))
+    (o) =>
+      o.courseId === course.id &&
+      sameDayUTC(new Date(o.date), new Date(selectedDate))
   );
 
   const participants = override ? override.participants : course.participants;
@@ -72,11 +75,13 @@ export default function CourseCard({
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
         >
-          {dates.map((date, index) => (
-            <option key={index} value={date.toISOString()}>
-              {date.toLocaleDateString()}
-            </option>
-          ))}
+          {dates
+            .filter((d) => d >= new Date()) // nur zukünftige im Dropdown
+            .map((date, index) => (
+              <option key={index} value={date.toISOString()}>
+                {date.toLocaleDateString()}
+              </option>
+            ))}
         </select>
       </div>
 
@@ -85,7 +90,10 @@ export default function CourseCard({
         <div className="chips">
           {participants.length === 0 && <span className="chip">—</span>}
           {participants.map((name) => (
-            <span className={`chip ${swapped.includes(name) ? "swapped" : ""}`} key={name}>
+            <span
+              className={`chip ${swapped.includes(name) ? "swapped" : ""}`}
+              key={name}
+            >
               {name}
             </span>
           ))}
@@ -118,15 +126,50 @@ export default function CourseCard({
             <div className="muted">Nicht in diesem Termin eingetragen</div>
           )}
 
-          <button
-            className="secondary"
-            onClick={() => onToggleSwap(course, selectedDate, userName)}
-          >
-            Tauschen anfragen
-          </button>
+          {(isParticipant || hasCancelled) && (
+            <button
+              className="secondary"
+              onClick={() => setShowSwapModal(true)}
+            >
+              {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
+            </button>
+          )}
         </div>
       ) : (
         <div className="not-enrolled">Nicht in diesem Kurs eingeschrieben</div>
+      )}
+
+      {/* Swap-Modal (noch ohne Terminliste anderer Kurse; bestätigt nur den Swap-Intent) */}
+      {showSwapModal && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h4>
+              {hasCancelled
+                ? "Freien Termin auswählen (folgt)"
+                : "Tauschanfrage starten"}
+            </h4>
+            <p>
+              Ausgewählter Termin:{" "}
+              <strong>
+                {new Date(selectedDate).toLocaleDateString()}
+              </strong>{" "}
+              · {course.name}
+            </p>
+            <div className="modal-actions">
+              <button onClick={() => setShowSwapModal(false)}>Schließen</button>
+              <button
+                className="primary"
+                onClick={() => {
+                  // ruft den von CourseList gelieferten Handler mit (course, dateIso, userName) auf
+                  onToggleSwap(course, selectedDate, userName);
+                  setShowSwapModal(false);
+                }}
+              >
+                Bestätigen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

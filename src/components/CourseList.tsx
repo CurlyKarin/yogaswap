@@ -20,6 +20,13 @@ export default function CourseList({ currentUser }: Props) {
   // zentrale, termin-spezifische Änderungen im State
   const [overrides, setOverrides] = useState<CourseDateOverride[]>(initialOverrides);
 
+  // State fürs Swap-Modal
+  const [swapModal, setSwapModal] = useState<{
+    course: Course;
+    dateIso: string;
+    userName: string;
+  } | null>(null);
+
   function getCourseDates(course: Course) {
     const now = new Date();
     const [hours, minutes] = course.time.split(":").map(Number);
@@ -81,34 +88,51 @@ export default function CourseList({ currentUser }: Props) {
     });
   }
 
-  // (Platzhalter) Tausch-Handler – kann später erweitert werden
+  // Swap-Handler öffnet nur das Modal
   function onToggleSwap(course: Course, dateIso: string, userName: string) {
-    console.log("Swap toggle (noch nicht implementiert)", {
-      course: course.name,
-      dateIso,
-      userName
-    });
+    setSwapModal({ course, dateIso, userName });
   }
 
   return (
-    <div className="grid">
-      {courses.map((course) => {
-        const dates = getCourseDates(course);
-        const isEnrolled = currentUser.enrolledCourseIds.includes(course.id);
+    <>
+      <div className="grid">
+        {courses.map((course) => {
+          const dates = getCourseDates(course);
+          const isEnrolled = currentUser.enrolledCourseIds.includes(course.id);
 
-        return (
-          <CourseCard
-            key={course.id}
-            course={course}
-            currentUser={currentUser}
-            isEnrolled={isEnrolled}
-            dates={dates}
-            overrides={overrides}
-            onToggleAbsence={onToggleAbsence}
-            onToggleSwap={onToggleSwap}
-          />
-        );
-      })}
-    </div>
+          return (
+            <CourseCard
+              key={course.id}
+              course={course}
+              currentUser={currentUser}
+              isEnrolled={isEnrolled}
+              dates={dates}
+              overrides={overrides}
+              onToggleAbsence={onToggleAbsence}
+              onToggleSwap={onToggleSwap}
+            />
+          );
+        })}
+      </div>
+
+      {swapModal && (
+        <div className="modal">
+          <div className="modal-content">
+            <h3>Tauschanfrage</h3>
+            <p>
+              Du möchtest deinen Termin am{" "}
+              {new Date(swapModal.dateIso).toLocaleDateString()} im Kurs{" "}
+              <strong>{swapModal.course.name}</strong> tauschen.
+            </p>
+            <div className="actions">
+              <button onClick={() => alert("Tausch bestätigt (noch Dummy)")}>
+                Bestätigen
+              </button>
+              <button onClick={() => setSwapModal(null)}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
