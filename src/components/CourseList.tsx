@@ -88,9 +88,43 @@ export default function CourseList({ currentUser }: Props) {
     });
   }
 
-  // Swap-Handler öffnet nur das Modal
-  function onToggleSwap(course: Course, dateIso: string, userName: string) {
-    setSwapModal({ course, dateIso, userName });
+  function onToggleSwap(course: Course, targetDateIso: string, userName: string) {
+    setOverrides((prev) => {
+      // 1. Ursprungstermin austragen
+      const withoutOrigin = prev.map((o) =>
+        o.courseId === course.id && o.participants.includes(userName)
+          ? { ...o, participants: o.participants.filter((p) => p !== userName) }
+          : o
+      );
+
+      // 2. Zieltermin suchen
+      const targetDate = new Date(targetDateIso);
+      const targetOverride = withoutOrigin.find(
+        (o) => o.courseId === course.id && sameDayUTC(new Date(o.date), targetDate)
+      );
+
+      if (targetOverride) {
+        return withoutOrigin.map((o) =>
+          o === targetOverride
+            ? {
+                ...o,
+                participants: [...o.participants, userName],
+                swapped: [...new Set([...(o.swapped ?? []), userName])],
+              }
+            : o
+        );
+      } else {
+        return [
+          ...withoutOrigin,
+          {
+            courseId: course.id,
+            date: targetDateIso,
+            participants: [userName],
+            swapped: [userName],
+          },
+        ];
+      }
+    });
   }
 
   return (
@@ -98,14 +132,11 @@ export default function CourseList({ currentUser }: Props) {
       <div className="grid">
         {courses.map((course) => {
           const dates = getCourseDates(course);
-          const isEnrolled = currentUser.enrolledCourseIds.includes(course.id);
-
           return (
             <CourseCard
               key={course.id}
               course={course}
               currentUser={currentUser}
-              isEnrolled={isEnrolled}
               dates={dates}
               overrides={overrides}
               onToggleAbsence={onToggleAbsence}
