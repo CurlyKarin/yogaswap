@@ -50,7 +50,8 @@ export function getAvailableDates(
         const participants = override ? override.participants : course.participants;
 
         const isFull = participants.length >= course.capacity;
-        const userAlreadyInThisCourse = participants.includes(currentUser.nickname);
+        // dem currentUser soll weder ein Termin vorgeschlagen bekommen, zu dem er bereits getauscht hat, noch einen in den er dauerhaft eingeschrieben ist
+        const userAlreadyInThisCourse = participants.includes(currentUser.nickname) || course.participants.includes(currentUser.nickname);
 
         return {
           course,

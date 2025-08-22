@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Course, User, CourseDateOverride } from "../types";
+import type { Course, User, CourseDateOverride, Swap } from "../types";
 import { courses } from "../data/courses";
 import { swapSettings } from "../data/swapSettings";
 import { getAvailableDates } from "../lib/dates";
@@ -9,8 +9,9 @@ type Props = {
   currentUser: User;
   dates: Date[];
   overrides: CourseDateOverride[];
+  swaps: Swap[];
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
-  onToggleSwap: (course: Course, dateIso: string, userName: string) => void;
+  onToggleSwap: (dateIso: string, userName: string) => void;
 };
 
 function sameDayUTC(a: Date, b: Date) {
@@ -26,13 +27,16 @@ export default function CourseCard({
   currentUser,
   dates,
   overrides,
+  swaps,
   onToggleAbsence,
   onToggleSwap
 }: Props) {
-  // Vorauswahl: nächster zukünftiger Termin
+
   const [selectedDate, setSelectedDate] = useState<string>(
     dates[0]?.toISOString() || ""
   );
+  const [swapDateIso, setSwapDateIso] = useState<string | null>(null);
+
   const [showSwapModal, setShowSwapModal] = useState(false);
 
   // passenden Override für den aktuell gewählten Termin suchen
@@ -53,13 +57,16 @@ export default function CourseCard({
   const hasCancelled = originallyParticipant && !isParticipant;
   const canRejoin = hasCancelled && participants.length < course.capacity;
 
+  // Optionen für Zieltermine (aus allen Kursen, mit Regeln/Filtern)
   const availableSwapDates = getAvailableDates(
     courses,
     overrides,
     currentUser,
     swapSettings,
-    new Date(selectedDate),
-  );
+    new Date(selectedDate) // Referenzdatum
+  )
+    // aufsteigend sortieren
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   return (
     <div className="course-card">
@@ -149,6 +156,7 @@ export default function CourseCard({
 
       {/* Swap-Modal (noch ohne Terminliste anderer Kurse; bestätigt nur den Swap-Intent) */}
       {showSwapModal && (
+
         <div className="modal-backdrop">
           <div className="modal">
             <h4>
@@ -166,11 +174,10 @@ export default function CourseCard({
 
             {availableSwapDates.length > 0 ? (
               <select
-                onChange={(e) => setSelectedDate(e.target.value)}
-                value={selectedDate}
+                value={swapDateIso || availableSwapDates[0]?.date.toISOString()}
+                onChange={(e) => setSwapDateIso(e.target.value)}
               >
                 {availableSwapDates
-                  .sort((a, b) => a.date.getTime() - b.date.getTime())
                   .map((swapDate, idx) => (
                     <option key={idx} value={swapDate.date.toISOString()}>
                       {new Intl.DateTimeFormat("de-DE", {
@@ -193,7 +200,7 @@ export default function CourseCard({
                 className="primary"
                 onClick={() => {
                   // jetzt wird direkt in CourseList eingetragen/ausgetragen
-                  onToggleSwap(course, selectedDate, userName);
+                  onToggleSwap(swapDateIso || availableSwapDates[0]?.date.toISOString(), userName);
                   setShowSwapModal(false);
                 }}
               >

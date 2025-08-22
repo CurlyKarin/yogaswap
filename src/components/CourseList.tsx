@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { courses } from "../data/courses";
-import type { Course, User, CourseDateOverride } from "../types";
+import type { Course, User, CourseDateOverride, Swap } from "../types";
 import CourseCard from "./CourseCard";
 import { courseDateOverrides as initialOverrides } from "../data/courseOverrides";
 
@@ -26,6 +26,8 @@ export default function CourseList({ currentUser }: Props) {
     dateIso: string;
     userName: string;
   } | null>(null);
+
+  const [swaps, setSwaps] = useState<Swap[]>([]);
 
   function getCourseDates(course: Course) {
     const now = new Date();
@@ -88,44 +90,173 @@ export default function CourseList({ currentUser }: Props) {
     });
   }
 
-  function onToggleSwap(course: Course, targetDateIso: string, userName: string) {
+  function onToggleSwap(dateIso: string, userName: string) {
     setOverrides((prev) => {
-      // 1. Ursprungstermin austragen
-      const withoutOrigin = prev.map((o) =>
-        o.courseId === course.id && o.participants.includes(userName)
+      const updated = [...prev];
+      const targetDate = new Date(dateIso);
+
+      // 1) Ursprungs-Override suchen (dort, wo der User drin ist)
+    const originIdx = updated.findIndex((o) =>
+      o.participants.includes(userName)
+    );
+
+    if (originIdx >= 0) {
+      // User aus bestehendem Override austragen
+      updated[originIdx] = {
+        ...updated[originIdx],
+        participants: updated[originIdx].participants.filter(
+          (p) => p !== userName
+        ),
+      };
+    } else {
+      // Kein Override vorhanden → neuen für Ursprungstermin anlegen
+      const originCourse = courses.find((course) =>
+        course.participants.includes(userName)
+      );
+      if (originCourse) {
+        const originDate = originCourse.dates.find((d) => {
+          const [h, m] = originCourse.time.split(":").map(Number);
+          const cDate = new Date(
+            d.getFullYear(),
+            d.getMonth(),
+            d.getDate(),
+            h,
+            m
+          );
+          return cDate >= new Date(); // nächster gültiger Termin
+        });
+        if (originDate) {
+          const [h, m] = originCourse.time.split(":").map(Number);
+          const originDateIso = new Date(
+            originDate.getFullYear(),
+            originDate.getMonth(),
+            originDate.getDate(),
+            h,
+            m
+          ).toISOString();
+
+          updated.push({
+            courseId: originCourse.id,
+            date: originDateIso,
+            participants: originCourse.participants.filter(
+              (p) => p !== userName
+            ),
+            swapped: [],
+          });
+        }
+      }
+    }
+
+    // 2) Zielkurs anhand Termin finden
+    const targetCourse = courses.find((course) =>
+      course.dates.some((d) => {
+        const [h, m] = course.time.split(":").map(Number);
+        const cDate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
+        return cDate.getTime() === targetDate.getTime();
+      })
+    );
+
+    if (!targetCourse) {
+      console.warn("Kein Kurs zum Zieltermin gefunden:", dateIso);
+      return updated;
+    }
+
+    // 3) Override für Zieltermin suchen oder anlegen
+    let targetOverride = updated.find(
+      (o) =>
+        o.courseId === targetCourse.id &&
+        new Date(o.date).getTime() === targetDate.getTime()
+    );
+
+    if (!targetOverride) {
+      targetOverride = {
+        courseId: targetCourse.id,
+        date: dateIso,
+        participants: [...targetCourse.participants],
+        swapped: [],
+      };
+      updated.push(targetOverride);
+    }
+
+    // 4) User in Zieltermin eintragen
+    if (!targetOverride.participants.includes(userName)) {
+      targetOverride.participants.push(userName);
+    }
+
+    return updated;
+  });
+
+  setSwapModal(null);
+  }
+  
+  function onConfirmSwap(targetDateIso: string, userName: string) {
+    if (!swapModal) return;
+
+    // Swap nur 1x aktiv pro User
+    const existing = swaps.find(s => s.user === userName);
+    if (existing) {
+      alert("Du hast bereits einen aktiven Tausch!");
+      setSwapModal(null);
+      return;
+    }
+
+    setOverrides((prev) => {
+      const targetDate = new Date(targetDateIso);
+
+      // 1. User aus allen Kursen austragen, in denen er an diesem Tag eingetragen ist
+      let updated = prev.map((o) =>
+        o.participants.includes(userName)
           ? { ...o, participants: o.participants.filter((p) => p !== userName) }
           : o
       );
 
-      // 2. Zieltermin suchen
-      const targetDate = new Date(targetDateIso);
-      const targetOverride = withoutOrigin.find(
-        (o) => o.courseId === course.id && sameDayUTC(new Date(o.date), targetDate)
+      // 2. Zielkurs anhand des Datums suchen
+      const targetCourse = courses.find((c) =>
+        c.dates.some((d) => sameDayUTC(d, targetDate))
       );
 
-      if (targetOverride) {
-        return withoutOrigin.map((o) =>
-          o === targetOverride
-            ? {
-                ...o,
-                participants: [...o.participants, userName],
-                swapped: [...new Set([...(o.swapped ?? []), userName])],
-              }
-            : o
-        );
-      } else {
-        return [
-          ...withoutOrigin,
-          {
-            courseId: course.id,
-            date: targetDateIso,
-            participants: [userName],
-            swapped: [userName],
-          },
-        ];
+      if (!targetCourse) {
+        console.warn("Kein passender Kurs für Zieltermin gefunden!");
+        return updated;
       }
+
+      // 3. Ziel-Override suchen oder anlegen
+      const targetIdx = updated.findIndex(
+        (o) => o.courseId === targetCourse.id && sameDayUTC(new Date(o.date), targetDate)
+      );
+
+      if (targetIdx >= 0) {
+        // existiert schon → User hinzufügen
+        updated[targetIdx] = {
+          ...updated[targetIdx],
+          participants: [...new Set([...updated[targetIdx].participants, userName])],
+          swapped: [...new Set([...updated[targetIdx].swapped ?? [], userName])],
+        };
+      } else {
+        // noch nicht vorhanden → mit Basis-Teilnehmern anlegen
+        updated.push({
+          courseId: targetCourse.id,
+          date: targetDateIso,
+          participants: [...new Set([...targetCourse.participants, userName])],
+          swapped: [userName],
+        });
+      }
+
+      return updated;
     });
+    
   }
+  
+  // Swap löschen
+  function cancelSwap(swap: Swap) {
+    setSwaps(prev => prev.filter(s => s !== swap));
+    // Zieltermin Eintrag löschen
+    const course = courses.find(c => c.id === swap.toCourseId)!;
+    onToggleAbsence(course, swap.toDate, swap.user);
+    // Ursprungstermin wieder frei → kann rückgängig gemacht werden
+    // (hier nicht automatisch eintragen, User kann Rücknahme klicken)
+  }
+
 
   return (
     <>
@@ -139,6 +270,7 @@ export default function CourseList({ currentUser }: Props) {
               currentUser={currentUser}
               dates={dates}
               overrides={overrides}
+              swaps={swaps}
               onToggleAbsence={onToggleAbsence}
               onToggleSwap={onToggleSwap}
             />
@@ -156,7 +288,12 @@ export default function CourseList({ currentUser }: Props) {
               <strong>{swapModal.course.name}</strong> tauschen.
             </p>
             <div className="actions">
-              <button onClick={() => alert("Tausch bestätigt (noch Dummy)")}>
+              <button
+                onClick={() => {
+                  onToggleSwap(swapModal.dateIso, swapModal.userName);onConfirmSwap(swapModal.dateIso, swapModal.userName);
+                  setSwapModal(null);
+                }}
+              >
                 Bestätigen
               </button>
               <button onClick={() => setSwapModal(null)}>Abbrechen</button>
