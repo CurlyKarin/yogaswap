@@ -11,7 +11,8 @@ type Props = {
   overrides: CourseDateOverride[];
   swaps: Swap[];
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
-  onToggleSwap: (dateIso: string, userName: string) => void;
+  confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
+  cancelSwap: (swap: Swap) => void;
 };
 
 function sameDayUTC(a: Date, b: Date) {
@@ -29,7 +30,8 @@ export default function CourseCard({
   overrides,
   swaps,
   onToggleAbsence,
-  onToggleSwap
+  confirmSwap,
+  cancelSwap,
 }: Props) {
 
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -123,16 +125,31 @@ export default function CourseCard({
       </div>
       {isParticipant || originallyParticipant ? (
         <div className="actions">
+          {/* Absage / Rücknahme */}
           {isParticipant ? (
             <button
               className="danger"
+              disabled={swaps.some(
+                (s) =>
+                  s.user === userName &&
+                  s.fromCourseId === course.id &&
+                  s.fromDate === selectedDate
+              )}
               onClick={() => onToggleAbsence(course, selectedDate, userName)}
             >
               Termin absagen
             </button>
           ) : hasCancelled ? (
             <button
-              disabled={!canRejoin}
+              disabled={
+                !canRejoin || 
+                swaps.some(
+                  (s) =>
+                    s.user === userName &&
+                    s.fromCourseId === course.id &&
+                    s.fromDate === selectedDate
+                )
+              }
               onClick={() => onToggleAbsence(course, selectedDate, userName)}
             >
               Absage zurücknehmen
@@ -141,14 +158,39 @@ export default function CourseCard({
             <div className="muted">Nicht in diesem Termin eingetragen</div>
           )}
 
+          {/* Swap starten oder abbrechen */}
           {(originallyParticipant || hasCancelled) && (
-            <button
-              className="secondary"
-              onClick={() => setShowSwapModal(true)}
-            >
-              {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
-            </button>
-          )}
+            <>
+              {!swaps.some(
+                (s) =>
+                  s.user === userName &&
+                  s.fromCourseId === course.id &&
+                  s.fromDate === selectedDate
+              ) ? (
+                <button
+                  className="secondary"
+                  onClick={() => setShowSwapModal(true)}
+                >
+                  {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
+                </button>
+              ) : (
+               <button
+                className="secondary danger"
+                onClick={() => {
+                  const activeSwap = swaps.find(
+                    (s) =>
+                      s.user === userName &&
+                      s.fromCourseId === course.id &&
+                      s.fromDate === selectedDate
+                  );
+                  if (activeSwap) cancelSwap(activeSwap);
+                }} 
+              >
+                Tausch abbrechen
+              </button>               
+            )}
+          </>
+        )}
         </div>
       ) : (
         <div className="not-enrolled">Nicht in diesem Kurs eingeschrieben</div>
@@ -200,7 +242,15 @@ export default function CourseCard({
                 className="primary"
                 onClick={() => {
                   // jetzt wird direkt in CourseList eingetragen/ausgetragen
-                  onToggleSwap(swapDateIso || availableSwapDates[0]?.date.toISOString(), userName);
+                  //onToggleSwap(swapDateIso || availableSwapDates[0]?.date.toISOString(), userName);
+                  if (swapDateIso) {
+                    const target = availableSwapDates.find(
+                      (opt) => opt.date.toISOString() === swapDateIso
+                    );
+                    if (target) {
+                      confirmSwap(course, selectedDate, target.course.id, swapDateIso, userName);
+                    }
+                  }
                   setShowSwapModal(false);
                 }}
               >
