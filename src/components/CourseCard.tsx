@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Course, User, CourseDateOverride, Swap } from "../types";
 import { courses } from "../data/courses";
 import { swapSettings } from "../data/swapSettings";
@@ -70,6 +70,24 @@ export default function CourseCard({
     // aufsteigend sortieren
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
+  // wenn Modal geöffnet wird, Default setzen
+  useEffect(() => {
+    if (showSwapModal && availableSwapDates.length > 0 && !swapDateIso) {
+      setSwapDateIso(availableSwapDates[0].date.toISOString());
+    }
+  }, [showSwapModal, availableSwapDates, swapDateIso]);
+
+  // Gibt es für diesen Kurs+Termin einen Swap, an dem der User beteiligt ist?
+  const swapForThisTerm = swaps.find(
+    (s) =>
+      s.user === userName &&
+      (
+        (s.fromCourseId === course.id && s.fromDate === selectedDate) ||
+        (s.toCourseId === course.id && s.toDate === selectedDate)
+      )
+  );
+
+  // ------------------ return ------------------
   return (
     <div className="course-card">
       <div className="course-head">
@@ -124,74 +142,54 @@ export default function CourseCard({
         </div>
       </div>
       {isParticipant || originallyParticipant ? (
-        <div className="actions">
-          {/* Absage / Rücknahme */}
-          {isParticipant ? (
+      <div className="actions">
+        {swapForThisTerm ? (
+          <>
             <button
-              className="danger"
-              disabled={swaps.some(
-                (s) =>
-                  s.user === userName &&
-                  s.fromCourseId === course.id &&
-                  s.fromDate === selectedDate
-              )}
-              onClick={() => onToggleAbsence(course, selectedDate, userName)}
+              className="secondary danger"
+              onClick={() => cancelSwap(swapForThisTerm)}
             >
-              Termin absagen
+              Tausch abbrechen
             </button>
-          ) : hasCancelled ? (
-            <button
-              disabled={
-                !canRejoin || 
-                swaps.some(
-                  (s) =>
-                    s.user === userName &&
-                    s.fromCourseId === course.id &&
-                    s.fromDate === selectedDate
-                )
-              }
-              onClick={() => onToggleAbsence(course, selectedDate, userName)}
-            >
-              Absage zurücknehmen
-            </button>
-          ) : (
-            <div className="muted">Nicht in diesem Termin eingetragen</div>
-          )}
-
-          {/* Swap starten oder abbrechen */}
-          {(originallyParticipant || hasCancelled) && (
-            <>
-              {!swaps.some(
-                (s) =>
-                  s.user === userName &&
-                  s.fromCourseId === course.id &&
-                  s.fromDate === selectedDate
-              ) ? (
-                <button
-                  className="secondary"
-                  onClick={() => setShowSwapModal(true)}
-                >
-                  {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
-                </button>
-              ) : (
-               <button
-                className="secondary danger"
-                onClick={() => {
-                  const activeSwap = swaps.find(
-                    (s) =>
-                      s.user === userName &&
-                      s.fromCourseId === course.id &&
-                      s.fromDate === selectedDate
-                  );
-                  if (activeSwap) cancelSwap(activeSwap);
-                }} 
+            <div className="muted small">
+              {swapForThisTerm.fromCourseId === course.id
+                ? `Getauscht mit ${new Date(swapForThisTerm.toDate).toLocaleDateString()} · ${
+                    courses.find(c => c.id === swapForThisTerm.toCourseId)?.name
+                  }`
+                : `Getauscht von ${new Date(swapForThisTerm.fromDate).toLocaleDateString()} · ${
+                    courses.find(c => c.id === swapForThisTerm.fromCourseId)?.name
+                  }`}
+            </div>
+          </>
+        ) : (
+          <>
+            {isParticipant ? (
+              <button
+                className="danger"
+                onClick={() => onToggleAbsence(course, selectedDate, userName)}
               >
-                Tausch abbrechen
-              </button>               
+                Termin absagen
+              </button>
+            ) : hasCancelled ? (
+              <button onClick={() => onToggleAbsence(course, selectedDate, userName)}>
+                Absage zurücknehmen
+              </button>
+            ) : (
+              <div className="muted">Nicht in diesem Termin eingetragen</div>
+            )}
+
+            {(originallyParticipant || hasCancelled) && (
+              <button
+                className="secondary"
+                onClick={() => setShowSwapModal(true)}
+              >
+                {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
+              </button>
             )}
           </>
         )}
-        </div>
+      </div>
+
       ) : (
         <div className="not-enrolled">Nicht in diesem Kurs eingeschrieben</div>
       )}
@@ -242,7 +240,6 @@ export default function CourseCard({
                 className="primary"
                 onClick={() => {
                   // jetzt wird direkt in CourseList eingetragen/ausgetragen
-                  //onToggleSwap(swapDateIso || availableSwapDates[0]?.date.toISOString(), userName);
                   if (swapDateIso) {
                     const target = availableSwapDates.find(
                       (opt) => opt.date.toISOString() === swapDateIso
