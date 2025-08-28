@@ -142,6 +142,21 @@ button:disabled {
   border: 1px solid #ddd;
 }
 
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: grid; place-items: center;
+  z-index: 1000;
+}
+.modal {
+  background: #fff; padding: 16px 20px;
+  border-radius: 8px; max-width: 480px; width: 90%;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+.modal-actions {
+  margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;
+}
+
 /* Responsive */
 @media (max-width: 1023px) {
   .grid { grid-template-columns: repeat(2, 1fr); }

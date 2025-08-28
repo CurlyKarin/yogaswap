@@ -1,14 +1,18 @@
-import { useState } from "react";
-import type { Course, User, CourseDateOverride } from "../types";
+import { useEffect, useState } from "react";
+import type { Course, User, CourseDateOverride, Swap } from "../types";
+import { courses } from "../data/courses";
+import { swapSettings } from "../data/swapSettings";
+import { getAvailableDates } from "../lib/dates";
 
 type Props = {
   course: Course;
   currentUser: User;
-  isEnrolled: boolean;
   dates: Date[];
   overrides: CourseDateOverride[];
+  swaps: Swap[];
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
-  onToggleSwap: (course: Course, dateIso: string, userName: string) => void;
+  confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
+  cancelSwap: (swap: Swap) => void;
 };
 
 function sameDayUTC(a: Date, b: Date) {
@@ -22,20 +26,26 @@ function sameDayUTC(a: Date, b: Date) {
 export default function CourseCard({
   course,
   currentUser,
-  isEnrolled,
   dates,
   overrides,
+  swaps,
   onToggleAbsence,
-  onToggleSwap
+  confirmSwap,
+  cancelSwap,
 }: Props) {
-  // vorauswahl: nächster Termin
+
   const [selectedDate, setSelectedDate] = useState<string>(
     dates[0]?.toISOString() || ""
   );
+  const [swapDateIso, setSwapDateIso] = useState<string | null>(null);
 
-  // aktuellen Override ermitteln
+  const [showSwapModal, setShowSwapModal] = useState(false);
+
+  // passenden Override für den aktuell gewählten Termin suchen
   const override = overrides.find(
-    (o) => o.courseId === course.id && sameDayUTC(new Date(o.date), new Date(selectedDate))
+    (o) =>
+      o.courseId === course.id &&
+      sameDayUTC(new Date(o.date), new Date(selectedDate))
   );
 
   const participants = override ? override.participants : course.participants;
@@ -49,6 +59,35 @@ export default function CourseCard({
   const hasCancelled = originallyParticipant && !isParticipant;
   const canRejoin = hasCancelled && participants.length < course.capacity;
 
+  // Optionen für Zieltermine (aus allen Kursen, mit Regeln/Filtern)
+  const availableSwapDates = getAvailableDates(
+    courses,
+    overrides,
+    currentUser,
+    swapSettings,
+    new Date(selectedDate) // Referenzdatum
+  )
+    // aufsteigend sortieren
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  // wenn Modal geöffnet wird, Default setzen
+  useEffect(() => {
+    if (showSwapModal && availableSwapDates.length > 0 && !swapDateIso) {
+      setSwapDateIso(availableSwapDates[0].date.toISOString());
+    }
+  }, [showSwapModal, availableSwapDates, swapDateIso]);
+
+  // Gibt es für diesen Kurs+Termin einen Swap, an dem der User beteiligt ist?
+  const swapForThisTerm = swaps.find(
+    (s) =>
+      s.user === userName &&
+      (
+        (s.fromCourseId === course.id && s.fromDate === selectedDate) ||
+        (s.toCourseId === course.id && s.toDate === selectedDate)
+      )
+  );
+
+  // ------------------ return ------------------
   return (
     <div className="course-card">
       <div className="course-head">
@@ -72,11 +111,13 @@ export default function CourseCard({
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
         >
-          {dates.map((date, index) => (
-            <option key={index} value={date.toISOString()}>
-              {date.toLocaleDateString()}
-            </option>
-          ))}
+          {dates
+            .filter((d) => d >= new Date()) // nur zukünftige im Dropdown
+            .map((date, index) => (
+              <option key={index} value={date.toISOString()}>
+                {date.toLocaleDateString()}
+              </option>
+            ))}
         </select>
       </div>
 
@@ -85,7 +126,10 @@ export default function CourseCard({
         <div className="chips">
           {participants.length === 0 && <span className="chip">—</span>}
           {participants.map((name) => (
-            <span className={`chip ${swapped.includes(name) ? "swapped" : ""}`} key={name}>
+            <span
+              className={`chip ${swapped.includes(name) ? "swapped" : ""}`}
+              key={name}
+            >
               {name}
             </span>
           ))}
@@ -97,36 +141,121 @@ export default function CourseCard({
             ))}
         </div>
       </div>
-
-      {isEnrolled ? (
-        <div className="actions">
-          {isParticipant ? (
+      {isParticipant || originallyParticipant ? (
+      <div className="actions">
+        {swapForThisTerm ? (
+          <>
             <button
-              className="danger"
-              onClick={() => onToggleAbsence(course, selectedDate, userName)}
+              className="secondary danger"
+              onClick={() => cancelSwap(swapForThisTerm)}
             >
-              Termin absagen
+              Tausch abbrechen
             </button>
-          ) : hasCancelled ? (
-            <button
-              disabled={!canRejoin}
-              onClick={() => onToggleAbsence(course, selectedDate, userName)}
-            >
-              Absage zurücknehmen
-            </button>
-          ) : (
-            <div className="muted">Nicht in diesem Termin eingetragen</div>
-          )}
+            <div className="muted small">
+              {swapForThisTerm.fromCourseId === course.id
+                ? `Getauscht mit ${new Date(swapForThisTerm.toDate).toLocaleDateString()} · ${
+                    courses.find(c => c.id === swapForThisTerm.toCourseId)?.name
+                  }`
+                : `Getauscht von ${new Date(swapForThisTerm.fromDate).toLocaleDateString()} · ${
+                    courses.find(c => c.id === swapForThisTerm.fromCourseId)?.name
+                  }`}
+            </div>
+          </>
+        ) : (
+          <>
+            {isParticipant ? (
+              <button
+                className="danger"
+                onClick={() => onToggleAbsence(course, selectedDate, userName)}
+              >
+                Termin absagen
+              </button>
+            ) : hasCancelled ? (
+              <button onClick={() => onToggleAbsence(course, selectedDate, userName)}>
+                Absage zurücknehmen
+              </button>
+            ) : (
+              <div className="muted">Nicht in diesem Termin eingetragen</div>
+            )}
 
-          <button
-            className="secondary"
-            onClick={() => onToggleSwap(course, selectedDate, userName)}
-          >
-            Tauschen anfragen
-          </button>
-        </div>
+            {(originallyParticipant || hasCancelled) && (
+              <button
+                className="secondary"
+                onClick={() => setShowSwapModal(true)}
+              >
+                {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
       ) : (
         <div className="not-enrolled">Nicht in diesem Kurs eingeschrieben</div>
+      )}
+
+      {/* Swap-Modal (noch ohne Terminliste anderer Kurse; bestätigt nur den Swap-Intent) */}
+      {showSwapModal && (
+
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h4>
+              {hasCancelled
+                ? "Freien Termin auswählen (folgt)"
+                : "Tauschanfrage starten"}
+            </h4>
+            <p>
+              Ausgewählter Termin:{" "}
+              <strong>
+                {new Date(selectedDate).toLocaleDateString()}
+              </strong>{" "}
+              · {course.name}
+            </p>
+
+            {availableSwapDates.length > 0 ? (
+              <select
+                value={swapDateIso || availableSwapDates[0]?.date.toISOString()}
+                onChange={(e) => setSwapDateIso(e.target.value)}
+              >
+                {availableSwapDates
+                  .map((swapDate, idx) => (
+                    <option key={idx} value={swapDate.date.toISOString()}>
+                      {new Intl.DateTimeFormat("de-DE", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                      }).format(swapDate.date)}
+                    </option>
+                  ))}
+              </select>
+      ) : (
+        <p className="muted">Keine passenden Ersatztermine verfügbar</p>
+      )}
+
+            <div className="modal-actions">
+              <button onClick={() => setShowSwapModal(false)}>Schließen</button>
+              <button
+                className="primary"
+                onClick={() => {
+                  // jetzt wird direkt in CourseList eingetragen/ausgetragen
+                  if (swapDateIso) {
+                    const target = availableSwapDates.find(
+                      (opt) => opt.date.toISOString() === swapDateIso
+                    );
+                    if (target) {
+                      confirmSwap(course, selectedDate, target.course.id, swapDateIso, userName);
+                    }
+                  }
+                  setShowSwapModal(false);
+                }}
+              >
+                Bestätigen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

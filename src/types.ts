@@ -22,3 +22,15 @@ export type CourseDateOverride = {
   swapped?: string[];
 };
 
+export type SwapSettings = {
+  minOffsetDays: number; // frühestens X Tage nach Referenzdatum
+  maxOffsetDays: number; // spätestens X Tage nach Referenzdatum
+};
+
+export type Swap = {
+  user: string;        // der Teilnehmer
+  fromCourseId: number;
+  fromDate: string;    // ISO des Ursprungstermins
+  toCourseId: number;
+  toDate: string;      // ISO des Zieltermins
+};
