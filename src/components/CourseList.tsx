@@ -38,7 +38,7 @@ export default function CourseList({ currentUser }: Props) {
         s.fromDate === dateIso
     );
     if (hasSwap) {
-      alert("Du hast für diesen Termin einen aktiven Tausch – Absage/Rücknahme nicht möglich.");
+      alert("Absagen nicht möglich, solange ein Tausch aktiv oder offen ist.");
       return;
     }
 
@@ -64,7 +64,8 @@ export default function CourseList({ currentUser }: Props) {
             courseId: course.id,
             date: dateIso,
             participants: newList,
-            swapped: [] // neu, daher leer
+            swapped: [], // neu, daher leer
+            waitlist: [],  // neu, daher leer
           });
         }
       } else {
@@ -81,7 +82,8 @@ export default function CourseList({ currentUser }: Props) {
               courseId: course.id,
               date: dateIso,
               participants: [...effectiveParticipants, userName],
-              swapped: [] // neu, daher leer
+              swapped: [], // neu, daher leer
+              waitlist: [],  // neu, daher leer
             });
           }
         } else {
@@ -138,6 +140,8 @@ export default function CourseList({ currentUser }: Props) {
           participants: updated[originIdx].participants.filter(
             (p) => p !== userName
           ),
+          swapped: updated[originIdx].swapped ?? [],
+          waitlist: updated[originIdx].waitlist ?? [],
         };
       } else {
         // wenn noch kein Override → neu anlegen, damit der User wirklich raus ist
@@ -149,6 +153,7 @@ export default function CourseList({ currentUser }: Props) {
           date: fromDateIso,
           participants: baseParticipants,
           swapped: [],
+          waitlist: [],
         });
       }
 
@@ -161,11 +166,11 @@ export default function CourseList({ currentUser }: Props) {
         const newParticipants = cur.participants.includes(userName)
           ? cur.participants
           : [...cur.participants, userName];
-        const newSwapped = [...new Set([...(cur.swapped ?? []), userName])];
-        updated[targetIdx] = {
+         updated[targetIdx] = {
           ...cur,
           participants: newParticipants,
-          swapped: newSwapped,
+          swapped: [...new Set([...(cur.swapped ?? []), userName])],
+          waitlist: cur.waitlist ?? [],
         };
       } else {
         // neue Override basierend auf Basis-Teilnehmern des Zielkurses
@@ -176,6 +181,7 @@ export default function CourseList({ currentUser }: Props) {
           date: toDateIso,
           participants: baseTarget,
           swapped: [userName],
+          waitlist: [],
         });
       }
 
@@ -188,7 +194,8 @@ export default function CourseList({ currentUser }: Props) {
       fromCourseId: fromCourse.id,
       fromDate: fromDateIso,
       toCourseId,
-      toDate: toDateIso
+      toDate: toDateIso,
+      status: "active",
     }]);
   }
 
