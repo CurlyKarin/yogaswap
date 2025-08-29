@@ -12,6 +12,7 @@ type Props = {
   swaps: Swap[];
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
   confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
+  requestSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   cancelSwap: (swap: Swap) => void;
 };
 
@@ -31,6 +32,7 @@ export default function CourseCard({
   swaps,
   onToggleAbsence,
   confirmSwap,
+  requestSwap,
   cancelSwap,
 }: Props) {
 
@@ -141,6 +143,21 @@ export default function CourseCard({
             ))}
         </div>
       </div>
+
+      {/* Warteliste anzeigen, falls vorhanden */}
+{override?.waitlist && override.waitlist.length > 0 && (
+  <div className="course-row">
+    <div className="muted">Warteliste</div>
+    <div className="chips">
+      {override.waitlist.map((name, idx) => (
+        <span className="chip wait" key={name}>
+          {idx + 1}. {name}
+        </span>
+      ))}
+    </div>
+  </div>
+)}
+
       {isParticipant || originallyParticipant ? (
       <div className="actions">
         {swapForThisTerm ? (
