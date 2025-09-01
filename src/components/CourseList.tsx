@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { courses } from "../data/courses";
-import type { Course, User, CourseDateOverride, Swap } from "../types";
+import type { Course, User } from "../types";
 import CourseCard from "./CourseCard";
 import { courseDateOverrides as initialOverrides } from "../data/courseOverrides";
 import { swapes as initialSwaps } from "../data/swapes";
@@ -18,7 +18,7 @@ export default function CourseList({ currentUser }: Props) {
     requestSwap,
     cancelSwap,
     onToggleAbsence,
-  } = useCourseSwaps();
+  } = useCourseSwaps(initialOverrides, initialSwaps );
 
     // zentrale, termin-spezifische Änderungen im State
 // const [overrides, setOverrides] = useState<CourseDateOverride[]>(initialOverrides);
