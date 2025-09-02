@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Course, User, CourseDateOverride, Swap } from "../types";
 import { courses } from "../data/courses";
 import { swapSettings } from "../data/swapSettings";
-import { getAvailableDates } from "../lib/dates";
+import { getAvailableDates, getWaitlistDates } from "../lib/dates";
 
 type Props = {
   course: Course;
@@ -40,6 +40,7 @@ export default function CourseCard({
     dates[0]?.toISOString() || ""
   );
   const [swapDateIso, setSwapDateIso] = useState<string | null>(null);
+  const [swapDateIsoWaitlist, setSwapDateIsoWaitlist] = useState<string | null>(null);
 
   const [showSwapModal, setShowSwapModal] = useState(false);
 
@@ -72,12 +73,23 @@ export default function CourseCard({
     // aufsteigend sortieren
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
+  const waitlistDates = getWaitlistDates(
+    courses,
+    overrides,
+    currentUser,
+    swapSettings,
+    new Date(selectedDate) // Referenzdatum
+  )
+    // aufsteigend sortieren
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+
   // wenn Modal geöffnet wird, Default setzen
-  useEffect(() => {
-    if (showSwapModal && availableSwapDates.length > 0 && !swapDateIso) {
-      setSwapDateIso(availableSwapDates[0].date.toISOString());
-    }
-  }, [showSwapModal, availableSwapDates, swapDateIso]);
+  // useEffect(() => {
+  //   if (showSwapModal && availableSwapDates.length > 0 && !swapDateIso) {
+  //     setSwapDateIso(availableSwapDates[0].date.toISOString());
+  //   }
+  // }, [showSwapModal, availableSwapDates, swapDateIso]);
 
   // Gibt es für diesen Kurs+Termin einen Swap, an dem der User beteiligt ist?
   const swapForThisTerm = swaps.find(
@@ -145,18 +157,18 @@ export default function CourseCard({
       </div>
 
       {/* Warteliste anzeigen, falls vorhanden */}
-{override?.waitlist && override.waitlist.length > 0 && (
-  <div className="course-row">
-    <div className="muted">Warteliste</div>
-    <div className="chips">
-      {override.waitlist.map((name, idx) => (
-        <span className="chip wait" key={name}>
-          {idx + 1}. {name}
-        </span>
-      ))}
-    </div>
-  </div>
-)}
+      {override?.waitlist && override.waitlist.length > 0 && (
+        <div className="course-row">
+          <div className="muted">Warteliste</div>
+          <div className="chips">
+            {override.waitlist.map((name, idx) => (
+              <span className="chip wait" key={name}>
+                {idx + 1}. {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isParticipant || originallyParticipant ? (
       <div className="actions">
@@ -213,7 +225,6 @@ export default function CourseCard({
 
       {/* Swap-Modal (noch ohne Terminliste anderer Kurse; bestätigt nur den Swap-Intent) */}
       {showSwapModal && (
-
         <div className="modal-backdrop">
           <div className="modal">
             <h4>
@@ -230,26 +241,61 @@ export default function CourseCard({
             </p>
 
             {availableSwapDates.length > 0 ? (
-              <select
-                value={swapDateIso || availableSwapDates[0]?.date.toISOString()}
-                onChange={(e) => setSwapDateIso(e.target.value)}
-              >
-                {availableSwapDates
-                  .map((swapDate, idx) => (
+              <>
+                <p className="muted">
+                  Es stehen {availableSwapDates.length} freie Termin(e) zur Auswahl.
+                </p>
+                <select
+                  value={swapDateIso ?? ""} // 
+                  onChange={(e) => {
+                    setSwapDateIso(e.target.value || null);
+                    setSwapDateIsoWaitlist(null) // andere Auswahl zuruecksetzen
+                  }}
+                >
+                  <option value="" disabled>
+                    Bitte freien Termin auswählen…
+                  </option>
+                  {availableSwapDates.map((swapDate, idx) => (
                     <option key={idx} value={swapDate.date.toISOString()}>
                       {new Intl.DateTimeFormat("de-DE", {
                         year: "numeric",
                         month: "2-digit",
                         day: "2-digit",
                         hour: "2-digit",
-                        minute: "2-digit"
+                        minute: "2-digit",
                       }).format(swapDate.date)}
                     </option>
                   ))}
-              </select>
-      ) : (
-        <p className="muted">Keine passenden Ersatztermine verfügbar</p>
-      )}
+                </select>
+                <p className="muted" style={{ marginTop: "1em" }}>
+                  Oder Wunsch auf die Warteliste setzen ({waitlistDates.length} mögliche):
+                </p>
+                <select
+                  value={swapDateIsoWaitlist ?? ""}
+                  onChange={(e) => {
+                    setSwapDateIsoWaitlist(e.target.value || null);
+                    setSwapDateIso(null); // andere Auswahl zurücksetzen
+                  }}
+                >
+                  <option value="" disabled>
+                    Bitte belegten Termin wählen…
+                  </option>
+                  {waitlistDates.map((waitlistDate, idx) => (
+                    <option key={idx} value={waitlistDate.date.toISOString()}>
+                      {new Intl.DateTimeFormat("de-DE", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }).format(waitlistDate.date)}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <p className="muted">Keine passenden Ersatztermine verfügbar</p>
+            )}
 
             <div className="modal-actions">
               <button onClick={() => setShowSwapModal(false)}>Schließen</button>
@@ -264,9 +310,17 @@ export default function CourseCard({
                     if (target) {
                       confirmSwap(course, selectedDate, target.course.id, swapDateIso, userName);
                     }
+                  } else if (swapDateIsoWaitlist) {
+                    const target = waitlistDates.find(
+                      (opt) => opt.date.toISOString() === swapDateIsoWaitlist
+                    );
+                    if (target) {
+                      requestSwap(course, selectedDate, target.course.id, swapDateIsoWaitlist, userName);
+                    }
                   }
                   setShowSwapModal(false);
                 }}
+                disabled={!swapDateIso && !swapDateIsoWaitlist} // 👉 Button erst aktiv nach Auswahl
               >
                 Bestätigen
               </button>

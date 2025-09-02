@@ -1,14 +1,8 @@
 import { useState } from "react";
 import type { Course, CourseDateOverride, Swap, SwapStatus } from "../types"; 
 import { courses } from "../data/courses";
-
-function sameDayUTC(a: Date, b: Date) {
-  return (
-    a.getUTCFullYear() === b.getUTCFullYear() &&
-    a.getUTCMonth() === b.getUTCMonth() &&
-    a.getUTCDate() === b.getUTCDate()
-  );
-}
+import { getEffectiveWaitlist } from "../lib/waitlist";
+import { sameDayUTC } from "../lib/dates";
 
 export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], initialSwaps: Swap[] = []) {
   // zentrale, termin-spezifische Änderungen im State
@@ -29,11 +23,11 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
     }
 
     // 🟡 Vorwarnung bei bestehender Warteliste
-    const ov = overrides.find((o) => o.courseId === course.id && o.date === dateIso);
-    if (ov && ov.waitlist && ov.waitlist.length > 0) {
+    const waitlist = getEffectiveWaitlist(course, overrides, dateIso);
+    if (waitlist.length > 0) {
       const proceed = confirm(
-        `Achtung: Für diesen Termin existiert eine Warteliste (${ov.waitlist.length} Person(en)). ` +
-        `Deine Absage hat direkte Auswirkungen – jemand rückt automatisch nach. Möchtest du fortfahren?`
+        `Achtung: Für diesen Termin existiert eine Warteliste (${waitlist.length} Person(en)). ` +
+          `Deine Absage hat direkte Auswirkungen – jemand rückt automatisch nach. Möchtest du fortfahren?`
       );
       if (!proceed) return;
     }
@@ -260,6 +254,18 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
     const existingTargetOverride = overrides.find(
       (o) => o.courseId === toCourseId && o.date === toDateIso
     );
+
+    // Wenn es bereits eine Warteliste gibt -> NICHT bestätigen, sondern in die Warteliste (requestSwap)
+    const hasWaitlist =
+      !!(existingTargetOverride && Array.isArray(existingTargetOverride.waitlist) && existingTargetOverride.waitlist.length > 0);
+
+    if (hasWaitlist) {
+      // automatischer Fallback: statt direktem Eintragen -> Warteliste
+      requestSwap(fromCourse, fromDateIso, toCourseId, toDateIso, userName);
+      alert("Dieser Termin hat bereits eine Warteliste. Du wurdest in die Warteliste eingetragen.");
+      return;
+    }
+
     const effectiveTargetParticipants = existingTargetOverride
       ? existingTargetOverride.participants
       : targetCourse.participants;
@@ -419,21 +425,28 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
       const targetIdx = updated.findIndex(
         (o) => o.courseId === toCourseId && o.date === toDateIso
       );
+
       if (targetIdx >= 0) {
         const cur = updated[targetIdx];
-        updated[targetIdx] = {
-          ...cur,
-          waitlist: [...(cur.waitlist ?? []), userName],
-        };
+        // nur hinzufügen, falls User nicht schon drin
+        if (!cur.waitlist?.includes(userName)) {
+          updated[targetIdx] = {
+            ...cur,
+            waitlist: [...(cur.waitlist ?? []), userName],
+          };
+        }
       } else {
+        // Override neu anlegen → Basis sind immer die aktuellen Kursdaten
+        const baseParticipants = targetCourse.participants;
         updated.push({
           courseId: toCourseId,
           date: toDateIso,
-          participants: targetCourse.participants,
+          participants: [...baseParticipants],  // alle bisherigen Teilnehmer
           swapped: [],
-          waitlist: [userName],
+          waitlist: [userName], // neue Warteliste
         });
       }
+
       return updated;
     });
 
@@ -450,6 +463,7 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
       },
     ]);
   }
+
 
   return {
     overrides,

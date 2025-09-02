@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { courses } from "../data/courses";
 import type { Course, User } from "../types";
 import CourseCard from "./CourseCard";
