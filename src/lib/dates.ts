@@ -18,6 +18,11 @@ export function sameInstant(a: Date | string, b: Date | string): boolean {
   return sameDayUTC(new Date(a), new Date(b));
 }
 
+export function toDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10); // "YYYY-MM-DD"
+}
+
+
 /** interne Helferfunktion: liefert alle potenziellen Kurs-Termine inkl. Flags */
 function collectCourseDates(
   allCourses: Course[],

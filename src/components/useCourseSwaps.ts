@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Course, CourseDateOverride, Swap, SwapStatus } from "../types"; 
+import type { Course, CourseDateOverride, Swap } from "../types"; 
 import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
@@ -152,83 +152,6 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
       );
       // TODO: hier könnte man auch die Mail-Benachrichtigung triggern
     }
-  }
-
-  function tryPromoteWaitlist(courseId: number, dateIso: string) {
-    setOverrides((prevOverrides) => {
-      const updated = [...prevOverrides];
-      const idx = updated.findIndex(
-        (o) => o.courseId === courseId && o.date === dateIso
-      );
-      if (idx < 0) return updated; // nix gefunden
-
-      const course = courses.find((c) => c.id === courseId);
-      if (!course) return updated;
-
-      const override = updated[idx];
-      const effectiveParticipants = override.participants;
-      const capacity = course.capacity;
-
-      if (
-        effectiveParticipants.length < capacity &&
-        override.waitlist !== undefined &&
-        override.waitlist.length > 0
-      ) {
-        // den ersten Nachrücker nehmen
-        const nextUser = override.waitlist[0];
-
-        // Teilnehmer hinzufügen
-        const newParticipants = [...effectiveParticipants, nextUser];
-        const newSwapped = [...(override.swapped ?? []), nextUser];
-        const newWaitlist = override.waitlist.slice(1);
-
-        updated[idx] = {
-          ...override,
-          participants: newParticipants,
-          swapped: newSwapped,
-          waitlist: newWaitlist,
-        };
-
-        // Swaps-Status updaten: pending → active (nur wenn der Status passt)
-        setSwaps((prevSwaps) => {
-          const nextSwaps = prevSwaps.map((s) =>
-            s.user === nextUser &&
-            s.toCourseId === courseId &&
-            s.toDate === dateIso &&
-            s.status === "pending"
-              ? { ...s, status: "active" as SwapStatus }
-              : s
-          );
-        
-
-          // Origin austragen
-          const swap = nextSwaps.find(
-            (s) =>
-              s.user === nextUser &&
-              s.toCourseId === courseId &&
-              s.toDate === dateIso
-          );
-          if (swap) {
-            const originIdx = updated.findIndex(
-              (o) => o.courseId === swap.fromCourseId && o.date === swap.fromDate
-            );
-            if (originIdx >= 0) {
-              updated[originIdx] = {
-               ...updated[originIdx],
-                participants: updated[originIdx].participants.filter(
-                  (p) => p !== nextUser
-                ),
-              };
-            }
-          }
-          
-          return nextSwaps; 
-        });
-      }
-      
-
-      return updated;
-    });
   }
 
   // Swap starten
@@ -472,7 +395,6 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
     requestSwap,
     cancelSwap,
     onToggleAbsence,
-    tryPromoteWaitlist,
   };
 
 
