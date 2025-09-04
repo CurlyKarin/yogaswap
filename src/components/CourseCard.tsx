@@ -137,8 +137,8 @@ export default function CourseCard({
         </select>
       </div>
 
-      <div className="course-row">
-        <div className="muted">Teilnehmer</div>
+      <div className="course-row list-row">
+        <div className="label muted">Teilnehmer</div>
         <div className="chips">
           {participants.length === 0 && <span className="chip">—</span>}
           {participants.map((name) => (
@@ -158,19 +158,21 @@ export default function CourseCard({
         </div>
       </div>
 
-      {/* Warteliste anzeigen, falls vorhanden */}
-      {waitlist && waitlist.length > 0 && (
-        <div className="course-row">
-          <div className="muted">Warteliste</div>
-          <div className="chips">
-            {waitlist.map((name, idx) => (
+      {/* Warteliste anzeigen */}
+      <div className="course-row list-row">
+        <div className="label muted">Warteliste</div>
+        <div className="chips">
+          {waitlist.length === 0 ? (
+            <span className="chip muted small">Keine Anfragen</span>
+          ) : (
+            waitlist.map((name, idx) => (
               <span className="chip wait" key={name}>
                 {idx + 1}. {name}
               </span>
-            ))}
-          </div>
+            ))
+          )}
         </div>
-      )}
+      </div>
 
       {isParticipant || originallyParticipant ? (
         <div className="actions">
