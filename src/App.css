@@ -61,6 +61,18 @@ body {
   margin: 8px 0;
 }
 
+.course-row.list-row {
+  display: flex;
+  align-items: flex-start; /* Label bleibt oben */
+  gap: 0.75rem;            /* Abstand zwischen Label und Liste */
+}
+
+.course-row.list-row .label {
+  min-width: 90px;         /* sorgt für gleichmäßige Ausrichtung */
+  padding-top: 0.2em;      /* Label etwas nach unten rücken */
+}
+
+
 .muted {
   color: #666;
   font-size: 14px;
@@ -69,7 +81,7 @@ body {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 0.5rem;
 }
 .chip {
   background: #f0f0f0;
