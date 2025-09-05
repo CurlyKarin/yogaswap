@@ -13,7 +13,7 @@ type Props = {
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
   confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   requestSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
-  cancelSwap: (swap: Swap) => void;
+  cancelSwap: (swap: Swap, clickedCourseId: number) => void;
 };
 
 function sameDayUTC(a: Date, b: Date) {
@@ -101,6 +101,17 @@ export default function CourseCard({
       s.toDate === selectedDateKey &&
       s.status === "pending"
   );
+
+  const pendingSwapsFromOrigin = swaps.filter(
+  (s) =>
+    s.user === userName &&
+    s.fromCourseId === course.id &&
+    s.fromDate === selectedDate &&
+    s.status === "pending"
+);
+
+const hasPendingRequestsFromOrigin = pendingSwapsFromOrigin.length > 0;
+
 
 
   // ------------------ return ------------------
@@ -193,7 +204,7 @@ export default function CourseCard({
 
               <button
                 className="secondary danger"
-                onClick={() => cancelSwap(swapForThisTerm)}
+                onClick={() => cancelSwap(swapForThisTerm, course.id)}
               >
                 {swapForThisTerm.status === "pending"
                   ? "Tauschanfrage abbrechen"
@@ -254,7 +265,7 @@ export default function CourseCard({
             <div className="actions">
               <button
                 className="secondary danger"
-                onClick={() => cancelSwap(swapForWaitlist)}
+                onClick={() => cancelSwap(swapForWaitlist, course.id)}
               >
                 Tauschanfrage abbrechen
               </button>

@@ -10,7 +10,7 @@ export const courseDateOverrides: CourseDateOverride[] = [
   },
   {
     courseId: 6,
-    date: "2025-09-04",
+    date: "2025-09-11",
     participants: ["Aria", "Rue", "Skye" ],
     swapped: ["Skye"],
     waitlist: ["Kai", "Nia"],
