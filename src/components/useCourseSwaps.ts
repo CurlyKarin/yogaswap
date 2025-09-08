@@ -20,7 +20,8 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
       (s) =>
         s.user === userName &&
         s.fromCourseId === course.id &&
-        s.fromDate === dateIso
+        s.fromDate === dateIso &&
+        s.status === "active" 
     );
     if (hasSwap) {
       alert("Absagen nicht möglich, solange ein Tausch aktiv oder offen ist.");
@@ -334,7 +335,6 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
         return o;
       })
     );
-
   }
 
   // Swap löschen
@@ -496,6 +496,51 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
         status: "pending",
       },
     ]);
+  }
+
+  function cancelAllPendingSwapsFromOrigin(
+    fromCourseId: number,
+    fromDateIso: string,
+    userName: string
+  ) {
+    // Alle Pending-Swaps dieses Users vom Ursprungstermin merken
+    const pendingFromOrigin = swaps.filter(
+      (s) =>
+        s.user === userName &&
+        s.fromCourseId === fromCourseId &&
+        s.fromDate === fromDateIso &&
+        s.status === "pending"
+    );
+
+    // Swaps bereinigen
+    setSwaps((prev) => {
+      const withoutPending = prev.filter(
+        (s) =>
+          !(
+            s.user === userName &&
+            s.fromCourseId === fromCourseId &&
+            s.fromDate === fromDateIso &&
+            s.status === "pending"
+          )
+      );
+      return withoutPending
+    });
+
+    // Wartelisten bereinigen (auf Basis der gemerkten pending-Swaps)
+    setOverrides((prev) =>
+      prev.map((o) => {
+        const hadPendingSwap = pendingFromOrigin.some(
+          (s) => s.toCourseId === o.courseId && s.toDate === o.date
+        );
+        if (hadPendingSwap) {
+          return {
+            ...o,
+            waitlist: (o.waitlist ?? []).filter((u) => u !== userName),
+          };
+        }
+        return o;
+      })
+    );
   }
 
 

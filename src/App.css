@@ -72,6 +72,10 @@ body {
   padding-top: 0.2em;      /* Label etwas nach unten rücken */
 }
 
+.status-text {
+  margin-top: 0.5rem;
+  text-align: left; /* oder center, wenn du es mittig unter den Buttons willst */
+}
 
 .muted {
   color: #666;
