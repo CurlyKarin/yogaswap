@@ -286,62 +286,34 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
 
       return updated;
     });
-    // Swaps bereinigen: nur der gerade bestätigte bleibt aktiv
-    // Alle Pending-Swaps dieses Users vom Ursprungstermin merken
-    const pendingFromOrigin = swaps.filter(
-      (s) =>
-        s.user === userName &&
-        s.fromCourseId === fromCourse.id &&
-        s.fromDate === fromDateIso &&
-        s.status === "pending"
-    );
 
-    // Swaps bereinigen
-    setSwaps((prev) => {
-      const withoutPending = prev.filter(
-        (s) =>
-          !(
-            s.user === userName &&
-            s.fromCourseId === fromCourse.id &&
-            s.fromDate === fromDateIso &&
-            s.status === "pending"
-          )
-      );
-      return [
-        ...withoutPending,
-        {
-          user: userName,
-          fromCourseId: fromCourse.id,
-          fromDate: fromDateIso,
-          toCourseId,
-          toDate: toDateIso,
-          status: "active" as const,
-        },
-      ];
-    });
+    cancelAllPendingSwapsFromOrigin(fromCourse.id, fromDateIso, userName);
 
-    // Wartelisten bereinigen (auf Basis der gemerkten pending-Swaps)
-    setOverrides((prev) =>
-      prev.map((o) => {
-        const hadPendingSwap = pendingFromOrigin.some(
-          (s) => s.toCourseId === o.courseId && s.toDate === o.date
-        );
-        if (hadPendingSwap) {
-          return {
-            ...o,
-            waitlist: (o.waitlist ?? []).filter((u) => u !== userName),
-          };
-        }
-        return o;
-      })
-    );
+    setSwaps((prev) => [
+      ...prev,
+      {
+        user: userName,
+        fromCourseId: fromCourse.id,
+        fromDate: fromDateIso,
+        toCourseId,
+        toDate: toDateIso,
+        status: "active" as const,
+      },
+    ]);
   }
 
   // Swap löschen
   function cancelSwap(swap: Swap, clickedCourseId: number) {
     const isOrigin = swap.fromCourseId === clickedCourseId;
 
-    console.log("=== cancelSwap ===", swap, "isOrigin:", isOrigin);
+    console.log("[cancelSwap] START", { swap, clickedCourseId, isOrigin });
+
+    // alle zum ursprung gehörende Swaps löschen und Wartelisten bereinigen
+    if (isOrigin && swap.status === "pending") {
+      console.log("[cancelSwap] Ursprung + pending → alle bereinigen");
+      cancelAllPendingSwapsFromOrigin(swap.fromCourseId, swap.fromDate, swap.user);
+      return;
+    }
 
     // 1) Overrides zuerst bereinigen
     setOverrides((prev) => {

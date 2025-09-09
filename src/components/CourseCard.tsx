@@ -94,6 +94,13 @@ export default function CourseCard({
         (s.toCourseId === course.id && s.toDate === selectedDateKey)
       )
   );
+
+  const allSwapsForThisTerm = swaps.filter(
+    (s) =>
+      (s.fromCourseId === course.id && s.fromDate === selectedDateKey && s.user === userName) ||
+      (s.toCourseId === course.id && s.toDate === selectedDateKey && s.user === userName)
+    );
+
   const swapForWaitlist = swaps.find(
     (s) =>
       s.user === userName &&
@@ -278,34 +285,38 @@ const hasPendingRequestsFromOrigin = pendingCount > 0;
       </>
       )}
       
-{/* 🆕 Status-Text jetzt separat unter den Buttons */}
-{swapForThisTerm && (
-  <div className="muted small status-text">
-    {swapForThisTerm.status === "pending" && swapForThisTerm.fromCourseId === course.id
-      ? `Tauschanfrage für ${new Date(
-          swapForThisTerm.toDate
-        ).toLocaleDateString()} · ${
-          courses.find((c) => c.id === swapForThisTerm.toCourseId)?.name
-        }`
-      : swapForThisTerm.status === "pending" && swapForThisTerm.toCourseId === course.id
-      ? `Tauschanfrage zu ${new Date(
-          swapForThisTerm.fromDate
-        ).toLocaleDateString()} · ${
-          courses.find((c) => c.id === swapForThisTerm.toCourseId)?.name
-        }`
-      : swapForThisTerm.fromCourseId === course.id
-      ? `Getauscht mit ${new Date(
-          swapForThisTerm.toDate
-        ).toLocaleDateString()} · ${
-          courses.find((c) => c.id === swapForThisTerm.toCourseId)?.name
-        }`
-      : `Getauscht von ${new Date(
-          swapForThisTerm.fromDate
-        ).toLocaleDateString()} · ${
-          courses.find((c) => c.id === swapForThisTerm.fromCourseId)?.name
-        }`}
-  </div>
-)}
+      {/* 🆕 Status-Text jetzt separat unter den Buttons */}
+      {allSwapsForThisTerm.length > 0 && (
+        <div className="muted small status-text">
+          {allSwapsForThisTerm.map((swap, idx) => (
+            <div key={idx}>
+          {swap.status === "pending" && swap.fromCourseId === course.id
+            ? `Tauschanfrage für ${new Date(
+                swap.toDate
+              ).toLocaleDateString()} · ${
+                courses.find((c) => c.id === swap.toCourseId)?.name
+              }`
+            : swap.status === "pending" && swap.toCourseId === course.id
+            ? `Tauschanfrage zu ${new Date(
+                swap.fromDate
+              ).toLocaleDateString()} · ${
+                courses.find((c) => c.id === swap.toCourseId)?.name
+              }`
+            : swap.fromCourseId === course.id
+            ? `Getauscht mit ${new Date(
+                swap.toDate
+              ).toLocaleDateString()} · ${
+                courses.find((c) => c.id === swap.toCourseId)?.name
+              }`
+            : `Getauscht von ${new Date(
+                swap.fromDate
+              ).toLocaleDateString()} · ${
+                courses.find((c) => c.id === swap.fromCourseId)?.name
+              }`}
+            </div>
+          ))}
+        </div>
+      )}
       {/* Swap-Modal (noch ohne Terminliste anderer Kurse; bestätigt nur den Swap-Intent) */}
       {showSwapModal && (
         <div className="modal-backdrop">
