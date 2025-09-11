@@ -13,7 +13,7 @@ type Props = {
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
   confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   requestSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
-  cancelSwap: (swap: Swap) => void;
+  cancelSwap: (swap: Swap, clickedCourseId: number) => void;
 };
 
 function sameDayUTC(a: Date, b: Date) {
@@ -94,6 +94,13 @@ export default function CourseCard({
         (s.toCourseId === course.id && s.toDate === selectedDateKey)
       )
   );
+
+  const allSwapsForThisTerm = swaps.filter(
+    (s) =>
+      (s.fromCourseId === course.id && s.fromDate === selectedDateKey && s.user === userName) ||
+      (s.toCourseId === course.id && s.toDate === selectedDateKey && s.user === userName)
+    );
+
   const swapForWaitlist = swaps.find(
     (s) =>
       s.user === userName &&
@@ -101,6 +108,18 @@ export default function CourseCard({
       s.toDate === selectedDateKey &&
       s.status === "pending"
   );
+
+  const pendingSwapsFromOrigin = swaps.filter(
+  (s) =>
+    s.user === userName &&
+    s.fromCourseId === course.id &&
+    s.fromDate === selectedDateKey &&
+    s.status === "pending"
+);
+
+const pendingCount = pendingSwapsFromOrigin.length;
+const hasPendingRequestsFromOrigin = pendingCount > 0;
+
 
 
   // ------------------ return ------------------
@@ -165,9 +184,9 @@ export default function CourseCard({
           {waitlist.length === 0 ? (
             <span className="chip muted small">Keine Anfragen</span>
           ) : (
-            waitlist.map((name, idx) => (
+            waitlist.map((name) => (
               <span className="chip wait" key={name}>
-                {idx + 1}. {name}
+                {name}
               </span>
             ))
           )}
@@ -180,44 +199,24 @@ export default function CourseCard({
             <>
               {/* Falls User den Ursprungstermin noch nicht abgesagt hat → Absage-Button trotzdem anzeigen */}
               {swapForThisTerm.status === "pending" &&
-                originallyParticipant &&
-                !hasCancelled && (
+                originallyParticipant && (
                   <button
                     className="danger"
                     onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
                   >
-                    Termin absagen
+                    {hasCancelled ? "Absage zuruecknehmen" : "Termin absagen"}
                   </button>
                 
               )}
 
               <button
                 className="secondary danger"
-                onClick={() => cancelSwap(swapForThisTerm)}
+                onClick={() => cancelSwap(swapForThisTerm, course.id)}
               >
                 {swapForThisTerm.status === "pending"
-                  ? "Tauschanfrage abbrechen"
+                  ? "Tauschanfragen abbrechen"
                   : "Tausch abbrechen"}
               </button>
-
-              {swapForThisTerm.status === "pending" ? (
-                <div className="muted small">
-                  Tauschanfrage für{" "}
-                  {new Date(swapForThisTerm.toDate).toLocaleDateString()} ·{" "}
-                  {courses.find((c) => c.id === swapForThisTerm.toCourseId)?.name}
-                </div>
-              ) : (
-                <div className="muted small">
-                  {swapForThisTerm.fromCourseId === course.id
-                    ? `Getauscht mit ${new Date(swapForThisTerm.toDate).toLocaleDateString()} · ${
-                        courses.find(c => c.id === swapForThisTerm.toCourseId)?.name
-                      }`
-                    : `Getauscht von ${new Date(swapForThisTerm.fromDate).toLocaleDateString()} · ${
-                        courses.find(c => c.id === swapForThisTerm.fromCourseId)?.name
-                      }`}
-                </div>
-              )}
-
             </>
           ) : (
             <>
@@ -239,13 +238,33 @@ export default function CourseCard({
               {(originallyParticipant || hasCancelled) && (
                 <button
                   className="secondary"
-                  onClick={() => setShowSwapModal(true)}
+                  onClick={() => {
+                    setSwapDateIso(null);
+                    setSwapDateIsoWaitlist(null);
+                    setShowSwapModal(true);
+                  }}
                 >
                   {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
                 </button>
               )}
+              
             </>
           )}
+          {/* 🆕 Wenn schon pending-Requests existieren: zusätzlicher Button */}
+              {hasPendingRequestsFromOrigin && (
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    // zwinge Nutzer zur bewussten Auswahl: nichts vorauswählen
+                    setSwapDateIso(null);
+                    setSwapDateIsoWaitlist(null);
+                    setShowSwapModal(true);
+                  }}
+                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
+                >
+                  Weitere Tauschanfrage
+                </button>
+              )}
         </div>
 
       ) : (
@@ -254,15 +273,10 @@ export default function CourseCard({
             <div className="actions">
               <button
                 className="secondary danger"
-                onClick={() => cancelSwap(swapForWaitlist)}
+                onClick={() => cancelSwap(swapForWaitlist, course.id)}
               >
                 Tauschanfrage abbrechen
               </button>
-              <div className="muted small">
-                Du stehst auf der Warteliste für{" "}
-                {new Date(swapForWaitlist.toDate).toLocaleDateString()} ·{" "}
-                {courses.find((c) => c.id === swapForWaitlist.toCourseId)?.name}
-              </div>
             </div>
         ) : (
           <div className="muted">Nicht in diesem Termin eingetragen</div>   
@@ -270,7 +284,39 @@ export default function CourseCard({
       }
       </>
       )}
-
+      
+      {/* 🆕 Status-Text jetzt separat unter den Buttons */}
+      {allSwapsForThisTerm.length > 0 && (
+        <div className="muted small status-text">
+          {allSwapsForThisTerm.map((swap, idx) => (
+            <div key={idx}>
+          {swap.status === "pending" && swap.fromCourseId === course.id
+            ? `Tauschanfrage für ${new Date(
+                swap.toDate
+              ).toLocaleDateString()} · ${
+                courses.find((c) => c.id === swap.toCourseId)?.name
+              }`
+            : swap.status === "pending" && swap.toCourseId === course.id
+            ? `Tauschanfrage zu ${new Date(
+                swap.fromDate
+              ).toLocaleDateString()} · ${
+                courses.find((c) => c.id === swap.toCourseId)?.name
+              }`
+            : swap.fromCourseId === course.id
+            ? `Getauscht mit ${new Date(
+                swap.toDate
+              ).toLocaleDateString()} · ${
+                courses.find((c) => c.id === swap.toCourseId)?.name
+              }`
+            : `Getauscht von ${new Date(
+                swap.fromDate
+              ).toLocaleDateString()} · ${
+                courses.find((c) => c.id === swap.fromCourseId)?.name
+              }`}
+            </div>
+          ))}
+        </div>
+      )}
       {/* Swap-Modal (noch ohne Terminliste anderer Kurse; bestätigt nur den Swap-Intent) */}
       {showSwapModal && (
         <div className="modal-backdrop">
