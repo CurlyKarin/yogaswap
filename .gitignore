@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+projects/demo/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/LICENSE
+projects/demo/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/CHANGELOG.md
+projects/demo/.terraform/terraform.tfstate
+projects/demo/terraform.tfstate.backup
+projects/demo/terraform.tfstate
+projects/demo/.terraform.lock.hcl
+projects/demo/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/terraform-provider-aws.exe
+app/build/index.html
+app/build/assets/index-CVVSM1yU.css
+app/build/assets/index-Db3N-rlk.js
