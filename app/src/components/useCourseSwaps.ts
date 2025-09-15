@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Course, CourseDateOverride, Swap, SwapStatus } from "../types"; 
+import type { Course, CourseDateOverride, Swap } from "../types"; 
 import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";

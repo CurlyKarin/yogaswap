@@ -3,21 +3,21 @@ import type { CourseDateOverride } from "../types";
 export const courseDateOverrides: CourseDateOverride[] = [
   {
     courseId: 1,
-    date: "2025-08-18",
-    participants: ["Luna", "Nia"],
-    swapped: ["Nia"],
+    date: "2025-09-22",
+    participants: ["Nova","Luna", "Skye", "Zoe", "Aria", "Rue", "Kai",  "Nia"],
+    swapped: ["Kai"],
     waitlist: [],
   },
   {
     courseId: 6,
-    date: "2025-09-11",
+    date: "2025-09-18",
     participants: ["Aria", "Rue", "Skye" ],
     swapped: ["Skye"],
     waitlist: ["Kai", "Nia"],
   },
   {
     courseId: 4,
-    date: "2025-09-10",
+    date: "2025-09-17",
     participants: ["Luna", "Skye" ],
     swapped: [],
     waitlist: ["Nia"],

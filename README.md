@@ -1,69 +1,89 @@
-# React + TypeScript + Vite
+# YogaSwap Demo (S3)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Dies ist die **Demo-Version** von YogaSwap, die lokal gebaut und anschließend auf ein öffentlich zugängliches S3-Bucket hochgeladen werden kann. Sie dient ausschließlich der Präsentation und zum Testen – nicht für den produktiven Betrieb.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Voraussetzungen
 
-## Expanding the ESLint configuration
+Bevor du die Demo nutzen kannst, musst du folgendes installiert haben:
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Node.js** (>=18) und **npm** – zum Bauen der Frontend-Anwendung
+- **OpenTofu** (alternativ Terraform) – zum Erstellen der AWS-Infrastruktur
+- Ein **AWS-Konto** mit entsprechenden Rechten (S3-Bucket erstellen, Objekte hochladen, Bucket Policy anpassen)
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+## Projektstruktur
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+yogaswap-demo/
+  src/
+    data/
+      courseOverrides.ts
+      swapes.ts
+    components/
+    assets/
+    lib/
+  projects/
+    demo/
+      main.tf
+  app/
+  README.md
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Demodaten
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Die Demodaten liegen im Verzeichnis `src/data/` und bestehen aus TypeScript-Dateien:
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- `courseOverrides.ts` – überschreibt bestimmte Kurse für die Demo, z.B. Preise, Bezeichnungen  
+- `swapes.ts` – definiert Beispiel-Swaps, die in der Demo verfügbar sind
+
+> ⚠️ Hinweis: Die Daten können im Laufe der Zeit veraltet sein. Passe sie ggf. an, bevor du die Demo präsentierst.
+
+---
+
+## Deployment mit OpenTofu
+
+1. **Frontend bauen**
+
+```bash
+cd app
+npm install
+npm run build
 ```
+
+2. **OpenTofu Projekt anwenden**
+
+```bash
+cd projects/demo
+tofu apply
+```
+
+- Wenn du den Bucket-Namen ändern möchtest, passe aws_s3_bucket.spa.bucket in main.tf an.
+- OpenTofu erstellt ein S3-Bucket, lädt die gebauten Frontend-Dateien hoch und konfiguriert die Website.
+
+3. **Demo aufrufen**
+Nach erfolgreichem Apply gibt OpenTofu die URL der Demo zurück:
+
+```bash
+Output:
+spa_url = "<dein-bucket-website-endpunkt>"
+```
+Beispiel: http://yogaswap-demo-2025.s3-website.eu-central-1.amazonaws.com
+
+4. **Demo wieder abräumen**
+```bash
+tofu destroy
+```
+Damit werden das S3-Bucket und alle hochgeladenen Dateien wieder gelöscht. Nützlich, um Kosten zu sparen.
+
+## Hinweise
+
+- **Kosten:** Das Hochladen der Demo-Dateien auf S3 verursacht nur geringe Kosten. Prüfe dein AWS-Free-Tier Limit, falls du die Demo über einen längeren Zeitraum laufen lassen möchtest.
+
+- **Branch / Version:** Diese Demo entspricht einem bestimmten Entwicklungsstand von YogaSwap. Für produktive Weiterentwicklung wird empfohlen, die Hauptversion in einem separaten Branch zu pflegen.
+
+- **S3 Bucket ACLs:** Achte darauf, dass die OpenTofu-Konfiguration die richtigen Public-Access-Einstellungen verwendet. Sonst kann die Website nicht öffentlich zugänglich sein.
+
+Viel Spaß beim Testen der YogaSwap-Demo!
