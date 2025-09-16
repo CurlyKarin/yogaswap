@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,         // erlaubt Projekt-Referenzen
+    "declaration": true,       // erzeugt .d.ts Dateien, wenn du baust
+    "declarationMap": true,    // Mapping für Debugging
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}

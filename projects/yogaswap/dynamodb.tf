@@ -1,10 +1,9 @@
 module "swaps_table" {
   source     = "../modules/dynamodb"
-  name       = "${var.project}-swaps"
+  name       = "${var.project}-swaps-table"
   hash_key   = "user"
   range_key  = "fromDate_fromCourseId"
 
-  # warum ???????????? nur Schlüssel???
   attributes = [
     { 
         name = "user", 
@@ -26,9 +25,9 @@ module "swaps_table" {
   
 }
 
-module "courseOverrides_table" {
+module "course_overrides_table" {
   source     = "../modules/dynamodb"
-  name       = "${var.project}-courseOverrides"
+  name       = "${var.project}-courseOverrides-table"
   hash_key   = "courseId"
   range_key  = "date"
   attributes = [
@@ -43,16 +42,9 @@ module "courseOverrides_table" {
   ]
 }
 
-# Anlegen von Test Datensätzen
-resource "aws_dynamodb_table_item" "example_swaps" {
-  for_each = {
-    v1 = jsonencode({ id = { S = "v1" }, type = { S = "car" }, brand = { S = "Toyota" }, year = { N = "2020" } })
-    v2 = jsonencode({ id = { S = "v2" }, type = { S = "truck" }, brand = { S = "Volvo" }, year = { N = "2018" } })
-    v3 = jsonencode({ id = { S = "v3" }, type = { S = "motorcycle" }, brand = { S = "BMW" }, year = { N = "2021" } })
-  }
-
-  table_name = module.swaps_table.table_name
-  hash_key   = "user"
-  range_key  = "fromDate"
-  item       = each.value
+output "table_names" {
+  value = [
+    aws_dynamodb_table.swaps_table.name,
+    aws_dynamodb_table.course_overrides_table.name
+  ]
 }

@@ -15,26 +15,26 @@ export type Course = {
   dates: Date[]; // Liste der Termine
 };
 
-export type CourseDateOverride = {
-  courseId: number;
-  date: string; // ISO-String
-  participants: string[];
-  swapped?: string[]; // aktive Tausch-Teilnehmer
-  waitlist?: string[]; // Nachrücker für volle Termine
-};
+// export type CourseDateOverride = {
+//   courseId: number;
+//   date: string; // ISO-String
+//   participants: string[];
+//   swapped?: string[]; // aktive Tausch-Teilnehmer
+//   waitlist?: string[]; // Nachrücker für volle Termine
+// };
 
 export type SwapSettings = {
   minOffsetDays: number; // frühestens X Tage nach Referenzdatum
   maxOffsetDays: number; // spätestens X Tage nach Referenzdatum
 };
 
-export type SwapStatus = "pending" | "active";
+// export type SwapStatus = "pending" | "active";
 
-export type Swap = {
-  user: string;        // der Teilnehmer
-  fromCourseId: number;
-  fromDate: string;    // ISO des Ursprungstermins
-  toCourseId: number;
-  toDate: string;      // ISO des Zieltermins
-  status: SwapStatus;
-};
+// export type Swap = {
+//   user: string;        // der Teilnehmer
+//   fromCourseId: number;
+//   fromDate: string;    // ISO des Ursprungstermins
+//   toCourseId: number;
+//   toDate: string;      // ISO des Zieltermins
+//   status: SwapStatus;
+// };

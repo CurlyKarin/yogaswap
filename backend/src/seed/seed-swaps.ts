@@ -1,27 +1,7 @@
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
-import { Swap, CourseDateOverride } from "../../../shared/types.js";
-//import swaps from "./seed_swaps.json";
+import { Swap, CourseDateOverride } from "../../../shared/src/types.js";
 
 const client = new DynamoDBClient({ region: "eu-central-1" });
-
-// async function seed() {
-//   for (const swap of swaps) {
-//     const cmd = new PutItemCommand({
-//       TableName: "swaps",
-//       Item: {
-//         user: { S: swap.user },
-//         fromDate_fromCourseId: { S: swap.fromDate_fromCourseId },
-//         toCourseId: { N: swap.toCourseId.toString() },
-//         toDate: { S: swap.toDate },
-//         status: { S: swap.status }
-//       }
-//     });
-//     await client.send(cmd);
-//     console.log(`Inserted swap for ${swap.user}`);
-//   }
-// }
-
-// seed().catch(console.error);
 
 // Hinweis: Du kannst später npm run seed einrichten, das diesen Script ausführt.
 // Demo-Daten
@@ -47,3 +27,9 @@ async function seedTable(tableName: string, items: any[]) {
     console.log(`Inserted item into ${tableName}:`, item);
   }
 }
+
+(async () => {
+  await seedTable("courseOverrides", courseDateOverrides);
+  await seedTable("swaps", swaps);
+  console.log("Seeding completed!");
+})();

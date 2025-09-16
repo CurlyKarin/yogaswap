@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type { Course, CourseDateOverride, Swap } from "../types"; 
+import type { Course} from "../types"; 
 import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
+import { Swap, CourseDateOverride } from "@shared/types";
 
 export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], initialSwaps: Swap[] = []) {
   // zentrale, termin-spezifische Änderungen im State

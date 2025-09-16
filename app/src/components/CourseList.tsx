@@ -4,6 +4,7 @@ import CourseCard from "./CourseCard";
 import { courseDateOverrides as initialOverrides } from "../data/courseOverrides";
 import { swapes as initialSwaps } from "../data/swapes";
 import { useCourseSwaps } from "./useCourseSwaps";
+import React from "react";
 
 type Props = {
   currentUser: User;
