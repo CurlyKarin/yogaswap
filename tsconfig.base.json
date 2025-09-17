@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["shared/src/*"]
+      "@shared/*": ["shared/src/*"],
+      "@app/*": ["app/src/*"]
     },
     "moduleResolution": "node",
     "resolveJsonModule": true

@@ -5,7 +5,6 @@ import { Swap, CourseDateOverride } from "@shared/types";
 import { courses } from "../data/courses";
 import { swapSettings } from "../data/swapSettings";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
-import React from "react";
 
 type Props = {
   course: Course;

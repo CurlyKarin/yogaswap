@@ -1,4 +1,5 @@
-import type { Course, User, CourseDateOverride } from "../types";
+import { CourseDateOverride } from "@shared/index";
+import type { Course, User} from "../types";
 import type { SwapSettings } from "../types";
 
 export function getSwapOptions(

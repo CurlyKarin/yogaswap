@@ -2,7 +2,6 @@ import { useState } from "react";
 import { users } from "../data/users";
 import { saveCurrentUser } from "../lib/storage";
 import type { User } from "../types";
-import React from "react";
 //import "./Login.css"; // optional, falls du eigenes login-css möchtest
 
 type Props = {

@@ -1,5 +1,6 @@
 // lib/dates.ts
-import type { Course, CourseDateOverride, User, SwapSettings } from "../types";
+import { CourseDateOverride } from "@shared/types";
+import type { Course, User, SwapSettings } from "../types";
 
 export function sameDayUTC(a: Date, b: Date) {
   return (

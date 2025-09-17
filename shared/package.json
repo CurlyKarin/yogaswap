@@ -1,7 +1,13 @@
 {
-  "name": "@yogaswap/shared",
-  "version": "0.1.0",
+  "name": "yogaswap-shared",
+  "version": "1.0.0",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "private": true
+  "scripts": {
+    "build": "tsc --build tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.0"
+  }
 }

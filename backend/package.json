@@ -5,11 +5,11 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc --build",
-    "seed": "ts-node src/seed/seed-swaps.ts",
+    "seed": "ts-node src/seed/index.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.888.0",
+    "@aws-sdk/client-dynamodb": "^3.890.0",
     "@aws-sdk/client-lambda": "^3.388.0",
     "@aws-sdk/lib-dynamodb": "^3.388.0",
     "@yogaswap/shared": "file:../shared"
