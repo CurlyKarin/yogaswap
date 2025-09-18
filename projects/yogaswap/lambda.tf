@@ -31,6 +31,11 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Resource = each.value.table_arns
       },
       {
+        Effect   = "Allow",
+        Action   = each.value.s3_actions,
+        Resource = each.value.s3_resources
+      },
+      {
         Effect = "Allow",
         Action = [
           "logs:CreateLogGroup",
@@ -43,20 +48,21 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
-resource "aws_lambda_function" "get_swaps" {
+resource "aws_lambda_function" "lambda" {
   for_each = local.lambda_configs
 
   function_name     = "${var.project}-${each.value.name}"
   handler           = "index.handler"
   runtime           = "nodejs18.x"
   role              = aws_iam_role.lambda_role[each.key].arn
-  filename          = "${path.module}/../../backend-code/lambdas/${each.value.file_name}"
-  source_code_hash  = filebase64sha256("${path.module}/../../backend-code/lambdas/${each.value.file_name}")
+  filename          = "${path.module}/../../backend/zips/${each.value.file_name}"
+  source_code_hash  = filebase64sha256("${path.module}/../../backend/zips/${each.value.file_name}")
 
   environment {
-    variables = {
-      SWAPS_TABLE  = module.swaps_table.table_name
-      OVERRIDES_TABLE = module.course_overrides_table.table_name
-    }
+    variables = each.value.tables
   }
+}
+
+output "lambda_arns" {
+  value = { for k, v in aws_lambda_function.lambda : k => v.arn }
 }

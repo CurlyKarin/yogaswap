@@ -1,1 +1,1 @@
-{"root":["./src/lambdas/getswaps.ts","./src/seed/index.ts","./src/seed/overrides.ts","./src/seed/swaps.ts"],"version":"5.9.2"}
+{"root":["./src/index.ts","./src/lambdas/getoverrides/index.ts","./src/lambdas/getswaps/index.ts","./src/seed/index.ts","./src/seed/overrides.ts","./src/seed/swaps.ts"],"version":"5.9.2"}

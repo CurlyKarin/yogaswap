@@ -5,7 +5,22 @@ variable "name" {
 }
 
 variable "hash_key" {
+  type = string
+}
 
+variable "range_key" {
+  type = string
+  default = null
+}
+
+variable "global_secondary_index" {
+  type = object({
+    name               = string
+    hash_key           = string
+    range_key          = string
+    projection_type    = string
+  })
+  default = null
 }
 
 variable "attributes" {

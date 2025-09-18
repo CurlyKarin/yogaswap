@@ -3,8 +3,8 @@
 
 
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
-import { swaps } from "./swaps";
-import { courseDateOverrides } from "./overrides";
+import { swaps } from "./swaps.js";
+import { courseDateOverrides } from "./overrides.js";
 
 const client = new DynamoDBClient({ region: "eu-central-1" });
 

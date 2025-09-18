@@ -12,16 +12,24 @@ module "swaps_table" {
     {
         name = "fromDate_fromCourseId"
         type = "S"
-    }
+    }#,
+    #{
+    #  name = "toCourseId"
+    #  type = "S"
+    #},
+    #{
+    #  name = "toDate"
+    #  type = "S"
+    #}
   ]
   
   # Falls du später nach Zielkurs suchen willst
-  global_secondary_index {
-    name               = "toCourseIndex"
-    hash_key           = "toCourseId"
-    range_key          = "toDate"
-    projection_type    = "ALL"
-  }
+  #global_secondary_index {
+  #  name               = "toCourseIndex"
+  #  hash_key           = "toCourseId"
+  #  range_key          = "toDate"
+  #  projection_type    = "ALL"
+  #}
   
 }
 
@@ -42,9 +50,9 @@ module "course_overrides_table" {
   ]
 }
 
-output "table_names" {
-  value = [
-    aws_dynamodb_table.swaps_table.name,
-    aws_dynamodb_table.course_overrides_table.name
-  ]
-}
+#output "table_names" {
+#  value = [
+#    module.swaps_table.table_name,
+#    module.course_overrides_table.table_name
+#  ]
+#}

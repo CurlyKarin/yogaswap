@@ -1,7 +1,7 @@
 // backend/src/lambdas/getOverrides.ts
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
-import type { CourseDateOverride } from "@shared";
+import type { CourseDateOverride } from "@yogaswap/shared";
 
 const client = new DynamoDBClient({ region: "eu-central-1" });
 

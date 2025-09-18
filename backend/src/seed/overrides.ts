@@ -1,4 +1,4 @@
-import { CourseDateOverride } from "@shared";
+import { CourseDateOverride } from "@yogaswap/shared";
 
 export const courseDateOverrides: CourseDateOverride[] = [
   { courseId: 1, date: "2025-09-22", participants: ["Nova","Luna","Skye","Zoe","Aria","Rue","Kai","Nia"], swapped: ["Kai"], waitlist: [] },

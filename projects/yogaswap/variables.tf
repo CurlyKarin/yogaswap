@@ -1,10 +1,14 @@
 
 variable "project" {
+  description = "Projektname für Ressourcen-Namen"
+  type        = string
   default = "yogaswap-backend-demo"
 }
 
 variable "region" {
-  default = "eu-west-3"
+  description = "AWS-Region"
+  type        = string
+  default = "eu-central-1" 
 }
 
 variable "lambdas" {

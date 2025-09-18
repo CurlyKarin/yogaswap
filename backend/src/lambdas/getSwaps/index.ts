@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
-import { Swap } from "@shared";
+import { Swap } from "@yogaswap/shared";
 
 //cd backend/src/lambdas/getSwaps
 //npm init -y

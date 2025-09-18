@@ -11,17 +11,29 @@ locals {
     "get_swaps" = {
       name           = var.lambdas["get_swaps"].name
       file_name      = var.lambdas["get_swaps"].file_name
-      table_arns     = [module.dynamodb.swaps_table, module.dynamodb.course_overrides_table.table_arn]
+      table_arns     = [module.swaps_table.table_arn]
       dynamodb_actions = var.lambdas["get_swaps"].dynamodb_actions
+      tables = {
+        "SWAPS_TABLE" = module.swaps_table.table_name
+      }
+      s3_actions     = ["s3:GetObject", "s3:PutObject"]
+      s3_resources   = ["arn:aws:s3:::my-bucket/*"]
     },
     "get_coursedateoverrides" = {
       name           = var.lambdas["get_coursedateoverrides"].name
       file_name      = var.lambdas["get_coursedateoverrides"].file_name
-      table_arns     = [module.dynamodb.swaps_table.table_arn]
+      table_arns     = [module.course_overrides_table.table_arn]
       dynamodb_actions = var.lambdas["get_coursedateoverrides"].dynamodb_actions
+      tables = {
+        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+      }
+      s3_actions     = ["s3:GetObject", "s3:PutObject"]
+      s3_resources   = ["arn:aws:s3:::my-bucket/*"]
     }
   }
 }
+
+
 #resource "aws_apigatewayv2_api" "spa_api" {
 #  name          = "YogaSwapAPI"
 #  protocol_type = "HTTP"
