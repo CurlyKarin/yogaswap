@@ -32,3 +32,11 @@ projects/demo/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/wi
 app/build/index.html
 app/build/assets/index-CVVSM1yU.css
 app/build/assets/index-Db3N-rlk.js
+projects/yogaswap/.terraform.lock.hcl
+projects/yogaswap/terraform.tfstate
+projects/yogaswap/.terraform/terraform.tfstate
+projects/yogaswap/.terraform/modules/modules.json
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/CHANGELOG.md
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/LICENSE
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/README.md
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/terraform-provider-aws.exe
