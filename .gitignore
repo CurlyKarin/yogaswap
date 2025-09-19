@@ -40,3 +40,5 @@ projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.
 projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/LICENSE
 projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/README.md
 projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/terraform-provider-aws.exe
+backend/terraform.tfstate
+projects/yogaswap/terraform.tfstate.backup
