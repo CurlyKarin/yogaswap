@@ -14,13 +14,13 @@ variable "range_key" {
 }
 
 variable "global_secondary_index" {
-  type = object({
+  type = list(object({
     name               = string
     hash_key           = string
-    range_key          = string
+    range_key          = optional(string)
     projection_type    = string
-  })
-  default = null
+  }))
+  default = []
 }
 
 variable "attributes" {

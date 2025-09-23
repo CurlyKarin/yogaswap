@@ -24,13 +24,13 @@ variable "lambdas" {
       name           = "get-swaps"
       file_name         = "getSwaps.zip"
       table_arns     = [] # Wird später gefüllt
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Scan", "dynamodb:DeleteItem"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:Scan", "dynamodb:Query"]
     },
     "get_coursedateoverrides" = {
       name           = "get-coursedateoverrides"
       file_name         = "getOverrides.zip"
       table_arns     = [] # Wird später gefüllt
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:Query"]
+      dynamodb_actions = ["dynamodb:Scan", "dynamodb:GetItem"]
     }
   }
 }

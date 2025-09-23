@@ -2,34 +2,29 @@ module "swaps_table" {
   source     = "../modules/dynamodb"
   name       = "${var.project}-swaps-table"
   hash_key   = "user"
-  range_key  = "fromDate_fromCourseId"
+  range_key  = "swapId"
 
   attributes = [
-    { 
-        name = "user", 
-        type = "S" 
-    },
-    {
-        name = "fromDate_fromCourseId"
-        type = "S"
-    }#,
-    #{
-    #  name = "toCourseId"
-    #  type = "S"
-    #},
-    #{
-    #  name = "toDate"
-    #  type = "S"
-    #}
+    { name = "user", type = "S" },
+    { name = "swapId", type = "S" },
+    { name = "fromDate_fromCourseId_status", type = "S" },
+    { name = "toDate_toCourseId_status", type = "S" }
   ]
   
-  # Falls du später nach Zielkurs suchen willst
-  #global_secondary_index {
-  #  name               = "toCourseIndex"
-  #  hash_key           = "toCourseId"
-  #  range_key          = "toDate"
-  #  projection_type    = "ALL"
-  #}
+  global_secondary_index = [
+    {
+      name            = "GSI_From"
+      hash_key        = "user"
+      range_key       = "fromDate_fromCourseId_status"
+      projection_type = "ALL"
+    },
+    {
+      name            = "GSI_To"
+      hash_key        = "user"
+      range_key       = "toDate_toCourseId_status"
+      projection_type = "ALL"
+    }
+  ]
   
 }
 

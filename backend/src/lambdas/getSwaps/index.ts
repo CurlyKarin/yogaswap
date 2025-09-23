@@ -17,34 +17,41 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   // Optional: Filter nach fromDate und fromCourseId
   const fromDate = event.queryStringParameters?.fromDate;
   const fromCourseId = event.queryStringParameters?.fromCourseId;
+  const status = event.queryStringParameters?.status || "pending";
 
   // Range Key zusammengesetzt: "fromDate_fromCourseId"
-  let keyCondition = "user = :u";
-  const expressionValues: Record<string, any> = { ":u": { S: user } };
-  if (fromDate && fromCourseId) {
-    keyCondition += " AND fromDate_fromCourseId = :f";
-    expressionValues[":f"] = { S: `${fromDate}#${fromCourseId}` };
-  }
+
+    let keyCondition = "#u = :u";
+    const expressionValues: { [key: string]: { S: string } } = { ":u": { S: user } };
+    const expressionNames: { [key: string]: string } = { "#u": "user" }; // user ist reserviert
+
+    if (fromDate && fromCourseId) {
+        keyCondition += " AND fromDate_fromCourseId_status = :f";
+        expressionValues[":f"] = { S: `${fromDate}#${fromCourseId}#${status}` };
+    }
 
   const command = new QueryCommand({
     TableName: process.env.SWAPS_TABLE,   // besser per ENV setzen!
     KeyConditionExpression: keyCondition,
     ExpressionAttributeValues: expressionValues,
+    ExpressionAttributeNames: expressionNames,
   });
 
   try {
     const data = await client.send(command);
-      const items: Swap[] = (data.Items || []).map((item) => {
-      const [fDate, fCourseId] = item.fromDate_fromCourseId.S!.split("_");
+    
+    const items: Swap[] = (data.Items || []).map((item) => {
+      const [fDate, fCourseId, tDate, tCourseId] = item.swapId.S!.split("#");
       return {
         user: item.user.S!,
         fromCourseId: Number(fCourseId),
         fromDate: fDate,
-        toCourseId: Number(item.toCourseId.N!),
-        toDate: item.toDate.S!,
+        toCourseId: Number(tCourseId),
+        toDate: tDate!,
         status: item.status.S as Swap["status"],
       };
     });
+
     return { statusCode: 200, body: JSON.stringify(items) };
   } catch (err) {
     console.error(err);

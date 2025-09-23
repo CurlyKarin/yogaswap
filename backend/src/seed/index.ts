@@ -29,12 +29,16 @@ async function seedSwaps(tableName: string, items: any[]) {
   for (const item of items) {
     const dynamoItem: Record<string, { S: string }> = {
       user: { S: item.user },
-      fromDate_fromCourseId: { S: `${item.fromDate}#${item.fromCourseId}` }, // ✅ Kombinierter Schlüssel
+      swapId: { S: `${item.fromDate}#${item.fromCourseId}#${item.toDate}#${item.toCourseId}` }, // eindeutiger Range Key
       fromDate: { S: item.fromDate },
       fromCourseId: { S: item.fromCourseId.toString() },
       toDate: { S: item.toDate },
       toCourseId: { S: item.toCourseId.toString() },
       status: { S: item.status },
+
+      // zusammengesetzte Keys für GSIs
+      fromDate_fromCourseId_status: { S: `${item.fromDate}#${item.fromCourseId}#${item.status}` },
+      toDate_toCourseId_status: { S: `${item.toDate}#${item.toCourseId}#${item.status}` },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));
@@ -45,7 +49,7 @@ async function seedSwaps(tableName: string, items: any[]) {
 (async () => {
   try {
     await seedSwaps("yogaswap-backend-demo-swaps-table", swaps);
-    await seedTable("yogaswap-backend-demo-courseOverrides", courseDateOverrides);
+    await seedTable("yogaswap-backend-demo-courseOverrides-table", courseDateOverrides);
     console.log("🎉 Seeding completed!");
   } catch (err) {
     console.error("❌ Seeding failed:", err);

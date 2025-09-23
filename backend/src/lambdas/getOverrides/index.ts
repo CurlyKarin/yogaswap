@@ -13,7 +13,7 @@ export const handler = async (
   const courseId = courseIdParam ? Number(courseIdParam) : undefined;
 
   const command = new ScanCommand({
-    TableName: "courseOverrides",
+    TableName: process.env.OVERRIDES_TABLE,
   });
 
   try {
