@@ -31,23 +31,37 @@ locals {
       s3_resources   = ["arn:aws:s3:::my-bucket/*"]
     }
   }
+   # Map für Lambda-ARNs
+  lambda_arns = { for k, v in aws_lambda_function.lambda : k => v.arn }
+
+  # API Gateway Routen
+  api_routes = {
+    "GET /swaps" = "get_swaps"
+    "GET /course-overrides" = "get_coursedateoverrides"
+  }
 }
 
+#--------------apigateway--------------------
+module "yogaswap_api" {
+  source       = "../modules/apigatewayv2"
+  name         = "${var.project}-api"
+  lambda_arns  = local.lambda_arns
+  routes       = local.api_routes
+}
+#---------------cloudfront------------------
 
-#resource "aws_apigatewayv2_api" "spa_api" {
-#  name          = "YogaSwapAPI"
-#  protocol_type = "HTTP"
-#}
+module "cloudfront_spa" {
+  source      = "../modules/cloudfront"
+  bucket_name = module.spa_site.bucket_name
+  bucket_domain_name = module.spa_site.bucket_regional_domain
+  api_gateway_domain_name = replace(module.yogaswap_api.api_endpoint, "https://", "")
+  #replace(var.api_endpoint, "/^https?://([^/]+).*/", "$1")
+}
 
-#resource "aws_apigatewayv2_integration" "get_swaps_integration" {
-#  api_id           = aws_apigatewayv2_api.spa_api.id
-#  integration_type = "AWS_PROXY"
-#  integration_uri  = aws_lambda_function.getSwaps.arn
-#  payload_format_version = "2.0"
-#}
+output "lambda_arns" {
+  value = local.lambda_arns
+}
 
-#resource "aws_apigatewayv2_route" "get_swaps_route" {
-#  api_id    = aws_apigatewayv2_api.spa_api.id
-#  route_key = "GET /swaps"
-#  target    = "integrations/${aws_apigatewayv2_integration.get_swaps_integration.id}"
-#}
+output "api_endpoint" {
+  value = aws_apigatewayv2_api.api.api_endpoint
+}

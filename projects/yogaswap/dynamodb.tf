@@ -45,9 +45,9 @@ module "course_overrides_table" {
   ]
 }
 
-#output "table_names" {
-#  value = [
-#    module.swaps_table.table_name,
-#    module.course_overrides_table.table_name
-#  ]
-#}
+output "table_names" {
+  value = [
+    module.swaps_table.table_name,
+    module.course_overrides_table.table_name
+  ]
+}
