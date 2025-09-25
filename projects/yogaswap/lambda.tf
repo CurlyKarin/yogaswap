@@ -24,18 +24,21 @@ resource "aws_iam_role_policy" "lambda_policy" {
   # Actions unbedingt erweitern, bei Änderungen im Lambda code
   policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
+    Statement = concat(
+      # DynamoDB-Berechtigungen, falls dynamodb_actions nicht leer
+      length(each.value.dynamodb_actions) > 0 ? [{
+        Effect   = "Allow",
         Action   = each.value.dynamodb_actions,
         Resource = each.value.table_arns
-      },
-      {
+      }] : [],
+      # S3-Berechtigungen, falls s3_actions nicht leer
+      length(each.value.s3_actions) > 0 ? [{
         Effect   = "Allow",
         Action   = each.value.s3_actions,
         Resource = each.value.s3_resources
-      },
-      {
+      }] : [],
+      # CloudWatch Logs-Berechtigungen
+      [{
         Effect = "Allow",
         Action = [
           "logs:CreateLogGroup",
@@ -43,8 +46,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "logs:PutLogEvents"
         ],
         Resource = "*"
-      }
-    ]
+      }]
+    )
   })
 }
 

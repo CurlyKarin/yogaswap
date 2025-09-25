@@ -18,6 +18,7 @@ variable "lambdas" {
     file_name       = string
     table_arns     = list(string) # Liste von DynamoDB-Tabellen-ARNs
     dynamodb_actions = list(string) # Aktionen, die die Lambda ausführen darf
+    s3_actions     = list(string)
   }))
   default = {
     "get_swaps" = {
@@ -25,12 +26,14 @@ variable "lambdas" {
       file_name         = "getSwaps.zip"
       table_arns     = [] # Wird später gefüllt
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:Scan", "dynamodb:Query"]
+      s3_actions     = []
     },
     "get_coursedateoverrides" = {
       name           = "get-coursedateoverrides"
       file_name         = "getOverrides.zip"
       table_arns     = [] # Wird später gefüllt
       dynamodb_actions = ["dynamodb:Scan", "dynamodb:GetItem"]
+      s3_actions     = []
     }
   }
 }

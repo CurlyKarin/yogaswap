@@ -117,10 +117,10 @@ export default function CourseCard({
     s.fromCourseId === course.id &&
     s.fromDate === selectedDateKey &&
     s.status === "pending"
-);
+  );
 
-const pendingCount = pendingSwapsFromOrigin.length;
-const hasPendingRequestsFromOrigin = pendingCount > 0;
+  const pendingCount = pendingSwapsFromOrigin.length;
+  const hasPendingRequestsFromOrigin = pendingCount > 0;
 
 
 

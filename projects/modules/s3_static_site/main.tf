@@ -54,8 +54,8 @@ resource "aws_s3_bucket_cors_configuration" "spa" {
 
   cors_rule {
     allowed_headers = ["*"]
-    allowed_methods = ["GET"]
-    allowed_origins = ["*"] # später ggf. nur deine Domain
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = ["https://${module.cloudfront_spa.distribution_url}", "http://localhost:5173"]
     max_age_seconds = 3000
   }
 }

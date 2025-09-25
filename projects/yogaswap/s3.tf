@@ -5,6 +5,7 @@ module "spa_site" {
   cloudfront_distribution_arn = module.cloudfront_spa.distribution_arn
   index_file  = "index.html"
   error_file  = "index.html"
+  enable_website_hosting = true
 }
 
 # Kopieren der Inhalte für die webpage ins bucket

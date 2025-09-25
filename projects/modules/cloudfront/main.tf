@@ -22,6 +22,7 @@ resource "aws_cloudfront_origin_access_control" "spa" {
 
 resource "aws_cloudfront_distribution" "spa" {
   enabled             = true
+  is_ipv6_enabled     = true
   default_root_object = "index.html"
 
   # Origin API Gateway
@@ -46,7 +47,7 @@ resource "aws_cloudfront_distribution" "spa" {
 
   # API Gateway
   ordered_cache_behavior {
-    path_pattern     = "/api/*"
+    path_pattern     = "/swaps*" # "/swaps"
     allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "DELETE", "PATCH"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = "api-gateway-backend"
@@ -56,7 +57,7 @@ resource "aws_cloudfront_distribution" "spa" {
     forwarded_values {
       query_string = true
       cookies {
-        forward = "all"
+        forward = "none"
       }
     }
     compress = true
@@ -117,6 +118,6 @@ output "distribution_arn" {
 }
 
 output "distribution_url" {
-  value       = "https://${aws_cloudfront_distribution.spa.domain_name}"
+  value       = aws_cloudfront_distribution.spa.domain_name
   description = "Die URL, unter der die SPA via CloudFront erreichbar ist"
 }

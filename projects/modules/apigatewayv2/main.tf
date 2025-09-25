@@ -1,6 +1,12 @@
 resource "aws_apigatewayv2_api" "this" {
   name          = var.name
   protocol_type = "HTTP"
+  cors_configuration {
+    allow_origins = ["*", "http://localhost:5173"]
+    allow_methods = ["GET", "POST", "OPTIONS", "PUT", "DELETE"]
+    allow_headers = ["Content-Type"]
+    max_age       = 300
+  }
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -40,4 +46,8 @@ resource "aws_lambda_permission" "apigw" {
 
 output "api_endpoint" {
   value = aws_apigatewayv2_api.this.api_endpoint
+}
+
+output "url" {
+  value = aws_apigatewayv2_stage.default.invoke_url
 }

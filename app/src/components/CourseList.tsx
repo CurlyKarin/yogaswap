@@ -17,13 +17,11 @@ export default function CourseList({ currentUser }: Props) {
     requestSwap,
     cancelSwap,
     onToggleAbsence,
-  } = useCourseSwaps(initialOverrides, initialSwaps );
+  } = useCourseSwaps(initialOverrides, initialSwaps, currentUser );
 
     // zentrale, termin-spezifische Änderungen im State
 // const [overrides, setOverrides] = useState<CourseDateOverride[]>(initialOverrides);
 //  const [swaps, setSwaps] = useState<Swap[]>([]);
-
-//export default function CourseList({ currentUser }: Props) {
 
   function getCourseDates(course: Course) {
     const now = new Date();

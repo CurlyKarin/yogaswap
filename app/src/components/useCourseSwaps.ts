@@ -1,14 +1,28 @@
 import { useEffect, useState } from "react";
-import type { Course} from "../types"; 
+import type { Course, User} from "../types"; 
 import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
 import { Swap, CourseDateOverride } from "@shared/types";
+import axios from "axios";
 
-export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], initialSwaps: Swap[] = []) {
+export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], initialSwaps: Swap[] = [], currentUser: User) {
   // zentrale, termin-spezifische Änderungen im State
   const [overrides, setOverrides] = useState<CourseDateOverride[]>(initialOverrides);
   const [swaps, setSwaps] = useState<Swap[]>(initialSwaps);
+
+  useEffect(() => {
+    const loadSwaps = async () => {
+      try {
+        const response = await axios.get(`/swaps`, { params: { user: currentUser } });
+        setSwaps(response.data);
+      } catch (error) {
+        console.error('Fehler beim Laden der Swaps', error);
+        setSwaps(initialSwaps); // Fallback auf initialSwaps bei Fehler
+      }
+    };
+    loadSwaps();
+  }, [currentUser]);
 
     // 👉 Debug-Ausgabe bei jedem Swaps-Update
    useEffect(() => {
@@ -17,6 +31,7 @@ export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], init
 
 function onToggleAbsence(course: Course, dateIso: string, userName: string) {
   // Absagen blockieren, wenn bereits aktiver Swap
+  // Das macht hier eigentlich keinen Sinn und nur zur Sicherheit? Prüfen!!!
   const hasSwap = swaps.some(
     (s) =>
       s.user === userName &&
@@ -159,6 +174,7 @@ function onToggleAbsence(course: Course, dateIso: string, userName: string) {
   // Swap starten
   function confirmSwap(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) {
     // Swap nur 1x aktiv pro User+Termin
+    // nur zur Sicherheit hier drin, Prüfen!!!
     const existing = swaps.find(
       (s) =>
         s.user === userName &&

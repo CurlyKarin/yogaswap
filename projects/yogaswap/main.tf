@@ -16,8 +16,8 @@ locals {
       tables = {
         "SWAPS_TABLE" = module.swaps_table.table_name
       }
-      s3_actions     = ["s3:GetObject", "s3:PutObject"]
-      s3_resources   = ["arn:aws:s3:::my-bucket/*"]
+      s3_actions     = []
+      s3_resources   = []
     },
     "get_coursedateoverrides" = {
       name           = var.lambdas["get_coursedateoverrides"].name
@@ -27,8 +27,8 @@ locals {
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
       }
-      s3_actions     = ["s3:GetObject", "s3:PutObject"]
-      s3_resources   = ["arn:aws:s3:::my-bucket/*"]
+      s3_actions     = []
+      s3_resources   = []
     }
   }
    # Map für Lambda-ARNs
@@ -55,13 +55,20 @@ module "cloudfront_spa" {
   bucket_name = module.spa_site.bucket_name
   bucket_domain_name = module.spa_site.bucket_regional_domain
   api_gateway_domain_name = replace(module.yogaswap_api.api_endpoint, "https://", "")
-  #replace(var.api_endpoint, "/^https?://([^/]+).*/", "$1")
 }
 
-output "lambda_arns" {
-  value = local.lambda_arns
+output "api_url" {
+  value = module.yogaswap_api.url
+}
+
+output "cloudfront_domain" {
+  value = module.cloudfront_spa.distribution_url
+}
+
+output "spa_bucket_regional_name" {
+  value = module.spa_site.bucket_regional_domain
 }
 
 output "api_endpoint" {
-  value = aws_apigatewayv2_api.api.api_endpoint
+  value = module.yogaswap_api.api_endpoint
 }
