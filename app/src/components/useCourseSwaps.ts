@@ -1,178 +1,104 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Course, User} from "../types"; 
 import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
 import { Swap, CourseDateOverride } from "@shared/types";
-import axios from "axios";
+import { createSwap, deleteSwap, getSwaps, updateSwap } from "../api/swaps";
 
-export function useCourseSwaps(initialOverrides: CourseDateOverride[] = [], initialSwaps: Swap[] = [], currentUser: User) {
-  // zentrale, termin-spezifische Änderungen im State
+export function useCourseSwaps(
+  initialOverrides: CourseDateOverride[] = [],
+  swaps: Swap[],
+  setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>,
+) {
   const [overrides, setOverrides] = useState<CourseDateOverride[]>(initialOverrides);
-  const [swaps, setSwaps] = useState<Swap[]>(initialSwaps);
 
-  useEffect(() => {
-    const loadSwaps = async () => {
-      try {
-        const response = await axios.get(`/swaps`, { params: { user: currentUser } });
-        setSwaps(response.data);
-      } catch (error) {
-        console.error('Fehler beim Laden der Swaps', error);
-        setSwaps(initialSwaps); // Fallback auf initialSwaps bei Fehler
-      }
-    };
-    loadSwaps();
-  }, [currentUser]);
-
-    // 👉 Debug-Ausgabe bei jedem Swaps-Update
-   useEffect(() => {
-     console.log("🔄 Swaps updated:", swaps);
-   }, [swaps]);
-
-function onToggleAbsence(course: Course, dateIso: string, userName: string) {
-  // Absagen blockieren, wenn bereits aktiver Swap
-  // Das macht hier eigentlich keinen Sinn und nur zur Sicherheit? Prüfen!!!
-  const hasSwap = swaps.some(
-    (s) =>
-      s.user === userName &&
-      s.fromCourseId === course.id &&
-      s.fromDate === dateIso &&
-      s.status === "active"
-  );
-  if (hasSwap) {
-    alert("Absagen nicht möglich, solange ein Tausch aktiv oder offen ist.");
-    return;
-  }
-
-  // Warnung bei Warteliste
-  const waitlist = getEffectiveWaitlist(course, overrides, dateIso);
-  if (waitlist.length > 0) {
-    const proceed = confirm(
-      `Achtung: Für diesen Termin existiert eine Warteliste (${waitlist.length} Person(en)). ` +
-        `Deine Absage hat direkte Auswirkungen – jemand rückt automatisch nach. Möchtest du fortfahren?`
+  function onToggleAbsence(course: Course, dateIso: string, userName: string) {
+    // Absagen blockieren, wenn bereits aktiver Swap
+    // Das ermöglicht hier eigentlich keinen Sinn und nur zur Sicherheit? Prüfen!!!
+    const hasSwap = swaps.some(
+      (s) =>
+        s.user === userName &&
+        s.fromCourseId === course.id &&
+        s.fromDate === dateIso &&
+        s.status === "active"
     );
-    if (!proceed) return;
-  }
+    if (hasSwap) {
+      alert("Absagen nicht möglich, solange ein Tausch aktiv oder offen ist.");
+      return;
+    }
 
-  setOverrides((prevOverrides) => {
-    const updatedOverrides = [...prevOverrides];
-    const updatedSwaps = [...swaps]; // Lokale Kopie für atomare Updates
+    // Warnung bei Warteliste
+    const waitlist = getEffectiveWaitlist(course, overrides, dateIso);
+    if (waitlist.length > 0) {
+      const proceed = confirm(
+        `Achtung: Für diesen Termin existiert eine Warteliste (${waitlist.length} Person(en)). ` +
+          `Deine Absage hat direkte Auswirkungen – jemand rückt automatisch nach. Möchtest du fortfahren?`
+      );
+      if (!proceed) return;
+    }
 
-    const date = new Date(dateIso);
-    const idx = prevOverrides.findIndex(
-      (o) => o.courseId === course.id && sameDayUTC(new Date(o.date), date)
-    );
+    setOverrides((prevOverrides) => {
+      const updatedOverrides = [...prevOverrides];
 
-    const baseOverride: CourseDateOverride =
-      idx >= 0
-        ? { ...updatedOverrides[idx] }
-        : {
-            courseId: course.id,
-            date: dateIso,
-            participants: [...course.participants],
-            swapped: [],
-            waitlist: [],
-          };
+      const date = new Date(dateIso);
+      const idx = prevOverrides.findIndex(
+        (o) => o.courseId === course.id && sameDayUTC(new Date(o.date), date)
+      );
 
-    const courseCapacity = course.capacity;
-    const isIn = baseOverride.participants.includes(userName);
+      const baseOverride: CourseDateOverride =
+        idx >= 0
+          ? { ...updatedOverrides[idx] }
+          : {
+              courseId: course.id,
+              date: dateIso,
+              participants: [...course.participants],
+              swapped: [],
+              waitlist: [],
+            };
 
-    // --------- A) ABSAGE ----------
-    if (isIn) {
-      let nextOverride: CourseDateOverride = {
-        ...baseOverride,
-        participants: baseOverride.participants.filter((p) => p !== userName),
-      };
+      const courseCapacity = course.capacity;
+      const isIn = baseOverride.participants.includes(userName);
 
-      // Nachrücken aus Warteliste
-      if (nextOverride.participants.length < courseCapacity && nextOverride.waitlist?.length) {
-        const nextUser = nextOverride.waitlist[0];
-
-        nextOverride = {
-          ...nextOverride,
-          participants: [...nextOverride.participants, nextUser],
-          swapped: [...(nextOverride.swapped ?? []), nextUser],
-          waitlist: nextOverride.waitlist.slice(1),
+      if (isIn) {
+        // Absage: User entfernen
+        const nextOverride: CourseDateOverride = {
+          ...baseOverride,
+          participants: baseOverride.participants.filter((p) => p !== userName),
         };
 
-        // Pending Swap direkt auf active setzen
-        const swapIdx = updatedSwaps.findIndex(
-          (s) =>
-            s.user === nextUser &&
-            s.toCourseId === course.id &&
-            s.toDate === dateIso &&
-            s.status === "pending"
-        );
-        if (swapIdx >= 0) {
-          updatedSwaps[swapIdx] = { ...updatedSwaps[swapIdx], status: "active" };
+        if (idx >= 0) {
+          updatedOverrides[idx] = nextOverride;
+        } else {
+          updatedOverrides.push(nextOverride);
+        }
+      } else {
+        // Rücknahme: User hinzufügen, wenn Platz
+        const canRejoin = baseOverride.participants.length < courseCapacity;
+        if (!canRejoin) {
+          alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
+          return prevOverrides;
         }
 
-        // Ursprungstermin bereinigen
-        const pendingSwap = updatedSwaps[swapIdx];
-        if (pendingSwap) {
-          const originIdx = updatedOverrides.findIndex(
-            (o) => o.courseId === pendingSwap.fromCourseId && o.date === pendingSwap.fromDate
-          );
+        const nextOverride: CourseDateOverride = {
+          ...baseOverride,
+          participants: [...baseOverride.participants, userName],
+        };
 
-          if (originIdx >= 0) {
-            updatedOverrides[originIdx] = {
-              ...updatedOverrides[originIdx],
-              participants: updatedOverrides[originIdx].participants.filter(
-                (p) => p !== nextUser
-              ),
-              waitlist: (updatedOverrides[originIdx].waitlist ?? []).filter(
-                (u) => u !== nextUser
-              ),
-            };
-          } else {
-            const originCourse = courses.find((c) => c.id === pendingSwap.fromCourseId);
-            if (originCourse) {
-              updatedOverrides.push({
-                courseId: originCourse.id,
-                date: pendingSwap.fromDate,
-                participants: originCourse.participants.filter((p) => p !== nextUser),
-                swapped: [],
-                waitlist: [],
-              });
-            }
-          }
+        if (idx >= 0) {
+          updatedOverrides[idx] = nextOverride;
+        } else {
+          updatedOverrides.push(nextOverride);
         }
       }
 
-      // Override reinschreiben
-      if (idx >= 0) updatedOverrides[idx] = nextOverride;
-      else updatedOverrides.push(nextOverride);
-
-      // atomar Swaps setzen
-      setSwaps(updatedSwaps);
-
       return updatedOverrides;
-    }
-
-    // --------- B) RÜCKNAHME ----------
-    const canRejoin = baseOverride.participants.length < courseCapacity;
-    if (!canRejoin) {
-      alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
-      return prevOverrides;
-    }
-
-    const nextOverride: CourseDateOverride = {
-      ...baseOverride,
-      participants: [...baseOverride.participants, userName],
-    };
-
-    if (idx >= 0) updatedOverrides[idx] = nextOverride;
-    else updatedOverrides.push(nextOverride);
-
-    return updatedOverrides;
-  });
-
-  // Nachrücken weiterer Personen im System prüfen
-  processPromotions();
-}
+    });
+    processPromotions(); // Nachrücken übernehmen
+  }
 
   // Swap starten
-  function confirmSwap(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) {
+  async function confirmSwap(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) {
     // Swap nur 1x aktiv pro User+Termin
     // nur zur Sicherheit hier drin, Prüfen!!!
     const existing = swaps.find(
@@ -280,33 +206,53 @@ function onToggleAbsence(course: Course, dateIso: string, userName: string) {
 
     cancelAllPendingSwapsFromOrigin(fromCourse.id, fromDateIso, userName);
 
-    setSwaps((prev) => [
-      ...prev,
-      {
-        user: userName,
-        fromCourseId: fromCourse.id,
-        fromDate: fromDateIso,
-        toCourseId,
-        toDate: toDateIso,
-        status: "active" as const,
-      },
-    ]);
+    const newSwap: Swap = {
+      user: userName,
+      fromCourseId: fromCourse.id,
+      fromDate: fromDateIso,
+      toCourseId,
+      toDate: toDateIso,
+      status: 'active',
+    };
+    await createSwap(newSwap);
+    const updatedSwaps = await getSwaps(userName);
+    setSwaps(updatedSwaps);
 
     processPromotions();
+    console.log("confirmSwap");
   }
 
   // Swap löschen
-  function cancelSwap(swap: Swap, clickedCourseId: number) {
+  async function cancelSwap(swap: Swap, clickedCourseId: number) {
     const isOrigin = swap.fromCourseId === clickedCourseId;
 
     console.log("[cancelSwap] START", { swap, clickedCourseId, isOrigin });
 
+    const swapsToDelete = isOrigin
+      ? swaps.filter(
+          (s) =>
+            s.user === swap.user &&
+            s.fromCourseId === swap.fromCourseId &&
+            s.fromDate === swap.fromDate
+        )
+      : [swap];
+
+    // API-Aufrufe für Löschung
+    await Promise.all(
+      swapsToDelete.map(
+        async (s) => {
+          const swapId = `${s.fromDate}#${s.fromCourseId}#${s.toDate}#${s.toCourseId}`;
+          await deleteSwap(swapId);
+        }
+      )
+    );
+
     // alle zum ursprung gehörende Swaps löschen und Wartelisten bereinigen
-    if (isOrigin && swap.status === "pending") {
-      console.log("[cancelSwap] Ursprung + pending → alle bereinigen");
-      cancelAllPendingSwapsFromOrigin(swap.fromCourseId, swap.fromDate, swap.user);
-      return;
-    }
+    // if (isOrigin && swap.status === "pending") {
+    //   console.log("[cancelSwap] Ursprung + pending → alle bereinigen");
+    //   cancelAllPendingSwapsFromOrigin(swap.fromCourseId, swap.fromDate, swap.user);
+    //   return;
+    // }
 
     // 1) Overrides zuerst bereinigen
     setOverrides((prev) => {
@@ -360,39 +306,16 @@ function onToggleAbsence(course: Course, dateIso: string, userName: string) {
       });
     });
 
-    // 2) Swaps aufräumen
-    setSwaps((prev) => {
-      const filtered = isOrigin
-        ? prev.filter(
-            (s) =>
-              !(
-                s.user === swap.user &&
-                s.fromCourseId === swap.fromCourseId &&
-                s.fromDate === swap.fromDate
-              )
-          )
-        : prev.filter(
-            (s) =>
-              !(
-                s.user === swap.user &&
-                s.fromCourseId === swap.fromCourseId &&
-                s.fromDate === swap.fromDate &&
-                s.toCourseId === swap.toCourseId &&
-                s.toDate === swap.toDate
-              )
-          );
-
-      console.log("Swaps after cancel:", filtered);
-      return filtered;
-    });
+    const updatedSwaps = await getSwaps(swap.user);
+    setSwaps(updatedSwaps);
 
     processPromotions();
-    
+    console.log("cancelswap");
     // Hinweis: Der Ursprungstermin bleibt wie gehabt mit Override für Absage/Rücknahme bestehen.
   }
 
 
-  function requestSwap(
+  async function requestSwap(
     fromCourse: Course,
     fromDateIso: string,
     toCourseId: number,
@@ -452,20 +375,20 @@ function onToggleAbsence(course: Course, dateIso: string, userName: string) {
     });
 
     // 4) Swap mit Status "pending" speichern
-    setSwaps((prev) => [
-      ...prev,
-      {
-        user: userName,
-        fromCourseId: fromCourse.id,
-        fromDate: fromDateIso,
-        toCourseId,
-        toDate: toDateIso,
-        status: "pending",
-      },
-    ]);
+    const newSwap: Swap = {
+      user: userName,
+      fromCourseId: fromCourse.id,
+      fromDate: fromDateIso,
+      toCourseId,
+      toDate: toDateIso,
+      status: 'pending',
+    };
+    await createSwap(newSwap);
+    const updatedSwaps = await getSwaps(userName);
+    setSwaps(updatedSwaps);
   }
 
-  function cancelAllPendingSwapsFromOrigin(
+  async function cancelAllPendingSwapsFromOrigin(
     fromCourseId: number,
     fromDateIso: string,
     userName: string
@@ -480,18 +403,14 @@ function onToggleAbsence(course: Course, dateIso: string, userName: string) {
     );
 
     // Swaps bereinigen
-    setSwaps((prev) => {
-      const withoutPending = prev.filter(
-        (s) =>
-          !(
-            s.user === userName &&
-            s.fromCourseId === fromCourseId &&
-            s.fromDate === fromDateIso &&
-            s.status === "pending"
-          )
-      );
-      return withoutPending
-    });
+    await Promise.all(
+      pendingFromOrigin.map((swap) => {
+        const swapId = `${swap.fromDate}#${swap.fromCourseId}#${swap.toDate}#${swap.toCourseId}`;
+        return deleteSwap(swapId);
+      })
+    );
+    const updatedSwaps = await getSwaps(userName);
+    setSwaps(updatedSwaps);
 
     // Wartelisten bereinigen (auf Basis der gemerkten pending-Swaps)
     setOverrides((prev) =>
@@ -508,6 +427,7 @@ function onToggleAbsence(course: Course, dateIso: string, userName: string) {
         return o;
       })
     );
+        console.log("cancelAllPendingSwapsFromOrigin");
   }
 
 function processPromotions() {
@@ -537,10 +457,8 @@ function processPromotions() {
             changed = true;
 
             // 1️⃣ Swap auf active setzen
-            updatedSwaps = updatedSwaps.map((s) =>
-              s === swap ? { ...s, status: "active" as const } : s
-            );
-            
+            const swapId = `${swap.fromDate}#${swap.fromCourseId}#${swap.toDate}#${swap.toCourseId}`;
+            updateSwap(swapId, 'active');
 
             // 2️⃣ Teilnehmer im Zieltermin ergänzen
             target.participants = [...target.participants, swap.user];
@@ -568,9 +486,10 @@ function processPromotions() {
       
       return updatedOverrides;
     });
+        console.log("processPromotions");
   }
 }
-
+    console.log("return useCourseSwaps");
   return {
     overrides,
     swaps,

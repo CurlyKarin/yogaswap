@@ -19,6 +19,39 @@ locals {
       s3_actions     = []
       s3_resources   = []
     },
+    "create_swap" = {
+      name           = "create-swap"
+      file_name      = "createSwap.zip"
+      table_arns     = [module.swaps_table.table_arn]
+      dynamodb_actions = ["dynamodb:PutItem"]
+      tables = {
+        "SWAPS_TABLE" = module.swaps_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
+    },
+    "update_swap" = {
+      name           = "update-swap"
+      file_name      = "updateSwap.zip"
+      table_arns     = [module.swaps_table.table_arn]
+      dynamodb_actions = ["dynamodb:UpdateItem"]
+      tables = {
+        "SWAPS_TABLE" = module.swaps_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
+    },
+    "delete_swap" = {
+      name           = "delete-swap"
+      file_name      = "deleteSwap.zip"
+      dynamodb_actions = ["dynamodb:DeleteItem"]      
+      table_arns     = [module.swaps_table.table_arn]
+      tables = {
+        "SWAPS_TABLE" = module.swaps_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
+    },
     "get_coursedateoverrides" = {
       name           = var.lambdas["get_coursedateoverrides"].name
       file_name      = var.lambdas["get_coursedateoverrides"].file_name
@@ -38,6 +71,9 @@ locals {
   api_routes = {
     "GET /swaps" = "get_swaps"
     "GET /course-overrides" = "get_coursedateoverrides"
+    "POST /swaps" = "create_swap"
+    "PUT /swaps/{swapId}" = "update_swap"
+    "DELETE /swaps/{swapId}" = "delete_swap"
   }
 }
 
