@@ -62,6 +62,39 @@ locals {
       }
       s3_actions     = []
       s3_resources   = []
+    },
+    "create_override" = {
+      name           = "create-override"
+      file_name      = "createOverride.zip"
+      table_arns     = [module.course_overrides_table.table_arn]
+      dynamodb_actions = ["dynamodb:PutItem"]
+      tables = {
+        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
+    },
+    "update_override" = {
+      name           = "update-override"
+      file_name      = "updateOverride.zip"
+      table_arns     = [module.course_overrides_table.table_arn]
+      dynamodb_actions = ["dynamodb:UpdateItem"]
+      tables = {
+        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
+    },
+    "delete_override" = {
+      name           = "delete-override"
+      file_name      = "deleteOverride.zip"
+      dynamodb_actions = ["dynamodb:DeleteItem"]      
+      table_arns     = [module.course_overrides_table.table_arn]
+      tables = {
+        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
     }
   }
    # Map für Lambda-ARNs
@@ -74,6 +107,9 @@ locals {
     "POST /swaps" = "create_swap"
     "PUT /swaps/{swapId}" = "update_swap"
     "DELETE /swaps/{swapId}" = "delete_swap"
+    "POST /course-overrides" = "create_override"
+    "PUT /course-overrides/{courseId}/{date}" = "update_override"
+    "DELETE /course-overrides/{courseId}/{date}" = "delete_override"
   }
 }
 

@@ -11,6 +11,7 @@ export const handler = async (
   // Optionaler Filter nach courseId
   const courseIdParam = event.queryStringParameters?.courseId;
   const courseId = courseIdParam ? Number(courseIdParam) : undefined;
+  const sinceDate = event.queryStringParameters?.sinceDate; // z. B. "2025-09-29"
 
   const command = new ScanCommand({
     TableName: process.env.OVERRIDES_TABLE,
@@ -30,12 +31,16 @@ export const handler = async (
       items = items.filter((c) => c.courseId === courseId);
     }
 
+    if (sinceDate) {
+      items = items.filter((o) => new Date(o.date) >= new Date(sinceDate));
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify(items),
     };
   } catch (err) {
     console.error(err);
-    return { statusCode: 500, body: "Internal Server Error" };
+    return { statusCode: 500, body: JSON.stringify({ error: 'Internal Server Error' }) };
   }
 };

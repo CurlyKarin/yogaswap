@@ -8,7 +8,8 @@
     "seed": "ts-node src/seed/index.ts",
     "seed:build": "npm run build && node dist/seed/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "zip": "npm run build && node scripts/zipLambdas.mjs"
+    "zip": "npm run build && node scripts/zipLambdas.mjs",
+    "test": "jest"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.890.0",
@@ -19,11 +20,15 @@
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.152",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.4.0",
+    "archiver": "^5.3.2",
+    "aws-sdk-client-mock": "^4.1.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.4",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.9.2",
-    "archiver": "^5.3.2"
+    "typescript": "^5.9.2"
   },
   "type": "commonjs",
   "engines": {

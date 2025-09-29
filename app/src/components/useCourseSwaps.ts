@@ -1,20 +1,33 @@
-import { useState } from "react";
-import type { Course, User} from "../types"; 
+import { useEffect} from "react";
+import type { Course} from "../types"; 
 import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
 import { Swap, CourseDateOverride } from "@shared/types";
 import { createSwap, deleteSwap, getSwaps, updateSwap } from "../api/swaps";
+import { createOverride, deleteOverride, updateOverride } from "../api/overrides";
 
 export function useCourseSwaps(
-  initialOverrides: CourseDateOverride[] = [],
+  overrides: CourseDateOverride[] | undefined, // Erlaube undefined
+  setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>,
   swaps: Swap[],
   setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>,
 ) {
-  const [overrides, setOverrides] = useState<CourseDateOverride[]>(initialOverrides);
+  
+  // Filtere Overrides für aktuelle und zukünftige Termine
+  // Fallback auf leeres Array, wenn overrides undefined oder kein Array ist
+  const filteredOverrides = Array.isArray(overrides)
+    ? overrides.filter((o) => new Date(o.date) >= new Date())
+    : [];
+    
 
-  function onToggleAbsence(course: Course, dateIso: string, userName: string) {
-    // Absagen blockieren, wenn bereits aktiver Swap
+  useEffect(() => {
+    console.log('🔄 Filtered Overrides:', filteredOverrides);
+    console.log('🔄 Swaps:', swaps);
+  }, [filteredOverrides, swaps]);
+
+  async function onToggleAbsence(course: Course, dateIso: string, userName: string) {
+       // Absagen blockieren, wenn bereits aktiver Swap
     // Das ermöglicht hier eigentlich keinen Sinn und nur zur Sicherheit? Prüfen!!!
     const hasSwap = swaps.some(
       (s) =>
@@ -29,7 +42,7 @@ export function useCourseSwaps(
     }
 
     // Warnung bei Warteliste
-    const waitlist = getEffectiveWaitlist(course, overrides, dateIso);
+    const waitlist = getEffectiveWaitlist(course, filteredOverrides, dateIso);
     if (waitlist.length > 0) {
       const proceed = confirm(
         `Achtung: Für diesen Termin existiert eine Warteliste (${waitlist.length} Person(en)). ` +
@@ -38,17 +51,16 @@ export function useCourseSwaps(
       if (!proceed) return;
     }
 
-    setOverrides((prevOverrides) => {
-      const updatedOverrides = [...prevOverrides];
-
+    setOverrides((prev) => {
+      const updated = [...prev];
       const date = new Date(dateIso);
-      const idx = prevOverrides.findIndex(
+      const idx = prev.findIndex(
         (o) => o.courseId === course.id && sameDayUTC(new Date(o.date), date)
       );
 
       const baseOverride: CourseDateOverride =
         idx >= 0
-          ? { ...updatedOverrides[idx] }
+          ? { ...updated[idx] }
           : {
               courseId: course.id,
               date: dateIso,
@@ -68,16 +80,17 @@ export function useCourseSwaps(
         };
 
         if (idx >= 0) {
-          updatedOverrides[idx] = nextOverride;
+          updated[idx] = nextOverride;
+          updateOverride(course.id, dateIso, { participants: nextOverride.participants });
         } else {
-          updatedOverrides.push(nextOverride);
+          updated.push(nextOverride);
+          createOverride(nextOverride);
         }
       } else {
-        // Rücknahme: User hinzufügen, wenn Platz
-        const canRejoin = baseOverride.participants.length < courseCapacity;
-        if (!canRejoin) {
+        // Rücknahme: User hinzufügen, nur wenn Platz frei
+        if (baseOverride.participants.length >= courseCapacity) {
           alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
-          return prevOverrides;
+          return prev;
         }
 
         const nextOverride: CourseDateOverride = {
@@ -86,14 +99,17 @@ export function useCourseSwaps(
         };
 
         if (idx >= 0) {
-          updatedOverrides[idx] = nextOverride;
+          updated[idx] = nextOverride;
+          updateOverride(course.id, dateIso, { participants: nextOverride.participants });
         } else {
-          updatedOverrides.push(nextOverride);
+          updated.push(nextOverride);
+          createOverride(nextOverride);
         }
       }
 
-      return updatedOverrides;
+      return updated;
     });
+
     processPromotions(); // Nachrücken übernehmen
   }
 
@@ -119,7 +135,7 @@ export function useCourseSwaps(
       alert("Zielkurs nicht gefunden.");
       return;
     }
-    const existingTargetOverride = overrides.find(
+    const existingTargetOverride = filteredOverrides.find(
       (o) => o.courseId === toCourseId && o.date === toDateIso
     );
 
@@ -491,7 +507,7 @@ function processPromotions() {
 }
     console.log("return useCourseSwaps");
   return {
-    overrides,
+    overrides: filteredOverrides, // Rückgabe der gefilterten Overrides
     swaps,
     confirmSwap,
     requestSwap,

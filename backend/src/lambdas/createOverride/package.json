@@ -1,10 +1,10 @@
 {
-  "name": "update_swap",
+  "name": "create_override",
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "zip": "cd dist && zip -r ../../updateSwap.zip *"
+    "zip": "cd dist && zip -r ../../createOverride.zip *"
   },
   "devDependencies": {
     "@aws-sdk/client-dynamodb": "^3.890.0",

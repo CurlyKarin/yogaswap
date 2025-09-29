@@ -78,6 +78,6 @@ let command: QueryCommand;
     return { statusCode: 200, body: JSON.stringify(items) };
   } catch (err) {
     console.error(err);
-    return { statusCode: 500, body: "Internal Server Error" };
+    return { statusCode: 500, body: JSON.stringify({ error: 'Internal Server Error' }) };
   }
 };

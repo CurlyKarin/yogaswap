@@ -1,51 +1,75 @@
 import { courses } from "../data/courses";
 import type { Course, User } from "../types";
 import CourseCard from "./CourseCard";
-import { courseDateOverrides as initialOverrides } from "../data/courseOverrides";
-import { swapes as initialSwaps } from "../data/swapes";
 import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState } from "react";
-import { Swap } from "@shared/types";
-import axios from "axios";
+import { CourseDateOverride, Swap } from "@shared/types";
+import { getSwaps } from "../api/swaps";
+import { getOverrides } from "../api/overrides";
 
 type Props = {
   currentUser: User;
 };
 
 export default function CourseList({ currentUser }: Props) {
-  const [swaps, setSwaps] = useState<Swap[]>(initialSwaps);
+  const [swaps, setSwaps] = useState<Swap[]>([]);
+  const [overrides, setOverrides] = useState<CourseDateOverride[]>([]); // Neu: State für overrides, initial leer
   const {
-    overrides,
     confirmSwap,
     requestSwap,
     cancelSwap,
     onToggleAbsence,
-  } = useCourseSwaps(initialOverrides, swaps, setSwaps );
+    overrides: filteredOverrides
+  } = useCourseSwaps(overrides, setOverrides, swaps, setSwaps );
+  
+  useEffect(() => {
+    let isCancelled = false;
+    const loadOverrides = async () => {
+      try {
+        const overridesData = await getOverrides(); // Neu: Lade aus api/overrides.ts, optional mit sinceDate: '2025-09-29'
+        console.log('Geladene Overrides:', overridesData); // Debugging
+        if (!isCancelled) setOverrides(Array.isArray(overridesData) ? overridesData : []);
+      } catch (error) {
+        console.error('Fehler beim Laden der Overrides', error);
+        if (!isCancelled) setOverrides([]);
+      }
+    };
+    loadOverrides();
+    return () => {
+      isCancelled = true;
+    };
+  }, []); // Keine Abhängigkeiten, lade nur einmal
 
   useEffect(() => {
+    let isCancelled = false;
     const loadSwaps = async () => {
       if (!currentUser?.nickname) {
-        console.error('Kein Benutzer angegeben, fallback auf initialSwaps');
-        setSwaps(initialSwaps);
+        console.error('Kein Benutzer-Nickname, Swaps bleiben leer');
+        if (!isCancelled) setSwaps([]);
         return;
       }
       try {
-        console.log("Currentuser:", currentUser);
-        const response = await axios.get('/swaps', { params: { user: currentUser.nickname } });
-        setSwaps(response.data);
+        console.log('Lade Swaps für user:', currentUser.nickname);
+        const swapsData = await getSwaps(currentUser.nickname); // Verwende api/swaps.ts
+        if (!isCancelled) setSwaps(swapsData); // Setze Swaps, auch wenn leer
       } catch (error) {
         console.error('Fehler beim Laden der Swaps', error);
-        setSwaps(initialSwaps); // Fallback auf initialSwaps bei Fehler
+        if (!isCancelled) setSwaps([]); // Bei Fehler leeres Array
       }
     };
     loadSwaps();
-    console.log("useEffect ausgelöst");
-  }, [currentUser?.nickname, initialSwaps]);
+    console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
+    return () => {
+      isCancelled = true; // Verhindert Updates nach Unmount
+    };
+  }, [currentUser?.nickname]);
 
   // 👉 Debug-Ausgabe bei jedem Swaps-Update
   useEffect(() => {
-     console.log("🔄 Swaps updated:", swaps);
-  }, [swaps]);  
+    console.log('🔄 Overrides updated:', overrides);
+    console.log('🔄 Filtered Overrides:', filteredOverrides);
+    console.log('🔄 Swaps updated:', swaps);
+  }, [overrides, filteredOverrides, swaps]);
 
   useEffect(() => {
     console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
@@ -71,7 +95,7 @@ export default function CourseList({ currentUser }: Props) {
               course={course}
               currentUser={currentUser}
               dates={dates}
-              overrides={overrides}
+              overrides={filteredOverrides}
               swaps={swaps}
               onToggleAbsence={onToggleAbsence}
               confirmSwap={confirmSwap}
