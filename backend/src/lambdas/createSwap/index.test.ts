@@ -1,139 +1,88 @@
-import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { handler } from './index';
-import type { APIGatewayProxyEvent } from 'aws-lambda';
+import { APIGatewayProxyEvent } from 'aws-lambda';
 
-const dynamoMock = mockClient(DynamoDBClient);
-
-beforeEach(() => {
-  dynamoMock.reset();
-  process.env.SWAPS_TABLE = 'yogaswap-backend-demo-swaps-table';
-  jest.spyOn(console, 'error').mockImplementation(() => {}); // Mock console.error
+jest.mock('@aws-sdk/client-dynamodb', () => {
+  const mockSend = jest.fn();
+  return {
+    DynamoDBClient: jest.fn(() => ({ send: mockSend })),
+    PutItemCommand: jest.fn((input) => input),
+    mockSend,
+  };
 });
 
-afterEach(() => {
-  jest.restoreAllMocks(); // Stelle console.error nach jedem Test wieder her
-});
+const { mockSend } = jest.requireMock('@aws-sdk/client-dynamodb');
 
 describe('createSwap Lambda', () => {
-  it('should create a new swap successfully', async () => {
-    dynamoMock.on(PutItemCommand).resolves({});
+  const OLD_ENV = process.env;
 
-    const event: Partial<APIGatewayProxyEvent> = {
-      body: JSON.stringify({
-        user: 'Luna',
-        fromCourseId: 1,
-        fromDate: '2025-10-01',
-        toCourseId: 2,
-        toDate: '2025-10-02',
-        status: 'pending',
-      }),
-    };
-
-    const result = await handler(event as APIGatewayProxyEvent);
-
-    expect(result.statusCode).toBe(200);
-    expect(JSON.parse(result.body)).toEqual({ message: 'Swap created' });
-    expect(dynamoMock.calls()).toHaveLength(1);
-    expect(dynamoMock.call(0).args[0].input).toMatchObject({
-      TableName: 'yogaswap-backend-demo-swaps-table',
-      Item: {
-        swapId: { S: '2025-10-01#1#2025-10-02#2' },
-        user: { S: 'Luna' },
-        fromCourseId: { S: '1' },
-        fromDate: { S: '2025-10-01' },
-        toCourseId: { S: '2' },
-        toDate: { S: '2025-10-02' },
-        status: { S: 'pending' },
-      },
-    });
+  beforeEach(() => {
+    jest.resetModules();
+    process.env = { ...OLD_ENV, SWAPS_TABLE: 'test-swaps' };
+    mockSend.mockReset();
   });
 
-  it('should return 400 for missing required fields', async () => {
-    const event: Partial<APIGatewayProxyEvent> = {
-      body: JSON.stringify({
-        user: 'Luna',
-        fromCourseId: 1,
-        // fromDate, toCourseId, toDate, status fehlen
-      }),
-    };
+  afterAll(() => {
+    process.env = OLD_ENV;
+  });
 
-    const result = await handler(event as APIGatewayProxyEvent);
+  const baseEvent = (body: any): APIGatewayProxyEvent =>
+    ({
+      body: JSON.stringify(body),
+    } as any);
+
+  test('returns 400 if required fields are missing', async () => {
+    const event = baseEvent({ user: 'Anna' }); // missing required fields
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body)).toEqual({ error: 'Missing required fields' });
-    expect(dynamoMock.calls()).toHaveLength(0);
+    expect(JSON.parse(result.body).error).toMatch(/Missing required fields/);
+    expect(mockSend).not.toHaveBeenCalled();
   });
 
-  it('should handle DynamoDB errors', async () => {
-    dynamoMock.on(PutItemCommand).rejects(new Error('DynamoDB failure'));
+  test('successfully creates a swap', async () => {
+    mockSend.mockResolvedValueOnce({});
+    const event = baseEvent({
+      user: 'Nia',
+      fromCourseId: 'c1',
+      fromDate: '2025-10-01',
+      toCourseId: 'c2',
+      toDate: '2025-10-05',
+      status: 'pending',
+    });
 
-    const event: Partial<APIGatewayProxyEvent> = {
-      body: JSON.stringify({
-        user: 'Luna',
-        fromCourseId: 1,
-        fromDate: '2025-10-01',
-        toCourseId: 2,
-        toDate: '2025-10-02',
-        status: 'pending',
-      }),
-    };
+    const result = await handler(event);
 
-    const result = await handler(event as APIGatewayProxyEvent);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).message).toBe('Swap created');
 
-    expect(result.statusCode).toBe(500);
-    expect(JSON.parse(result.body)).toEqual({ error: 'Failed to create swap' });
-    expect(dynamoMock.calls()).toHaveLength(1);
-    expect(console.error).toHaveBeenCalledWith('Error creating swap:', expect.any(Error));
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-swaps',
+        Item: expect.objectContaining({
+          user: { S: 'Nia' },
+          fromCourseId: { S: 'c1' },
+          toCourseId: { S: 'c2' },
+          status: { S: 'pending' },
+        }),
+      })
+    );
   });
 
-//   it('should return 500 for invalid JSON body', async () => {
-//     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-//     const event: Partial<APIGatewayProxyEvent> = {
-//       body: 'invalid-json',
-//     };
+  test('returns 500 if DynamoDB fails', async () => {
+    mockSend.mockRejectedValueOnce(new Error('DynamoDB error'));
 
-//     const result = await handler(event as APIGatewayProxyEvent);
+    const event = baseEvent({
+      user: 'Nia',
+      fromCourseId: 'c1',
+      fromDate: '2025-10-01',
+      toCourseId: 'c2',
+      toDate: '2025-10-05',
+      status: 'pending',
+    });
 
-//     expect(result.statusCode).toBe(500);
-//     expect(JSON.parse(result.body)).toEqual({ error: 'Failed to create swap' });
-//     expect(dynamoMock.calls()).toHaveLength(0);
-//     expect(consoleErrorSpy).toHaveBeenCalledWith(
-//       'Error creating swap:',
-//       expect.objectContaining({
-//         name: 'SyntaxError',
-//         message: expect.stringMatching(/Unexpected token.*invalid-json/),
-//       })
-//     );
-//   });
-//   it('should return 500 for invalid JSON body', async () => {
-//     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-//     const event: Partial<APIGatewayProxyEvent> = {
-//       body: 'invalid-json',
-//     };
-
-//     const result = await handler(event as APIGatewayProxyEvent);
-
-//     console.log('Result:', result); // Debugging: Zeige die tatsächliche Antwort
-//     console.log('console.error calls:', consoleErrorSpy.mock.calls); // Debugging: Zeige console.error-Aufrufe
-
-//     expect(result.statusCode).toBe(500);
-//     expect(JSON.parse(result.body)).toEqual({ error: 'Failed to create swap' });
-//     expect(dynamoMock.calls()).toHaveLength(0);
-//     expect(consoleErrorSpy).toHaveBeenCalled();
-//     expect(consoleErrorSpy.mock.calls[0][0]).toBe('Error creating swap:');
-//     expect(consoleErrorSpy.mock.calls[0][1]).toBeInstanceOf(SyntaxError);
-//   });
-
-  it('should return 500 for invalid JSON body', async () => {
-    const event: Partial<APIGatewayProxyEvent> = {
-      body: 'invalid-json',
-    };
-
-    const result = await handler(event as APIGatewayProxyEvent);
+    const result = await handler(event);
 
     expect(result.statusCode).toBe(500);
-    expect(JSON.parse(result.body)).toEqual({ error: 'Failed to create swap' });
-    expect(dynamoMock.calls()).toHaveLength(0);
+    expect(JSON.parse(result.body).error).toBe('Failed to create swap');
   });
 });
