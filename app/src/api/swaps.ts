@@ -4,9 +4,16 @@ import { Swap } from '@yogaswap/shared';
 export async function getSwaps(user: string): Promise<Swap[]> {
   try {
     const response = await axios.get('/swaps', { params: { user } });
-    return response.data;
+    let data = response.data;
+    if (data.length === 0) {
+      console.log('Retrying getSwaps due to eventual consistency...');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Warte 1s
+      const retryResponse = await axios.get('/swaps', { params: { user } });
+      data = retryResponse.data;
+    }
+    return data;
   } catch (error) {
-    console.error('Fehler beim Laden der Swaps', error);
+    console.error('Fehler beim Laden der Swaps:', error);
     return [];
   }
 }

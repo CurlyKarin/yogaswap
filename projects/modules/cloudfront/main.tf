@@ -64,7 +64,7 @@ resource "aws_cloudfront_distribution" "spa" {
   }
   ordered_cache_behavior {
   path_pattern     = "/course-overrides*"
-  allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+  allowed_methods  = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"]
   cached_methods   = ["GET", "HEAD"]
   target_origin_id = "api-gateway-backend"
   viewer_protocol_policy = "redirect-to-https"
