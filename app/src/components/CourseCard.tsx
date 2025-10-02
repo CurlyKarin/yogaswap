@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Course, User} from "../types";
 import { Swap, CourseDateOverride } from "@shared/types";
 
@@ -17,6 +17,7 @@ type Props = {
   requestSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   cancelSwap: (swap: Swap, clickedCourseId: number) => void;
 };
+
 
 function sameDayUTC(a: Date, b: Date) {
   return (
@@ -37,20 +38,26 @@ export default function CourseCard({
   requestSwap,
   cancelSwap,
 }: Props) {
-
+  console.log('CourseCard swaps:', swaps); // Debugging
+  console.log('CourseCard overrides:', overrides); // Debugging
+  
   const [selectedDate, setSelectedDate] = useState<string>(
     dates[0]?.toISOString() || ""
   );
   const [swapDateIso, setSwapDateIso] = useState<string | null>(null);
   const [swapDateIsoWaitlist, setSwapDateIsoWaitlist] = useState<string | null>(null);
-
   const [showSwapModal, setShowSwapModal] = useState(false);
 
-  // passenden Override für den aktuell gewählten Termin suchen
-  const override = overrides.find(
-    (o) =>
-      o.courseId === course.id &&
-      sameDayUTC(new Date(o.date), new Date(selectedDate))
+  const userName = currentUser.nickname;
+  const selectedDateKey = toDateKey(new Date(selectedDate));
+
+  // Memoized Berechnungen für reaktive Aktualisierung
+  const override = useMemo(
+    () =>
+      overrides.find((o) =>
+        o.courseId === course.id && sameDayUTC(new Date(o.date), new Date(selectedDate))
+      ),
+    [overrides, course.id, selectedDate]
   );
 
   const participants = override ? override.participants : course.participants;
@@ -58,71 +65,75 @@ export default function CourseCard({
   const freeSpots = course.capacity - participants.length;
   const waitlist = override?.waitlist ?? [];
 
-  // Status des aktuellen Users bzgl. ausgewähltem Termin
-  const userName = currentUser.nickname; // Teilnehmerliste nutzt Nicknames
   const isParticipant = participants.includes(userName);
   const originallyParticipant = course.participants.includes(userName);
   const hasCancelled = originallyParticipant && !isParticipant;
- 
-  // Optionen für Zieltermine (aus allen Kursen, mit Regeln/Filtern)
-  const availableSwapDates = getAvailableDates(
-    courses,
-    overrides,
-    currentUser,
-    swapSettings,
-    new Date(selectedDate) // Referenzdatum
-  )
-    // aufsteigend sortieren
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  const waitlistDates = getWaitlistDates(
-    courses,
-    overrides,
-    currentUser,
-    swapSettings,
-    new Date(selectedDate) // Referenzdatum
-  )
-    // aufsteigend sortieren
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  const selectedDateKey = toDateKey(new Date(selectedDate));
-
-  // Gibt es für diesen Kurs+Termin einen Swap, an dem der User beteiligt ist?
-  const swapForThisTerm = swaps.find(
-    (s) =>
-      s.user === userName &&
-      (
-        (s.fromCourseId === course.id && s.fromDate === selectedDateKey) ||
-        (s.toCourseId === course.id && s.toDate === selectedDateKey)
-      )
+const availableSwapDates = useMemo(
+    () =>
+      getAvailableDates(courses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
+        (a, b) => a.date.getTime() - b.date.getTime()
+      ),
+    [courses, overrides, currentUser, swapSettings, selectedDate]
   );
 
-  const allSwapsForThisTerm = swaps.filter(
-    (s) =>
-      (s.fromCourseId === course.id && s.fromDate === selectedDateKey && s.user === userName) ||
-      (s.toCourseId === course.id && s.toDate === selectedDateKey && s.user === userName)
-    );
-
-  const swapForWaitlist = swaps.find(
-    (s) =>
-      s.user === userName &&
-      s.toCourseId === course.id &&
-      s.toDate === selectedDateKey &&
-      s.status === "pending"
+  const waitlistDates = useMemo(
+    () =>
+      getWaitlistDates(courses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
+        (a, b) => a.date.getTime() - b.date.getTime()
+      ),
+    [courses, overrides, currentUser, swapSettings, selectedDate]
   );
 
-  const pendingSwapsFromOrigin = swaps.filter(
-  (s) =>
-    s.user === userName &&
-    s.fromCourseId === course.id &&
-    s.fromDate === selectedDateKey &&
-    s.status === "pending"
+  const swapForThisTerm = useMemo(
+    () =>
+      swaps.find(
+        (s) =>
+          s.user === userName &&
+          ((s.fromCourseId === course.id && s.fromDate === selectedDateKey) ||
+           (s.toCourseId === course.id && s.toDate === selectedDateKey))
+      ),
+    [swaps, userName, course.id, selectedDateKey]
+  );
+
+  const allSwapsForThisTerm = useMemo(
+    () =>
+      swaps.filter(
+        (s) =>
+          (s.fromCourseId === course.id && s.fromDate === selectedDateKey && s.user === userName) ||
+          (s.toCourseId === course.id && s.toDate === selectedDateKey && s.user === userName)
+      ),
+    [swaps, userName, course.id, selectedDateKey]
+  );
+
+  const swapForWaitlist = useMemo(
+    () =>
+      swaps.find(
+        (s) =>
+          s.user === userName &&
+          s.toCourseId === course.id &&
+          s.toDate === selectedDateKey &&
+          s.status === "pending"
+      ),
+    [swaps, userName, course.id, selectedDateKey]
+  );
+
+  const pendingSwapsFromOrigin = useMemo(
+    () =>
+      swaps.filter(
+        (s) =>
+          s.user === userName &&
+          s.fromCourseId === course.id &&
+          s.fromDate === selectedDateKey &&
+          s.status === "pending"
+      ),
+    [swaps, userName, course.id, selectedDateKey]
   );
 
   const pendingCount = pendingSwapsFromOrigin.length;
   const hasPendingRequestsFromOrigin = pendingCount > 0;
 
-
+  console.log('swapForThisTerm:', swapForThisTerm); // Debugging
 
   // ------------------ return ------------------
   return (

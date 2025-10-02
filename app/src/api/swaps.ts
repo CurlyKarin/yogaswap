@@ -1,28 +1,47 @@
 import axios from 'axios';
-import { Swap } from '@yogaswap/shared';
+import { Swap } from '@shared/types';
 
-export async function getSwaps(user: string): Promise<Swap[]> {
+export async function getSwaps(user: string, fromDate?: string, fromCourseId?: number, toDate?: string, toCourseId?: number, status?: string): Promise<Swap[]> {
   try {
-    const response = await axios.get('/swaps', { params: { user } });
+    const params: Record<string, string | number> = { user };
+    if (fromDate) params.fromDate = fromDate;
+    if (fromCourseId) params.fromCourseId = fromCourseId.toString();
+    if (toDate) params.toDate = toDate;
+    if (toCourseId) params.toCourseId = toCourseId.toString();
+    if (status) params.status = status;
+
+    console.log('getSwaps params:', params);
+    const response = await axios.get('/swaps', { params });
     let data = response.data;
+    console.log('getSwaps initial response:', data);
     if (data.length === 0) {
-      console.log('Retrying getSwaps due to eventual consistency...');
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Warte 1s
-      const retryResponse = await axios.get('/swaps', { params: { user } });
+      console.log('Retrying getSwaps...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const retryResponse = await axios.get('/swaps', { params });
       data = retryResponse.data;
+      console.log('getSwaps retry response:', data);
     }
-    return data;
+    return data.map((item: any) => ({
+      user: item.user,
+      fromCourseId: parseInt(item.fromCourseId),
+      fromDate: item.fromDate,
+      toCourseId: parseInt(item.toCourseId),
+      toDate: item.toDate,
+      status: item.status,
+    }));
   } catch (error) {
     console.error('Fehler beim Laden der Swaps:', error);
     return [];
   }
 }
 
-export async function createSwap(newSwap: Swap): Promise<void> {
+export async function createSwap(swap: Swap): Promise<void> {
   try {
-    await axios.post('/swaps', newSwap);
+    console.log('Create Swap Call:', swap);
+    await axios.post('/swaps', swap);
   } catch (error) {
-    console.error('Fehler beim Anlegen des Swaps', error);
+    console.error('Fehler beim Erstellen des Swaps:', error);
+    throw error;
   }
 }
 
@@ -34,10 +53,14 @@ export async function updateSwap(swapId: string, status: Swap['status']): Promis
   }
 }
 
-export async function deleteSwap(swapId: string): Promise<void> {
+
+export async function deleteSwap(swap: Swap): Promise<void> {
   try {
-    await axios.delete(`/swaps/${swapId}`);
+    const swapId = `${swap.fromDate}#${swap.fromCourseId}#${swap.toDate}#${swap.toCourseId}`;
+    console.log('Delete Swap Call:', { swapId, user: swap.user });
+    await axios.delete(`/swaps/${swapId}`, { params: { user: swap.user } });
   } catch (error) {
-    console.error('Fehler beim Löschen des Swaps', error);
+    console.error('Fehler beim Löschen des Swaps:', error);
+    throw error;
   }
 }

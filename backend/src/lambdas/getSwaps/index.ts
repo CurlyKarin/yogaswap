@@ -2,70 +2,61 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
 import { Swap } from "@yogaswap/shared";
 
-//cd backend/src/lambdas/getSwaps
-//npm init -y
-//npm install typescript @types/node @aws-sdk/client-dynamodb aws-lambda --save-dev
-
 const client = new DynamoDBClient({ region: "eu-central-1" });
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const user = event.queryStringParameters?.user;
   if (!user) {
-    return { statusCode: 400, body: "Missing 'user' query parameter" };
+    return { statusCode: 400, body: JSON.stringify({ error: 'Missing user parameter' }) };
   }
 
-  // Optional: Filter nach fromDate und fromCourseId
   const fromDate = event.queryStringParameters?.fromDate;
   const fromCourseId = event.queryStringParameters?.fromCourseId;
-  const toCourseId = event.queryStringParameters?.toCourseId; // fuer OR-Filter; 
-  const toDate = event.queryStringParameters?.toDate; // Für OR-Filter
-  const status = event.queryStringParameters?.status || "pending";
+  const toDate = event.queryStringParameters?.toDate;
+  const toCourseId = event.queryStringParameters?.toCourseId;
+  //const status = event.queryStringParameters?.status; // Kein Default-Wert
 
-  // Range Key zusammengesetzt: "fromDate_fromCourseId"
-
-let command: QueryCommand;
+  let command: QueryCommand;
   if (fromDate && fromCourseId) {
-    // Abfrage über GSI_From
+    // Abfrage über GSI_From, unabhängig vom Status
     command = new QueryCommand({
       TableName: process.env.SWAPS_TABLE,
       IndexName: "GSI_From",
-      KeyConditionExpression: "#u = :u AND #f = :f",
+      KeyConditionExpression: "#u = :u AND begins_with(#f, :f)",
       ExpressionAttributeNames: { "#u": "user", "#f": "fromDate_fromCourseId_status" },
       ExpressionAttributeValues: {
         ":u": { S: user },
-        ":f": { S: `${fromDate}#${fromCourseId}${status ? `#${status}` : ''}` },
+        ":f": { S: `${fromDate}#${fromCourseId}` },
       },
+      ConsistentRead: true,
     });
   } else if (toDate && toCourseId) {
-    // Abfrage über GSI_To
+    // Abfrage über GSI_To, unabhängig vom Status
     command = new QueryCommand({
       TableName: process.env.SWAPS_TABLE,
       IndexName: "GSI_To",
-      KeyConditionExpression: "#u = :u AND #t = :t",
+      KeyConditionExpression: "#u = :u AND begins_with(#t, :t)",
       ExpressionAttributeNames: { "#u": "user", "#t": "toDate_toCourseId_status" },
       ExpressionAttributeValues: {
         ":u": { S: user },
-        ":t": { S: `${toDate}#${toCourseId}${status ? `#${status}` : ''}` },
+        ":t": { S: `${toDate}#${toCourseId}` },
       },
+      ConsistentRead: true,
     });
   } else {
-    // Fallback: Alle Swaps für den Benutzer
+    // Fallback: Alle Swaps für den Benutzer, ohne Status-Filter
     command = new QueryCommand({
       TableName: process.env.SWAPS_TABLE,
       KeyConditionExpression: "#u = :u",
       ExpressionAttributeNames: { "#u": "user" },
       ExpressionAttributeValues: { ":u": { S: user } },
-      ...(status ? {
-        FilterExpression: "#s = :s",
-        ExpressionAttributeNames: { "#u": "user", "#s": "status" },
-        ExpressionAttributeValues: { ":u": { S: user }, ":s": { S: status } },
-      } : {}),
+      ConsistentRead: true,
     });
   }
 
   try {
+    console.log('QueryCommand:', command.input);
     const data = await client.send(command);
-    
     const items: Swap[] = (data.Items || []).map((item) => ({
       user: item.user.S!,
       fromCourseId: Number(item.fromCourseId.S!),
@@ -74,10 +65,10 @@ let command: QueryCommand;
       toDate: item.toDate.S!,
       status: item.status.S as Swap["status"],
     }));
-
+    console.log('getSwaps result:', items);
     return { statusCode: 200, body: JSON.stringify(items) };
   } catch (err) {
-    console.error(err);
+    console.error('Error querying swaps:', err);
     return { statusCode: 500, body: JSON.stringify({ error: 'Internal Server Error' }) };
   }
 };

@@ -1,4 +1,10 @@
 terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0.0" # Neueste stabile Version
+    }
+  }
   backend "local" {}
 }
 
@@ -128,6 +134,29 @@ module "cloudfront_spa" {
   bucket_domain_name = module.spa_site.bucket_regional_domain
   api_gateway_domain_name = replace(module.yogaswap_api.api_endpoint, "https://", "")
 }
+
+# CloudFront-Invalidierung mit null_resource
+resource "null_resource" "cloudfront_invalidation" {
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    command = "aws cloudfront create-invalidation --distribution-id ${module.cloudfront_spa.distribution_id} --paths /* --no-cli-pager"
+    interpreter = ["cmd", "/C"]
+  }
+
+  depends_on = [aws_s3_object.spa_files]
+}
+
+resource "random_id" "invalidation" {
+  byte_length = 4
+  keepers = {
+    # Erzeuge neue ID bei jedem Plan/Apply, um Invalidierung zu triggern
+    always_run = timestamp()
+  }
+}
+
 
 output "api_url" {
   value = module.yogaswap_api.url

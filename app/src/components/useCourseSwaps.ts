@@ -8,7 +8,7 @@ import { createSwap, deleteSwap, getSwaps, updateSwap } from "../api/swaps";
 import { createOverride, deleteOverride, updateOverride } from "../api/overrides";
 
 export function useCourseSwaps(
-  overrides: CourseDateOverride[] | undefined, // Erlaube undefined
+  overrides: CourseDateOverride[], // Erlaube undefined
   setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>,
   swaps: Swap[],
   setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>,
@@ -16,10 +16,7 @@ export function useCourseSwaps(
   
   // Filtere Overrides für aktuelle und zukünftige Termine
   // Fallback auf leeres Array, wenn overrides undefined oder kein Array ist
-  const filteredOverrides = Array.isArray(overrides)
-    ? overrides.filter((o) => new Date(o.date) >= new Date())
-    : [];
-    
+  const filteredOverrides = overrides;
 
   useEffect(() => {
     console.log('🔄 Filtered Overrides:', filteredOverrides);
@@ -246,6 +243,7 @@ export function useCourseSwaps(
     };
     await createSwap(newSwap);
     const updatedSwaps = await getSwaps(userName);
+    console.log('Updated Swaps after confirmSwap:', updatedSwaps);
     setSwaps(updatedSwaps);
 
     processPromotions();
@@ -267,16 +265,18 @@ export function useCourseSwaps(
         )
       : [swap];
 
-    // API-Aufrufe für Löschung
+   // API-Aufrufe für Löschung
     await Promise.all(
-      swapsToDelete.map(
-        async (s) => {
-          const swapId = `${s.fromDate}#${s.fromCourseId}#${s.toDate}#${s.toCourseId}`;
-          await deleteSwap(swapId);
+      swapsToDelete.map(async (s) => {
+        // Sicherstellen, dass alle Felder vorhanden sind
+        if (!s.fromDate || !s.fromCourseId || !s.toDate || !s.toCourseId || !s.user) {
+          console.error('Invalid swap data:', s);
+          return;
         }
-      )
+        await deleteSwap(s);
+      })
     );
-
+    
     // alle zum ursprung gehörende Swaps löschen und Wartelisten bereinigen
     // if (isOrigin && swap.status === "pending") {
     //   console.log("[cancelSwap] Ursprung + pending → alle bereinigen");
@@ -294,6 +294,7 @@ export function useCourseSwaps(
         if (isOrigin && o.courseId === swap.fromCourseId && o.date === swap.fromDate) {
           if (swap.status === "active") {
             newO.swapped = (o.swapped ?? []).filter((u) => u !== swap.user);
+            newO.participants = (o.participants ?? []).filter((p) => p !== swap.user);
           } else if (swap.status === "pending") {
             newO.waitlist = (o.waitlist ?? []).filter((u) => u !== swap.user);
           }
@@ -331,12 +332,18 @@ export function useCourseSwaps(
             before,
             after: newO,
           });
+          updateOverride(o.courseId, o.date, {
+            participants: newO.participants,
+            swapped: newO.swapped,
+            waitlist: newO.waitlist,
+          });
         }
         return newO;
       });
     });
 
     const updatedSwaps = await getSwaps(swap.user);
+    console.log('Updated Swaps after cancelSwap:', updatedSwaps);
     setSwaps(updatedSwaps);
 
     processPromotions();
@@ -436,8 +443,7 @@ export function useCourseSwaps(
     // Swaps bereinigen
     await Promise.all(
       pendingFromOrigin.map((swap) => {
-        const swapId = `${swap.fromDate}#${swap.fromCourseId}#${swap.toDate}#${swap.toCourseId}`;
-        return deleteSwap(swapId);
+        return deleteSwap(swap);
       })
     );
     const updatedSwaps = await getSwaps(userName);

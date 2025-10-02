@@ -90,6 +90,9 @@ resource "aws_cloudfront_distribution" "spa" {
         forward = "none"
       }
     }
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
   }
 
   custom_error_response {

@@ -26,4 +26,9 @@ resource "aws_s3_object" "spa_files" {
     jpg  = "image/jpeg",
     svg  = "image/svg+xml"
   }, regex("\\.([^.]+)$", each.value)[0], "binary/octet-stream")
+
+  # Debugging: Logge hochgeladene Dateien
+  provisioner "local-exec" {
+    command = "echo 'Uploading ${each.value} to S3 bucket ${module.spa_site.bucket_name}'"
+  }
 }
