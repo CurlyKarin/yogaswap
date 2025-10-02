@@ -42,3 +42,16 @@ projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.
 projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/terraform-provider-aws.exe
 backend/terraform.tfstate
 projects/yogaswap/terraform.tfstate.backup
+app/build/assets/index-C1BZCd10.js
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.14.1/windows_amd64/CHANGELOG.md
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.14.1/windows_amd64/LICENSE
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.14.1/windows_amd64/README.md
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.14.1/windows_amd64/terraform-provider-aws.exe
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/null/3.2.4/windows_amd64/CHANGELOG.md
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/null/3.2.4/windows_amd64/LICENSE
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/null/3.2.4/windows_amd64/README.md
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/null/3.2.4/windows_amd64/terraform-provider-null.exe
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/CHANGELOG.md
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/LICENSE
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/README.md
+projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/terraform-provider-random.exe
