@@ -45,18 +45,20 @@ export async function createSwap(swap: Swap): Promise<void> {
   }
 }
 
-export async function updateSwap(swapId: string, status: Swap['status']): Promise<void> {
+export async function updateSwap(swap: Swap, status: Swap['status']): Promise<void> {
   try {
-    await axios.put(`/swaps/${swapId}`, { status });
+    const swapId = `${swap.fromDate}-${swap.fromCourseId}-${swap.toDate}-${swap.toCourseId}`;
+    console.log('Update Swap Call:', { swapId, user: swap.user, status });
+    await axios.put(`/swaps/${swapId}`, { status }, { params: { user: swap.user } });
   } catch (error) {
-    console.error('Fehler beim Updaten des Swaps', error);
+    console.error('Fehler beim Updaten des Swaps:', error);
+    throw error;
   }
 }
 
-
 export async function deleteSwap(swap: Swap): Promise<void> {
   try {
-    const swapId = `${swap.fromDate}#${swap.fromCourseId}#${swap.toDate}#${swap.toCourseId}`;
+    const swapId = `${swap.fromDate}-${swap.fromCourseId}-${swap.toDate}-${swap.toCourseId}`;
     console.log('Delete Swap Call:', { swapId, user: swap.user });
     await axios.delete(`/swaps/${swapId}`, { params: { user: swap.user } });
   } catch (error) {

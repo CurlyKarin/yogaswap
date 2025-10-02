@@ -8,8 +8,17 @@ module "spa_site" {
   enable_website_hosting = true
 }
 
-# Kopieren der Inhalte für die webpage ins bucket
+resource "null_resource" "upload_frontend" {
+  triggers = {
+    build_hash = local.build_hash
+  }
 
+  provisioner "local-exec" {
+    command = "aws s3 sync ../../app/build s3://${module.spa_site.bucket_name} --delete"
+  }
+}
+
+# Kopieren der Inhalte für die webpage ins bucket
 resource "aws_s3_object" "spa_files" {
   for_each = fileset("../../app/build", "**/*") 
 

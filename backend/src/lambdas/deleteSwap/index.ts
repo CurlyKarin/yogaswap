@@ -6,7 +6,8 @@ const client = new DynamoDBClient({ region: "eu-central-1" });
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const swapId = event.pathParameters?.swapId;
   const user = event.queryStringParameters?.user;
-
+  console.log('DeleteSwap params:', { swapId, user });
+  
   if (!swapId || !user) {
     return {
       statusCode: 400,

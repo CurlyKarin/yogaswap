@@ -252,6 +252,7 @@ export function useCourseSwaps(
 
   // Swap löschen
   async function cancelSwap(swap: Swap, clickedCourseId: number) {
+    console.log("[cancelSwap use] START", { swap, clickedCourseId, swaps });
     const isOrigin = swap.fromCourseId === clickedCourseId;
 
     console.log("[cancelSwap] START", { swap, clickedCourseId, isOrigin });
@@ -273,6 +274,7 @@ export function useCourseSwaps(
           console.error('Invalid swap data:', s);
           return;
         }
+        console.log("[cancelSwap] Deleting swap:", s);
         await deleteSwap(s);
       })
     );
@@ -320,7 +322,7 @@ export function useCourseSwaps(
           }
         }
         
-        // Debug-Ausgabe, falls sich etwas geändert hat
+        // UpdateOverride, falls sich etwas geändert hat
         if (
           JSON.stringify(before.participants) !== JSON.stringify(newO.participants) ||
           JSON.stringify(before.swapped) !== JSON.stringify(newO.swapped) ||
@@ -332,6 +334,7 @@ export function useCourseSwaps(
             before,
             after: newO,
           });
+
           updateOverride(o.courseId, o.date, {
             participants: newO.participants,
             swapped: newO.swapped,
@@ -347,7 +350,7 @@ export function useCourseSwaps(
     setSwaps(updatedSwaps);
 
     processPromotions();
-    console.log("cancelswap");
+
     // Hinweis: Der Ursprungstermin bleibt wie gehabt mit Override für Absage/Rücknahme bestehen.
   }
 
@@ -359,70 +362,97 @@ export function useCourseSwaps(
     toDateIso: string,
     userName: string
   ) {
-    // 1) prüfen, ob schon ein Swap existiert
-    const existing = swaps.find(
-      (s) =>
-        s.user === userName &&
-        s.fromCourseId === fromCourse.id &&
-        s.fromDate === fromDateIso &&
-        s.toCourseId === toCourseId &&
-        s.toDate === toDateIso
-    );
-    if (existing) {
-      alert("Du hast diese Anfrage bereits gestellt!");
-      return;
-    }
-
-    // 2) Zielkurs suchen
-    const targetCourse = courses.find((c) => c.id === toCourseId);
-    if (!targetCourse) {
-      alert("Zielkurs nicht gefunden.");
-      return;
-    }
-
-    // 3) in Overrides die Warteliste ergänzen
-    setOverrides((prev) => {
-      const updated = [...prev];
-      const targetIdx = updated.findIndex(
-        (o) => o.courseId === toCourseId && o.date === toDateIso
-      );
-
-      if (targetIdx >= 0) {
-        const cur = updated[targetIdx];
-        // nur hinzufügen, falls User nicht schon drin
-        if (!cur.waitlist?.includes(userName)) {
-          updated[targetIdx] = {
-            ...cur,
-            waitlist: [...(cur.waitlist ?? []), userName],
-          };
-        }
-      } else {
-        // Override neu anlegen → Basis sind immer die aktuellen Kursdaten
-        const baseParticipants = targetCourse.participants;
-        updated.push({
-          courseId: toCourseId,
-          date: toDateIso,
-          participants: [...baseParticipants],  // alle bisherigen Teilnehmer
-          swapped: [],
-          waitlist: [userName], // neue Warteliste
+     try {
+      // 1) Validierung der Eingabeparameter
+      if (!fromCourse?.id || !fromDateIso || !toCourseId || !toDateIso || !userName) {
+        console.error('Invalid input for requestSwap:', {
+          fromCourseId: fromCourse?.id,
+          fromDateIso,
+          toCourseId,
+          toDateIso,
+          userName,
         });
+        alert('Ungültige Eingabedaten für den Tausch.');
+        return;
       }
 
-      return updated;
-    });
+      // 2) Prüfen, ob schon ein Swap existiert
+      const existing = swaps.find(
+        (s) =>
+          s.user === userName &&
+          s.fromCourseId === fromCourse.id &&
+          s.fromDate === fromDateIso &&
+          s.toCourseId === toCourseId &&
+          s.toDate === toDateIso
+      );
+      if (existing) {
+        console.log('Swap already exists:', existing);
+        alert('Du hast diese Anfrage bereits gestellt!');
+        return;
+      }
 
-    // 4) Swap mit Status "pending" speichern
-    const newSwap: Swap = {
-      user: userName,
-      fromCourseId: fromCourse.id,
-      fromDate: fromDateIso,
-      toCourseId,
-      toDate: toDateIso,
-      status: 'pending',
-    };
-    await createSwap(newSwap);
-    const updatedSwaps = await getSwaps(userName);
-    setSwaps(updatedSwaps);
+      // 3) Zielkurs suchen
+      const targetCourse = courses.find((c) => c.id === toCourseId);
+      if (!targetCourse) {
+        console.error('Target course not found:', toCourseId);
+        alert('Zielkurs nicht gefunden.');
+        return;
+      }
+
+      // 4) In Overrides die Warteliste ergänzen
+      setOverrides((prev) => {
+        const updated = [...prev];
+        const targetIdx = updated.findIndex(
+          (o) => o.courseId === toCourseId && o.date === toDateIso
+        );
+
+        if (targetIdx >= 0) {
+          const cur = updated[targetIdx];
+          // Nur hinzufügen, falls User nicht schon drin
+          if (!cur.waitlist?.includes(userName)) {
+            updated[targetIdx] = {
+              ...cur,
+              waitlist: [...(cur.waitlist ?? []), userName],
+            };
+            console.log('Updated waitlist:', updated[targetIdx]);
+          } else {
+            console.log('User already in waitlist:', userName);
+          }
+        } else {
+          // Override neu anlegen
+          const baseParticipants = targetCourse.participants;
+          const newOverride: CourseDateOverride = {
+            courseId: toCourseId,
+            date: toDateIso,
+            participants: [...baseParticipants],
+            swapped: [],
+            waitlist: [userName],
+          };
+          updated.push(newOverride);
+          console.log('Created new override:', newOverride);
+        }
+
+        return updated;
+      });
+
+      // 5) Swap mit Status "pending" speichern
+      const newSwap: Swap = {
+        user: userName,
+        fromCourseId: fromCourse.id,
+        fromDate: fromDateIso,
+        toCourseId,
+        toDate: toDateIso,
+        status: 'pending',
+      };
+      console.log('Request Swap:', newSwap);
+      await createSwap(newSwap);
+      const updatedSwaps = await getSwaps(userName);
+      console.log('Updated Swaps after requestSwap:', updatedSwaps);
+      setSwaps(updatedSwaps);
+    } catch (error) {
+      console.error('Error in requestSwap:', error);
+      alert('Fehler beim Erstellen des Tauschs: ' + error);
+    }
   }
 
   // Abbrechen aller Swaps des Users, die vom Ursprungstermin stammen
@@ -443,6 +473,7 @@ export function useCourseSwaps(
     // Swaps bereinigen
     await Promise.all(
       pendingFromOrigin.map((swap) => {
+        console.log('cancelAllPendingSwapsFromOrigin:', swap);
         return deleteSwap(swap);
       })
     );
@@ -510,8 +541,7 @@ function processPromotions() {
             changed = true;
 
             // 1️⃣ Swap auf active setzen
-            const swapId = `${swap.fromDate}#${swap.fromCourseId}#${swap.toDate}#${swap.toCourseId}`;
-            updateSwap(swapId, 'active');
+            updateSwap(swap, 'active');
 
             // 2️⃣ Teilnehmer im Zieltermin ergänzen
             target.participants = [...target.participants, swap.user];

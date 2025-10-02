@@ -5,10 +5,12 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc --build",
+    "build-lambdas": "tsc --build src/lambdas/createSwap/tsconfig.json src/lambdas/deleteSwap/tsconfig.json src/lambdas/updateSwap/tsconfig.json src/lambdas/createOverride/tsconfig.json src/lambdas/updateOverride/tsconfig.json",
+    "zip": "node scripts/zipLambdas.mjs",
+    "build-and-zip": "npm run build-lambdas && npm run zip-lambdas",
     "seed": "ts-node src/seed/index.ts",
     "seed:build": "npm run build && node dist/seed/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "zip": "npm run build && node scripts/zipLambdas.mjs",
     "test": "jest"
   },
   "dependencies": {
@@ -16,13 +18,13 @@
     "@aws-sdk/client-lambda": "^3.388.0",
     "@aws-sdk/lib-dynamodb": "^3.388.0",
     "@yogaswap/shared": "file:../shared",
-    "aws-lambda": "^1.0.7"
+    "aws-lambda": "^1.0.7",
+    "archiver": "^5.3.2"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.152",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.4.0",
-    "archiver": "^5.3.2",
     "aws-sdk-client-mock": "^4.1.0",
     "jest": "^30.2.0",
     "ts-jest": "^29.4.4",
