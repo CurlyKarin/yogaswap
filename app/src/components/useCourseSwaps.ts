@@ -1,17 +1,14 @@
 import { useEffect} from "react";
-import type { Course} from "../types"; 
+import type { Course, User} from "../types"; 
 import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
 import { Swap, CourseDateOverride } from "@shared/types";
-import { createSwap, deleteSwap, getSwaps, updateSwap } from "../api/swaps";
-import { createOverride, deleteOverride, updateOverride } from "../api/overrides";
+import { createSwap, deleteSwap, getSwaps, getSwapsByStatus, updateSwap } from "../api/swaps";
+import { createOverride, deleteOverride, getOverrides, updateOverride } from "../api/overrides";
 
 export function useCourseSwaps(
-  overrides: CourseDateOverride[], // Erlaube undefined
-  setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>,
-  swaps: Swap[],
-  setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>,
+overrides: CourseDateOverride[], setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>, swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUser: User,
 ) {
   
   // Filtere Overrides für aktuelle und zukünftige Termine
@@ -278,13 +275,6 @@ export function useCourseSwaps(
         await deleteSwap(s);
       })
     );
-    
-    // alle zum ursprung gehörende Swaps löschen und Wartelisten bereinigen
-    // if (isOrigin && swap.status === "pending") {
-    //   console.log("[cancelSwap] Ursprung + pending → alle bereinigen");
-    //   cancelAllPendingSwapsFromOrigin(swap.fromCourseId, swap.fromDate, swap.user);
-    //   return;
-    // }
 
     // 1) Overrides zuerst bereinigen
     setOverrides((prev) => {
@@ -362,100 +352,84 @@ export function useCourseSwaps(
     toDateIso: string,
     userName: string
   ) {
-     try {
-      // 1) Validierung der Eingabeparameter
-      if (!fromCourse?.id || !fromDateIso || !toCourseId || !toDateIso || !userName) {
-        console.error('Invalid input for requestSwap:', {
-          fromCourseId: fromCourse?.id,
-          fromDateIso,
-          toCourseId,
-          toDateIso,
-          userName,
-        });
-        alert('Ungültige Eingabedaten für den Tausch.');
-        return;
-      }
-
-      // 2) Prüfen, ob schon ein Swap existiert
-      const existing = swaps.find(
-        (s) =>
-          s.user === userName &&
-          s.fromCourseId === fromCourse.id &&
-          s.fromDate === fromDateIso &&
-          s.toCourseId === toCourseId &&
-          s.toDate === toDateIso
-      );
-      if (existing) {
-        console.log('Swap already exists:', existing);
-        alert('Du hast diese Anfrage bereits gestellt!');
-        return;
-      }
-
-      // 3) Zielkurs suchen
-      const targetCourse = courses.find((c) => c.id === toCourseId);
-      if (!targetCourse) {
-        console.error('Target course not found:', toCourseId);
-        alert('Zielkurs nicht gefunden.');
-        return;
-      }
-
-      // 4) In Overrides die Warteliste ergänzen
-      setOverrides((prev) => {
-        const updated = [...prev];
-        const targetIdx = updated.findIndex(
-          (o) => o.courseId === toCourseId && o.date === toDateIso
-        );
-
-        if (targetIdx >= 0) {
-          const cur = updated[targetIdx];
-          // Nur hinzufügen, falls User nicht schon drin
-          if (!cur.waitlist?.includes(userName)) {
-            updated[targetIdx] = {
-              ...cur,
-              waitlist: [...(cur.waitlist ?? []), userName],
-            };
-            console.log('Updated waitlist:', updated[targetIdx]);
-          } else {
-            console.log('User already in waitlist:', userName);
-          }
-        } else {
-          // Override neu anlegen
-          const baseParticipants = targetCourse.participants;
-          const newOverride: CourseDateOverride = {
-            courseId: toCourseId,
-            date: toDateIso,
-            participants: [...baseParticipants],
-            swapped: [],
-            waitlist: [userName],
-          };
-          updated.push(newOverride);
-          console.log('Created new override:', newOverride);
-        }
-
-        return updated;
-      });
-
-      // 5) Swap mit Status "pending" speichern
-      const newSwap: Swap = {
-        user: userName,
-        fromCourseId: fromCourse.id,
-        fromDate: fromDateIso,
-        toCourseId,
-        toDate: toDateIso,
-        status: 'pending',
-      };
-      console.log('Request Swap:', newSwap);
-      await createSwap(newSwap);
-      const updatedSwaps = await getSwaps(userName);
-      console.log('Updated Swaps after requestSwap:', updatedSwaps);
-      setSwaps(updatedSwaps);
-    } catch (error) {
-      console.error('Error in requestSwap:', error);
-      alert('Fehler beim Erstellen des Tauschs: ' + error);
+    // 1) prüfen, ob schon ein Swap existiert
+    const existing = swaps.find(
+      (s) =>
+        s.user === userName &&
+        s.fromCourseId === fromCourse.id &&
+        s.fromDate === fromDateIso &&
+        s.toCourseId === toCourseId &&
+        s.toDate === toDateIso
+    );
+    if (existing) {
+      alert("Du hast diese Anfrage bereits gestellt!");
+      return;
     }
+
+    // 2) Zielkurs suchen
+    const targetCourse = courses.find((c) => c.id === toCourseId);
+    if (!targetCourse) {
+      alert("Zielkurs nicht gefunden.");
+      return;
+    }
+
+    // 3) in Overrides die Warteliste ergänzen
+    setOverrides((prev) => {
+      const updated = [...prev];
+      const targetIdx = updated.findIndex(
+        (o) => o.courseId === toCourseId && o.date === toDateIso
+      );
+
+      let nextOverride: CourseDateOverride;
+
+      if (targetIdx >= 0) {
+        const cur = updated[targetIdx];
+        // nur hinzufügen, falls User nicht schon drin
+        if (!cur.waitlist?.includes(userName)) {
+          nextOverride = {
+            ...cur,
+            waitlist: [...(cur.waitlist ?? []), userName],
+          };
+          updated[targetIdx] = nextOverride;
+          // Backend-Aufruf: Override aktualisieren
+          updateOverride(toCourseId, toDateIso, { waitlist: nextOverride.waitlist });
+        } else {
+          return prev; // Keine Änderung, falls schon in Warteliste
+        }
+      } else {
+        // Override neu anlegen → Basis sind immer die aktuellen Kursdaten
+        const baseParticipants = targetCourse.participants;
+        nextOverride = {
+          courseId: toCourseId,
+          date: toDateIso,
+          participants: [...baseParticipants],  // alle bisherigen Teilnehmer
+          swapped: [],
+          waitlist: [userName], // neue Warteliste
+        };
+        updated.push(nextOverride);
+        // Backend-Aufruf: Override erstellen
+        createOverride(nextOverride);
+      }
+
+      return updated;
+    });
+
+    // 4) Swap mit Status "pending" speichern
+    const newSwap: Swap = {
+      user: userName,
+      fromCourseId: fromCourse.id,
+      fromDate: fromDateIso,
+      toCourseId,
+      toDate: toDateIso,
+      status: 'pending',
+    };
+    await createSwap(newSwap);
+    const updatedSwaps = await getSwaps(userName);
+    setSwaps(updatedSwaps);
   }
 
   // Abbrechen aller Swaps des Users, die vom Ursprungstermin stammen
+  // Das wird gebraucht, wenn eine Tauschanfrage von pending in active geht. Falls es mehr als eine Tauschanfrage zu diesem Ursprungstermin und User gibt, werden diese abgebrochen.
   async function cancelAllPendingSwapsFromOrigin(
     fromCourseId: number,
     fromDateIso: string,
@@ -469,6 +443,10 @@ export function useCourseSwaps(
         s.fromDate === fromDateIso &&
         s.status === 'pending'
     );
+    // Nichts zu tun?
+    if (pendingFromOrigin.length === 0) {
+      return
+    }
 
     // Swaps bereinigen
     await Promise.all(
@@ -514,65 +492,111 @@ export function useCourseSwaps(
     console.log('cancelAllPendingSwapsFromOrigin');
   }
 
-function processPromotions() {
-  let changed = true;
+  async function processPromotions() {
+    let changed = true;
 
-  while (changed) {
-    changed = false;
+    while (changed) {
+      changed = false;
 
-    setOverrides((prevOverrides) => {
-      let updatedOverrides = [...prevOverrides];
+      // 1) Alle aktuellen Overrides laden (zukünftige Termine)
+      const allOverrides = await getOverrides(); // Vollständige Liste aus Backend
+      const futureOverrides = allOverrides.filter((o) => new Date(o.date) >= new Date());
 
-      setSwaps((prevSwaps) => {
-        let updatedSwaps = [...prevSwaps];
+      // 2) Alle pending Swaps laden (von allen Usern)
+      const allPendingSwaps = await getSwapsByStatus('pending'); 
 
-        // Iteriere über alle pending Swaps
-        for (const swap of prevSwaps.filter((s) => s.status === "pending")) {
-          const target = updatedOverrides.find(
-            (o) => o.courseId === swap.toCourseId && o.date === swap.toDate
+      // 3) Durchsuche Overrides nach freien Plätzen mit Warteliste
+      for (const override of futureOverrides) {
+        const overrideCourse = courses.find((c) => c.id === override.courseId);
+        if (!overrideCourse) continue;
+
+        const freeSpots = overrideCourse.capacity - override.participants.length;
+        if (freeSpots <= 0) continue;
+
+        // Nimm den ersten User aus der Warteliste
+        const promotedUser = override.waitlist?.[0]; // kann undefined sein, wenn die Warteliste leer ist.
+        if (!promotedUser) continue;
+
+        changed = true;
+
+        // 4) Override aktualisieren: User aus Warteliste in Teilnehmer verschieben
+        const newParticipants = [...override.participants, promotedUser];
+        const newSwapped = override.swapped ? [...override.swapped, promotedUser] : [promotedUser];
+        const newWaitlist = override.waitlist?.slice(1); // Rest der Warteliste
+
+        const updatedOverride = {
+          ...override,
+          participants: newParticipants,
+          swapped: newSwapped,
+          waitlist: newWaitlist,
+        };
+
+        // Backend-Aufruf: Override aktualisieren
+        await updateOverride(override.courseId, override.date, {
+          participants: updatedOverride.participants, 
+          swapped: updatedOverride.swapped,
+          waitlist: updatedOverride.waitlist,
+        });
+
+        // 5) Den entsprechenden pending Swap finden und aktivieren
+        const correspondingSwap = allPendingSwaps.find(
+          (s) => s.user === promotedUser && s.toCourseId === override.courseId && s.toDate === override.date
+        );
+        if (correspondingSwap) {
+          // Swap auf active setzen
+          updateSwap(correspondingSwap, 'active');
+
+          // Ursprungstermin bereinigen
+          const originOverride = allOverrides.find(
+            (o) => o.courseId === correspondingSwap.fromCourseId && o.date === correspondingSwap.fromDate
           );
-          if (!target) continue;
+          if (originOverride) {
+            const newOriginParticipants = originOverride.participants.filter((p) => p !== promotedUser);
+            const newOriginSwapped = (originOverride.swapped ?? []).filter((p) => p !== promotedUser);
+            const newOriginWaitlist = (originOverride.waitlist ?? []).filter((u) => u !== promotedUser);
 
-          const targetCourse = courses.find((c) => c.id === target.courseId);
-          const freeSpots = targetCourse ? targetCourse.capacity - target.participants.length : 0;
-
-          if (freeSpots > 0) {
-            // 🔹 Swap kann nachrücken
-            changed = true;
-
-            // 1️⃣ Swap auf active setzen
-            updateSwap(swap, 'active');
-
-            // 2️⃣ Teilnehmer im Zieltermin ergänzen
-            target.participants = [...target.participants, swap.user];
-            target.swapped = [...(target.swapped ?? []), swap.user];
-
-            // 3️⃣ Entferne den User aus Ziel-Warteliste
-            target.waitlist = (target.waitlist ?? []).filter((u) => u !== swap.user);
-            
-            // 4️⃣ Ursprungstermin bereinigen
-            const origin = updatedOverrides.find(
-              (o) => o.courseId === swap.fromCourseId && o.date === swap.fromDate
-            );
-            if (origin) {
-              origin.participants = origin.participants.filter((p) => p !== swap.user);
-              origin.swapped = (origin.swapped ?? []).filter((p) => p !== swap.user);
-              origin.waitlist = (origin.waitlist ?? []).filter((u) => u !== swap.user);
+            // Backend-Aufruf: Ursprung-Override aktualisieren
+            updateOverride(correspondingSwap.fromCourseId, correspondingSwap.fromDate, {
+              participants: newOriginParticipants,
+              swapped: newOriginSwapped,
+              waitlist: newOriginWaitlist,
+            });
+          } else {
+            // Falls kein Ursprung-Override existiert, erstellen
+            const originCourse = courses.find((c) => c.id === correspondingSwap.fromCourseId);
+            if (originCourse) {
+              const newOriginOverride: CourseDateOverride = {
+                courseId: correspondingSwap.fromCourseId,
+                date: correspondingSwap.fromDate,
+                participants: originCourse.participants.filter((p) => p !== promotedUser),
+                swapped: [],
+                waitlist: [],
+              };
+              createOverride(newOriginOverride);
             }
-
-            console.log(`[processPromotions] ${swap.user} nachgerückt von ${swap.fromCourseId}/${swap.fromDate} → ${swap.toCourseId}/${swap.toDate}`);
           }
-        }
 
-        return updatedSwaps;
-      });
-      
-      return updatedOverrides;
-    });
-        console.log("processPromotions");
+          // Alle anderen pending Swaps des Users vom Ursprungstermin stornieren
+          cancelAllPendingSwapsFromOrigin(correspondingSwap.fromCourseId, correspondingSwap.fromDate, promotedUser);
+
+          console.log(`[processPromotions] ${promotedUser} nachgerückt von ${correspondingSwap.fromCourseId}/${correspondingSwap.fromDate} → ${override.courseId}/${override.date}`);
+        }
+      }
+
+      // 4) State aktualisieren
+      if (changed) {
+        setOverrides(allOverrides); // Vollständige Liste zurücksetzen
+        setSwaps(await getSwaps(currentUser.nickname)); // Nur Swaps des aktuellen Users
+        // Rekursion für Kaskade
+        setTimeout(() => processPromotions(), 500);
+      } else {
+        console.log("[processPromotions] No further changes");
+      }
+    } 
   }
-}
-    console.log("return useCourseSwaps");
+
+  console.log("return useCourseSwaps");
+
   return {
     overrides: filteredOverrides, // Rückgabe der gefilterten Overrides
     swaps,

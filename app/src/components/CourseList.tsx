@@ -20,7 +20,7 @@ export default function CourseList({ currentUser }: Props) {
     cancelSwap,
     onToggleAbsence,
     overrides: filteredOverrides
-  } = useCourseSwaps(overrides, setOverrides, swaps, setSwaps );
+  } = useCourseSwaps(overrides, setOverrides, swaps, setSwaps, currentUser);
   
   useEffect(() => {
     let isCancelled = false;

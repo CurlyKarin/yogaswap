@@ -55,4 +55,6 @@ projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.
 projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/LICENSE
 projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/README.md
 projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/terraform-provider-random.exe
-app/build/assets/index-Dp7Hj6M5.js
+
+app/build/assets/*.*
+backend/tsconfig.tsbuildinfo

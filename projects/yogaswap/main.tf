@@ -25,6 +25,17 @@ locals {
       s3_actions     = []
       s3_resources   = []
     },
+    "get_swaps_by_status" = {
+      name           = "get-swaps-by-status"
+      file_name      = "getSwapsByStatus.zip"
+      table_arns     = [module.swaps_table.table_arn]
+      dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query"]
+      tables = {
+        "SWAPS_TABLE" = module.swaps_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
+    },
     "create_swap" = {
       name           = "create-swap"
       file_name      = "createSwap.zip"
@@ -109,6 +120,7 @@ locals {
   # API Gateway Routen
   api_routes = {
     "GET /swaps" = "get_swaps"
+    "GET /swaps/status" = "get_swaps_by_status"
     "GET /course-overrides" = "get_coursedateoverrides"
     "POST /swaps" = "create_swap"
     "PUT /swaps/{swapId}" = "update_swap"

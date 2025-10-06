@@ -66,3 +66,15 @@ export async function deleteSwap(swap: Swap): Promise<void> {
     throw error;
   }
 }
+
+export async function getSwapsByStatus(status: string): Promise<Swap[]> {
+  try {
+    console.log('getSwapsByStatus called with status:', status);
+    const response = await axios.get('/swaps/status', { params: { status } });
+    console.log('getSwapsByStatus response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Fehler beim Laden der Swaps by status:', error);
+    return [];
+  }
+}
