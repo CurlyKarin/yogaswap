@@ -39,7 +39,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   // Extrahiere fromDate, fromCourseId, toDate, toCourseId aus swapId
-  const parts = swapId.split("-");
+  const parts = swapId.split("_");
   if (parts.length !== 4) {
     return {
       statusCode: 400,
@@ -60,8 +60,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     },
     ExpressionAttributeValues: {
       ":status": { S: status },
-      ":fromStatus": { S: `${fromDate}-${fromCourseId}-${status}` },
-      ":toStatus": { S: `${toDate}-${toCourseId}-${status}` },
+      ":fromStatus": { S: `${fromDate}_${fromCourseId}_${status}` },
+      ":toStatus": { S: `${toDate}_${toCourseId}_${status}` },
     },
   });
 

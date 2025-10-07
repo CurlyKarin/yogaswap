@@ -26,7 +26,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ExpressionAttributeNames: { "#u": "user", "#f": "fromDate_fromCourseId_status" },
       ExpressionAttributeValues: {
         ":u": { S: user },
-        ":f": { S: `${fromDate}#${fromCourseId}` },
+        ":f": { S: `${fromDate}_${fromCourseId}` },
       },
       ConsistentRead: true,
     });
@@ -39,7 +39,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ExpressionAttributeNames: { "#u": "user", "#t": "toDate_toCourseId_status" },
       ExpressionAttributeValues: {
         ":u": { S: user },
-        ":t": { S: `${toDate}#${toCourseId}` },
+        ":t": { S: `${toDate}_${toCourseId}` },
       },
       ConsistentRead: true,
     });

@@ -1,9 +1,9 @@
 import { courses } from "../data/courses";
-import type { Course, User } from "../types";
+import type { User } from "../types";
 import CourseCard from "./CourseCard";
 import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState } from "react";
-import { CourseDateOverride, Swap } from "@shared/types";
+import { CourseDateOverride, Swap, Course} from "@shared/types";
 import { getSwaps } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
 

@@ -1,11 +1,11 @@
 import { useEffect} from "react";
-import type { Course, User} from "../types"; 
 import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
-import { Swap, CourseDateOverride } from "@shared/types";
+import { Swap, CourseDateOverride, Course } from "@shared/types";
 import { createSwap, deleteSwap, getSwaps, getSwapsByStatus, updateSwap } from "../api/swaps";
-import { createOverride, deleteOverride, getOverrides, updateOverride } from "../api/overrides";
+import { createOverride, getOverrides, updateOverride } from "../api/overrides";
+import { User } from "src/types";
 
 export function useCourseSwaps(
 overrides: CourseDateOverride[], setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>, swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUser: User,

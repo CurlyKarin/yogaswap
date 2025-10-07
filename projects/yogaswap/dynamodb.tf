@@ -45,9 +45,28 @@ module "course_overrides_table" {
   ]
 }
 
+# Neue Courses-Tabelle
+module "courses_table" {
+  source     = "../modules/dynamodb"
+  name       = "${var.project}-courses-table"
+  hash_key   = "id"
+  # Kein range_key, da Lookup-Tabelle
+  attributes = [
+    { name = "id", type = "N" },
+    { name = "name", type = "S" },
+    { name = "weekday", type = "S" },
+    { name = "time", type = "S" },
+    { name = "capacity", type = "N" },
+    { name = "participants", type = "SS" },  # String-Set für Nicknames
+    { name = "dates", type = "S" }  # JSON-String für Date-Array
+  ]
+  # Keine GSIs nötig, da hauptsächlich Reads nach id
+}
+
 output "table_names" {
   value = [
     module.swaps_table.table_name,
-    module.course_overrides_table.table_name
+    module.course_overrides_table.table_name,
+    module.courses_table.table_name
   ]
 }

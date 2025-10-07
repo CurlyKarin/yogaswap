@@ -13,15 +13,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const dynamoItem = {
-      swapId: { S: `${swap.fromDate}-${swap.fromCourseId}-${swap.toDate}-${swap.toCourseId}` },
+      swapId: { S: `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}` },
       user: { S: swap.user },
       fromCourseId: { S: swap.fromCourseId.toString() },
       fromDate: { S: swap.fromDate },
       toCourseId: { S: swap.toCourseId.toString() },
       toDate: { S: swap.toDate },
       status: { S: swap.status },
-      fromDate_fromCourseId_status: { S: `${swap.fromDate}-${swap.fromCourseId}-${swap.status}` },
-      toDate_toCourseId_status: { S: `${swap.toDate}-${swap.toCourseId}-${swap.status}` },
+      fromDate_fromCourseId_status: { S: `${swap.fromDate}_${swap.fromCourseId}_${swap.status}` },
+      toDate_toCourseId_status: { S: `${swap.toDate}_${swap.toCourseId}_${swap.status}` },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));

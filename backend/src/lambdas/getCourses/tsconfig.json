@@ -3,7 +3,7 @@
     "target": "es2020",
     "module": "commonjs",
     "lib": ["es2020"],
-    "outDir": "../../dist/lambdas/deleteOverride",
+    "outDir": "../../dist/lambdas/getCourses",
     "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,

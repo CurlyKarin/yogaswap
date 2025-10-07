@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { Course, User} from "../types";
-import { Swap, CourseDateOverride } from "@shared/types";
+import type { User} from "../types";
+import { Swap, CourseDateOverride, Course } from "@shared/types";
 
 import { courses } from "../data/courses";
 import { swapSettings } from "../data/swapSettings";
@@ -69,7 +69,7 @@ export default function CourseCard({
   const originallyParticipant = course.participants.includes(userName);
   const hasCancelled = originallyParticipant && !isParticipant;
 
-const availableSwapDates = useMemo(
+  const availableSwapDates = useMemo(
     () =>
       getAvailableDates(courses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
         (a, b) => a.date.getTime() - b.date.getTime()

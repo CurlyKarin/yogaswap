@@ -5,6 +5,8 @@
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { swaps } from "./swaps";
 import { courseDateOverrides } from "./overrides";
+import { courses } from "./courses";
+
 
 const client = new DynamoDBClient({ region: "eu-central-1" });
 
@@ -29,7 +31,7 @@ async function seedSwaps(tableName: string, items: any[]) {
   for (const item of items) {
     const dynamoItem: Record<string, { S: string }> = {
       user: { S: item.user },
-      swapId: { S: `${item.fromDate}#${item.fromCourseId}#${item.toDate}#${item.toCourseId}` }, // eindeutiger Range Key
+      swapId: { S: `${item.fromDate}_${item.fromCourseId}_${item.toDate}_${item.toCourseId}` }, // eindeutiger Range Key
       fromDate: { S: item.fromDate },
       fromCourseId: { S: item.fromCourseId.toString() },
       toDate: { S: item.toDate },
@@ -37,8 +39,8 @@ async function seedSwaps(tableName: string, items: any[]) {
       status: { S: item.status },
 
       // zusammengesetzte Keys für GSIs
-      fromDate_fromCourseId_status: { S: `${item.fromDate}#${item.fromCourseId}#${item.status}` },
-      toDate_toCourseId_status: { S: `${item.toDate}#${item.toCourseId}#${item.status}` },
+      fromDate_fromCourseId_status: { S: `${item.fromDate}_${item.fromCourseId}_${item.status}` },
+      toDate_toCourseId_status: { S: `${item.toDate}_${item.toCourseId}_${item.status}` },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));
@@ -50,6 +52,7 @@ async function seedSwaps(tableName: string, items: any[]) {
   try {
     await seedSwaps("yogaswap-backend-demo-swaps-table", swaps);
     await seedTable("yogaswap-backend-demo-courseOverrides-table", courseDateOverrides);
+    await seedTable("yogaswap-backend-demo-courses-table", courses);
     console.log("🎉 Seeding completed!");
   } catch (err) {
     console.error("❌ Seeding failed:", err);

@@ -5,15 +5,15 @@ export type User = {
   enrolledCourseIds: number[]; // in welchen Kursen ist der User?
 };
 
-export type Course = {
-  id: number;
-  name: string;
-  weekday: string; // z.B. "Mon", "Tue", ...
-  time: string;    // z.B. "18:30"
-  capacity: number;
-  participants: string[]; // Nicknames
-  dates: Date[]; // Liste der Termine
-};
+// export type Course = {
+//   id: number;
+//   name: string;
+//   weekday: string; // z.B. "Mon", "Tue", ...
+//   time: string;    // z.B. "18:30"
+//   capacity: number;
+//   participants: string[]; // Nicknames
+//   dates: Date[]; // Liste der Termine
+// };
 
 // export type CourseDateOverride = {
 //   courseId: number;

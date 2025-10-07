@@ -112,6 +112,30 @@ locals {
       }
       s3_actions     = []
       s3_resources   = []
+    },
+    "process_promotions" = {
+      name           = "process-promotions"
+      file_name      = "processPromotions.zip"
+      table_arns     = [module.swaps_table.table_arn, module.overrides_table.table_arn, module.courses_table.table_arn]
+      dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:PutItem"]
+      tables = {
+        "SWAPS_TABLE" = module.swaps_table.table_name
+        "OVERRIDES_TABLE" = module.overrides_table.table_name
+        "COURSES_TABLE" = module.courses_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
+    },
+    "ger_courses" = {
+      name           = "get-courses"
+      file_name      = "getCourses.zip"
+      table_arns     = [module.courses_table.table_arn]
+      dynamodb_actions = ["dynamodb:Scan", "dynamodb:GetItem"]
+      tables = {
+        "COURSES_TABLE" = module.courses_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
     }
   }
    # Map für Lambda-ARNs
@@ -128,6 +152,8 @@ locals {
     "POST /course-overrides" = "create_override"
     "PUT /course-overrides/{courseId}/{date}" = "update_override"
     "DELETE /course-overrides/{courseId}/{date}" = "delete_override"
+    "POST /process-promotions" = "process_promotions"
+    "GET /courses" = "get_courses"
   }
 
   build_files = fileset("../../app/build", "**")

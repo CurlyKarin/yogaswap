@@ -47,7 +47,7 @@ export async function createSwap(swap: Swap): Promise<void> {
 
 export async function updateSwap(swap: Swap, status: Swap['status']): Promise<void> {
   try {
-    const swapId = `${swap.fromDate}-${swap.fromCourseId}-${swap.toDate}-${swap.toCourseId}`;
+    const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
     console.log('Update Swap Call:', { swapId, user: swap.user, status });
     await axios.put(`/swaps/${swapId}`, { status }, { params: { user: swap.user } });
   } catch (error) {
@@ -58,7 +58,7 @@ export async function updateSwap(swap: Swap, status: Swap['status']): Promise<vo
 
 export async function deleteSwap(swap: Swap): Promise<void> {
   try {
-    const swapId = `${swap.fromDate}-${swap.fromCourseId}-${swap.toDate}-${swap.toCourseId}`;
+    const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
     console.log('Delete Swap Call:', { swapId, user: swap.user });
     await axios.delete(`/swaps/${swapId}`, { params: { user: swap.user } });
   } catch (error) {
