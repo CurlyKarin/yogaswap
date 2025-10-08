@@ -1,6 +1,6 @@
 // components/SwapModal.tsx
 import { useState } from "react";
-import type { Course } from "../types";
+import type { Course } from "@shared/types";
 
 type Props = {
   options: { course: Course; date: Date }[];

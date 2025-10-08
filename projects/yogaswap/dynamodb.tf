@@ -52,13 +52,10 @@ module "courses_table" {
   hash_key   = "id"
   # Kein range_key, da Lookup-Tabelle
   attributes = [
-    { name = "id", type = "N" },
-    { name = "name", type = "S" },
-    { name = "weekday", type = "S" },
-    { name = "time", type = "S" },
-    { name = "capacity", type = "N" },
-    { name = "participants", type = "SS" },  # String-Set für Nicknames
-    { name = "dates", type = "S" }  # JSON-String für Date-Array
+    {   
+        name = "id"
+        type = "N" 
+    }
   ]
   # Keine GSIs nötig, da hauptsächlich Reads nach id
 }

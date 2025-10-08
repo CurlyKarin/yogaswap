@@ -18,20 +18,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const expressionAttributeValues: Record<string, any> = {};
     const expressionAttributeNames: Record<string, string> = {};
 
+    // Validierung und Mapping für participants
     if (updates.participants) {
+      if (!Array.isArray(updates.participants) || updates.participants.some((p: any) => typeof p !== 'string')) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid participants array' }) };
+      }
       updateExpression += ' #participants = :participants,';
       expressionAttributeNames['#participants'] = 'participants';
-      expressionAttributeValues[':participants'] = { S: JSON.stringify(updates.participants) };
+      expressionAttributeValues[':participants'] = { L: updates.participants.map((p: string) => ({ S: p })) };
     }
+
+    // Validierung und Mapping für swapped
     if (updates.swapped) {
+      if (!Array.isArray(updates.swapped) || updates.swapped.some((s: any) => typeof s !== 'string')) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid swapped array' }) };
+      }
       updateExpression += ' #swapped = :swapped,';
       expressionAttributeNames['#swapped'] = 'swapped';
-      expressionAttributeValues[':swapped'] = { S: JSON.stringify(updates.swapped) };
+      expressionAttributeValues[':swapped'] = { L: updates.swapped.map((s: string) => ({ S: s })) };
     }
+
+    // Validierung und Mapping für waitlist
     if (updates.waitlist) {
+      if (!Array.isArray(updates.waitlist) || updates.waitlist.some((w: any) => typeof w !== 'string')) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid waitlist array' }) };
+      }
       updateExpression += ' #waitlist = :waitlist,';
       expressionAttributeNames['#waitlist'] = 'waitlist';
-      expressionAttributeValues[':waitlist'] = { S: JSON.stringify(updates.waitlist) };
+      expressionAttributeValues[':waitlist'] = { L: updates.waitlist.map((w: string) => ({ S: w })) };
     }
 
     if (updateExpression === 'SET') {

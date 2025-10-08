@@ -11,7 +11,7 @@ export async function getCourses(): Promise<Course[]> {
       time: item.time,
       capacity: item.capacity,
       participants: item.participants || [],
-      dates: item.dates.L ? item.dates.L.map((d: any) => new Date(d.S)) : [],  // Parse List<String> zu Date[]
+      dates: item.dates || [], 
     }));
   } catch (error) {
     console.error('Fehler beim Laden der Courses:', error);

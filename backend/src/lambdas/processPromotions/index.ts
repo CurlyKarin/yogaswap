@@ -21,17 +21,17 @@ async function updateOverrideHelper(
   if (updates.participants) {
     updateExpressionParts.push("#participants = :participants");
     expressionAttributeNames["#participants"] = "participants";
-    expressionAttributeValues[":participants"] = { SS: updates.participants };
+    expressionAttributeValues[":participants"] = { L: updates.participants.map((p) => ({ S: p })) };
   }
   if (updates.swapped) {
     updateExpressionParts.push("#swapped = :swapped");
     expressionAttributeNames["#swapped"] = "swapped";
-    expressionAttributeValues[":swapped"] = { SS: updates.swapped };
+    expressionAttributeValues[":swapped"] = { L: updates.swapped.map((s) => ({ S: s })) };
   }
   if (updates.waitlist) {
     updateExpressionParts.push("#waitlist = :waitlist");
     expressionAttributeNames["#waitlist"] = "waitlist";
-    expressionAttributeValues[":waitlist"] = { SS: updates.waitlist };
+    expressionAttributeValues[":waitlist"] = { L: updates.waitlist.map((w) => ({ S: w })) };
   }
 
   if (updateExpressionParts.length === 0) {
@@ -67,9 +67,9 @@ async function createOverrideHelper(override: CourseDateOverride): Promise<void>
     Item: {
       courseId: { N: override.courseId.toString() },
       date: { S: override.date },
-      participants: { SS: override.participants || [] },
-      swapped: { SS: override.swapped || [] },
-      waitlist: { SS: override.waitlist || [] },
+      participants: { L: (override.participants || []).map((p) => ({ S: p })) },
+      swapped: { L: (override.swapped || []).map((s) => ({ S: s })) },
+      waitlist: { L: (override.waitlist || []).map((w) => ({ S: w })) },
     },
   });
 
@@ -131,9 +131,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const allOverrides: CourseDateOverride[] = (overridesData.Items || []).map((item) => ({
         courseId: Number(item.courseId.S!),
         date: item.date.S!,
-        participants: JSON.parse(item.participants.S || "[]"),
-        swapped: JSON.parse(item.swapped.S || "[]"),
-        waitlist: JSON.parse(item.waitlist.S || "[]"),
+        participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
+        swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
+        waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
       }));
       const futureOverrides = allOverrides.filter((o) => new Date(o.date) >= new Date());
 
@@ -149,8 +149,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         weekday: item.weekday.S!,
         time: item.time.S!,
         capacity: Number(item.capacity.N!),
-        participants: JSON.parse(item.participants.S || "[]"),
-        dates: item.dates.L?.map((d: any) => d.S) || [],
+        participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
+        dates: item.dates.L ? item.dates.L.map((d: any) => d.S) : [],
       }));
 
       // 4) Durchsuche Overrides nach freien Plätzen mit Warteliste
@@ -158,11 +158,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         const overrideCourse = courses.find((c) => c.id === override.courseId);
         if (!overrideCourse) continue;
 
-        const freeSpots = overrideCourse.capacity - override.participants.length;  
+        const freeSpots = overrideCourse.capacity - override.participants.length;
         if (freeSpots <= 0) continue;
 
         // Nimm den ersten User aus der Warteliste
-        const promotedUser = override.waitlist?.[0]; // kann undefined sein, wenn die Warteliste leer ist.
+        const promotedUser = override.waitlist?.[0];
         if (!promotedUser) continue;
 
         const correspondingSwap = pendingSwaps.find(
@@ -201,7 +201,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           participants: newParticipants,
           waitlist: newWaitlist,
         });
-
 
         // 7) Ursprung-Override bereinigen
         const originOverride = allOverrides.find(
@@ -251,7 +250,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           );
           if (targetOriginOverride) {
             const newTargetWaitlist = (targetOriginOverride.waitlist || []).filter((u) => u !== promotedUser);
-             await updateOverrideHelper(originSwap.toCourseId, originSwap.toDate, {
+            await updateOverrideHelper(originSwap.toCourseId, originSwap.toDate, {
               waitlist: newTargetWaitlist,
             });
           }

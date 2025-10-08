@@ -1,20 +1,30 @@
-import axios from 'axios';
-import { Course } from '@yogaswap/shared';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
 
-export async function getCourses(): Promise<Course[]> {
+const client = new DynamoDBClient({ region: 'eu-central-1' });
+
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    const response = await axios.get('/courses');
-    return response.data.map((item: any) => ({
-      id: item.id,
-      name: item.name,
-      weekday: item.weekday,
-      time: item.time,
-      capacity: item.capacity,
-      participants: item.participants || [],
-      dates: item.dates.L ? item.dates.L.map((d: any) => new Date(d.S)) : [],  // Parse List<String> zu Date[]
+    const result = await client.send(
+      new ScanCommand({
+        TableName: process.env.COURSES_TABLE,
+        ConsistentRead: true,
+      })
+    );
+
+    const courses = (result.Items || []).map((item) => ({
+      id: Number(item.id.N!),
+      name: item.name.S!,
+      weekday: item.weekday.S!,
+      time: item.time.S!,
+      capacity: Number(item.capacity.N!),
+      participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
+      dates: item.dates.L ? item.dates.L.map((d: any) => d.S) : [],
     }));
+
+    return { statusCode: 200, body: JSON.stringify(courses) };
   } catch (error) {
-    console.error('Fehler beim Laden der Courses:', error);
-    return [];
+    console.error('Error getting courses:', error);
+    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to get courses' }) };
   }
-}
+};

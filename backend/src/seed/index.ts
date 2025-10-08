@@ -48,11 +48,53 @@ async function seedSwaps(tableName: string, items: any[]) {
   }
 }
 
+// Seed-Funktion für Courses-Tabelle
+async function seedCourses(tableName: string, items: any[]) {
+  for (const item of items) {
+    if (!item.id || !item.name || !item.weekday || !item.time || !item.capacity || !item.dates) {
+      console.warn(`⚠️ Skipping invalid course item:`, item);
+      continue;
+    }
+    const dynamoItem: Record<string, any> = {
+      id: { N: item.id.toString() },
+      name: { S: item.name },
+      weekday: { S: item.weekday },
+      time: { S: item.time },
+      capacity: { N: item.capacity.toString() },
+      dates: { L: (item.dates || []).map((d: string) => ({ S: d })) },
+      participants: { L: (item.participants || []).map((p: string) => ({ S: p })) },
+    };
+
+    await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));
+    console.log(`✅ Inserted into ${tableName}:`, item);
+  }
+}
+
+// Seed-Funktion für CourseOverrides-Tabelle
+async function seedOverrides(tableName: string, items: any[]) {
+  for (const item of items) {
+    if (!item.courseId || !item.date) {
+      console.warn(`⚠️ Skipping invalid override item:`, item);
+      continue;
+    }
+    const dynamoItem: Record<string, any> = {
+      courseId: { S: item.courseId.toString() },
+      date: { S: item.date },
+      participants: { L: (item.participants || []).map((p: string) => ({ S: p })) },
+      swapped: { L: (item.swapped || []).map((s: string) => ({ S: s })) },
+      waitlist: { L: (item.waitlist || []).map((w: string) => ({ S: w })) },
+    };
+
+    await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));
+    console.log(`✅ Inserted into ${tableName}:`, item);
+  }
+}
+
 (async () => {
   try {
     await seedSwaps("yogaswap-backend-demo-swaps-table", swaps);
-    await seedTable("yogaswap-backend-demo-courseOverrides-table", courseDateOverrides);
-    await seedTable("yogaswap-backend-demo-courses-table", courses);
+    await seedOverrides("yogaswap-backend-demo-courseOverrides-table", courseDateOverrides);
+    await seedCourses("yogaswap-backend-demo-courses-table", courses);
     console.log("🎉 Seeding completed!");
   } catch (err) {
     console.error("❌ Seeding failed:", err);

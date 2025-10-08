@@ -3,9 +3,10 @@ import type { User } from "../types";
 import CourseCard from "./CourseCard";
 import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState } from "react";
-import { CourseDateOverride, Swap, Course} from "@shared/types";
+import { CourseDateOverride, Swap} from "@shared/types";
 import { getSwaps } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
+import { getCourseDates } from "../lib/dates";
 
 type Props = {
   currentUser: User;
@@ -74,15 +75,6 @@ export default function CourseList({ currentUser }: Props) {
   useEffect(() => {
     console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
   }, [currentUser?.nickname]);
-
-  function getCourseDates(course: Course) {
-    const now = new Date();
-    const [hours, minutes] = course.time.split(":").map(Number);
-    return course.dates
-      .map((d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes))
-      .filter((d) => d >= now);
-  }
-
 
   return (
     <>

@@ -12,12 +12,27 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing courseId or date' }) };
     }
 
+    // Validierung der Eingaben
+    const participants = override.participants || [];
+    const swapped = override.swapped || [];
+    const waitlist = override.waitlist || [];
+
+    if (!Array.isArray(participants) || participants.some((p: any) => typeof p !== 'string')) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid participants array' }) };
+    }
+    if (!Array.isArray(swapped) || swapped.some((s: any) => typeof s !== 'string')) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid swapped array' }) };
+    }
+    if (!Array.isArray(waitlist) || waitlist.some((w: any) => typeof w !== 'string')) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid waitlist array' }) };
+    }
+
     const dynamoItem = {
       courseId: { S: override.courseId.toString() },
       date: { S: override.date },
-      participants: { S: JSON.stringify(override.participants || []) },
-      swapped: { S: JSON.stringify(override.swapped || []) },
-      waitlist: { S: JSON.stringify(override.waitlist || []) },
+      participants: { L: participants.map((p: string) => ({ S: p })) },
+      swapped: { L: swapped.map((s: string) => ({ S: s })) },
+      waitlist: { L: waitlist.map((w: string) => ({ S: w })) },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));

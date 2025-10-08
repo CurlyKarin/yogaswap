@@ -116,17 +116,17 @@ locals {
     "process_promotions" = {
       name           = "process-promotions"
       file_name      = "processPromotions.zip"
-      table_arns     = [module.swaps_table.table_arn, module.overrides_table.table_arn, module.courses_table.table_arn]
+      table_arns     = [module.swaps_table.table_arn, module.course_overrides_table.table_arn, module.courses_table.table_arn]
       dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:PutItem"]
       tables = {
         "SWAPS_TABLE" = module.swaps_table.table_name
-        "OVERRIDES_TABLE" = module.overrides_table.table_name
+        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
         "COURSES_TABLE" = module.courses_table.table_name
       }
       s3_actions     = []
       s3_resources   = []
     },
-    "ger_courses" = {
+    "get_courses" = {
       name           = "get-courses"
       file_name      = "getCourses.zip"
       table_arns     = [module.courses_table.table_arn]

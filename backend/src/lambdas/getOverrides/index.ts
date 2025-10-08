@@ -22,9 +22,9 @@ export const handler = async (
     let items: CourseDateOverride[] = (data.Items || []).map((item) => ({
       courseId: Number(item.courseId.S),
       date: item.date.S!,
-      participants: JSON.parse(item.participants.S!),
-      swapped: item.swapped ? JSON.parse(item.swapped.S!) : [],
-      waitlist: item.waitlist ? JSON.parse(item.waitlist.S!) : [],
+      participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
+      swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
+      waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
     }));
 
     if (courseId !== undefined) {
