@@ -90,11 +90,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing request body' }) };
     }
     body = JSON.parse(event.body);
-    const { courses } = body;
-    if (!courses || !Array.isArray(courses)) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing or invalid courses array' }) };
-    }
-
+  
     let iterations = 0;
     let changed = true;
     const maxIterations = 10;
@@ -115,9 +111,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const pendingSwapsData = await client.send(pendingSwapsCommand);
       const pendingSwaps: Swap[] = (pendingSwapsData.Items || []).map((item) => ({
         user: item.user.S!,
-        fromCourseId: Number(item.fromCourseId.S!),
+        fromCourseId: Number(item.fromCourseId.N || item.fromCourseId.S), // Unterstütze N und S (Übergang)
         fromDate: item.fromDate.S!,
-        toCourseId: Number(item.toCourseId.S!),
+        toCourseId: Number(item.toCourseId.N || item.toCourseId.S), // Unterstütze N und S (Übergang)
         toDate: item.toDate.S!,
         status: item.status.S as Swap["status"],
       }));
@@ -129,7 +125,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
       const overridesData = await client.send(overridesCommand);
       const allOverrides: CourseDateOverride[] = (overridesData.Items || []).map((item) => ({
-        courseId: Number(item.courseId.S!),
+        courseId: Number(item.courseId.N!),
         date: item.date.S!,
         participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
         swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],

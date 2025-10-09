@@ -1,19 +1,24 @@
 import { useEffect} from "react";
-import { courses } from "../data/courses";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
 import { Swap, CourseDateOverride, Course } from "@shared/types";
-import { createSwap, deleteSwap, getSwaps, getSwapsByStatus, updateSwap } from "../api/swaps";
+import { createSwap, deleteSwap, getSwaps, getSwapsByStatus, processPromotions, updateSwap } from "../api/swaps";
 import { createOverride, getOverrides, updateOverride } from "../api/overrides";
 import { User } from "src/types";
 
 export function useCourseSwaps(
-overrides: CourseDateOverride[], setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>, swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUser: User,
+courses: Course[],
+overrides: CourseDateOverride[], setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>, 
+swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUser: User,
 ) {
   
   // Filtere Overrides für aktuelle und zukünftige Termine
   // Fallback auf leeres Array, wenn overrides undefined oder kein Array ist
   const filteredOverrides = overrides;
+// const filteredOverrides = useMemo(
+//     () => overrides.filter((o) => courses.some((c) => c.id === o.courseId)),
+//     [overrides, courses]
+//   );
 
   useEffect(() => {
     console.log('🔄 Filtered Overrides:', filteredOverrides);
@@ -229,7 +234,6 @@ overrides: CourseDateOverride[], setOverrides: React.Dispatch<React.SetStateActi
     });
 
     // Swap-Verwaltung
-    cancelAllPendingSwapsFromOrigin(fromCourse.id, fromDateIso, userName);
     const newSwap: Swap = {
       user: userName,
       fromCourseId: fromCourse.id,
@@ -430,170 +434,170 @@ overrides: CourseDateOverride[], setOverrides: React.Dispatch<React.SetStateActi
 
   // Abbrechen aller Swaps des Users, die vom Ursprungstermin stammen
   // Das wird gebraucht, wenn eine Tauschanfrage von pending in active geht. Falls es mehr als eine Tauschanfrage zu diesem Ursprungstermin und User gibt, werden diese abgebrochen.
-  async function cancelAllPendingSwapsFromOrigin(
-    fromCourseId: number,
-    fromDateIso: string,
-    userName: string
-  ) {
-    // Alle Pending-Swaps dieses Users vom Ursprungstermin merken
-    const pendingFromOrigin = swaps.filter(
-      (s: Swap) =>
-        s.user === userName &&
-        s.fromCourseId === fromCourseId &&
-        s.fromDate === fromDateIso &&
-        s.status === 'pending'
-    );
-    // Nichts zu tun?
-    if (pendingFromOrigin.length === 0) {
-      return
-    }
+  // async function cancelAllPendingSwapsFromOrigin(
+  //   fromCourseId: number,
+  //   fromDateIso: string,
+  //   userName: string
+  // ) {
+  //   // Alle Pending-Swaps dieses Users vom Ursprungstermin merken
+  //   const pendingFromOrigin = swaps.filter(
+  //     (s: Swap) =>
+  //       s.user === userName &&
+  //       s.fromCourseId === fromCourseId &&
+  //       s.fromDate === fromDateIso &&
+  //       s.status === 'pending'
+  //   );
+  //   // Nichts zu tun?
+  //   if (pendingFromOrigin.length === 0) {
+  //     return
+  //   }
 
-    // Swaps bereinigen
-    await Promise.all(
-      pendingFromOrigin.map((swap) => {
-        console.log('cancelAllPendingSwapsFromOrigin:', swap);
-        return deleteSwap(swap);
-      })
-    );
-    const updatedSwaps = await getSwaps(userName);
-    setSwaps(updatedSwaps);
+  //   // Swaps bereinigen
+  //   await Promise.all(
+  //     pendingFromOrigin.map((swap) => {
+  //       console.log('cancelAllPendingSwapsFromOrigin:', swap);
+  //       return deleteSwap(swap);
+  //     })
+  //   );
+  //   const updatedSwaps = await getSwaps(userName);
+  //   setSwaps(updatedSwaps);
 
-    // Funktion zum Aktualisieren eines Overrides für die Warteliste
-    const updateOverrideForWaitlist = (
-      prev: CourseDateOverride[],
-      courseId: number,
-      dateIso: string,
-      userName: string
-    ) => {
-      const updated = [...prev];
-      const idx = updated.findIndex(
-        (o: CourseDateOverride) => o.courseId === courseId && o.date === dateIso
-      );
-      if (idx >= 0 && updated[idx].waitlist?.includes(userName)) {
-        const nextOverride: CourseDateOverride = {
-          ...updated[idx],
-          waitlist: updated[idx].waitlist.filter((u) => u !== userName),
-        };
-        updated[idx] = nextOverride;
-        updateOverride(courseId, dateIso, { waitlist: nextOverride.waitlist });
-      }
-      return updated;
-    };
+  //   // Funktion zum Aktualisieren eines Overrides für die Warteliste
+  //   const updateOverrideForWaitlist = (
+  //     prev: CourseDateOverride[],
+  //     courseId: number,
+  //     dateIso: string,
+  //     userName: string
+  //   ) => {
+  //     const updated = [...prev];
+  //     const idx = updated.findIndex(
+  //       (o: CourseDateOverride) => o.courseId === courseId && o.date === dateIso
+  //     );
+  //     if (idx >= 0 && updated[idx].waitlist?.includes(userName)) {
+  //       const nextOverride: CourseDateOverride = {
+  //         ...updated[idx],
+  //         waitlist: updated[idx].waitlist.filter((u) => u !== userName),
+  //       };
+  //       updated[idx] = nextOverride;
+  //       updateOverride(courseId, dateIso, { waitlist: nextOverride.waitlist });
+  //     }
+  //     return updated;
+  //   };
 
-    // Wartelisten bereinigen
-    setOverrides((prev: CourseDateOverride[]) => {
-      let updated = [...prev];
-      pendingFromOrigin.forEach((swap) => {
-        updated = updateOverrideForWaitlist(updated, swap.toCourseId, swap.toDate, userName);
-      });
-      return updated;
-    });
+  //   // Wartelisten bereinigen
+  //   setOverrides((prev: CourseDateOverride[]) => {
+  //     let updated = [...prev];
+  //     pendingFromOrigin.forEach((swap) => {
+  //       updated = updateOverrideForWaitlist(updated, swap.toCourseId, swap.toDate, userName);
+  //     });
+  //     return updated;
+  //   });
 
-    console.log('cancelAllPendingSwapsFromOrigin');
-  }
+  //   console.log('cancelAllPendingSwapsFromOrigin');
+  // }
 
-  async function processPromotions() {
-    let changed = true;
+  // async function processPromotions() {
+  //   let changed = true;
 
-    while (changed) {
-      changed = false;
+  //   while (changed) {
+  //     changed = false;
 
-      // 1) Alle aktuellen Overrides laden (zukünftige Termine)
-      const allOverrides = await getOverrides(); // Vollständige Liste aus Backend
-      const futureOverrides = allOverrides.filter((o) => new Date(o.date) >= new Date());
+  //     // 1) Alle aktuellen Overrides laden (zukünftige Termine)
+  //     const allOverrides = await getOverrides(); // Vollständige Liste aus Backend
+  //     const futureOverrides = allOverrides.filter((o) => new Date(o.date) >= new Date());
 
-      // 2) Alle pending Swaps laden (von allen Usern)
-      const allPendingSwaps = await getSwapsByStatus('pending'); 
+  //     // 2) Alle pending Swaps laden (von allen Usern)
+  //     const allPendingSwaps = await getSwapsByStatus('pending'); 
 
-      // 3) Durchsuche Overrides nach freien Plätzen mit Warteliste
-      for (const override of futureOverrides) {
-        const overrideCourse = courses.find((c) => c.id === override.courseId);
-        if (!overrideCourse) continue;
+  //     // 3) Durchsuche Overrides nach freien Plätzen mit Warteliste
+  //     for (const override of futureOverrides) {
+  //       const overrideCourse = courses.find((c) => c.id === override.courseId);
+  //       if (!overrideCourse) continue;
 
-        const freeSpots = overrideCourse.capacity - override.participants.length;
-        if (freeSpots <= 0) continue;
+  //       const freeSpots = overrideCourse.capacity - override.participants.length;
+  //       if (freeSpots <= 0) continue;
 
-        // Nimm den ersten User aus der Warteliste
-        const promotedUser = override.waitlist?.[0]; // kann undefined sein, wenn die Warteliste leer ist.
-        if (!promotedUser) continue;
+  //       // Nimm den ersten User aus der Warteliste
+  //       const promotedUser = override.waitlist?.[0]; // kann undefined sein, wenn die Warteliste leer ist.
+  //       if (!promotedUser) continue;
 
-        changed = true;
+  //       changed = true;
 
-        // 4) Override aktualisieren: User aus Warteliste in Teilnehmer verschieben
-        const newParticipants = [...override.participants, promotedUser];
-        const newSwapped = override.swapped ? [...override.swapped, promotedUser] : [promotedUser];
-        const newWaitlist = override.waitlist?.slice(1); // Rest der Warteliste
+  //       // 4) Override aktualisieren: User aus Warteliste in Teilnehmer verschieben
+  //       const newParticipants = [...override.participants, promotedUser];
+  //       const newSwapped = override.swapped ? [...override.swapped, promotedUser] : [promotedUser];
+  //       const newWaitlist = override.waitlist?.slice(1); // Rest der Warteliste
 
-        const updatedOverride = {
-          ...override,
-          participants: newParticipants,
-          swapped: newSwapped,
-          waitlist: newWaitlist,
-        };
+  //       const updatedOverride = {
+  //         ...override,
+  //         participants: newParticipants,
+  //         swapped: newSwapped,
+  //         waitlist: newWaitlist,
+  //       };
 
-        // Backend-Aufruf: Override aktualisieren
-        await updateOverride(override.courseId, override.date, {
-          participants: updatedOverride.participants, 
-          swapped: updatedOverride.swapped,
-          waitlist: updatedOverride.waitlist,
-        });
+  //       // Backend-Aufruf: Override aktualisieren
+  //       await updateOverride(override.courseId, override.date, {
+  //         participants: updatedOverride.participants, 
+  //         swapped: updatedOverride.swapped,
+  //         waitlist: updatedOverride.waitlist,
+  //       });
 
-        // 5) Den entsprechenden pending Swap finden und aktivieren
-        const correspondingSwap = allPendingSwaps.find(
-          (s) => s.user === promotedUser && s.toCourseId === override.courseId && s.toDate === override.date
-        );
-        if (correspondingSwap) {
-          // Swap auf active setzen
-          updateSwap(correspondingSwap, 'active');
+  //       // 5) Den entsprechenden pending Swap finden und aktivieren
+  //       const correspondingSwap = allPendingSwaps.find(
+  //         (s) => s.user === promotedUser && s.toCourseId === override.courseId && s.toDate === override.date
+  //       );
+  //       if (correspondingSwap) {
+  //         // Swap auf active setzen
+  //         updateSwap(correspondingSwap, 'active');
 
-          // Ursprungstermin bereinigen
-          const originOverride = allOverrides.find(
-            (o) => o.courseId === correspondingSwap.fromCourseId && o.date === correspondingSwap.fromDate
-          );
-          if (originOverride) {
-            const newOriginParticipants = originOverride.participants.filter((p) => p !== promotedUser);
-            const newOriginSwapped = (originOverride.swapped ?? []).filter((p) => p !== promotedUser);
-            const newOriginWaitlist = (originOverride.waitlist ?? []).filter((u) => u !== promotedUser);
+  //         // Ursprungstermin bereinigen
+  //         const originOverride = allOverrides.find(
+  //           (o) => o.courseId === correspondingSwap.fromCourseId && o.date === correspondingSwap.fromDate
+  //         );
+  //         if (originOverride) {
+  //           const newOriginParticipants = originOverride.participants.filter((p) => p !== promotedUser);
+  //           const newOriginSwapped = (originOverride.swapped ?? []).filter((p) => p !== promotedUser);
+  //           const newOriginWaitlist = (originOverride.waitlist ?? []).filter((u) => u !== promotedUser);
 
-            // Backend-Aufruf: Ursprung-Override aktualisieren
-            updateOverride(correspondingSwap.fromCourseId, correspondingSwap.fromDate, {
-              participants: newOriginParticipants,
-              swapped: newOriginSwapped,
-              waitlist: newOriginWaitlist,
-            });
-          } else {
-            // Falls kein Ursprung-Override existiert, erstellen
-            const originCourse = courses.find((c) => c.id === correspondingSwap.fromCourseId);
-            if (originCourse) {
-              const newOriginOverride: CourseDateOverride = {
-                courseId: correspondingSwap.fromCourseId,
-                date: correspondingSwap.fromDate,
-                participants: originCourse.participants.filter((p) => p !== promotedUser),
-                swapped: [],
-                waitlist: [],
-              };
-              createOverride(newOriginOverride);
-            }
-          }
+  //           // Backend-Aufruf: Ursprung-Override aktualisieren
+  //           updateOverride(correspondingSwap.fromCourseId, correspondingSwap.fromDate, {
+  //             participants: newOriginParticipants,
+  //             swapped: newOriginSwapped,
+  //             waitlist: newOriginWaitlist,
+  //           });
+  //         } else {
+  //           // Falls kein Ursprung-Override existiert, erstellen
+  //           const originCourse = courses.find((c) => c.id === correspondingSwap.fromCourseId);
+  //           if (originCourse) {
+  //             const newOriginOverride: CourseDateOverride = {
+  //               courseId: correspondingSwap.fromCourseId,
+  //               date: correspondingSwap.fromDate,
+  //               participants: originCourse.participants.filter((p) => p !== promotedUser),
+  //               swapped: [],
+  //               waitlist: [],
+  //             };
+  //             createOverride(newOriginOverride);
+  //           }
+  //         }
 
-          // Alle anderen pending Swaps des Users vom Ursprungstermin stornieren
-          cancelAllPendingSwapsFromOrigin(correspondingSwap.fromCourseId, correspondingSwap.fromDate, promotedUser);
+  //         // Alle anderen pending Swaps des Users vom Ursprungstermin stornieren
+  //         cancelAllPendingSwapsFromOrigin(correspondingSwap.fromCourseId, correspondingSwap.fromDate, promotedUser);
 
-          console.log(`[processPromotions] ${promotedUser} nachgerückt von ${correspondingSwap.fromCourseId}/${correspondingSwap.fromDate} → ${override.courseId}/${override.date}`);
-        }
-      }
+  //         console.log(`[processPromotions] ${promotedUser} nachgerückt von ${correspondingSwap.fromCourseId}/${correspondingSwap.fromDate} → ${override.courseId}/${override.date}`);
+  //       }
+  //     }
 
-      // 4) State aktualisieren
-      if (changed) {
-        setOverrides(allOverrides); // Vollständige Liste zurücksetzen
-        setSwaps(await getSwaps(currentUser.nickname)); // Nur Swaps des aktuellen Users
-        // Rekursion für Kaskade
-        setTimeout(() => processPromotions(), 500);
-      } else {
-        console.log("[processPromotions] No further changes");
-      }
-    } 
-  }
+  //     // 4) State aktualisieren
+  //     if (changed) {
+  //       setOverrides(allOverrides); // Vollständige Liste zurücksetzen
+  //       setSwaps(await getSwaps(currentUser.nickname)); // Nur Swaps des aktuellen Users
+  //       // Rekursion für Kaskade
+  //       setTimeout(() => processPromotions(), 500);
+  //     } else {
+  //       console.log("[processPromotions] No further changes");
+  //     }
+  //   } 
+  // }
 
   console.log("return useCourseSwaps");
 

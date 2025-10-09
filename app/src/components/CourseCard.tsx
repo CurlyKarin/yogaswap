@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
 import type { User} from "../types";
 import { Swap, CourseDateOverride, Course } from "@shared/types";
-
-import { courses } from "../data/courses";
 import { swapSettings } from "../data/swapSettings";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
 
 type Props = {
   course: Course;
+  allCourses: Course[];
   currentUser: User;
   dates: Date[];
   overrides: CourseDateOverride[];
@@ -29,6 +28,7 @@ function sameDayUTC(a: Date, b: Date) {
 
 export default function CourseCard({
   course,
+  allCourses,
   currentUser,
   dates,
   overrides,
@@ -71,18 +71,18 @@ export default function CourseCard({
 
   const availableSwapDates = useMemo(
     () =>
-      getAvailableDates(courses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
+      getAvailableDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
         (a, b) => a.date.getTime() - b.date.getTime()
       ),
-    [courses, overrides, currentUser, swapSettings, selectedDate]
+    [allCourses, overrides, currentUser, swapSettings, selectedDate]
   );
 
   const waitlistDates = useMemo(
     () =>
-      getWaitlistDates(courses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
+      getWaitlistDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
         (a, b) => a.date.getTime() - b.date.getTime()
       ),
-    [courses, overrides, currentUser, swapSettings, selectedDate]
+    [allCourses, overrides, currentUser, swapSettings, selectedDate]
   );
 
   const swapForThisTerm = useMemo(
@@ -307,24 +307,24 @@ export default function CourseCard({
             ? `Tauschanfrage für ${new Date(
                 swap.toDate
               ).toLocaleDateString()} · ${
-                courses.find((c) => c.id === swap.toCourseId)?.name
+                allCourses.find((c) => c.id === swap.toCourseId)?.name
               }`
             : swap.status === "pending" && swap.toCourseId === course.id
             ? `Tauschanfrage zu ${new Date(
                 swap.fromDate
               ).toLocaleDateString()} · ${
-                courses.find((c) => c.id === swap.toCourseId)?.name
+                allCourses.find((c) => c.id === swap.toCourseId)?.name
               }`
             : swap.fromCourseId === course.id
             ? `Getauscht mit ${new Date(
                 swap.toDate
               ).toLocaleDateString()} · ${
-                courses.find((c) => c.id === swap.toCourseId)?.name
+                allCourses.find((c) => c.id === swap.toCourseId)?.name
               }`
             : `Getauscht von ${new Date(
                 swap.fromDate
               ).toLocaleDateString()} · ${
-                courses.find((c) => c.id === swap.fromCourseId)?.name
+                allCourses.find((c) => c.id === swap.fromCourseId)?.name
               }`}
             </div>
           ))}

@@ -29,13 +29,13 @@ async function seedTable(tableName: string, items: any[]) {
 
 async function seedSwaps(tableName: string, items: any[]) {
   for (const item of items) {
-    const dynamoItem: Record<string, { S: string }> = {
+    const dynamoItem: Record<string, any> = {
       user: { S: item.user },
       swapId: { S: `${item.fromDate}_${item.fromCourseId}_${item.toDate}_${item.toCourseId}` }, // eindeutiger Range Key
       fromDate: { S: item.fromDate },
-      fromCourseId: { S: item.fromCourseId.toString() },
+      fromCourseId: { N: item.fromCourseId.toString() },
       toDate: { S: item.toDate },
-      toCourseId: { S: item.toCourseId.toString() },
+      toCourseId: { N: item.toCourseId.toString() },
       status: { S: item.status },
 
       // zusammengesetzte Keys für GSIs
