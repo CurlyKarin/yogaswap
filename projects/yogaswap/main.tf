@@ -117,7 +117,7 @@ locals {
       name           = "process-promotions"
       file_name      = "processPromotions.zip"
       table_arns     = [module.swaps_table.table_arn, module.course_overrides_table.table_arn, module.courses_table.table_arn]
-      dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:PutItem"]
+      dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
       tables = {
         "SWAPS_TABLE" = module.swaps_table.table_name
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
