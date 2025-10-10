@@ -42,7 +42,7 @@ async function updateOverrideHelper(
   const command = new UpdateItemCommand({
     TableName: process.env.OVERRIDES_TABLE,
     Key: {
-      courseId: { N: courseId.toString() },
+      courseId: { S: courseId.toString() },
       date: { S: date },
     },
     UpdateExpression: `SET ${updateExpressionParts.join(", ")}`,
@@ -65,7 +65,7 @@ async function createOverrideHelper(override: CourseDateOverride): Promise<void>
   const command = new PutItemCommand({
     TableName: process.env.OVERRIDES_TABLE,
     Item: {
-      courseId: { N: override.courseId.toString() },
+      courseId: { S: override.courseId.toString() },
       date: { S: override.date },
       participants: { L: (override.participants || []).map((p) => ({ S: p })) },
       swapped: { L: (override.swapped || []).map((s) => ({ S: s })) },
@@ -117,6 +117,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         toDate: item.toDate.S!,
         status: item.status.S as Swap["status"],
       }));
+      console.log('pendingSwaps:', pendingSwaps);
 
       // 2) Alle Overrides laden (zukünftige Termine)
       const overridesCommand = new ScanCommand({
@@ -125,13 +126,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
       const overridesData = await client.send(overridesCommand);
       const allOverrides: CourseDateOverride[] = (overridesData.Items || []).map((item) => ({
-        courseId: Number(item.courseId.N!),
+        courseId: Number(item.courseId.S),
         date: item.date.S!,
         participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
         swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
         waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
       }));
       const futureOverrides = allOverrides.filter((o) => new Date(o.date) >= new Date());
+      console.log('futureOverrides:', futureOverrides);
 
       // 3) Alle Courses laden (Scan, da klein)
       const coursesCommand = new ScanCommand({
@@ -148,14 +150,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
         dates: item.dates.L ? item.dates.L.map((d: any) => d.S) : [],
       }));
+      console.log('courses:', courses);
 
       // 4) Durchsuche Overrides nach freien Plätzen mit Warteliste
       for (const override of futureOverrides) {
+        console.log('override:', override);
         const overrideCourse = courses.find((c) => c.id === override.courseId);
         if (!overrideCourse) continue;
 
         const freeSpots = overrideCourse.capacity - override.participants.length;
         if (freeSpots <= 0) continue;
+        console.log('freeSpots:', freeSpots);
+        console.log('override.courseId:', override.courseId, 'override.date:', override.date, 'override.waitlist:', override.waitlist);
 
         // Nimm den ersten User aus der Warteliste
         const promotedUser = override.waitlist?.[0];
@@ -192,9 +198,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
         // 6) Ziel-Override aktualisieren (UpdateItemCommand)
         const newParticipants = [...override.participants, promotedUser];
-        const newWaitlist = override.waitlist?.slice(1);
+        const newSwapped = [...(override.swapped || []), promotedUser]; // Hinzufügen zu swapped
+        const newWaitlist = override.waitlist?.slice(1) || [];
+        console.log('Ziel-Override aktualisieren: newParticipants:', newParticipants, 'newSwapped:', newSwapped, 'newWaitlist:', newWaitlist, 'courseId:', override.courseId, 'date:', override.date);
         await updateOverrideHelper(override.courseId, override.date, {
           participants: newParticipants,
+          swapped: newSwapped,
           waitlist: newWaitlist,
         });
 
@@ -203,9 +212,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           (o) => o.courseId === correspondingSwap.fromCourseId && o.date === correspondingSwap.fromDate
         );
         if (originOverride) {
-          const newOriginParticipants = originOverride.participants.filter((p) => p !== promotedUser);
+          const newOriginParticipants = originOverride.participants.includes(promotedUser)
+            ? originOverride.participants.filter((p) => p !== promotedUser)
+            : originOverride.participants; // Nur entfernen, wenn in participants
           const newOriginSwapped = (originOverride.swapped ?? []).filter((p) => p !== promotedUser);
           const newOriginWaitlist = (originOverride.waitlist ?? []).filter((u) => u !== promotedUser);
+          console.log('Ursprung-Override bereinigen: newOriginParticipants:', newOriginParticipants, 'newOriginSwapped:', newOriginSwapped, 'newOriginWaitlist:', newOriginWaitlist, 'courseId:', correspondingSwap.fromCourseId, 'date:', correspondingSwap.fromDate);
           await updateOverrideHelper(correspondingSwap.fromCourseId, correspondingSwap.fromDate, {
             participants: newOriginParticipants,
             swapped: newOriginSwapped,
@@ -213,7 +225,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           });
         } else {
           const originCourse = courses.find((c) => c.id === correspondingSwap.fromCourseId);
-          if (originCourse) {
+          if (originCourse && originCourse.participants.includes(promotedUser)) {
+            // Nur Override erstellen, wenn der User in participants ist
             const newOriginOverride: CourseDateOverride = {
               courseId: correspondingSwap.fromCourseId,
               date: correspondingSwap.fromDate,
