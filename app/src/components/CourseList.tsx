@@ -19,87 +19,79 @@ export default function CourseList({ currentUser }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Wiederverwendbare fetchData-Funktion mit isCancelled
+// Wiederverwendbare fetchData-Funktion mit isCancelled
+  const fetchData = async () => {
+    let isCancelled = false;
+    try {
+      console.log('Fetching courses, overrides, and swaps...', { user: currentUser?.nickname });
+      setLoading(true);
+      const [courseData, overrideData, swapsData] = await Promise.all([
+        getCourses(),
+        getOverrides(),
+        currentUser?.nickname ? getSwaps(currentUser.nickname) : Promise.resolve([]),
+      ]);
+      console.log('Data fetched:', { courseData, overrideData, swapsData });
+      if (!isCancelled) {
+        setCourses(courseData.sort((a, b) => a.id - b.id));
+        setOverrides(Array.isArray(overrideData) ? overrideData : []);
+        setSwaps(swapsData);
+        setLoading(false);
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Error in fetchData:', err);
+      if (!isCancelled) {
+        setError('Failed to load data');
+        setLoading(false);
+        setSwaps([]);
+      }
+    }
+    return () => {
+      isCancelled = true;
+    };
+  };
+
+  // Initialer Datenabruf
+  useEffect(() => {
+    const fetchDataAndClearError = async () => {
+      await fetchData();
+      setError(null);
+    };
+    fetchDataAndClearError();
+  }, [currentUser?.nickname]);
+
   const {
     confirmSwap,
     requestSwap,
     cancelSwap,
     onToggleAbsence,
     overrides: filteredOverrides
-  } = useCourseSwaps(courses, overrides, setOverrides, swaps, setSwaps, currentUser);
-  
- // Lade Kurse und Overrides
-  useEffect(() => {
-    let isCancelled = false;
-    const fetchData = async () => {
-      try {
-        console.log('Fetching courses and overrides...');
-        const [courseData, overrideData] = await Promise.all([
-          getCourses(),
-          getOverrides(),
-        ]);
-        console.log('Data fetched:', { courseData, overrideData });
-        if (!isCancelled) {
-          // Sortiere Kurse nach id (aufsteigend)
-          const sortedCourses = courseData.sort((a, b) => a.id - b.id);
-          setCourses(sortedCourses);
-          setOverrides(Array.isArray(overrideData) ? overrideData : []);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error('Error in fetchData:', err);
-        if (!isCancelled) {
-          setError('Failed to load data');
-          setLoading(false);
-        }
-      }
-    };
-    fetchData();
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
+  } = useCourseSwaps(courses, overrides, setOverrides, swaps, setSwaps, currentUser, fetchData);
 
   // useEffect(() => {
   //   let isCancelled = false;
-  //   const loadOverrides = async () => {
+  //   const loadSwaps = async () => {
+  //     if (!currentUser?.nickname) {
+  //       console.error('Kein Benutzer-Nickname, Swaps bleiben leer');
+  //       if (!isCancelled) setSwaps([]);
+  //       return;
+  //     }
   //     try {
-  //       const overridesData = await getOverrides(); // Neu: Lade aus api/overrides.ts, optional mit sinceDate: '2025-09-29'
-  //       console.log('Geladene Overrides:', overridesData); // Debugging
-  //       if (!isCancelled) setOverrides(Array.isArray(overridesData) ? overridesData : []);
+  //       console.log('Lade Swaps für user:', currentUser.nickname);
+  //       const swapsData = await getSwaps(currentUser.nickname); // Verwende api/swaps.ts
+  //       if (!isCancelled) setSwaps(swapsData); // Setze Swaps, auch wenn leer
   //     } catch (error) {
-  //       console.error('Fehler beim Laden der Overrides', error);
-  //       if (!isCancelled) setOverrides([]);
+  //       console.error('Fehler beim Laden der Swaps', error);
+  //       if (!isCancelled) setSwaps([]); // Bei Fehler leeres Array
   //     }
   //   };
-  //   loadOverrides();
+  //   loadSwaps();
+  //   console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
   //   return () => {
-  //     isCancelled = true;
+  //     isCancelled = true; // Verhindert Updates nach Unmount
   //   };
-  // }, []); // Keine Abhängigkeiten, lade nur einmal
-
-  useEffect(() => {
-    let isCancelled = false;
-    const loadSwaps = async () => {
-      if (!currentUser?.nickname) {
-        console.error('Kein Benutzer-Nickname, Swaps bleiben leer');
-        if (!isCancelled) setSwaps([]);
-        return;
-      }
-      try {
-        console.log('Lade Swaps für user:', currentUser.nickname);
-        const swapsData = await getSwaps(currentUser.nickname); // Verwende api/swaps.ts
-        if (!isCancelled) setSwaps(swapsData); // Setze Swaps, auch wenn leer
-      } catch (error) {
-        console.error('Fehler beim Laden der Swaps', error);
-        if (!isCancelled) setSwaps([]); // Bei Fehler leeres Array
-      }
-    };
-    loadSwaps();
-    console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
-    return () => {
-      isCancelled = true; // Verhindert Updates nach Unmount
-    };
-  }, [currentUser?.nickname]);
+  // }, [currentUser?.nickname]);
 
   // 👉 Debug-Ausgabe bei jedem Swaps-Update
   useEffect(() => {
@@ -111,20 +103,6 @@ export default function CourseList({ currentUser }: Props) {
   useEffect(() => {
     console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
   }, [currentUser?.nickname]);
-
-  // useEffect(() => {
-  //   const fetchCourses = async () => {
-  //     try {
-  //       const data = await getCourses();
-  //       setCourses(data);
-  //       setLoading(false);
-  //     } catch (err) {
-  //       setError('Failed to load courses');
-  //       setLoading(false);
-  //     }
-  //   };
-  //   fetchCourses();
-  // }, []);
 
   if (loading) {
     console.log('Rendering loading state...');

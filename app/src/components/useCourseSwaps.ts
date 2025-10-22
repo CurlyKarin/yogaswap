@@ -7,9 +7,11 @@ import { createOverride, getOverrides, updateOverride } from "../api/overrides";
 import { User } from "src/types";
 
 export function useCourseSwaps(
-courses: Course[],
-overrides: CourseDateOverride[], setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>, 
-swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUser: User,
+  courses: Course[],
+  overrides: CourseDateOverride[], setOverrides: React.Dispatch<React.SetStateAction<CourseDateOverride[]>>, 
+  swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, 
+  currentUser: User,
+  fetchData: () => Promise<() => void>
 ) {
   
   // Filtere Overrides für aktuelle und zukünftige Termine
@@ -111,6 +113,8 @@ swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUs
     });
 
     processPromotions(); // Nachrücken übernehmen
+
+    await fetchData();
   }
 
   // Swap starten
@@ -249,6 +253,7 @@ swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUs
 
     processPromotions();
     console.log("confirmSwap");
+    await fetchData
   }
 
   // Swap löschen
@@ -345,6 +350,8 @@ swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUs
 
     processPromotions();
 
+    await fetchData();
+
     // Hinweis: Der Ursprungstermin bleibt wie gehabt mit Override für Absage/Rücknahme bestehen.
   }
 
@@ -430,6 +437,8 @@ swaps: Swap[], setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, currentUs
     await createSwap(newSwap);
     const updatedSwaps = await getSwaps(userName);
     setSwaps(updatedSwaps);
+
+    await fetchData();
   }
 
   // Abbrechen aller Swaps des Users, die vom Ursprungstermin stammen
