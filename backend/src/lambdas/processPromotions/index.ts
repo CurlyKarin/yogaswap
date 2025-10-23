@@ -342,13 +342,49 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
+    // 9) Aktualisierte Swaps und Overrides laden
+    const updatedSwapsCommand = new ScanCommand({
+      TableName: process.env.SWAPS_TABLE,
+      ConsistentRead: true,
+    });
+    const updatedSwapsData = await client.send(updatedSwapsCommand);
+    const updatedSwaps: Swap[] = (updatedSwapsData.Items || []).map((item) => ({
+      user: item.user.S!,
+      fromCourseId: Number(item.fromCourseId.N || item.fromCourseId.S),
+      fromDate: item.fromDate.S!,
+      toCourseId: Number(item.toCourseId.N || item.toCourseId.S),
+      toDate: item.toDate.S!,
+      status: item.status.S as Swap["status"],
+    }));
+
+    const updatedOverridesCommand = new ScanCommand({
+      TableName: process.env.OVERRIDES_TABLE,
+      ConsistentRead: true,
+    });
+    const updatedOverridesData = await client.send(updatedOverridesCommand);
+    const updatedOverrides: CourseDateOverride[] = (updatedOverridesData.Items || []).map((item) => ({
+      courseId: Number(item.courseId.S!),
+      date: item.date.S!,
+      participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
+      swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
+      waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
+    }));
     console.log(`[processPromotions] Complete after ${iterations} iterations`);
+    
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: 'Promotions processed', iterations, promoted: promotedSwaps.length }),
+      body: JSON.stringify({
+        message: 'Promotions processed',
+        iterations,
+        promoted: promotedSwaps.length,
+        swaps: updatedSwaps,
+        overrides: updatedOverrides,
+      }),
     };
   } catch (error) {
     console.error('Error in processPromotions:', error);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Internal Server Error' }) };
+    return { 
+      statusCode: 500, 
+      body: JSON.stringify({ error: 'Failed to process promotions' }) };
   }
 };
