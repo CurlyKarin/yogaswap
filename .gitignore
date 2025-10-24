@@ -58,3 +58,4 @@ projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.
 
 app/build/assets/*.*
 backend/tsconfig.tsbuildinfo
+backend/src/lambdas/processPromotions/index.xxxxx
