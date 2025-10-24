@@ -5,36 +5,8 @@ export type User = {
   enrolledCourseIds: number[]; // in welchen Kursen ist der User?
 };
 
-// export type Course = {
-//   id: number;
-//   name: string;
-//   weekday: string; // z.B. "Mon", "Tue", ...
-//   time: string;    // z.B. "18:30"
-//   capacity: number;
-//   participants: string[]; // Nicknames
-//   dates: Date[]; // Liste der Termine
-// };
-
-// export type CourseDateOverride = {
-//   courseId: number;
-//   date: string; // ISO-String
-//   participants: string[];
-//   swapped?: string[]; // aktive Tausch-Teilnehmer
-//   waitlist?: string[]; // Nachrücker für volle Termine
-// };
-
 export type SwapSettings = {
   minOffsetDays: number; // frühestens X Tage nach Referenzdatum
   maxOffsetDays: number; // spätestens X Tage nach Referenzdatum
 };
 
-// export type SwapStatus = "pending" | "active";
-
-// export type Swap = {
-//   user: string;        // der Teilnehmer
-//   fromCourseId: number;
-//   fromDate: string;    // ISO des Ursprungstermins
-//   toCourseId: number;
-//   toDate: string;      // ISO des Zieltermins
-//   status: SwapStatus;
-// };

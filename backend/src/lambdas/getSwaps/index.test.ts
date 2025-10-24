@@ -1,6 +1,6 @@
 import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import { APIGatewayProxyEvent } from "aws-lambda";
-import { handler } from './index';
+import { handler } from "./index";
 
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
@@ -36,7 +36,7 @@ describe("getSwaps Lambda", () => {
     const result = await handler(event);
 
     expect(result.statusCode).toBe(400);
-    expect(result.body).toContain("Missing 'user' query parameter");
+    expect(result.body).toContain("Missing user parameter");
     expect(mockSend).not.toHaveBeenCalled();
   });
 
@@ -58,7 +58,6 @@ describe("getSwaps Lambda", () => {
       user: "Nia",
       fromDate: "2025-10-01",
       fromCourseId: "1",
-      status: "pending",
     });
 
     const result = await handler(event);
@@ -71,10 +70,14 @@ describe("getSwaps Lambda", () => {
       expect.objectContaining({
         TableName: "test-swaps",
         IndexName: "GSI_From",
-        KeyConditionExpression: "#u = :u AND #f = :f",
+        KeyConditionExpression: "#u = :u AND begins_with(#f, :f)",
         ExpressionAttributeNames: expect.objectContaining({
           "#u": "user",
           "#f": "fromDate_fromCourseId_status",
+        }),
+        ExpressionAttributeValues: expect.objectContaining({
+          ":u": { S: "Nia" },
+          ":f": { S: "2025-10-01_1" },
         }),
       })
     );
@@ -94,7 +97,9 @@ describe("getSwaps Lambda", () => {
     expect(QueryCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         IndexName: "GSI_To",
+        KeyConditionExpression: "#u = :u AND begins_with(#t, :t)",
         ExpressionAttributeNames: expect.objectContaining({
+          "#u": "user",
           "#t": "toDate_toCourseId_status",
         }),
       })

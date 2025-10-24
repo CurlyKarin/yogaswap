@@ -17,9 +17,9 @@ describe('getOverrides Lambda', () => {
         {
           courseId: { S: '1' },
           date: { S: '2025-10-01' },
-          participants: { S: JSON.stringify(['Luna']) },
-          swapped: { S: JSON.stringify([]) },
-          waitlist: { S: JSON.stringify([]) },
+          participants: { L: [{ S: 'Luna' }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
         },
       ],
     });
@@ -52,16 +52,16 @@ describe('getOverrides Lambda', () => {
         {
           courseId: { S: '1' },
           date: { S: '2025-10-01' },
-          participants: { S: JSON.stringify(['Luna']) },
-          swapped: { S: JSON.stringify([]) },
-          waitlist: { S: JSON.stringify([]) },
+          participants: { L: [{ S: 'Luna' }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
         },
         {
           courseId: { S: '2' },
           date: { S: '2025-10-02' },
-          participants: { S: JSON.stringify(['Kai']) },
-          swapped: { S: JSON.stringify([]) },
-          waitlist: { S: JSON.stringify([]) },
+          participants: { L: [{ S: 'Kai' }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
         },
       ],
     });
@@ -90,16 +90,16 @@ describe('getOverrides Lambda', () => {
         {
           courseId: { S: '1' },
           date: { S: '2025-09-20' },
-          participants: { S: JSON.stringify(['Luna']) },
-          swapped: { S: JSON.stringify([]) },
-          waitlist: { S: JSON.stringify([]) },
+          participants: { L: [{ S: 'Luna' }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
         },
         {
           courseId: { S: '1' },
           date: { S: '2025-10-01' },
-          participants: { S: JSON.stringify(['Kai']) },
-          swapped: { S: JSON.stringify([]) },
-          waitlist: { S: JSON.stringify([]) },
+          participants: { L: [{ S: 'Kai' }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
         },
       ],
     });

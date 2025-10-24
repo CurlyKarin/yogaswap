@@ -27,33 +27,34 @@ describe("deleteSwap Lambda", () => {
     process.env = OLD_ENV;
   });
 
-  const makeEvent = (swapId?: string): APIGatewayProxyEvent =>
+  const makeEvent = (swapId?: string, user?: string): APIGatewayProxyEvent =>
     ({
       pathParameters: swapId ? { swapId } : null,
+      queryStringParameters: user ? { user } : null,
     } as any);
 
-  test("returns 400 if swapId is missing", async () => {
-    const event = makeEvent(undefined);
+  test("returns 400 if swapId or user is missing", async () => {
+    const event = makeEvent(undefined, "Nia");
     const result = await handler(event);
 
     expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toBe("Missing swapId");
+    expect(JSON.parse(result.body).error).toBe("Missing swapId or user parameter");
     expect(mockSend).not.toHaveBeenCalled();
   });
 
-  test("deletes an existing swap", async () => {
+  test("deletes an existing swap successfully", async () => {
     mockSend.mockResolvedValueOnce({});
 
-    const event = makeEvent("abc123");
+    const event = makeEvent("abc123", "Nia");
     const result = await handler(event);
 
     expect(result.statusCode).toBe(200);
-    expect(JSON.parse(result.body).message).toBe("Swap deleted");
+    expect(JSON.parse(result.body).message).toBe("Swap deleted successfully");
 
     expect(DeleteItemCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: "test-swaps",
-        Key: { swapId: { S: "abc123" } },
+        Key: { swapId: { S: "abc123" }, user: { S: "Nia" } },
       })
     );
   });
@@ -61,10 +62,10 @@ describe("deleteSwap Lambda", () => {
   test("returns 500 on DynamoDB error", async () => {
     mockSend.mockRejectedValueOnce(new Error("DynamoDB error"));
 
-    const event = makeEvent("xyz789");
+    const event = makeEvent("xyz789", "Luna");
     const result = await handler(event);
 
     expect(result.statusCode).toBe(500);
-    expect(JSON.parse(result.body).error).toBe("Failed to delete swap");
+    expect(JSON.parse(result.body).error).toBe("Internal Server Error");
   });
 });

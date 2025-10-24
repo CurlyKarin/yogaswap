@@ -3,6 +3,7 @@ import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { handler } from './index';
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 
+// Mock DynamoDB client
 const dynamoMock = mockClient(DynamoDBClient);
 
 beforeEach(() => {
@@ -28,15 +29,19 @@ describe('createOverride Lambda', () => {
 
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body)).toEqual({ message: 'Override created' });
+
+    // Es wird genau ein PutItemCommand erwartet
     expect(dynamoMock.calls()).toHaveLength(1);
+
+    // Das gesendete Item soll Listenattribute ("L") enthalten
     expect(dynamoMock.call(0).args[0].input).toMatchObject({
       TableName: 'yogaswap-backend-demo-courseOverrides-table',
       Item: {
         courseId: { S: '1' },
         date: { S: '2025-10-01' },
-        participants: { S: JSON.stringify(['Luna']) },
-        swapped: { S: JSON.stringify([]) },
-        waitlist: { S: JSON.stringify([]) },
+        participants: { L: [{ S: 'Luna' }] },
+        swapped: { L: [] },
+        waitlist: { L: [] },
       },
     });
   });
@@ -55,7 +60,23 @@ describe('createOverride Lambda', () => {
     expect(dynamoMock.calls()).toHaveLength(0);
   });
 
-  it('should handle DynamoDB errors', async () => {
+  it('should return 400 for invalid participants array', async () => {
+    const event: Partial<APIGatewayProxyEvent> = {
+      body: JSON.stringify({
+        courseId: 1,
+        date: '2025-10-01',
+        participants: [123], // invalid type
+      }),
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body)).toEqual({ error: 'Invalid participants array' });
+    expect(dynamoMock.calls()).toHaveLength(0);
+  });
+
+  it('should handle DynamoDB errors gracefully', async () => {
     dynamoMock.on(PutItemCommand).rejects(new Error('DynamoDB failure'));
 
     const event: Partial<APIGatewayProxyEvent> = {
