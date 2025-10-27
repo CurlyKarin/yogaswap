@@ -1,0 +1,19 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,         // erlaubt Projekt-Referenzen
+    "declaration": true,       // erzeugt .d.ts Dateien, wenn du baust
+    "declarationMap": true,    // Mapping für Debugging
+    "outDir": "dist",
+    "rootDir": "src",
+    "moduleResolution": "node",
+    "module": "ESNext",
+    "target": "ES2020",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "strict": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

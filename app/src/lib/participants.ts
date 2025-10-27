@@ -1,4 +1,5 @@
-import type { Course, CourseDateOverride } from "../types";
+import { CourseDateOverride } from "@shared/types";
+import type { Course } from "@shared/types";
 
 export const getEffectiveParticipants = (course: Course, overrides: CourseDateOverride[], dateIso: string) => {
   const override = overrides.find((o) => o.courseId === course.id && o.date === dateIso);

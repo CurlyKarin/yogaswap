@@ -1,38 +1,118 @@
-import { courses } from "../data/courses";
-import type { Course, User } from "../types";
+import type { User } from "../types";
 import CourseCard from "./CourseCard";
-import { courseDateOverrides as initialOverrides } from "../data/courseOverrides";
-import { swapes as initialSwaps } from "../data/swapes";
 import { useCourseSwaps } from "./useCourseSwaps";
+import { useEffect, useState } from "react";
+import { Course, CourseDateOverride, Swap} from "@shared/types";
+import { getSwaps } from "../api/swaps";
+import { getOverrides } from "../api/overrides";
+import { getCourseDates } from "../lib/dates";
+import { getCourses } from "../api/courses";
 
 type Props = {
   currentUser: User;
 };
 
 export default function CourseList({ currentUser }: Props) {
+  const [swaps, setSwaps] = useState<Swap[]>([]);
+  const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Wiederverwendbare fetchData-Funktion mit isCancelled
+// Wiederverwendbare fetchData-Funktion mit isCancelled
+  const fetchData = async () => {
+    let isCancelled = false;
+    try {
+      console.log('Fetching courses, overrides, and swaps...', { user: currentUser?.nickname });
+      setLoading(true);
+      const [courseData, overrideData, swapsData] = await Promise.all([
+        getCourses(),
+        getOverrides(),
+        currentUser?.nickname ? getSwaps(currentUser.nickname) : Promise.resolve([]),
+      ]);
+      console.log('Data fetched:', { courseData, overrideData, swapsData });
+      if (!isCancelled) {
+        setCourses(courseData.sort((a, b) => a.id - b.id));
+        setOverrides(Array.isArray(overrideData) ? overrideData : []);
+        setSwaps(swapsData);
+        setLoading(false);
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Error in fetchData:', err);
+      if (!isCancelled) {
+        setError('Failed to load data');
+        setLoading(false);
+        setSwaps([]);
+      }
+    }
+    return () => {
+      isCancelled = true;
+    };
+  };
+
+  // Initialer Datenabruf
+  useEffect(() => {
+    const fetchDataAndClearError = async () => {
+      await fetchData();
+      setError(null);
+    };
+    fetchDataAndClearError();
+  }, [currentUser?.nickname]);
+
   const {
-    overrides,
-    swaps,
     confirmSwap,
     requestSwap,
     cancelSwap,
     onToggleAbsence,
-  } = useCourseSwaps(initialOverrides, initialSwaps );
+    overrides: filteredOverrides
+  } = useCourseSwaps(courses, overrides, setOverrides, swaps, setSwaps, currentUser, fetchData);
 
-    // zentrale, termin-spezifische Änderungen im State
-// const [overrides, setOverrides] = useState<CourseDateOverride[]>(initialOverrides);
-//  const [swaps, setSwaps] = useState<Swap[]>([]);
+  // useEffect(() => {
+  //   let isCancelled = false;
+  //   const loadSwaps = async () => {
+  //     if (!currentUser?.nickname) {
+  //       console.error('Kein Benutzer-Nickname, Swaps bleiben leer');
+  //       if (!isCancelled) setSwaps([]);
+  //       return;
+  //     }
+  //     try {
+  //       console.log('Lade Swaps für user:', currentUser.nickname);
+  //       const swapsData = await getSwaps(currentUser.nickname); // Verwende api/swaps.ts
+  //       if (!isCancelled) setSwaps(swapsData); // Setze Swaps, auch wenn leer
+  //     } catch (error) {
+  //       console.error('Fehler beim Laden der Swaps', error);
+  //       if (!isCancelled) setSwaps([]); // Bei Fehler leeres Array
+  //     }
+  //   };
+  //   loadSwaps();
+  //   console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
+  //   return () => {
+  //     isCancelled = true; // Verhindert Updates nach Unmount
+  //   };
+  // }, [currentUser?.nickname]);
 
-//export default function CourseList({ currentUser }: Props) {
+  // 👉 Debug-Ausgabe bei jedem Swaps-Update
+  useEffect(() => {
+    console.log('🔄 Overrides updated:', overrides);
+    console.log('🔄 Filtered Overrides:', filteredOverrides);
+    console.log('🔄 Swaps updated:', swaps);
+  }, [overrides, filteredOverrides, swaps]);
 
-  function getCourseDates(course: Course) {
-    const now = new Date();
-    const [hours, minutes] = course.time.split(":").map(Number);
-    return course.dates
-      .map((d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes))
-      .filter((d) => d >= now);
+  useEffect(() => {
+    console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
+  }, [currentUser?.nickname]);
+
+  if (loading) {
+    console.log('Rendering loading state...');
+    return <div>Loading...</div>;
   }
-
+  if (error) {
+    console.log('Rendering error state:', error);
+    return <div>{error}</div>;
+  }
+  console.log('Rendering courses:', courses);
 
   return (
     <>
@@ -42,10 +122,11 @@ export default function CourseList({ currentUser }: Props) {
           return (
             <CourseCard
               key={course.id}
-              course={course}
+              course={course} 
+              allCourses={courses}
               currentUser={currentUser}
               dates={dates}
-              overrides={overrides}
+              overrides={filteredOverrides}
               swaps={swaps}
               onToggleAbsence={onToggleAbsence}
               confirmSwap={confirmSwap}

@@ -1,5 +1,5 @@
 // lib/waitlist.ts
-import type { Course, CourseDateOverride } from "../types";
+import { CourseDateOverride, Course } from "@shared/index";
 import { sameInstant } from "./dates";
 
 /**
