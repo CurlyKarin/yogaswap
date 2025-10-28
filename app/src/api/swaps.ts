@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { CourseDateOverride, Swap } from '@shared/types';
+import { CourseDateOverride, Swap } from 'shared/types';
 
 export async function getSwaps(user: string, fromDate?: string, fromCourseId?: number, toDate?: string, toCourseId?: number, status?: string): Promise<Swap[]> {
   try {

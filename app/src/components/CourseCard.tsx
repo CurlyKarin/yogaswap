@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import type { User} from "../types";
-import { Swap, CourseDateOverride, Course } from "@shared/types";
+import { Swap, CourseDateOverride, Course, User } from "shared/types";
 import { swapSettings } from "../data/swapSettings";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
 

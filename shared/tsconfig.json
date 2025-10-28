@@ -4,7 +4,7 @@
     "composite": true,         // erlaubt Projekt-Referenzen
     "declaration": true,       // erzeugt .d.ts Dateien, wenn du baust
     "declarationMap": true,    // Mapping für Debugging
-    "outDir": "dist",
+    "outDir": "./dist",
     "rootDir": "src",
     "moduleResolution": "node",
     "module": "ESNext",

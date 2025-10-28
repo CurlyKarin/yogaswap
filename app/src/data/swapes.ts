@@ -1,4 +1,4 @@
-import type { Swap } from "@shared/types";
+import type { Swap } from "shared/types";
 
 export const swapes: Swap[] = [
     { 

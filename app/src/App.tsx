@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import Login from "./components/Login";
 import CourseList from "./components/CourseList";
-import type { User } from "./types";
 import { getCurrentUser, clearCurrentUser } from "./lib/storage";
+import { User } from "shared/types";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);

@@ -1,6 +1,6 @@
 // lib/dates.ts
-import { CourseDateOverride, Course } from "@shared/types";
-import type { User, SwapSettings } from "../types";
+import { CourseDateOverride, Course, User } from "shared/types";
+import type { SwapSettings } from "../types";
 
 export function getCourseDates(course: Course) {
   const now = new Date();

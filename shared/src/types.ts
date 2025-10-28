@@ -39,5 +39,5 @@ export interface User {
   // Benutzerrolle: admin (voller Zugriff), instructor (Kursverwaltung), participant (Standard), trial (Schnupperteilnehmer)
   role: UserRole;
   // Benutzerspezifische Einstellungen, z. B. Benachrichtigungspräferenzen, flexibel für zukünftige Erweiterungen
-  settings?: Record<string, unknown>;
+  //settings?: Record<string, unknown>;
 }

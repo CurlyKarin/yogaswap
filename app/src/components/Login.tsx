@@ -1,8 +1,8 @@
+
+import { User } from "shared/types";
+import { loadCurrentUser } from "shared/lib/storage";
 import { useState } from "react";
-import { users } from "../data/users";
-import { saveCurrentUser } from "../lib/storage";
-import type { User } from "../types";
-//import "./Login.css"; // optional, falls du eigenes login-css möchtest
+import { LoginCredentials, useAuth } from "shared/auth";
 
 type Props = {
   onLogin: (user: User) => void;
@@ -11,16 +11,25 @@ type Props = {
 export default function Login({ onLogin }: Props) {
   const [email, setEmail] = useState("luna@example.com");
   const [password, setPassword] = useState("1234");
-  const [error, setError] = useState<string | null>(null);
+  //const [error, setError] = useState<string | null>(null);
+  const { login, isLoading, error } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // const handleSubmit = (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   const user = users.find(u => u.email === email);
+  //   if (user && password === '1234') { // Fallback-Password für Demo
+  //     saveCurrentUser(user);
+  //     onLogin(user);
+  //   } else {
+  //     setError("Invalid email or password");
+  //   }
+  // };
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) {
-      saveCurrentUser(user);
-      onLogin(user);
-    } else {
-      setError("Invalid email or password");
+    const success = await login({ email, password } as LoginCredentials);
+    if (success) {
+      const user = loadCurrentUser(); // Checkmark direkt aufrufen
+      onLogin(user!);
     }
   };
 
@@ -34,6 +43,7 @@ export default function Login({ onLogin }: Props) {
           value={email}
           autoComplete="username"
           onChange={e => setEmail(e.target.value)}
+          disabled={isLoading}
         />
         <input
           type="password"
@@ -41,8 +51,11 @@ export default function Login({ onLogin }: Props) {
           value={password}
           autoComplete="current-password"
           onChange={e => setPassword(e.target.value)}
+          disabled={isLoading}
         />
-        <button type="submit">Login</button>
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? "Lädt..." : "Login"}
+        </button>
       </form>
 
       {error && <p style={{ color: "crimson" }}>{error}</p>}

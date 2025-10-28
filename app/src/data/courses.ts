@@ -1,4 +1,4 @@
-import { Course } from "@shared/types";
+import { Course } from "shared/types";
 
 export const courses: Course[] = [
   {

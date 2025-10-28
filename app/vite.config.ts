@@ -10,4 +10,13 @@ export default defineConfig({
   build: {
     outDir: 'build',
   },
+  resolve: {
+    alias: {
+      'shared': path.resolve(__dirname, '../shared/dist'), // Checkmark neu
+    },
+    dedupe: ['react', 'react-dom'], // Checkmark WICHTIG!
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom'], // Checkmark Vite muss react vorab laden
+  },
 });
