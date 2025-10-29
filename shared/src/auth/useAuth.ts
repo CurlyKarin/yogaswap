@@ -1,60 +1,48 @@
 // shared/src/auth/useAuth.ts
 import { useCallback, useState } from 'react';
-import { User } from '..';
+import { User, UserRole } from '..';
 import { saveCurrentUser, loadCurrentUser, clearCurrentUser } from '../lib/storage';
 import { users } from '../data/mockUsers';
 
-// Typ für Login-Credentials
-export type LoginCredentials = {
-  email: string;
-  password: string;
-};
+export type LoginCredentials = { email: string; password: string };
 
 // Auth-Hook (aktuell: Fake-Login, später: Cognito)
-export const useAuth = () => {
+export const useAuth = (useCognito: boolean = false) => {
   const [user, setUser] = useState<User | null>(loadCurrentUser());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const login = useCallback(async (credentials: LoginCredentials): Promise<boolean> => {
+  const login = useCallback(async (credentials: { email: string; password: string }) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Checkmark Fake-Login (später ersetzt durch Cognito)
-      const foundUser = users.find(u => u.email === credentials.email);
-      if (foundUser && credentials.password === '1234') { // Demo-Passwort
-        saveCurrentUser(foundUser);
-        setUser(foundUser);
-        return true;
+      if (useCognito) {
+        // Checkmark Wird später in app überschrieben
+        throw new Error('Cognito nicht verfügbar');
       } else {
-        setError('Ungültige E-Mail oder Passwort');
-        return false;
+        const foundUser = users.find(u => u.email === credentials.email);
+        if (foundUser && credentials.password === '1234') {
+          saveCurrentUser(foundUser);
+          setUser(foundUser);
+          return true;
+        } else {
+          setError('Ungültige E-Mail oder Passwort');
+          return false;
+        }
       }
-    } catch (err) {
-      setError('Login fehlgeschlagen');
+    } catch (err: any) {
+      setError(err.message || 'Login fehlgeschlagen');
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+ }, [useCognito]);
 
   const logout = useCallback(() => {
     clearCurrentUser();
     setUser(null);
   }, []);
 
-  const refreshUser = useCallback(() => {
-    const stored = loadCurrentUser();
-    setUser(stored);
-  }, []);
-
-  return {
-    user,
-    isLoading,
-    error,
-    login,
-    logout,
-    refreshUser,
-  };
+  return { user, isLoading, error, login, logout };
 };

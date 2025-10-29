@@ -5,17 +5,30 @@ import CourseList from "./components/CourseList";
 import { getCurrentUser, clearCurrentUser } from "./lib/storage";
 import { User } from "shared/types";
 
+const useAppAuth = () => {
+  return import.meta.env.DEV ? useAuth() : useCognitoAuth();
+};
+
+import { useCognitoAuth } from "./components/useCognitoAuth";
+import { useAuth } from "shared/auth";
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { user, login, logout, isLoading, error } = useAppAuth(); 
 
-  // Beim Laden schauen, ob ein User in localStorage ist
+// Beim Laden: User aus localStorage
   useEffect(() => {
-    const u = getCurrentUser();
-    if (u) setCurrentUser(u);
-  }, []);
+    const storedUser = getCurrentUser();
+    if (storedUser) {
+      setCurrentUser(storedUser);
+    } else if (user) {
+      setCurrentUser(user);
+    }
+  }, [user]);
 
-  const handleLogin = (user: User) => {
-    setCurrentUser(user);
+// Login-Handler
+  const handleLogin = (loggedInUser: User) => {
+    setCurrentUser(loggedInUser);
   };
 
   const handleLogout = () => {
@@ -30,10 +43,18 @@ export default function App() {
         {currentUser && (
           <div className="userbox">
             <span>Hi, {currentUser.nickname}</span>
-            <button onClick={handleLogout}>Logout</button>
+            <button onClick={handleLogout} disabled={isLoading}>
+              {isLoading ? "..." : "Logout"}
+            </button>
           </div>
         )}
       </header>
+
+      {error && (
+        <div className="error" style={{ color: "red", textAlign: "center", margin: "1rem" }}>
+          {error}
+        </div>
+      )}
 
       {!currentUser ? (
         <Login onLogin={handleLogin} />
