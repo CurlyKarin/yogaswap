@@ -38,6 +38,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Resource = each.value.s3_resources
       }] : [],
       # CloudWatch Logs-Berechtigungen
+      # Action = ["logs:*"], ???
       [{
         Effect = "Allow",
         Action = [
@@ -46,7 +47,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "logs:PutLogEvents"
         ],
         Resource = "*"
-      }]
+      }],
+      try(each.value.additional_policies, [])
     )
   })
 }

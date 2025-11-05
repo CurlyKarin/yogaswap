@@ -32,7 +32,9 @@
     "ts-jest": "^29.4.4",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "@aws-sdk/client-cognito-identity-provider": "^3.0.0",
+    "@aws-sdk/client-ses": "^3.0.0"
   },
   "type": "commonjs",
   "engines": {

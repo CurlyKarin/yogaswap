@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0.0" # Neueste stabile Version
+      version = ">= 5.0.0" 
     }
   }
   backend "local" {}
@@ -136,6 +136,30 @@ locals {
       }
       s3_actions     = []
       s3_resources   = []
+    },
+    "create_participants" = {
+      name           = "create-participants"
+      file_name      = "createParticipants.zip"
+      table_arns     = []
+      dynamodb_actions = []
+      tables = { }
+      s3_actions     = []
+      s3_resources   = []
+      additional_policies = [
+        {
+          Effect   = "Allow"
+          Action   = [
+            "cognito-idp:AdminCreateUser",
+            "cognito-idp:AdminAddUserToGroup"
+          ]
+          Resource = aws_cognito_user_pool.yogaswap.arn
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail"]
+          Resource = "*"
+        }
+      ]
     }
   }
    # Map für Lambda-ARNs
@@ -154,6 +178,7 @@ locals {
     "DELETE /course-overrides/{courseId}/{date}" = "delete_override"
     "POST /process-promotions" = "process_promotions"
     "GET /courses" = "get_courses"
+    "POST /participants" = "create_participants"
   }
 
   build_files = fileset("../../app/build", "**")

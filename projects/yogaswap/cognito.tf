@@ -1,9 +1,14 @@
-# Checkmark Cognito User Pool
+# Cognito User Pool
 resource "aws_cognito_user_pool" "yogaswap" {
   name = "${var.project}-users"
 
   # Self-Sign-Up erlauben
   auto_verified_attributes = ["email"]
+
+  # Admin erstellt User
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
 
   password_policy {
     minimum_length    = 6
@@ -66,19 +71,21 @@ resource "aws_cognito_user_pool_client" "yogaswap_app" {
   generate_secret = false
 }
 
-# infrastructure/main.tf
-resource "aws_cognito_user" "luna" {
-  user_pool_id = aws_cognito_user_pool.yogaswap.id
-  username     = "luna@example.com"
-  password     = "Temp123!"
+# cognito_groups
+#resource "null_resource" "create_cognito_groups" {
+#  triggers = {
+#    user_pool_id = aws_cognito_user_pool.yogaswap.id
+#  }
 
-  attributes = {
-    email          = "luna@example.com"
-    email_verified = true
-    "custom:role"  = "participant"
-    "custom:nickname" = "Luna"
-  }
-}
+#  provisioner "local-exec" {
+#    command = "node ${path.module}/../../backend/scripts/createGroups.js ${aws_cognito_user_pool.yogaswap.id}"
+#  }
+
+#  provisioner "local-exec" {
+#    when    = destroy
+#    command = "echo 'Groups cannot be deleted via CLI – ignore'"
+#  }
+#}
 
 # Checkmark Outputs
 output "cognito_user_pool_id" {
