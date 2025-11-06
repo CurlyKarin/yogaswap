@@ -1,17 +1,27 @@
-// scripts/createGroups.js
-const { CognitoIdentityProviderClient, CreateGroupCommand } = require("@aws-sdk/client-cognito-identity-provider");
+// backend/scripts/createGroups.js
+const { CognitoIdentityProviderClient, CreateGroupCommand } = require('@aws-sdk/client-cognito-identity-provider');
 
-const client = new CognitoIdentityProviderClient({});
-const groups = ["admin", "instructor", "participant"];
+const userPoolId = process.argv[2];
+const groups = ['admin', 'instructor', 'participant'];
+
+const client = new CognitoIdentityProviderClient({ region: 'eu-central-1' });
 
 (async () => {
-  const userPoolId = process.argv[2];
   for (const group of groups) {
     try {
-      await client.send(new CreateGroupCommand({ UserPoolId: userPoolId, GroupName: group }));
-      console.log(`Group ${group} created`);
+      await client.send(new CreateGroupCommand({
+        UserPoolId: userPoolId,
+        GroupName: group,
+        Precedence: groups.indexOf(group) + 1,
+      }));
+      console.log(`✅ Group '${group}' created`);
     } catch (err) {
-      if (err.name !== "GroupExistsException") throw err;
+      if (err.name === 'GroupExistsException') {
+        console.log(`ℹ️ Group '${group}' already exists`);
+      } else {
+        console.error(`❌ Error creating group '${group}':`, err);
+      }
     }
   }
+  console.log('✅ All groups processed');
 })();

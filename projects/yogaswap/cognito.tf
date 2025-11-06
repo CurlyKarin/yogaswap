@@ -10,6 +10,10 @@ resource "aws_cognito_user_pool" "yogaswap" {
     allow_admin_create_user_only = true
   }
 
+  username_configuration {
+    case_sensitive = false
+  }
+
   password_policy {
     minimum_length    = 6
     require_lowercase = false
@@ -20,7 +24,6 @@ resource "aws_cognito_user_pool" "yogaswap" {
 
   schema {
     attribute_data_type      = "String"
-    developer_only_attribute = false
     mutable                  = true
     name                     = "email"
     required                 = true
@@ -33,9 +36,8 @@ resource "aws_cognito_user_pool" "yogaswap" {
 
   schema {
     attribute_data_type      = "String"
-    developer_only_attribute = false
     mutable                  = true
-    name                     = "custom:role"
+    name                     = "role"
     required                 = false
 
     string_attribute_constraints {
@@ -46,10 +48,9 @@ resource "aws_cognito_user_pool" "yogaswap" {
 
   schema {
     attribute_data_type      = "String"
-    developer_only_attribute = false
     mutable                  = true
-    name                     = "custom:nickname"
-    required                 = false
+    name                     = "nickname"
+    required                 = true
 
     string_attribute_constraints {
       min_length = 1
@@ -71,21 +72,28 @@ resource "aws_cognito_user_pool_client" "yogaswap_app" {
   generate_secret = false
 }
 
-# cognito_groups
-#resource "null_resource" "create_cognito_groups" {
-#  triggers = {
-#    user_pool_id = aws_cognito_user_pool.yogaswap.id
-#  }
+resource "aws_cognito_user_group" "admin" {
+  name         = "admin"
+  user_pool_id = aws_cognito_user_pool.yogaswap.id
+  description  = "Administratoren"
+  precedence   = 0    # niedrigere Zahl = höhere Priorität falls mehrere Rollen relevant sind
+  # optional: role_arn = aws_iam_role.some_role.arn
+}
 
-#  provisioner "local-exec" {
-#    command = "node ${path.module}/../../backend/scripts/createGroups.js ${aws_cognito_user_pool.yogaswap.id}"
-#  }
+resource "aws_cognito_user_group" "instructor" {
+  name         = "instructor"
+  user_pool_id = aws_cognito_user_pool.yogaswap.id
+  description  = "Instructoren"
+  precedence   = 10
+}
 
-#  provisioner "local-exec" {
-#    when    = destroy
-#    command = "echo 'Groups cannot be deleted via CLI – ignore'"
-#  }
-#}
+resource "aws_cognito_user_group" "participant" {
+  name         = "participant"
+  user_pool_id = aws_cognito_user_pool.yogaswap.id
+  description  = "Teilnehmer"
+  precedence   = 20
+}
+
 
 # Checkmark Outputs
 output "cognito_user_pool_id" {

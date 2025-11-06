@@ -87,3 +87,34 @@ Damit werden das S3-Bucket und alle hochgeladenen Dateien wieder gelöscht. Nüt
 - **S3 Bucket ACLs:** Achte darauf, dass die OpenTofu-Konfiguration die richtigen Public-Access-Einstellungen verwendet. Sonst kann die Website nicht öffentlich zugänglich sein.
 
 Viel Spaß beim Testen der YogaSwap-Demo!
+
+
+
+
+-----------------------
+User groups anlegen:
+$ tofu output cognito_user_pool_id
+"eu-central-1_N0bwRFdoZ"
+$ node ../../backend/scripts/createGroups.js eu-central-1_N0bwRFdoZ
+{
+    "Groups": [
+        {
+            "GroupName": "admin",
+            "UserPoolId": "eu-central-1_N0bwRFdoZ",
+            "LastModifiedDate": "2025-11-05T15:13:57.684000+01:00",
+            "CreationDate": "2025-11-05T15:13:57.684000+01:00"
+        },
+        {
+            "GroupName": "instructor",
+            "UserPoolId": "eu-central-1_N0bwRFdoZ",
+            "LastModifiedDate": "2025-11-05T15:13:57.817000+01:00",
+            "CreationDate": "2025-11-05T15:13:57.817000+01:00"
+        },
+        {
+            "GroupName": "participant",
+            "UserPoolId": "eu-central-1_N0bwRFdoZ",
+            "LastModifiedDate": "2025-11-05T15:13:57.963000+01:00",
+            "CreationDate": "2025-11-05T15:13:57.963000+01:00"
+        }
+    ]
+}

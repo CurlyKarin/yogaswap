@@ -9,24 +9,13 @@ type Props = {
 };
 
 export default function Login({ onLogin }: Props) {
-  const [email, setEmail] = useState("luna@example.com");
-  const [password, setPassword] = useState("1234");
-  //const [error, setError] = useState<string | null>(null);
+  const [nickname, setNickname] = useState("Admin");  // Checkmark Standard: Admin
+  const [password, setPassword] = useState("Admin123!");
   const { login, isLoading, error } = useAuth();
 
-  // const handleSubmit = (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   const user = users.find(u => u.email === email);
-  //   if (user && password === '1234') { // Fallback-Password für Demo
-  //     saveCurrentUser(user);
-  //     onLogin(user);
-  //   } else {
-  //     setError("Invalid email or password");
-  //   }
-  // };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = await login({ email, password } as LoginCredentials);
+    const success = await login({ email:nickname, password } as LoginCredentials);
     if (success) {
       const user = loadCurrentUser(); // Checkmark direkt aufrufen
       onLogin(user!);
@@ -38,11 +27,11 @@ export default function Login({ onLogin }: Props) {
       <h1>YogaSwap Login</h1>
       <form onSubmit={handleSubmit} className="todo-form">
         <input
-          type="email"
-          placeholder="email"
-          value={email}
+          type="text"
+          placeholder="Spitzname"
+          value={nickname}
           autoComplete="username"
-          onChange={e => setEmail(e.target.value)}
+          onChange={e => setNickname(e.target.value)}
           disabled={isLoading}
         />
         <input
@@ -61,7 +50,7 @@ export default function Login({ onLogin }: Props) {
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
       <p style={{ fontSize: 12, opacity: 0.8 }}>
-        Demo-Zugang: z. B. <code>luna@example.com</code> / <code>1234</code>
+        Demo: <code>Admin</code> / <code>Admin123!</code>
       </p>
     </div>
   );

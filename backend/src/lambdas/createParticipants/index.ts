@@ -16,12 +16,12 @@ export const handler = async (event: {
     // 1. User anlegen
     await cognito.send(new AdminCreateUserCommand({
       UserPoolId: process.env.USER_POOL_ID!,
-      Username: email,
+      Username: nickname,
       TemporaryPassword: tempPassword,
       UserAttributes: [
         { Name: "email", Value: email },
         { Name: "email_verified", Value: "true" },
-        { Name: "custom:nickname", Value: nickname },
+        { Name: "nickname", Value: nickname },
         { Name: "custom:role", Value: role },
       ],
       MessageAction: "SUPPRESS",
@@ -30,7 +30,7 @@ export const handler = async (event: {
     // 2. In Gruppe
     await cognito.send(new AdminAddUserToGroupCommand({
       UserPoolId: process.env.USER_POOL_ID!,
-      Username: email,
+      Username: nickname,
       GroupName: role,
     }));
 
