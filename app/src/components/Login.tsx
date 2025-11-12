@@ -1,23 +1,32 @@
-
+// app/src/components/Login.tsx
 import { User } from "shared/types";
 import { loadCurrentUser } from "shared/lib/storage";
 import { useState } from "react";
-import { LoginCredentials, useAuth } from "shared/auth";
+import { useCognitoAuth } from "../auth/useCognitoAuth";
 
 type Props = {
   onLogin: (user: User) => void;
 };
 
 export default function Login({ onLogin }: Props) {
-  const [nickname, setNickname] = useState("Admin");  // Checkmark Standard: Admin
-  const [password, setPassword] = useState("Admin123!");
-  const { login, isLoading, error } = useAuth();
+  const [username, setUsername] = useState("admin");  // Checkmark Spitzname!
+  const [password, setPassword] = useState("Hallo123!");
+  const { login, isLoading, error } = useCognitoAuth();
+
+  console.log('Login component rendered');
+  console.log('Using auth: useCognitoAuth');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = await login({ email:nickname, password } as LoginCredentials);
+    console.log('Login button clicked!');  // Checkmark DEBUG!
+    console.log('Credentials:', { username, password });
+
+    const success = await login({ username, password }); 
+    console.log('Login success?', success);
+
     if (success) {
-      const user = loadCurrentUser(); // Checkmark direkt aufrufen
+      const user = loadCurrentUser();
+      console.log('User loaded:', user);
       onLogin(user!);
     }
   };
@@ -29,9 +38,9 @@ export default function Login({ onLogin }: Props) {
         <input
           type="text"
           placeholder="Spitzname"
-          value={nickname}
+          value={username}
           autoComplete="username"
-          onChange={e => setNickname(e.target.value)}
+          onChange={e => setUsername(e.target.value)}
           disabled={isLoading}
         />
         <input
@@ -50,7 +59,7 @@ export default function Login({ onLogin }: Props) {
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
       <p style={{ fontSize: 12, opacity: 0.8 }}>
-        Demo: <code>Admin</code> / <code>Admin123!</code>
+        Demo: <code>admin</code> / <code>Hallo123!</code>
       </p>
     </div>
   );

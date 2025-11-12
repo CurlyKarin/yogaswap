@@ -6,6 +6,12 @@ import './index.css';
 import App from './App';
 import { Amplify } from 'aws-amplify';
 
+// Checkmark DEBUG: Prüfe Config
+console.log('Amplify Config:', {
+  userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
+  clientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
+});
+
 // Checkmark Amplify Konfiguration
 Amplify.configure({
   Auth: {

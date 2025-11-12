@@ -1,6 +1,7 @@
 // app/src/auth/useAppAuth.ts
-import { useAuth } from 'shared/auth';
-import { useCognitoAuth } from '../components/useCognitoAuth';
+
+import { useCognitoAuth } from './useCognitoAuth';
+import { useAuth } from './useAuth';
 
 
 export const useAppAuth = () => {

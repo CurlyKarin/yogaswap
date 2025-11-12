@@ -6,41 +6,44 @@ import Login from "./components/Login";
 import CourseList from "./components/CourseList";
 import AdminPanel from "./components/AdminPanel";
 import Invite from "./components/Invite";
-import { getCurrentUser, clearCurrentUser } from "./lib/storage";
+import ChangePassword from "./components/changePassword";
+import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
 import { User } from "shared/types";
 
 // Checkmark useAppAuth ZUERST definieren
-const useAppAuth = () => {
+// app/src/App.tsx
+// NACH der Definition von useAppAuth
+export const useAppAuth = () => {
+  console.log("useAppAuth called, DEV:", import.meta.env.DEV);
   return import.meta.env.DEV ? useAuth() : useCognitoAuth();
 };
 
 // Checkmark Imports NACH useAppAuth
-import { useCognitoAuth } from "./components/useCognitoAuth";
-import { useAuth } from "shared/auth";
+import { useCognitoAuth } from "./auth/useCognitoAuth";
+import { useAuth } from "./auth/useAuth";
 
 // Checkmark Haupt-App als Komponente
 function MainApp() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const { user, login, logout, isLoading, error } = useAppAuth();
+  const { login, logout, isLoading, error } = useAppAuth();
 
   // Beim Laden: User aus localStorage
   useEffect(() => {
-    const storedUser = getCurrentUser();
-    if (storedUser) {
-      setCurrentUser(storedUser);
-    } else if (user) {
-      setCurrentUser(user);
-    }
-  }, [user]);
+    const stored = loadCurrentUser();
+    if (stored) {
+      setCurrentUser(stored);
+    } 
+  }, []);
 
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {
+    saveCurrentUser(loggedInUser);
     setCurrentUser(loggedInUser);
   };
 
   // Logout-Handler
   const handleLogout = async () => {
-    await logout();
+    logout();
     clearCurrentUser();
     setCurrentUser(null);
   };
@@ -93,14 +96,14 @@ function InviteWithRedirect() {
 }
 
 // Checkmark Hauptkomponente mit Routing
+// app/src/App.tsx
 export default function App() {
   return (
     <Routes>
-      {/* Checkmark Einladungsseite */}
       <Route path="/invite" element={<InviteWithRedirect />} />
-
-      {/* Checkmark Haupt-App (alle anderen Pfade) */}
-      <Route path="*" element={<MainApp />} />
+      <Route path="/change-password" element={<ChangePassword />} />  // Checkmark OBEN!
+      <Route path="/login" element={<Login onLogin={() => {}} />} />   // Checkmark Optional
+      <Route path="*" element={<MainApp />} />                        // Checkmark ZULETZT!
     </Routes>
   );
 }

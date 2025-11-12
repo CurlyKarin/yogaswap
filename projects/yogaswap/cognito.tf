@@ -65,11 +65,21 @@ resource "aws_cognito_user_pool_client" "yogaswap_app" {
   user_pool_id = aws_cognito_user_pool.yogaswap.id
 
   explicit_auth_flows = [
+    "ALLOW_USER_SRP_AUTH",
     "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 
   generate_secret = false
+
+  callback_urls = [
+    "https://${module.cloudfront_spa.distribution_url}", 
+    "http://localhost:5173"]
+
+  logout_urls = [
+    "https://${module.cloudfront_spa.distribution_url}",
+    "http://localhost:5173"
+  ]
 }
 
 resource "aws_cognito_user_group" "admin" {

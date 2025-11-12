@@ -4,17 +4,12 @@ import type { User } from '..';
 const USER_KEY = "yogaswap_current_user";
 
 export const saveCurrentUser = (user: User) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-  }
+  localStorage.setItem('currentUser', JSON.stringify(user));
 };
 
 export const loadCurrentUser = (): User | null => {
-  if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(USER_KEY);
-    return data ? JSON.parse(data) : null;
-  }
-  return null;
+  const data = localStorage.getItem('currentUser');
+  return data ? JSON.parse(data) : null;
 };
 
 export const clearCurrentUser = () => {

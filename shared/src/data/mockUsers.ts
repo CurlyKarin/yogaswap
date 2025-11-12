@@ -11,7 +11,7 @@ export const users: User[] = [
   { nickname: 'Nia', email: 'nia@example.com', role: 'participant' },
   { nickname: "Kai", email: "kai@example.com", role: "participant" },
   { nickname: "Rue", email: "rue@example.com", role: "participant" },
-  { nickname: 'Admin', email: 'admin@example.com', role: 'admin' },
+  { nickname: 'admin', email: 'karin.schrader@msg.group', role: 'admin' },
   { nickname: 'Instructor', email: 'instructor@example.com', role: 'instructor' },
   { nickname: 'Trial1', email: 'trial@example.com', role: 'trial' },
 ];
