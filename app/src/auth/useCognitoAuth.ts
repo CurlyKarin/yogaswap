@@ -73,8 +73,11 @@ export const useCognitoAuth = (): AuthReturn => {
 
   const logout = useCallback(async () => {
     try {
-      await signOut();
-    } catch {}
+      console.log('Global Sign Out...');
+      await signOut({ global: true });
+    } catch (err: any) {
+      console.error('SignOut Error:', err);
+    }
     clearCurrentUser();
     setUser(null);
   }, []);

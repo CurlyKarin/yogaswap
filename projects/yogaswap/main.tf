@@ -160,6 +160,9 @@ locals {
           Resource = "*"
         }
       ]
+      environment = {  # Checkmark HINZUFÜGEN!
+        USER_POOL_ID = aws_cognito_user_pool.yogaswap.id
+      }
     }
   }
    # Map für Lambda-ARNs

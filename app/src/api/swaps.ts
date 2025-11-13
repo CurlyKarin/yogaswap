@@ -79,16 +79,6 @@ export async function getSwapsByStatus(status: string): Promise<Swap[]> {
   }
 }
 
-// Verarbeitet die Wartelisten für alle Kurse
-// export async function processPromotions(): Promise<void> {
-//   try {
-//     await axios.post('/process-promotions', {});
-//   } catch (error) {
-//     console.error('Failed to process promotions:', error);
-//     throw error;
-//   }
-// }
-
 export async function processPromotions(): Promise<{
   message: string;
   iterations: number;

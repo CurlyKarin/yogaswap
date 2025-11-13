@@ -4,12 +4,19 @@ import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
 
-export const handler = async (event: {
-  email: string;
-  nickname: string;
-  role: "participant" | "instructor" | "admin";
-}) => {
-  const { email, nickname, role } = event;
+// export const handler = async (event: {
+//   email: string;
+//   nickname: string;
+//   role: "participant" | "instructor" | "admin";
+// }) => {
+export const handler = async (event: any) => {
+  console.log('EVENT:', JSON.stringify(event));  
+
+  const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
+  const { email, nickname, role } = body;
+  if (!email || !nickname || !role) {
+    throw new Error('Missing required fields');
+  }
   const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
 
   try {
@@ -26,20 +33,36 @@ export const handler = async (event: {
       ],
       MessageAction: "SUPPRESS",
     }));
+  } catch (err: any) {
+    if (err.name === 'UsernameExistsException') {
+      console.log('User exists, updating group...');
+    } else {
+      console.error('Cognito Error:', err);
+      throw err;
+    }
+  }
 
-    // 2. In Gruppe
+  // 2. In Gruppe (immer ausführen)
+  try {
     await cognito.send(new AdminAddUserToGroupCommand({
       UserPoolId: process.env.USER_POOL_ID!,
       Username: nickname,
       GroupName: role,
     }));
+  } catch (err: any) {
+    if (err.name !== 'ResourceNotFoundException') {  // Gruppe existiert nicht
+      console.error('Group Error:', err);
+      throw err;
+    }
+  }
 
-    // 3. Einladungslink
-    const link = `https://yogaswap.de/invite?email=${encodeURIComponent(email)}&temp=${tempPassword}`;
+  // 3. Einladungslink
+  const link = `https://yogaswap.de/invite?email=${encodeURIComponent(email)}&temp=${tempPassword}`;
 
-    // 4. E-Mail
+  // 4. E-Mail senden (nur wenn SES verifiziert)
+  try {
     await ses.send(new SendEmailCommand({
-      Source: "no-reply@yogaswap.de",
+      Source: "karin.schrader@online.de",
       Destination: { ToAddresses: [email] },
       Message: {
         Subject: { Data: "Willkommen bei YogaSwap!" },
@@ -47,14 +70,15 @@ export const handler = async (event: {
           <h2>Hi ${nickname}!</h2>
           <p>Du wurdest zu YogaSwap eingeladen.</p>
           <p><a href="${link}">Klicke hier, um dein Passwort zu setzen</a></p>
-          <p>Temporäres Passwort: <strong>${tempPassword}</strong> (nur falls Link nicht klappt)</p>
-        `}},
+          <p><strong>Temporäres Passwort:</strong> <code style="background:#f0f0f0;padding:4px 8px;border-radius:4px;">${tempPassword}</code></p>
+          <p>(Nur falls der Link nicht funktioniert)</p>
+      `}},
       },
     }));
-
-    return { success: true };
   } catch (err: any) {
-    console.error(err);
-    throw err;
+    console.warn('SES Error (ignored for now):', err.message);
   }
+
+  return { success: true };
+
 };

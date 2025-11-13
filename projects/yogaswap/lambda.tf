@@ -63,8 +63,14 @@ resource "aws_lambda_function" "lambda" {
   filename          = "${path.module}/../../backend/zips/${each.value.file_name}"
   source_code_hash  = filebase64sha256("${path.module}/../../backend/zips/${each.value.file_name}")
 
-  environment {
-    variables = each.value.tables
+  dynamic "environment" {
+    for_each = length(merge(each.value.tables, try(each.value.environment, {}))) > 0 ? [1] : []
+    content {
+      variables = merge(
+        each.value.tables,
+        try(each.value.environment, {})
+      )
+    }
   }
 }
 

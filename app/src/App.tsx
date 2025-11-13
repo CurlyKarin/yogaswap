@@ -8,7 +8,7 @@ import AdminPanel from "./components/AdminPanel";
 import Invite from "./components/Invite";
 import ChangePassword from "./components/changePassword";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
-import { User } from "shared/types";
+import { User, UserRole } from "shared/types";
 
 // Checkmark useAppAuth ZUERST definieren
 // app/src/App.tsx
@@ -21,19 +21,48 @@ export const useAppAuth = () => {
 // Checkmark Imports NACH useAppAuth
 import { useCognitoAuth } from "./auth/useCognitoAuth";
 import { useAuth } from "./auth/useAuth";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 // Checkmark Haupt-App als Komponente
 function MainApp() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { login, logout, isLoading, error } = useAppAuth();
 
-  // Beim Laden: User aus localStorage
+  // App.tsx
   useEffect(() => {
-    const stored = loadCurrentUser();
-    if (stored) {
-      setCurrentUser(stored);
-    } 
-  }, []);
+    const initAuth = async () => {
+      // 1. Versuche, User aus localStorage zu laden
+      const stored = loadCurrentUser();
+      if (stored) {
+        console.log('User aus localStorage geladen:', stored);
+        setCurrentUser(stored);
+        return;  // Checkmark Fertig!
+      }
+
+      // 2. Falls kein localStorage: Prüfe Cognito-Session
+      try {
+        const session = await fetchAuthSession();
+        if (session.tokens?.idToken) {
+          const payload = session.tokens.idToken.payload;
+
+          const user: User = {
+            nickname: payload.nickname as string,
+            email: payload.email as string,
+            role: (payload['custom:role'] as UserRole) || 'participant',
+          };
+
+          saveCurrentUser(user);  // Checkmark Speichern für später!
+          setCurrentUser(user);
+          console.log('User aus Cognito-Session geladen:', user);
+        }
+      } catch (err) {
+        console.log('Keine aktive Session:', err);
+        // Kein User → Login-Seite
+      }
+    };
+
+    initAuth();
+  }, []); 
 
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {
