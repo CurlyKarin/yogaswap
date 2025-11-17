@@ -7,49 +7,32 @@ export default function AdminPanel() {
   const [role, setRole] = useState<"participant" | "instructor" | "admin">("participant");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-
-  // const inviteUser = async () => {
-  //   if (!email || !nickname) return;
-  //   setLoading(true);
-  //   setMessage("");
-
-  //   try {
-  //     const res = await fetch("/api/participants", {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ email, nickname, role }),
-  //     });
-
-  //     if (res.ok) {
-  //       setMessage(`Einladung gesendet an ${email}`);
-  //       setEmail("");
-  //       setNickname("");
-  //     } else {
-  //       setMessage("Fehler beim Senden");
-  //     }
-  //   } catch {
-  //     setMessage("Netzwerkfehler");
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+  const [error, setError] = useState("");
 
   const handleInvite = async () => {
     if (!email || !nickname) return;
     setLoading(true);
     setMessage("");
+    setError("");
 
-    const success = await inviteUser({ email, nickname, role });
+    try {
+      const result = await inviteUser({ email, nickname, role });
 
-    if (success) {
-      setMessage(`Einladung gesendet an ${email}`);
-      setEmail("");
-      setNickname("");
-    } else {
-      setMessage("Fehler beim Senden");
+      if (result.error === "Nickname already exists") {
+        setError("Dieser Spitzname ist bereits vergeben.");
+      } else if (result.success) {
+        setMessage(`Einladung gesendet an ${email}`);
+        setEmail("");
+        setNickname("");
+      } else {
+        setError("Fehler beim Senden");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError("Fehler beim Senden");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
   
   return (
@@ -78,9 +61,10 @@ export default function AdminPanel() {
         <button onClick={handleInvite} disabled={loading || !email || !nickname}>
           {loading ? "Wird gesendet..." : "Einladen"}
         </button>
-        {message && <p style={{ margin: "0.5rem 0", color: message.includes("gesendet") ? "green" : "red" }}>
-          {message}
-        </p>}
+
+        {message && <p style={{ margin: "0.5rem 0", color: "green" }}>{message}</p>}
+        {error && <p style={{ margin: "0.5rem 0", color: "red" }}>{error}</p>}
+ 
       </div>
     </div>
   );

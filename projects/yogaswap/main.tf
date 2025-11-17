@@ -150,7 +150,8 @@ locals {
           Effect   = "Allow"
           Action   = [
             "cognito-idp:AdminCreateUser",
-            "cognito-idp:AdminAddUserToGroup"
+            "cognito-idp:AdminAddUserToGroup",
+            "cognito-idp:AdminSetUserPassword"
           ]
           Resource = aws_cognito_user_pool.yogaswap.arn
         },
@@ -162,6 +163,7 @@ locals {
       ]
       environment = {  # Checkmark HINZUFÜGEN!
         USER_POOL_ID = aws_cognito_user_pool.yogaswap.id
+        BASE_URL     = module.cloudfront_spa.distribution_url
       }
     }
   }

@@ -1,48 +1,62 @@
-import { AdminCreateUserCommand, AdminAddUserToGroupCommand, CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
+import { AdminCreateUserCommand, AdminAddUserToGroupCommand, CognitoIdentityProviderClient, AdminSetUserPasswordCommand} from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
 
-// export const handler = async (event: {
-//   email: string;
-//   nickname: string;
-//   role: "participant" | "instructor" | "admin";
-// }) => {
 export const handler = async (event: any) => {
   console.log('EVENT:', JSON.stringify(event));  
 
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
   const { email, nickname, role } = body;
+
   if (!email || !nickname || !role) {
-    throw new Error('Missing required fields');
+    return { statusCode: 400, body: JSON.stringify({ error: "Missing required fields" }) };
   }
-  const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+
+  // URL-sicheres temporäres Passwort (Base64-encoded)
+  const rawPassword = Math.random().toString(36).slice(-8) + "A1!";
+  const tempPasswordB64 = Buffer.from(rawPassword).toString('base64');
+  // DEBUG-LOGS (temporär)
+console.log("createParticipants: will create username =", nickname);
+console.log("createParticipants: rawPassword =", rawPassword);
 
   try {
-    // 1. User anlegen
+    // 1. User erstellen
     await cognito.send(new AdminCreateUserCommand({
       UserPoolId: process.env.USER_POOL_ID!,
-      Username: nickname,
-      TemporaryPassword: tempPassword,
+      Username: nickname, // Nickname muss einzigartig sein
+      TemporaryPassword: tempPasswordB64 ,
       UserAttributes: [
         { Name: "email", Value: email },
         { Name: "email_verified", Value: "true" },
         { Name: "nickname", Value: nickname },
-        { Name: "custom:role", Value: role },
+        { Name: "custom:role", Value: role }
       ],
-      MessageAction: "SUPPRESS",
+      MessageAction: "SUPPRESS", // Keine automatische E-Mail
     }));
   } catch (err: any) {
-    if (err.name === 'UsernameExistsException') {
-      console.log('User exists, updating group...');
+    if (err.name === "UsernameExistsException") {
+      // Wenn Benutzer schon existiert, setze neues temporäres Passwort (force change)
+      console.log("Username exists — resetting temporary password via AdminSetUserPassword");
+      try {
+        await cognito.send(new AdminSetUserPasswordCommand({
+          UserPoolId: process.env.USER_POOL_ID!,
+          Username: nickname,
+          Password: rawPassword,
+          Permanent: false, // false => user must change password on next sign-in
+        }));
+      } catch (err2: any) {
+        console.error("AdminSetUserPassword failed:", err2);
+        throw err2;
+      }
     } else {
-      console.error('Cognito Error:', err);
+      console.error("AdminCreateUser failed:", err);
       throw err;
     }
   }
 
-  // 2. In Gruppe (immer ausführen)
+  // 2. Gruppe zuweisen
   try {
     await cognito.send(new AdminAddUserToGroupCommand({
       UserPoolId: process.env.USER_POOL_ID!,
@@ -50,33 +64,35 @@ export const handler = async (event: any) => {
       GroupName: role,
     }));
   } catch (err: any) {
-    if (err.name !== 'ResourceNotFoundException') {  // Gruppe existiert nicht
-      console.error('Group Error:', err);
-      throw err;
-    }
+    console.warn("Group assignment error (ignored):", err.message);
   }
 
-  // 3. Einladungslink
-  const link = `https://yogaswap.de/invite?email=${encodeURIComponent(email)}&temp=${tempPassword}`;
+  // Link erstellen & Email senden (nickname + base64 temp)
+  const baseUrl = process.env.BASE_URL?.startsWith("http") ? process.env.BASE_URL : `https://${process.env.BASE_URL}`;
+  const link = `${baseUrl}/invite?nickname=${encodeURIComponent(nickname)}&temp=${encodeURIComponent(tempPasswordB64)}&email=${encodeURIComponent(email)}`;
 
-  // 4. E-Mail senden (nur wenn SES verifiziert)
+  // E-Mail senden (nur wenn SES verifiziert)
   try {
     await ses.send(new SendEmailCommand({
       Source: "karin.schrader@online.de",
       Destination: { ToAddresses: [email] },
       Message: {
         Subject: { Data: "Willkommen bei YogaSwap!" },
-        Body: { Html: { Data: `
-          <h2>Hi ${nickname}!</h2>
-          <p>Du wurdest zu YogaSwap eingeladen.</p>
-          <p><a href="${link}">Klicke hier, um dein Passwort zu setzen</a></p>
-          <p><strong>Temporäres Passwort:</strong> <code style="background:#f0f0f0;padding:4px 8px;border-radius:4px;">${tempPassword}</code></p>
-          <p>(Nur falls der Link nicht funktioniert)</p>
-      `}},
-      },
+        Body: {
+          Html: {
+            Data: `
+              <h2>Hi ${nickname}!</h2>
+              <p>Du wurdest zu YogaSwap eingeladen.</p>
+              <p><a href="${link}">Klicke hier, um dein Passwort zu setzen</a></p>
+              <p><strong>Temporäres Passwort:</strong> <code>${tempPasswordB64}</code></p>
+              <p>(Nur falls der Link nicht funktioniert)</p>
+            `
+          }
+        }
+      }
     }));
   } catch (err: any) {
-    console.warn('SES Error (ignored for now):', err.message);
+    console.warn("SES Error (ignored):", err.message);
   }
 
   return { success: true };

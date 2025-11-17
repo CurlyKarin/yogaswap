@@ -129,11 +129,12 @@ resource "aws_cloudfront_distribution" "spa" {
     viewer_protocol_policy = "redirect-to-https"
 
     forwarded_values {
-      query_string = false
+      query_string = true
       cookies {
         forward = "none"
       }
     }
+
     min_ttl     = 0
     default_ttl = 0
     max_ttl     = 0
@@ -143,12 +144,14 @@ resource "aws_cloudfront_distribution" "spa" {
     error_code         = 403
     response_code      = 200
     response_page_path = "/index.html"
+    error_caching_min_ttl = 0
   }
 
   custom_error_response {
     error_code         = 404
     response_code      = 200
     response_page_path = "/index.html"
+    error_caching_min_ttl = 0
   }
 
   viewer_certificate {
