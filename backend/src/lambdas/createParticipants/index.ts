@@ -4,6 +4,15 @@ import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
 
+function generateSafeTempPassword(length = 10) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*";
+  let pw = "";
+  for (let i = 0; i < length; i++) {
+    pw += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pw;
+}
+
 export const handler = async (event: any) => {
   console.log('EVENT:', JSON.stringify(event));  
 
@@ -14,45 +23,46 @@ export const handler = async (event: any) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing required fields" }) };
   }
 
-  // URL-sicheres temporäres Passwort (Base64-encoded)
-  const rawPassword = Math.random().toString(36).slice(-8) + "A1!";
-  const tempPasswordB64 = Buffer.from(rawPassword).toString('base64');
-  // DEBUG-LOGS (temporär)
-console.log("createParticipants: will create username =", nickname);
-console.log("createParticipants: rawPassword =", rawPassword);
+  // raw temporary password (safe characters)
+  const rawPassword = generateSafeTempPassword(10) + "A1"; // ensure mix / length
+  // Do NOT put the password in the URL; include in the email body only.
+
+  // Use the nickname as Username (no suffix). If your pool is case-insensitive,
+  // Cognito will internally normalize; at sign-in we normalize too (frontend).
+  const username = nickname;
 
   try {
     // 1. User erstellen
     await cognito.send(new AdminCreateUserCommand({
       UserPoolId: process.env.USER_POOL_ID!,
       Username: nickname, // Nickname muss einzigartig sein
-      TemporaryPassword: tempPasswordB64 ,
+      TemporaryPassword: rawPassword ,
       UserAttributes: [
         { Name: "email", Value: email },
         { Name: "email_verified", Value: "true" },
-        { Name: "nickname", Value: nickname },
+        { Name: "nickname", Value: username },
         { Name: "custom:role", Value: role }
       ],
       MessageAction: "SUPPRESS", // Keine automatische E-Mail
     }));
   } catch (err: any) {
-    if (err.name === "UsernameExistsException") {
-      // Wenn Benutzer schon existiert, setze neues temporäres Passwort (force change)
-      console.log("Username exists — resetting temporary password via AdminSetUserPassword");
+    // If user exists, set a new temporary password (so admin can re-invite)
+    if (err?.name === "UsernameExistsException") {
+      console.log("Username exists; setting a new temporary password via AdminSetUserPassword");
       try {
         await cognito.send(new AdminSetUserPasswordCommand({
           UserPoolId: process.env.USER_POOL_ID!,
-          Username: nickname,
+          Username: username,
           Password: rawPassword,
-          Permanent: false, // false => user must change password on next sign-in
+          Permanent: false // user must change on next sign-in
         }));
       } catch (err2: any) {
         console.error("AdminSetUserPassword failed:", err2);
-        throw err2;
+        return { statusCode: 500, body: JSON.stringify({ error: "Failed to reset password" }) };
       }
     } else {
       console.error("AdminCreateUser failed:", err);
-      throw err;
+      return { statusCode: 500, body: JSON.stringify({ error: "Failed to create user" }) };
     }
   }
 
@@ -60,41 +70,46 @@ console.log("createParticipants: rawPassword =", rawPassword);
   try {
     await cognito.send(new AdminAddUserToGroupCommand({
       UserPoolId: process.env.USER_POOL_ID!,
-      Username: nickname,
+      Username: username,
       GroupName: role,
     }));
   } catch (err: any) {
     console.warn("Group assignment error (ignored):", err.message);
   }
 
-  // Link erstellen & Email senden (nickname + base64 temp)
-  const baseUrl = process.env.BASE_URL?.startsWith("http") ? process.env.BASE_URL : `https://${process.env.BASE_URL}`;
-  const link = `${baseUrl}/invite?nickname=${encodeURIComponent(nickname)}&temp=${encodeURIComponent(tempPasswordB64)}&email=${encodeURIComponent(email)}`;
+  // Build link (only nickname in the URL)
+  const baseUrlEnv = process.env.BASE_URL || "";
+  const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+  const link = `${baseUrl}/invite?nickname=${encodeURIComponent(username)}&email=${encodeURIComponent(email)}`;
 
-  // E-Mail senden (nur wenn SES verifiziert)
+  // Send invitation email (temp password shown in email body)
+  const emailHtml = `
+    <h2>Hi ${nickname}!</h2>
+    <p>Du wurdest zu YogaSwap eingeladen.</p>
+    <p><a href="${link}">Klicke hier, um dein temporäres Passwort einzugeben und ein neues Passwort zu setzen</a></p>
+    <p><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong>
+      <br/><code style="background:#f0f0f0;padding:4px 8px;border-radius:4px;">${rawPassword}</code>
+    </p>
+    <p>Tipp: Falls das Passwort beim Einfügen nicht funktioniert, achte auf keine Leerzeichen vor/nach dem Passwort.</p>
+  `;
+
   try {
     await ses.send(new SendEmailCommand({
       Source: "karin.schrader@online.de",
       Destination: { ToAddresses: [email] },
       Message: {
-        Subject: { Data: "Willkommen bei YogaSwap!" },
-        Body: {
-          Html: {
-            Data: `
-              <h2>Hi ${nickname}!</h2>
-              <p>Du wurdest zu YogaSwap eingeladen.</p>
-              <p><a href="${link}">Klicke hier, um dein Passwort zu setzen</a></p>
-              <p><strong>Temporäres Passwort:</strong> <code>${tempPasswordB64}</code></p>
-              <p>(Nur falls der Link nicht funktioniert)</p>
-            `
-          }
-        }
+        Subject: { Data: "YogaSwap Einladung" },
+        Body: { Html: { Data: emailHtml } }
       }
     }));
   } catch (err: any) {
-    console.warn("SES Error (ignored):", err.message);
+    console.warn("SES send warning:", err?.message || err);
+    // do not fail user creation if SES can't send (depending on your policy)
   }
 
-  return { success: true };
+  console.log("createParticipants: created/updated username=", username);
+  // Do NOT log passwords in production
+  // console.log("createParticipants: rawPassword=", rawPassword);
 
+  return { statusCode: 200, body: JSON.stringify({ success: true, username: username, link }) };
 };

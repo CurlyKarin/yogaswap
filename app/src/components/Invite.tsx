@@ -7,95 +7,114 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const nickname = searchParams.get("nickname") || "";
-  const emailForDisplay = searchParams.get("email") || "";
-  const tempEncoded = searchParams.get("temp") || "";
-  const tempPassword = tempEncoded ? atob(tempEncoded) : "";
+  // nickname (username) and optional email for display
+  const nicknameParam = searchParams.get("nickname") || "";
+  const emailDisplay = searchParams.get("email") || "";
 
+  // user inputs
+  const [tempPassword, setTempPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  
+  // Defensive normalization: if your pool is case-insensitive, sign in with lowercase
+  const usernameForSignIn = nicknameParam ? nicknameParam.toLowerCase() : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setIsLoading(true);
+    setLoading(true);
 
-    if (!nickname || !tempPassword) {
+    if (!nicknameParam) {
       setError("Ungültiger Link.");
-      setIsLoading(false);
+      setLoading(false);
+      return;
+    }
+    if (!tempPassword) {
+      setError("Bitte das temporäre Passwort aus der E-Mail eingeben.");
+      setLoading(false);
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setError("Das neue Passwort muss mindestens 6 Zeichen lang sein.");
+      setLoading(false);
       return;
     }
 
     try {
-      // defensive lowercase normalization (minimal change)
-      const nicknameNormalized = nickname.toLowerCase();
-      // 1) Sign in with the temporary password
-      const user = await signIn({ username: nicknameNormalized, password: tempPassword }) as any;
+      // 1) Sign in with temporary password
+      const user = await signIn({ username: usernameForSignIn, password: tempPassword }) as any;
 
-      // 2) If Cognito requires new password, respond to the challenge
-      if (user?.challengeName === "NEW_PASSWORD_REQUIRED") {
-        if (!newPassword || newPassword.length < 6) {
-          throw new Error("Bitte gib ein neues Passwort mit mindestens 6 Zeichen ein.");
-        }
-        // respondToAuthChallenge interface from v6 user object
-        if (typeof user.respondToAuthChallenge === "function") {
-          await user.respondToAuthChallenge({
-            challengeName: "NEW_PASSWORD_REQUIRED",
-            challengeResponses: {
-              USERNAME: nickname,
-              NEW_PASSWORD: newPassword,
-            },
-          });
-        } else {
-          // Fallback nur für den Fall, dass das Objekt anders aussieht
-          throw new Error("Konnte Passwort-Challenge nicht ausführen.");
-        }
+      // 2) If challenge required -> respond
+      if (user?.challengeName === "NEW_PASSWORD_REQUIRED" && typeof user.respondToAuthChallenge === "function") {
+        await user.respondToAuthChallenge({
+          challengeName: "NEW_PASSWORD_REQUIRED",
+          challengeResponses: {
+            USERNAME: usernameForSignIn,
+            NEW_PASSWORD: newPassword,
+          },
+        });
       }
 
-      // optional: onSuccess callback oder navigate
+      // success
       onSuccess?.();
       navigate("/", { replace: true });
     } catch (err: any) {
-      console.error("Invite sign-in error:", err);
-      // Typische Fehlererkennung
+      console.error("Invite error:", err);
       const msg = err?.message || String(err);
       if (msg.includes("Incorrect username or password") || msg.includes("NotAuthorizedException")) {
         setError("Benutzername oder temporäres Passwort ist falsch. Bitte Admin um neue Einladung.");
       } else if (msg.includes("UserNotFoundException")) {
-        setError("Benutzer existiert nicht. Bitte Admin um erneute Einladung.");
+        setError("Benutzer nicht gefunden. Bitte Admin um Einladung.");
       } else if (msg.includes("expired") || msg.includes("expired or not found")) {
-        setError("Der Invite-Link ist abgelaufen. Bitte Admin um erneute Einladung.");
+        setError("Der temporäre Account oder Link ist abgelaufen. Bitte Admin um neue Einladung.");
       } else {
         setError(msg);
       }
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  if (!nickname || !tempPassword) return <p>Ungültiger Link.</p>;
+  if (!nicknameParam) return <p>Ungültiger Link.</p>;
 
   return (
-    <div style={{ maxWidth: 420, margin: "2rem auto", padding: "1rem" }}>
-      <h2>Passwort setzen</h2>
-      {emailForDisplay && <p>Für: <strong>{emailForDisplay}</strong></p>}
-      <p>Benutzername: <strong>{nickname}</strong></p>
+    <div style={{ maxWidth: 480, margin: "2rem auto", padding: "1rem", border: "1px solid #eee", borderRadius: 8 }}>
+      <h2>Passwort-Setup</h2>
+      {emailDisplay && <p>Für: <strong>{emailDisplay}</strong></p>}
+      <p>Benutzername: <strong>{nicknameParam}</strong></p>
 
       <form onSubmit={handleSubmit}>
-        <input
-          type="password"
-          placeholder="Neues Passwort (min. 6 Zeichen)"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          required
-          minLength={6}
-          disabled={isLoading}
-          style={{ width: "100%", padding: "0.5rem", marginBottom: 8 }}
-        />
+        <label style={{ fontSize: 14 }}>
+          Temporäres Passwort (aus der E-Mail)
+          <input
+            type="text"
+            value={tempPassword}
+            onChange={(e) => setTempPassword(e.target.value.trim())}
+            disabled={loading}
+            style={{ width: "100%", padding: "0.5rem", marginTop: 6, marginBottom: 12 }}
+            placeholder="Temporäres Passwort hier eingeben"
+          />
+        </label>
+
+        <label style={{ fontSize: 14 }}>
+          Neues Passwort (min. 6 Zeichen)
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            disabled={loading}
+            style={{ width: "100%", padding: "0.5rem", marginTop: 6, marginBottom: 12 }}
+            placeholder="Neues Passwort"
+            minLength={6}
+          />
+        </label>
+
         {error && <p style={{ color: "red" }}>{error}</p>}
-        <button type="submit" disabled={isLoading || newPassword.length < 6} style={{ width: "100%", padding: "0.5rem" }}>
-          {isLoading ? "Wird gesetzt..." : "Passwort setzen"}
+
+        <button type="submit" disabled={loading} style={{ width: "100%", padding: "0.6rem", marginTop: 8 }}>
+          {loading ? "Verarbeite…" : "Passwort setzen"}
         </button>
       </form>
     </div>
