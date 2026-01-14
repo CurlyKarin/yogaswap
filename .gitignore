@@ -1,3 +1,14 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
+
 # Logs
 logs
 *.log
@@ -7,55 +18,60 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.local
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-projects/demo/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/LICENSE
-projects/demo/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/CHANGELOG.md
-projects/demo/.terraform/terraform.tfstate
-projects/demo/terraform.tfstate.backup
-projects/demo/terraform.tfstate
-projects/demo/.terraform.lock.hcl
-projects/demo/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/terraform-provider-aws.exe
-app/build/index.html
-app/build/assets/index-CVVSM1yU.css
-app/build/assets/index-Db3N-rlk.js
-projects/yogaswap/.terraform.lock.hcl
-projects/yogaswap/terraform.tfstate
-projects/yogaswap/.terraform/terraform.tfstate
-projects/yogaswap/.terraform/modules/modules.json
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/CHANGELOG.md
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/LICENSE
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/README.md
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.13.0/windows_amd64/terraform-provider-aws.exe
-backend/terraform.tfstate
-projects/yogaswap/terraform.tfstate.backup
-app/build/assets/index-C1BZCd10.js
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.14.1/windows_amd64/CHANGELOG.md
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.14.1/windows_amd64/LICENSE
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.14.1/windows_amd64/README.md
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/aws/6.14.1/windows_amd64/terraform-provider-aws.exe
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/null/3.2.4/windows_amd64/CHANGELOG.md
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/null/3.2.4/windows_amd64/LICENSE
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/null/3.2.4/windows_amd64/README.md
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/null/3.2.4/windows_amd64/terraform-provider-null.exe
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/CHANGELOG.md
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/LICENSE
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/README.md
-projects/yogaswap/.terraform/providers/registry.opentofu.org/hashicorp/random/3.7.2/windows_amd64/terraform-provider-random.exe
+.DS_Store
+*.swp
+*.swo
+*~
 
-app/build/assets/*.*
-backend/tsconfig.tsbuildinfo
-backend/src/lambdas/processPromotions/index.xxxxx
+# TypeScript
+*.tsbuildinfo
+
+# Terraform/OpenTofu
+*.tfvars
+!*.tfvars.example
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# AWS
+.aws-sam/
+
+# Temporary files
+*.tmp
+*.temp
+*.xxxxx
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Backend specific
+backend/zips/*.zip
+
+# Frontend build outputs (already covered by build/, but more specific)
+app/build/

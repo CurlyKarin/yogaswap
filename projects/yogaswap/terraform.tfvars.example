@@ -1,0 +1,16 @@
+# Projekt-Konfiguration
+# Kopiere diese Datei zu terraform.tfvars und passe die Werte an
+
+# Der Bucket-Name wird automatisch zu "${project}-site"
+# z.B. mit project = "yogaswap-demo" wird der Bucket zu "yogaswap-demo-site"
+#
+# WICHTIG: S3-Bucket-Namen müssen global eindeutig sein!
+# Wenn du auf mehreren AWS-Accounts arbeitest, verwende einen eindeutigen Suffix:
+# project = "yogaswap-demo-prod"  oder
+# project = "yogaswap-demo-2025"  oder
+# project = "yogaswap-demo-karin"
+
+project = "yogaswap-demo"
+
+region = "eu-central-1"
+

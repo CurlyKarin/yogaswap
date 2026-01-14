@@ -35,9 +35,29 @@ npm run dev
 ## 3. Seeds
 Befülle DynamoDB mit Beispieldaten:
 
-````bash
-npm run seed:index
-````
+**Wichtig:** Die Tabellennamen müssen deinem Terraform-Projektnamen entsprechen!
+
+**Option 1: Automatisch (empfohlen)**  
+Wenn `projects/yogaswap/terraform.tfvars` vorhanden ist, wird der `project`-Wert automatisch übernommen.  
+Einfach ausführen:
+```bash
+npm run seed
+```
+
+**Option 2: Mit PROJECT_NAME**
+```bash
+PROJECT_NAME="yogaswap-backend-demo-karin" npm run seed
+```
+
+**Option 3: Tabellennamen direkt setzen**
+```bash
+SWAPS_TABLE="yogaswap-backend-demo-karin-swaps-table" \
+OVERRIDES_TABLE="yogaswap-backend-demo-karin-courseOverrides-table" \
+COURSES_TABLE="yogaswap-backend-demo-karin-courses-table" \
+npm run seed
+```
+
+**Hinweis:** Stelle sicher, dass die Tabellen bereits in AWS existieren (nach Schritt 1 des Deployments)!
 
 ## 4. Deployment Zips
 Erstellt Zip-Dateien für die Lambdas im Verzeichnis dist/zips/:

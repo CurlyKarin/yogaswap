@@ -1,0 +1,525 @@
+# 🚀 Komplette Einrichtung auf einem frischen Rechner
+
+Diese Anleitung führt dich durch die komplette Einrichtung von YogaSwap auf einem neuen Rechner.
+
+---
+
+## 📋 Schritt 1: Homebrew installieren (falls noch nicht vorhanden)
+
+Homebrew ist ein Paketmanager für macOS, der das Installieren von Tools vereinfacht.
+
+**Prüfen, ob Homebrew installiert ist:**
+```bash
+brew --version
+```
+
+**Falls nicht installiert:**
+1. Öffne ein Terminal
+2. Kopiere und führe aus:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+3. Folge den Anweisungen auf dem Bildschirm
+4. **Wichtig:** Nach der Installation musst du deine Shell neu laden:
+```bash
+source ~/.zshrc
+```
+
+---
+
+## 📦 Schritt 2: Node.js 20+ installieren
+
+**Installieren:**
+```bash
+brew install node@20
+```
+
+**Shell neu laden (falls nötig):**
+```bash
+source ~/.zshrc
+```
+
+**Verifizieren:**
+```bash
+node --version   # Sollte v20.x.x sein
+npm --version    # Sollte eine Version zeigen
+```
+
+**Tipp:** Falls du bereits Node.js 18 hast, erst deinstallieren:
+```bash
+brew uninstall node@18
+```
+
+---
+
+## 🏗️ Schritt 3: OpenTofu installieren
+
+OpenTofu ist ein Open-Source-Fork von Terraform und wird zum Deployen der AWS-Infrastruktur verwendet.
+
+**Installieren:**
+```bash
+brew install opentofu
+```
+
+**Verifizieren:**
+```bash
+tofu --version
+```
+
+Sollte etwas wie `OpenTofu v1.x.x` anzeigen.
+
+---
+
+## ☁️ Schritt 4: AWS CLI installieren
+
+Die AWS CLI wird benötigt, um dich bei AWS zu authentifizieren und Ressourcen zu verwalten.
+
+**Installieren:**
+```bash
+brew install awscli
+```
+
+**Verifizieren:**
+```bash
+aws --version
+```
+
+---
+
+## 🔑 Schritt 5: AWS Account einrichten
+
+### 5.1 AWS Access Keys erstellen
+
+1. **Gehe zur AWS Console:**
+   - Öffne [https://console.aws.amazon.com/](https://console.aws.amazon.com/)
+   - Logge dich mit deinem AWS-Account ein
+
+2. **IAM Console öffnen:**
+   - Suche nach "IAM" in der Suchleiste
+   - Klicke auf "IAM" → "Users"
+
+3. **Benutzer erstellen (falls noch nicht vorhanden):**
+   - Klicke auf "Create user"
+   - Wähle einen Namen (z.B. "yogaswap-deployment")
+   - Klicke auf "Next"
+
+4. **Berechtigungen vergeben:**
+   - Wähle "Attach policies directly"
+   - Suche und wähle: **"AdministratorAccess"** (für den Anfang - später kann man eingrenzen)
+   - ODER wähle spezifische Policies:
+     - `AmazonDynamoDBFullAccess`
+     - `AWSLambda_FullAccess`
+     - `AmazonAPIGatewayAdministrator`
+     - `AmazonS3FullAccess`
+     - `CloudFrontFullAccess`
+     - `IAMFullAccess`
+   - Klicke auf "Next" → "Create user"
+
+5. **Access Keys erstellen:**
+   - Klicke auf den erstellten Benutzer
+   - Gehe zu Tab "Security credentials"
+   - Scrolle zu "Access keys"
+   - Klicke auf "Create access key"
+   - Wähle "Command Line Interface (CLI)"
+   - Setze ein Häkchen bei "I understand..."
+   - Klicke auf "Next"
+   - Optional: Beschreibung hinzufügen (z.B. "YogaSwap Deployment")
+   - Klicke auf "Create access key"
+
+6. **Keys speichern:**
+   - **WICHTIG:** Kopiere dir beide Werte sofort:
+     - **Access Key ID** (z.B. `AKIAIOSFODNN7EXAMPLE`)
+     - **Secret Access Key** (z.B. `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`)
+   - Du kannst den Secret Key später nicht mehr ansehen!
+   - Speichere sie sicher (z.B. in einem Passwort-Manager)
+
+### 5.2 AWS CLI konfigurieren
+
+**Im Terminal ausführen:**
+```bash
+aws configure
+```
+
+Du wirst nach 4 Werten gefragt:
+
+1. **AWS Access Key ID:**
+   ```
+   AKIAIOSFODNN7EXAMPLE
+   ```
+   → Füge deinen Access Key ID ein (Enter)
+
+2. **AWS Secret Access Key:**
+   ```
+   wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+   ```
+   → Füge deinen Secret Access Key ein (Enter)
+
+3. **Default region name:**
+   ```
+   eu-central-1
+   ```
+   → Empfohlen: `eu-central-1` (Frankfurt) oder `us-east-1` (N. Virginia) (Enter)
+
+4. **Default output format:**
+   ```
+   json
+   ```
+   → Einfach Enter drücken (json ist Standard)
+
+**Verifizieren, dass es funktioniert:**
+```bash
+aws sts get-caller-identity
+```
+
+Sollte deinen AWS Account-ID und User-ARN anzeigen.
+
+---
+
+## 📥 Schritt 6: Projekt herunterladen/klonen
+
+**Falls das Projekt schon lokal ist:**
+```bash
+cd /Users/karin/repos/yogaswap
+```
+
+**Falls du es noch klonen musst:**
+```bash
+cd ~/repos  # oder wo auch immer du deine Projekte speichern willst
+git clone <dein-repository-url>
+cd yogaswap
+```
+
+---
+
+## 🔧 Schritt 7: Projekt-Abhängigkeiten installieren
+
+**Schnell-Setup (empfohlen):**
+```bash
+./scripts/setup.sh
+```
+
+**Oder manuell:**
+
+1. **Shared-Package:**
+```bash
+cd shared
+npm install
+npm run build
+cd ..
+```
+
+2. **Backend:**
+```bash
+cd backend
+npm install
+npm run build-lambdas
+npm run zip
+cd ..
+```
+
+3. **Frontend:**
+```bash
+cd app
+npm install
+npm run build
+cd ..
+```
+
+---
+
+## ✅ Schritt 8: Setup prüfen
+
+Führe das Check-Script aus:
+```bash
+./scripts/check-setup.sh
+```
+
+Alle Checks sollten ✅ grün sein. Falls nicht, behebe die angezeigten Probleme.
+
+---
+
+## 🎯 Schritt 9: Projekt für deinen AWS Account konfigurieren
+
+### 9.1 Projektname festlegen
+
+S3-Bucket-Namen müssen **global eindeutig** sein. Wähle einen eindeutigen Namen:
+
+```bash
+cd projects/yogaswap
+cp terraform.tfvars.example terraform.tfvars
+```
+
+**Bearbeite `terraform.tfvars`** und setze deinen Projektnamen:
+```hcl
+project = "yogaswap-backend-demo-karin"  # Ändere zu deinem Namen!
+region  = "eu-central-1"
+```
+
+**Beispiele für eindeutige Namen:**
+- `yogaswap-backend-demo-2025`
+- `yogaswap-backend-demo-karin`
+- `yogaswap-backend-demo-prod`
+- `yogaswap-backend-demo-<dein-name>`
+
+---
+
+## 🚀 Schritt 10: Terraform initialisieren
+
+**Zum Terraform-Verzeichnis wechseln:**
+```bash
+cd projects/yogaswap
+```
+
+**Terraform initialisieren:**
+```bash
+tofu init
+```
+
+Dies lädt die benötigten Provider herunter (kann 1-2 Minuten dauern).
+
+Du solltest sehen:
+```
+Initializing provider plugins...
+Terraform has been successfully initialized!
+```
+
+---
+
+## 📋 Schritt 11: Deployment planen und ausführen (in 3 Schritten)
+
+**⚠️ WICHTIG:** Beim ersten Deployment musst du in 3 Schritten vorgehen, da es zirkuläre Abhängigkeiten gibt zwischen S3-Bucket und CloudFront.
+
+### Schritt 11.1: DynamoDB-Tabellen und S3-Bucket erstellen
+
+Zuerst erstellen wir die DynamoDB-Tabellen (die später von den Lambda-Funktionen benötigt werden) und das S3-Bucket (das vor CloudFront existieren muss):
+
+```bash
+tofu apply -target=module.swaps_table -target=module.course_overrides_table -target=module.courses_table -target=module.spa_site
+```
+
+**Was passiert:**
+- Erstellt 3 DynamoDB-Tabellen (Swaps, Course Overrides, Courses)
+- Erstellt S3-Bucket für das Frontend (ohne CloudFront-Policy - die kommt später)
+- Dauer: ~1-2 Minuten
+
+**Bestätigung:** Tippe `yes` wenn gefragt wird.
+
+**Hinweis:** Das S3-Bucket wird ohne die CloudFront-Policy erstellt. Die Policy wird in Schritt 3 hinzugefügt, wenn CloudFront erstellt wird.
+
+### Schritt 11.2: Lambda-Funktionen und API Gateway erstellen
+
+Jetzt erstellen wir die Lambda-Funktionen und das API Gateway:
+
+```bash
+tofu apply -target=aws_lambda_function.lambda -target=module.yogaswap_api
+```
+
+**Was passiert:**
+- Erstellt alle Lambda-Funktionen (11 Stück)
+- Erstellt API Gateway mit allen Routen
+- Verknüpft Lambdas mit DynamoDB-Tabellen
+- Dauer: ~3-5 Minuten
+
+**Bestätigung:** Tippe `yes` wenn gefragt wird.
+
+### Schritt 11.3: CloudFront und S3-Bucket-Policy erstellen
+
+Zuletzt erstellen wir CloudFront und aktualisieren die S3-Bucket-Policy (die den CloudFront-ARN benötigt):
+
+```bash
+tofu apply
+```
+
+**Was passiert:**
+- Erstellt CloudFront Distribution
+- Aktualisiert S3-Bucket-Policy (mit CloudFront-Zugriff)
+- Verknüpft S3 mit CloudFront
+- Lädt Frontend-Dateien ins S3-Bucket hoch
+- Dauer: ~3-5 Minuten
+
+**Bestätigung:** Tippe `yes` wenn gefragt wird.
+
+**🎉 Fertig!** Nach diesen 3 Schritten ist alles deployed.
+
+---
+
+### Alternative: Alles auf einmal (für spätere Deployments)
+
+Nach dem ersten Deployment kannst du bei späteren Updates alles auf einmal deployen:
+
+```bash
+tofu apply
+```
+
+Dies funktioniert, sobald alle Ressourcen einmal existieren.
+
+---
+
+## ✅ Schritt 12: URLs abrufen
+
+Nach dem dritten Deployment-Schritt zeigt Terraform die wichtigen URLs:
+
+```bash
+tofu output
+```
+
+Du solltest sehen:
+```
+Outputs:
+
+api_endpoint = "https://xxxxx.execute-api.eu-central-1.amazonaws.com"
+api_url = "https://xxxxx.execute-api.eu-central-1.amazonaws.com"
+cloudfront_domain = "xxxxx.cloudfront.net"
+spa_bucket_regional_name = "yogaswap-xxx.s3.eu-central-1.amazonaws.com"
+```
+
+**Die CloudFront-URL ist deine Haupt-URL** für die Anwendung!
+
+Öffne sie im Browser – deine YogaSwap-App sollte jetzt online sein! 🎉
+
+**Hinweis:** CloudFront kann 5-15 Minuten brauchen, bis die Distribution vollständig aktiviert ist. Wenn du einen Fehler siehst, warte ein paar Minuten und lade die Seite neu.
+
+---
+
+## 📊 Schritt 13: Seed-Daten laden (optional)
+
+Falls du Beispieldaten in DynamoDB laden möchtest:
+
+**Wichtig:** Verwende den gleichen Projektnamen wie in deiner `terraform.tfvars`!
+
+Das Seed-Script liest automatisch den `project`-Wert aus `projects/yogaswap/terraform.tfvars`. Wenn diese Datei existiert, reicht:
+```bash
+cd ../../backend
+npm run seed
+```
+
+Falls du den Projektnamen explizit setzen möchtest:
+
+```bash
+cd ../../backend
+PROJECT_NAME="yogaswap-backend-demo-karin" npm run seed
+```
+
+**Ersetze `yogaswap-backend-demo-karin`** mit dem Projektnamen aus deiner `terraform.tfvars`.
+
+Das Script zeigt dir, welche Tabellen verwendet werden und lädt Beispieldaten:
+- Beispiel-Swaps
+- Beispiel-Course-Overrides
+- Beispiel-Courses
+
+**Alternative:** Du kannst die Tabellennamen auch direkt setzen:
+```bash
+SWAPS_TABLE="yogaswap-backend-demo-karin-swaps-table" \
+OVERRIDES_TABLE="yogaswap-backend-demo-karin-courseOverrides-table" \
+COURSES_TABLE="yogaswap-backend-demo-karin-courses-table" \
+npm run seed
+```
+
+---
+
+## 🔄 Alternative: Alles auf einmal mit Deployment-Script (erst nach 1. Deployment!)
+
+**⚠️ Hinweis:** Das Deployment-Script ist für **spätere Updates** gedacht. Beim ersten Mal solltest du die 3 Schritte manuell durchführen (siehe Schritt 11).
+
+**Für spätere Deployments** kannst du das Script verwenden:
+
+```bash
+cd /Users/karin/repos/yogaswap
+./scripts/deploy.sh yogaswap-backend-demo-karin
+```
+
+Das Script:
+- Baut alle Komponenten
+- Erstellt/aktualisiert `terraform.tfvars`
+- Führt `tofu init` aus (falls nötig)
+- Zeigt den Plan
+- Fragt nach Bestätigung
+- Führt `tofu apply` aus
+
+**Nach dem ersten Deployment** funktioniert `tofu apply` ohne `-target` Flags, da alle Ressourcen bereits existieren.
+
+---
+
+## 🐛 Häufige Probleme
+
+### Problem: "Access Denied" beim tofu apply
+
+**Lösung:** Dein AWS-User hat nicht genug Berechtigungen.
+- Prüfe in AWS IAM → Users → dein User → Permissions
+- Stelle sicher, dass AdministratorAccess oder die benötigten Policies angehängt sind
+
+### Problem: "Bucket name already exists"
+
+**Lösung:** Der Bucket-Name ist nicht eindeutig.
+- Ändere den `project`-Namen in `terraform.tfvars`
+- Wähle einen einzigartigeren Namen
+
+### Problem: "region mismatch"
+
+**Lösung:** Prüfe, dass die Region in `terraform.tfvars` mit deiner AWS-CLI-Region übereinstimmt.
+
+### Problem: "tofu: command not found"
+
+**Lösung:** OpenTofu ist nicht installiert oder nicht im PATH.
+```bash
+brew install opentofu
+source ~/.zshrc
+```
+
+### Problem: "Resource dependency error" oder zirkuläre Abhängigkeit
+
+**Lösung:** Beim ersten Deployment musst du die 3 Schritte befolgen (siehe Schritt 11). Nach dem ersten Deployment kannst du `tofu apply` ohne `-target` Flags verwenden.
+
+---
+
+## 📝 Checkliste für neuen Rechner
+
+- [ ] Homebrew installiert
+- [ ] Node.js 20+ installiert (`node --version`)
+- [ ] OpenTofu installiert (`tofu --version`)
+- [ ] AWS CLI installiert (`aws --version`)
+- [ ] AWS Access Keys erstellt
+- [ ] AWS CLI konfiguriert (`aws configure`)
+- [ ] AWS-Credentials getestet (`aws sts get-caller-identity`)
+- [ ] Projekt-Abhängigkeiten installiert (`./scripts/setup.sh`)
+- [ ] Setup-Check erfolgreich (`./scripts/check-setup.sh`)
+- [ ] `terraform.tfvars` erstellt und konfiguriert
+- [ ] Terraform initialisiert (`tofu init`)
+- [ ] Schritt 1: DynamoDB-Tabellen und S3-Bucket erstellt
+- [ ] Schritt 2: Lambdas und API Gateway erstellt
+- [ ] Schritt 3: CloudFront und S3-Bucket-Policy erstellt
+- [ ] URLs abgerufen (`tofu output`)
+- [ ] (Optional) Seed-Daten geladen (`PROJECT_NAME="..." npm run seed`)
+
+---
+
+## 🎓 Zusammenfassung der wichtigsten Befehle
+
+```bash
+# Setup prüfen
+./scripts/check-setup.sh
+
+# Alles installieren und bauen
+./scripts/setup.sh
+
+# Deployment (automatisch)
+./scripts/deploy.sh <projektname>
+
+# Erste Deployment (in 3 Schritten)
+cd projects/yogaswap
+tofu init
+tofu apply -target=module.swaps_table -target=module.course_overrides_table -target=module.courses_table -target=module.spa_site
+tofu apply -target=aws_lambda_function.lambda -target=aws_iam_role.lambda_role -target=aws_iam_role_policy.lambda_policy -target=module.yogaswap_api
+tofu apply
+
+# Spätere Deployments (alles auf einmal)
+tofu apply
+
+# Infrastruktur löschen (wenn nötig)
+tofu destroy
+```
+
+---
+
+Viel Erfolg! 🚀
+
