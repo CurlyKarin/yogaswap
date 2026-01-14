@@ -1,14 +1,227 @@
 // cd backend
 // npm run seed
+//
+// Tabellennamen können über Environment-Variablen gesetzt werden:
+//
+// Option 1: Mit PROJECT_NAME (empfohlen - Tabellennamen werden automatisch gebildet)
+// PROJECT_NAME="yogaswap-backend-demo-karin" npm run seed
+//
+// Option 2: Tabellennamen direkt setzen
+// SWAPS_TABLE="yogaswap-backend-demo-karin-swaps-table" \
+// OVERRIDES_TABLE="yogaswap-backend-demo-karin-courseOverrides-table" \
+// COURSES_TABLE="yogaswap-backend-demo-karin-courses-table" \
+// npm run seed
+//
+// Option 3: Standard (verwendet "yogaswap-backend-demo")
+// npm run seed
 
-
-import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, PutItemCommand, DescribeTableCommand, ResourceNotFoundException, ListTablesCommand } from "@aws-sdk/client-dynamodb";
 import { swaps } from "./swaps";
 import { courseDateOverrides } from "./overrides";
 import { courses } from "./courses";
 
+import path from "node:path";
+import fs from "node:fs";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
+function resolveProjectName(): string {
+  if (process.env.PROJECT_NAME) {
+    return process.env.PROJECT_NAME;
+  }
+
+  // Versuche den Projektnamen aus projects/yogaswap/terraform.tfvars zu lesen
+  const tfvarsPath = path.resolve(__dirname, "../../../projects/yogaswap/terraform.tfvars");
+  try {
+    if (fs.existsSync(tfvarsPath)) {
+      const tfvarsContent = fs.readFileSync(tfvarsPath, "utf-8");
+      
+      // Suche nach project = "..." in Zeilen, die NICHT mit # beginnen
+      // Berücksichtige auch Fälle wo # nach Leerzeichen/Tabs kommt
+      const lines = tfvarsContent.split("\n");
+      for (const line of lines) {
+        // Entferne führende Leerzeichen und prüfe ob Zeile mit # beginnt (Kommentar)
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith("#")) {
+          continue; // Kommentarzeile überspringen
+        }
+        
+        // Suche nach project = "..." in dieser Zeile
+        const match = trimmedLine.match(/^project\s*=\s*"([^"]+)"/);
+        if (match?.[1]) {
+          console.log(`ℹ️  PROJECT_NAME aus terraform.tfvars geladen: ${match[1]}`);
+          return match[1];
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("⚠️  Konnte terraform.tfvars nicht lesen:", err);
+  }
+
+  return "yogaswap-backend-demo";
+}
+
+// Tabellennamen aus Environment-Variablen oder terraform.tfvars
+// Format: {project}-{table-type}-table
+const PROJECT_NAME = resolveProjectName();
+const SWAPS_TABLE = process.env.SWAPS_TABLE || `${PROJECT_NAME}-swaps-table`;
+const OVERRIDES_TABLE = process.env.OVERRIDES_TABLE || `${PROJECT_NAME}-courseOverrides-table`;
+const COURSES_TABLE = process.env.COURSES_TABLE || `${PROJECT_NAME}-courses-table`;
+const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "eu-central-1";
+
+const client = new DynamoDBClient({ region: AWS_REGION });
+
+// Prüfe ob eine Tabelle existiert
+async function tableExists(tableName: string): Promise<boolean> {
+  try {
+    await client.send(new DescribeTableCommand({ TableName: tableName }));
+    return true;
+  } catch (error) {
+    if (error instanceof ResourceNotFoundException || 
+        (error as any)?.name === "ResourceNotFoundException" ||
+        (error as any)?.__type === "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+// Liste alle Tabellen auf, die zum Projekt passen könnten
+async function listSimilarTables(prefix: string): Promise<string[]> {
+  try {
+    const result = await client.send(new ListTablesCommand({}));
+    const allTables = result.TableNames || [];
+    // Filtere Tabellen, die yogaswap enthalten
+    return allTables.filter(tableName => 
+      tableName.toLowerCase().includes('yogaswap')
+    );
+  } catch (error) {
+    console.warn("⚠️  Konnte Tabellen-Liste nicht abrufen:", error);
+    return [];
+  }
+}
+
+// Versuche passende Tabellen basierend auf Typ zu finden
+async function findMatchingTables(
+  missingTableType: string, 
+  similarTables: string[]
+): Promise<string[]> {
+  const patterns: Record<string, string[]> = {
+    "swaps": ["swap"],
+    "courseOverrides": ["override", "course"],
+    "courses": ["course"]
+  };
+  
+  const patternsForType = patterns[missingTableType.toLowerCase()] || [missingTableType.toLowerCase()];
+  
+  return similarTables.filter(tableName => {
+    const lowerTable = tableName.toLowerCase();
+    return patternsForType.some(pattern => lowerTable.includes(pattern));
+  });
+}
+
+// Prüfe alle Tabellen vor dem Seeding
+async function checkTablesExist(): Promise<void> {
+  const tables = [
+    { name: SWAPS_TABLE, type: "Swaps", expected: "swaps-table" },
+    { name: OVERRIDES_TABLE, type: "Course Overrides", expected: "courseOverrides-table" },
+    { name: COURSES_TABLE, type: "Courses", expected: "courses-table" },
+  ];
+
+  const missingTables: Array<{ name: string; type: string; expected: string }> = [];
+
+  for (const table of tables) {
+    const exists = await tableExists(table.name);
+    if (!exists) {
+      missingTables.push(table);
+      console.log(`❌ ${table.type} Table "${table.name}" existiert nicht`);
+    } else {
+      console.log(`✅ ${table.type} Table "${table.name}" existiert`);
+    }
+  }
+
+  if (missingTables.length > 0) {
+    console.log("");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("❌ Fehler: Die folgenden Tabellen wurden nicht gefunden:");
+    console.log("");
+    
+    for (const table of missingTables) {
+      console.log(`   - ${table.name}`);
+    }
+    
+    console.log("");
+    console.log("🔍 Suche nach ähnlichen Tabellen...");
+    
+    // Versuche ähnliche Tabellen zu finden
+    const projectPrefix = PROJECT_NAME.split('-').slice(0, 2).join('-'); // z.B. "yogaswap-demo"
+    const similarTables = await listSimilarTables(projectPrefix);
+    
+    if (similarTables.length > 0) {
+      console.log("");
+      console.log("💡 Gefundene Tabellen in AWS:");
+      for (const table of similarTables) {
+        console.log(`   - ${table}`);
+      }
+      console.log("");
+      console.log("⚠️  Die Tabellennamen stimmen nicht überein!");
+      console.log("");
+      
+      // Versuche passende Tabellen zu finden
+      const suggestedTables: Record<string, string> = {};
+      for (const missing of missingTables) {
+        const matching = await findMatchingTables(missing.expected.replace("-table", ""), similarTables);
+        if (matching.length > 0) {
+          suggestedTables[missing.name] = matching[0];
+        }
+      }
+      
+      if (Object.keys(suggestedTables).length > 0) {
+        console.log("💡 Vorschlag - Diese Tabellen passen zu deinen erwarteten Tabellen:");
+        console.log("");
+        for (const [expected, found] of Object.entries(suggestedTables)) {
+          console.log(`   Erwartet: ${expected}`);
+          console.log(`   Gefunden: ${found}`);
+          console.log("");
+        }
+        console.log("   Verwende diese Tabellennamen:");
+        console.log("");
+        
+        const swapsTable = suggestedTables[SWAPS_TABLE] || SWAPS_TABLE;
+        const overridesTable = suggestedTables[OVERRIDES_TABLE] || OVERRIDES_TABLE;
+        const coursesTable = suggestedTables[COURSES_TABLE] || COURSES_TABLE;
+        
+        console.log(`   SWAPS_TABLE="${swapsTable}" \\`);
+        console.log(`   OVERRIDES_TABLE="${overridesTable}" \\`);
+        console.log(`   COURSES_TABLE="${coursesTable}" \\`);
+        console.log(`   npm run seed`);
+      } else {
+        console.log("💡 Mögliche Lösungen:");
+        console.log("");
+        console.log("   1. Tabellennamen direkt setzen (basierend auf den gefundenen Tabellen):");
+        console.log(`      SWAPS_TABLE="<name-aus-liste>" \\`);
+        console.log(`      OVERRIDES_TABLE="<name-aus-liste>" \\`);
+        console.log(`      COURSES_TABLE="<name-aus-liste>" \\`);
+        console.log(`      npm run seed`);
+        console.log("");
+      }
+      
+      console.log("");
+      console.log("   2. Oder PROJECT_NAME anpassen:");
+      console.log("      PROJECT_NAME=\"yogaswap-demo\" npm run seed");
+      console.log("");
+      console.log("   3. Oder terraform.tfvars aktualisieren mit dem korrekten Projektnamen")
+    } else {
+      console.log("   Keine ähnlichen Tabellen gefunden.");
+      console.log("");
+      console.log("💡 Lösung: Erstelle die Tabellen zuerst mit Terraform:");
+      console.log("");
+      console.log("   cd projects/yogaswap");
+      console.log("   tofu apply -target=module.swaps_table -target=module.course_overrides_table -target=module.courses_table");
+    }
+    
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    process.exit(1);
+  }
+}
 
 async function seedTable(tableName: string, items: any[]) {
   for (const item of items) {
@@ -92,11 +305,47 @@ async function seedOverrides(tableName: string, items: any[]) {
 
 (async () => {
   try {
-    await seedSwaps("yogaswap-backend-demo-swaps-table", swaps);
-    await seedOverrides("yogaswap-backend-demo-courseOverrides-table", courseDateOverrides);
-    await seedCourses("yogaswap-backend-demo-courses-table", courses);
+    console.log("🌱 Starting seed process...");
+    console.log(`   AWS Region: ${AWS_REGION}`);
+    console.log(`   Project Name: ${PROJECT_NAME}`);
+    console.log(`   Swaps Table: ${SWAPS_TABLE}`);
+    console.log(`   Overrides Table: ${OVERRIDES_TABLE}`);
+    console.log(`   Courses Table: ${COURSES_TABLE}`);
+    console.log("");
+    console.log("🔍 Prüfe ob Tabellen existieren...");
+    console.log("");
+
+    // Prüfe zuerst, ob alle Tabellen existieren
+    await checkTablesExist();
+    
+    console.log("");
+    console.log("📝 Starte Seeding...");
+    console.log("");
+
+    await seedSwaps(SWAPS_TABLE, swaps);
+    await seedOverrides(OVERRIDES_TABLE, courseDateOverrides);
+    await seedCourses(COURSES_TABLE, courses);
+    
+    console.log("");
     console.log("🎉 Seeding completed!");
   } catch (err) {
-    console.error("❌ Seeding failed:", err);
+    // Wenn es ein ResourceNotFoundException ist, geben wir eine hilfreiche Meldung aus
+    if (err instanceof ResourceNotFoundException || 
+        (err as any)?.__type === "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException") {
+      console.error("");
+      console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.error("❌ Fehler: DynamoDB-Tabelle wurde nicht gefunden!");
+      console.error("");
+      console.error("💡 Die Tabellen müssen zuerst mit Terraform erstellt werden:");
+      console.error("");
+      console.error("   cd projects/yogaswap");
+      console.error("   tofu apply -target=module.swaps_table -target=module.course_overrides_table -target=module.courses_table");
+      console.error("");
+      console.error("   Siehe auch: projects/yogaswap/DEPLOYMENT_STEPS.md");
+      console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    } else {
+      console.error("❌ Seeding failed:", err);
+    }
+    process.exit(1);
   }
 })();

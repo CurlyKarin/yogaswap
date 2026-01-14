@@ -11,11 +11,12 @@
   },
   "dependencies": {
     "@aws-amplify/auth": "^6.17.0",
+    "@yogaswap/shared": "file:../shared",
     "aws-amplify": "^6.15.7",
+    "axios": "^1.12.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.5",
-    "shared": "file:../shared"
+    "react-router-dom": "^7.9.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
