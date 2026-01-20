@@ -14,7 +14,13 @@ function generateSafeTempPassword(length = 10) {
 }
 
 export const handler = async (event: any) => {
-  console.log('EVENT:', JSON.stringify(event));  
+  console.log('EVENT:', JSON.stringify(event));
+  // Debug: Environment Variables ausgeben
+  console.log('Environment Variables:', {
+    SES_SOURCE_EMAIL: process.env.SES_SOURCE_EMAIL,
+    USER_POOL_ID: process.env.USER_POOL_ID,
+    BASE_URL: process.env.BASE_URL
+  });  
 
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
   const { email, nickname, role } = body;
@@ -93,23 +99,44 @@ export const handler = async (event: any) => {
     <p>Tipp: Falls das Passwort beim Einfügen nicht funktioniert, achte auf keine Leerzeichen vor/nach dem Passwort.</p>
   `;
 
+  let emailSent = false;
   try {
+    const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+    // Debug: Zeige die verwendete E-Mail-Adresse
+    console.log(`📧 Verwende SES Source Email: "${sesSourceEmail}"`);
+    console.log(`📧 process.env.SES_SOURCE_EMAIL = "${process.env.SES_SOURCE_EMAIL}"`);
     await ses.send(new SendEmailCommand({
-      Source: "karin.schrader@online.de",
+      Source: sesSourceEmail,
       Destination: { ToAddresses: [email] },
       Message: {
         Subject: { Data: "YogaSwap Einladung" },
         Body: { Html: { Data: emailHtml } }
       }
     }));
+    emailSent = true;
+    console.log("SES email sent successfully to", email);
   } catch (err: any) {
     console.warn("SES send warning:", err?.message || err);
     // do not fail user creation if SES can't send (depending on your policy)
+    // Falls E-Mail nicht versendet werden kann, logge das temporäre Passwort für den Admin
+    console.warn(`⚠️ E-Mail konnte nicht versendet werden. Temporäres Passwort für User '${username}': ${rawPassword}`);
   }
 
   console.log("createParticipants: created/updated username=", username);
-  // Do NOT log passwords in production
-  // console.log("createParticipants: rawPassword=", rawPassword);
+  // Do NOT log passwords in production normally, but log if email failed
+  if (!emailSent) {
+    console.warn(`⚠️ WICHTIG: E-Mail nicht versendet. User '${username}' benötigt temporäres Passwort: ${rawPassword}`);
+  }
 
-  return { statusCode: 200, body: JSON.stringify({ success: true, username: username, link }) };
+  return { 
+    statusCode: 200, 
+    body: JSON.stringify({ 
+      success: true, 
+      username: username, 
+      link,
+      emailSent,
+      // Nur wenn E-Mail nicht versendet wurde, Passwort zurückgeben (für Admin)
+      ...(emailSent ? {} : { tempPassword: rawPassword, warning: "E-Mail konnte nicht versendet werden. Bitte Passwort manuell übermitteln." })
+    }) 
+  };
 };

@@ -61,7 +61,14 @@ resource "aws_lambda_function" "lambda" {
   runtime           = "nodejs18.x"
   role              = aws_iam_role.lambda_role[each.key].arn
   filename          = "${path.module}/../../backend/zips/${each.value.file_name}"
-  source_code_hash  = filebase64sha256("${path.module}/../../backend/zips/${each.value.file_name}")
+  # Kombiniere Source Code Hash mit Environment Variables Hash, damit Lambda bei Environment-Änderungen neu deployed wird
+  source_code_hash  = sha256(join(",", [
+    filebase64sha256("${path.module}/../../backend/zips/${each.value.file_name}"),
+    jsonencode(merge(
+      each.value.tables,
+      try(each.value.environment, {})
+    ))
+  ]))
 
   dynamic "environment" {
     for_each = length(merge(each.value.tables, try(each.value.environment, {}))) > 0 ? [1] : []

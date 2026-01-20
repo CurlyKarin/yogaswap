@@ -32,16 +32,19 @@ tofu apply -target=module.swaps_table -target=module.course_overrides_table -tar
 
 ---
 
-## Schritt 2: Lambda-Funktionen und API Gateway erstellen
+## Schritt 2: Cognito User Pool, Lambda-Funktionen und API Gateway erstellen
 
-**Warum jetzt?** Die Lambdas brauchen die Tabellen aus Schritt 1. API Gateway braucht die Lambdas.
+**Warum jetzt?** Die Lambdas brauchen die Tabellen aus Schritt 1. Cognito muss vor CloudFront erstellt werden (wird in Lambda-Umgebungsvariablen verwendet). API Gateway braucht die Lambdas.
 
 ```bash
-tofu apply -target=aws_lambda_function.lambda -target=aws_iam_role.lambda_role -target=aws_iam_role_policy.lambda_policy -target=module.yogaswap_api
+tofu apply -target=aws_cognito_user_pool.yogaswap -target=aws_cognito_user_pool_client.yogaswap_app -target=aws_cognito_user_group.admin -target=aws_cognito_user_group.instructor -target=aws_cognito_user_group.participant -target=aws_lambda_function.lambda -target=aws_iam_role.lambda_role -target=aws_iam_role_policy.lambda_policy -target=module.yogaswap_api
 ```
 
 **Was wird erstellt:**
-- ✅ 11 Lambda-Funktionen (get-swaps, create-swap, update-swap, etc.)
+- ✅ Cognito User Pool
+- ✅ Cognito App Client
+- ✅ Cognito User Groups (admin, instructor, participant)
+- ✅ 12 Lambda-Funktionen (inkl. create-participants für Cognito)
 - ✅ IAM-Rollen und -Policies für die Lambdas
 - ✅ API Gateway mit allen Routen
 

@@ -1,8 +1,9 @@
 // app/src/components/ChangePassword.tsx
 import { useState } from 'react';
-import { confirmSignIn } from 'aws-amplify/auth';
+import { confirmSignIn, fetchAuthSession } from 'aws-amplify/auth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { saveCurrentUser } from 'shared/lib/storage';
+import { User, UserRole } from 'shared/types';
 
 export default function ChangePassword() {
   const [password, setPassword] = useState('');
@@ -24,7 +25,22 @@ export default function ChangePassword() {
     try {
       await confirmSignIn({ challengeResponse: password });
 
-      saveCurrentUser({ nickname: username, email: `${username}@yogaswap.de`, role: 'admin' });
+      // Nach erfolgreichem Passwort-Setzen: User-Information aus Cognito holen
+      const session = await fetchAuthSession();
+      if (session.tokens?.idToken) {
+        const payload = session.tokens.idToken.payload;
+        const user: User = {
+          nickname: payload.nickname as string,
+          email: payload.email as string,
+          role: (payload['custom:role'] as UserRole) || 'participant',
+        };
+        saveCurrentUser(user);
+        console.log('User nach Passwort-Änderung gespeichert:', user);
+      } else {
+        // Fallback falls Session noch nicht verfügbar
+        console.warn('Keine Session verfügbar nach confirmSignIn, verwende Fallback');
+      }
+
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Fehler');

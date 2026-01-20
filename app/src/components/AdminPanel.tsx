@@ -21,7 +21,17 @@ export default function AdminPanel() {
       if (result.error === "Nickname already exists") {
         setError("Dieser Spitzname ist bereits vergeben.");
       } else if (result.success) {
-        setMessage(`Einladung gesendet an ${email}`);
+        if (result.emailSent) {
+          setMessage(`✅ Einladung per E-Mail gesendet an ${email}`);
+        } else {
+          // E-Mail nicht versendet - zeige temporäres Passwort
+          const tempPw = result.tempPassword || "(Passwort nicht verfügbar)";
+          setMessage(
+            `⚠️ User erstellt, aber E-Mail konnte nicht versendet werden.\n` +
+            `Temporäres Passwort für '${nickname}': ${tempPw}\n` +
+            `Bitte Passwort persönlich übermitteln.`
+          );
+        }
         setEmail("");
         setNickname("");
       } else {
@@ -62,7 +72,11 @@ export default function AdminPanel() {
           {loading ? "Wird gesendet..." : "Einladen"}
         </button>
 
-        {message && <p style={{ margin: "0.5rem 0", color: "green" }}>{message}</p>}
+        {message && (
+          <p style={{ margin: "0.5rem 0", color: message.includes("⚠️") ? "orange" : "green", whiteSpace: "pre-line" }}>
+            {message}
+          </p>
+        )}
         {error && <p style={{ margin: "0.5rem 0", color: "red" }}>{error}</p>}
  
       </div>

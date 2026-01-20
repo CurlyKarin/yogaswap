@@ -1,7 +1,9 @@
 // src/components/Invite.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { signIn } from "@aws-amplify/auth";
+import { signIn, confirmSignIn, fetchAuthSession } from "@aws-amplify/auth";
+import { saveCurrentUser } from "shared/lib/storage";
+import { User, UserRole } from "shared/types";
 
 export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const [searchParams] = useSearchParams();
@@ -10,6 +12,24 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   // nickname (username) and optional email for display
   const nicknameParam = searchParams.get("nickname") || "";
   const emailDisplay = searchParams.get("email") || "";
+
+  // Beim Aufruf der Invite-Seite: localStorage leeren, falls anderer User
+  useEffect(() => {
+    if (nicknameParam) {
+      const stored = localStorage.getItem('yogaswap_user');
+      if (stored) {
+        try {
+          const storedUser = JSON.parse(stored);
+          if (storedUser.nickname && storedUser.nickname.toLowerCase() !== nicknameParam.toLowerCase()) {
+            console.log(`Lösche localStorage für ${storedUser.nickname}, da neuer User ${nicknameParam} Passwort setzt`);
+            localStorage.removeItem('yogaswap_user');
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+    }
+  }, [nicknameParam]);
 
   // user inputs
   const [tempPassword, setTempPassword] = useState("");
@@ -44,17 +64,24 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
 
     try {
       // 1) Sign in with temporary password
-      const user = await signIn({ username: usernameForSignIn, password: tempPassword }) as any;
+      const result = await signIn({ username: usernameForSignIn, password: tempPassword });
 
-      // 2) If challenge required -> respond
-      if (user?.challengeName === "NEW_PASSWORD_REQUIRED" && typeof user.respondToAuthChallenge === "function") {
-        await user.respondToAuthChallenge({
-          challengeName: "NEW_PASSWORD_REQUIRED",
-          challengeResponses: {
-            USERNAME: usernameForSignIn,
-            NEW_PASSWORD: newPassword,
-          },
-        });
+      // 2) If challenge required -> confirm with new password
+      if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+        await confirmSignIn({ challengeResponse: newPassword });
+      }
+
+      // 3) Nach erfolgreichem Passwort-Setzen: User-Information aus Cognito holen
+      const session = await fetchAuthSession();
+      if (session.tokens?.idToken) {
+        const payload = session.tokens.idToken.payload;
+        const user: User = {
+          nickname: payload.nickname as string,
+          email: payload.email as string,
+          role: (payload['custom:role'] as UserRole) || 'participant',
+        };
+        saveCurrentUser(user);
+        console.log('User nach Passwort-Setzen gespeichert:', user);
       }
 
       // success

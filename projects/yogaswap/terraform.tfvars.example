@@ -14,3 +14,13 @@ project = "yogaswap-demo"
 
 region = "eu-central-1"
 
+# E-Mail-Adresse für SES (muss in AWS SES verifiziert sein)
+# In SES Sandbox-Modus: Nur verifizierte E-Mail-Adressen können E-Mails senden/empfangen
+# Für Produktion: Verlasse den Sandbox-Modus oder verifiziere deine Domain in SES
+#
+# Beispiel:
+# ses_source_email = "yogaswap@example.com"
+#
+# Wichtig: Diese E-Mail-Adresse muss in AWS SES Console verifiziert werden!
+ses_source_email = "yogaswap@example.com"
+
