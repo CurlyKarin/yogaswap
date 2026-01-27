@@ -3,4 +3,5 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/?(*.)+(spec|test).ts'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
 };
