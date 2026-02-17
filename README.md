@@ -1,5 +1,11 @@
 # YogaSwap
 
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=flat&logo=vite&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-Serverless-FF9900?style=flat&logo=amazonaws&logoColor=white)
+![Terraform](https://img.shields.io/badge/OpenTofu%2FTerraform-IaC-7B42BC?style=flat&logo=terraform&logoColor=white)
+
 **Serverless-SaaS-Plattform für Yoga-Kursverwaltung und Kursplatz-Tausch**
 
 YogaSwap ermöglicht Yogastudios die Verwaltung und den Tausch von Kursplätzen zwischen Teilnehmenden – inkl. automatischem Wartelisten-Management und rollenbasierter Zugriffskontrolle.
