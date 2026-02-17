@@ -384,11 +384,33 @@ Die **CloudFront-URL** ist deine Haupt-URL für die Anwendung!
 
 Falls du Beispieldaten in DynamoDB laden möchtest:
 
+**Option 1: Automatisch (empfohlen)**  
+Wenn `projects/yogaswap/terraform.tfvars` vorhanden ist, wird der `project`-Wert automatisch übernommen:
+
 ```bash
 cd backend
-npm run seed:build
+npm run seed
 cd ..
 ```
+
+**Option 2: Mit PROJECT_NAME**
+```bash
+cd backend
+PROJECT_NAME="yogaswap-demo" npm run seed
+cd ..
+```
+
+**Option 3: Tabellennamen direkt setzen**
+```bash
+cd backend
+SWAPS_TABLE="yogaswap-demo-swaps-table" \
+OVERRIDES_TABLE="yogaswap-demo-courseOverrides-table" \
+COURSES_TABLE="yogaswap-demo-courses-table" \
+npm run seed
+cd ..
+```
+
+**Hinweis:** Die Tabellen müssen bereits in AWS existieren (nach Schritt 1 des Deployments).
 
 ---
 
