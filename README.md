@@ -14,6 +14,16 @@ YogaSwap ermöglicht Yogastudios die Verwaltung und den Tausch von Kursplätzen 
 
 ---
 
+## ✨ Features
+
+- **Kursplatz-Tausch** – Teilnehmende können Kursplätze untereinander tauschen
+- **Automatisches Wartelisten-Management** – Aufrückungen bei freien Plätzen
+- **Rollenbasierte Zugriffe** – Admin, Instructor, Participant mit unterschiedlichen Rechten
+- **Einladungssystem** – E-Mail-Einladungen für neue Nutzer (via AWS SES)
+- **Responsive UI** – Nutzbar auf Desktop und mobilen Geräten
+
+---
+
 ## 📋 Projektübersicht
 
 YogaSwap ist eine vollständige Serverless-Webanwendung bestehend aus:
@@ -21,6 +31,33 @@ YogaSwap ist eine vollständige Serverless-Webanwendung bestehend aus:
 - **Backend**: AWS Lambda-Funktionen (Serverless)
 - **Infrastruktur**: DynamoDB, API Gateway, CloudFront, S3
 - **Deployment**: Terraform/OpenTofu
+
+---
+
+## 📁 Projektstruktur
+
+```
+yogaswap/
+├── app/                    # Frontend (React/TypeScript/Vite)
+│   ├── src/
+│   ├── .env.example       # Vorlage für Umgebungsvariablen
+│   └── package.json
+├── backend/               # Backend (Serverless Lambdas)
+│   ├── src/
+│   │   ├── lambdas/      # Lambda-Funktionen
+│   │   ├── seed/         # Seed-Daten für DynamoDB
+│   │   └── scripts/      # Helper-Scripts (createGroups, createAdminUser)
+│   ├── zips/             # Lambda-ZIP-Dateien (werden beim Build erzeugt)
+│   └── package.json
+├── shared/                # Gemeinsame Typen und Utilities
+│   └── src/
+├── projects/              # Terraform/OpenTofu-Konfigurationen
+│   └── yogaswap/
+│       ├── main.tf, lambda.tf, dynamodb.tf, s3.tf, ...
+│       └── terraform.tfvars.example
+├── scripts/               # Deployment- und Setup-Scripts
+└── README.md
+```
 
 ---
 
@@ -482,34 +519,6 @@ tofu destroy
 
 ---
 
-## 📁 Projektstruktur
-
-```
-yogaswap/
-├── app/                    # Frontend (React/TypeScript/Vite)
-│   ├── src/
-│   ├── build/             # Gebaute Frontend-Dateien (nach npm run build)
-│   └── package.json
-├── backend/               # Backend (Serverless Lambdas)
-│   ├── src/
-│   │   ├── lambdas/      # Lambda-Funktionen
-│   │   └── seed/         # Seed-Daten für DynamoDB
-│   ├── zips/             # Lambda-ZIP-Dateien
-│   └── package.json
-├── shared/                # Gemeinsame Typen und Utilities
-│   └── src/
-├── projects/              # Terraform-Konfigurationen
-│   └── yogaswap/         # Haupt-Deployment-Konfiguration
-│       ├── main.tf
-│       ├── lambda.tf
-│       ├── dynamodb.tf
-│       ├── s3.tf
-│       └── variables.tf
-└── README.md
-```
-
----
-
 ## 🐛 Häufige Probleme und Lösungen
 
 ### Problem: "terraform: command not found"
@@ -586,6 +595,12 @@ npm run zip
 ### Region
 
 Das Projekt verwendet standardmäßig `eu-central-1` (Frankfurt). Du kannst die Region in `projects/yogaswap/variables.tf` ändern.
+
+---
+
+## 🤝 Mitwirken
+
+Ideen, Bug-Reports oder Pull Requests sind willkommen! Siehe [CONTRIBUTING.md](.github/CONTRIBUTING.md) für Hinweise.
 
 ---
 
