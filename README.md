@@ -1,6 +1,12 @@
-# YogaSwap - Setup & Deployment Anleitung
+# YogaSwap
 
-Diese Anleitung führt dich durch die komplette Installation und das Deployment von YogaSwap auf AWS.
+**Serverless-SaaS-Plattform für Yoga-Kursverwaltung und Kursplatz-Tausch**
+
+YogaSwap ermöglicht Yogastudios die Verwaltung und den Tausch von Kursplätzen zwischen Teilnehmenden – inkl. automatischem Wartelisten-Management und rollenbasierter Zugriffskontrolle.
+
+**▶ [Live-Demo ansehen](https://d1cvi2br361w6h.cloudfront.net)** *(Anmeldung erforderlich)*
+
+---
 
 ## 📋 Projektübersicht
 
@@ -601,7 +607,7 @@ Viel Erfolg mit YogaSwap! 🧘‍♀️
 
 ---
 
-## 🔐 AWS Cognito Setup (feature-add-aws-cognito)
+## 🔐 AWS Cognito Setup
 
 YogaSwap verwendet AWS Cognito für Benutzer-Authentifizierung. Die Cognito-Ressourcen werden automatisch beim Deployment mit Terraform erstellt.
 
