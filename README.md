@@ -307,11 +307,15 @@ Du wirst nach einer Bestätigung gefragt. Gib `yes` ein.
 
 **Wichtig**: Das Deployment kann einige Minuten dauern, da folgende Ressourcen erstellt werden:
 - DynamoDB-Tabellen (Swaps, Course Overrides, Courses)
-- Lambda-Funktionen (11 verschiedene Funktionen)
+- Cognito User Pool (für Benutzer-Authentifizierung)
+- Cognito App Client und User Groups
+- Lambda-Funktionen (12 verschiedene Funktionen, inkl. create-participants)
 - API Gateway
 - CloudFront Distribution
 - S3-Bucket für das Frontend
 - IAM-Rollen und -Policies
+
+**Hinweis**: Beim ersten Deployment musst du die 3-Schritt-Anleitung aus `FRESH_SETUP.md` oder `projects/yogaswap/DEPLOYMENT_STEPS.md` befolgen.
 
 ### 3. Outputs abrufen
 
@@ -356,6 +360,29 @@ cd ..
    terraform apply
    cd ../..
    ```
+
+**Wichtig für Cognito:** Wenn Cognito-Ressourcen bereits existieren, solltest du die Cognito-Environment-Variablen beim Build setzen:
+
+```bash
+cd app
+VITE_COGNITO_USER_POOL_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_id) \
+VITE_COGNITO_CLIENT_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_client_id) \
+npm run build
+cd ..
+```
+
+Alternativ kannst du eine `.env.production` Datei erstellen (wird automatisch von Vite beim Build verwendet):
+```bash
+cd app
+cat > .env.production << EOF
+VITE_COGNITO_USER_POOL_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_id)
+VITE_COGNITO_CLIENT_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_client_id)
+EOF
+npm run build
+cd ..
+```
+
+**Hinweis:** Die Region ist bereits in der User Pool ID enthalten (z.B. `eu-central-1_XXXXXXXXX`) und muss nicht separat gesetzt werden.
 
 ### Backend-Änderungen (Lambda-Funktionen)
 
@@ -507,6 +534,19 @@ npm run zip
 2. Prüfe die Browser-Console auf Fehler
 3. Prüfe, ob die CloudFront-Distribution korrekt konfiguriert ist
 
+### Problem: "Cognito User Pool not found" oder Login funktioniert nicht
+
+**Lösung**: 
+1. Stelle sicher, dass Cognito beim Deployment erstellt wurde (siehe Schritt 2 im Deployment)
+2. Prüfe, ob `.env.local` die korrekten Cognito-Werte enthält:
+   ```bash
+   cd projects/yogaswap
+   tofu output cognito_user_pool_id
+   tofu output cognito_user_pool_client_id
+   ```
+3. Vergleiche die Werte mit denen in `app/.env.local`
+4. Stelle sicher, dass das Frontend neu gestartet wurde nach dem Erstellen von `.env.local`
+
 ### Problem: "Module not found" Fehler bei npm install
 
 **Lösung**: Stelle sicher, dass du in allen Verzeichnissen (`shared/`, `backend/`, `app/`) `npm install` ausgeführt hast.
@@ -558,3 +598,313 @@ Nach erfolgreichem Deployment:
 ---
 
 Viel Erfolg mit YogaSwap! 🧘‍♀️
+
+---
+
+## 🔐 AWS Cognito Setup (feature-add-aws-cognito)
+
+YogaSwap verwendet AWS Cognito für Benutzer-Authentifizierung. Die Cognito-Ressourcen werden automatisch beim Deployment mit Terraform erstellt.
+
+**⚠️ Wichtiger Hinweis zur User-Verwaltung:**
+- Der **Nickname** ist eindeutig und wird als Username in Cognito verwendet
+- Die **E-Mail** kann mehrfach verwendet werden (z.B. mehrere User mit gleicher E-Mail-Adresse)
+- Beim Login wird der **Nickname** verwendet, nicht die E-Mail
+
+### Cognito-Konfiguration für lokale Entwicklung
+
+**1. Cognito-Werte aus Terraform abrufen:**
+```bash
+cd projects/yogaswap
+tofu output
+```
+
+Du solltest folgende Outputs sehen:
+```
+cognito_user_pool_id = "eu-central-1_XXXXXXXXX"
+cognito_user_pool_client_id = "xxxxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
+**2. `.env.local` für lokale Entwicklung erstellen:**
+
+Erstelle `app/.env.local` (oder kopiere von `app/.env.example` falls vorhanden):
+```bash
+cd app
+cat > .env.local << EOF
+VITE_COGNITO_USER_POOL_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_id)
+VITE_COGNITO_CLIENT_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_client_id)
+EOF
+```
+
+**Oder manuell:**
+Erstelle `app/.env.local` und trage die Werte ein:
+```bash
+VITE_COGNITO_USER_POOL_ID=eu-central-1_XXXXXXXXX
+VITE_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**Hinweis:** Die Region ist bereits in der User Pool ID enthalten (z.B. `eu-central-1_XXXXXXXXX`) und muss nicht separat gesetzt werden.
+
+**3. Frontend lokal starten:**
+```bash
+npm run dev
+```
+
+Das Frontend läuft dann auf `http://localhost:5173` und kann mit Cognito authentifizieren.
+
+### Cognito User Groups
+
+Die Cognito User Groups werden **automatisch beim Deployment erstellt** (siehe Schritt 2 im Deployment):
+- `admin` - Administratoren
+- `instructor` - Instruktoren
+- `participant` - Teilnehmer
+
+**⚠️ Wichtig:** Falls die Groups aus irgendeinem Grund fehlen (z.B. bei älteren Deployments), musst du sie manuell erstellen:
+
+```bash
+# User Pool ID abrufen
+cd projects/yogaswap
+USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
+
+# User Groups erstellen
+cd ../../backend
+node scripts/createGroups.js $USER_POOL_ID
+```
+
+**Hinweis:** 
+- Das Script verwendet `@aws-sdk/client-cognito-identity-provider`, das bereits als Dev-Dependency im `backend/package.json` enthalten ist.
+- Das Script ist idempotent: Es erstellt nur fehlende Groups und ignoriert bereits existierende.
+
+### Ersten Admin-User erstellen
+
+**⚠️ Wichtig:** Nach dem ersten Deployment musst du den ersten Admin-User manuell erstellen, bevor du dich anmelden kannst.
+
+**Option 1: Mit Initial-Setup-Script (empfohlen)**
+
+```bash
+# User Pool ID abrufen
+cd projects/yogaswap
+USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
+
+# Admin-User erstellen (mit Passwort - empfohlen)
+cd ../../backend
+node scripts/createAdminUser.js $USER_POOL_ID admin@example.com admin MeinPasswort123!
+```
+
+**⚠️ Wichtig:** 
+- **Gib immer ein Passwort an** beim Erstellen des Admin-Users, damit das Passwort sofort permanent gesetzt wird
+- Der **Nickname** (hier: `admin`) muss eindeutig sein und wird als Username verwendet
+- Die **E-Mail** kann mehrfach verwendet werden (z.B. mehrere User mit gleicher E-Mail)
+- Beim Login wird der **Nickname** verwendet, nicht die E-Mail
+
+**Falls du kein Passwort angibst:**
+Das Script generiert ein temporäres Passwort, das in der Konsole ausgegeben wird. Du musst dann:
+1. Die `/invite` Seite verwenden oder
+2. Beim ersten Login das Passwort ändern (wird zu `/change-password` weitergeleitet)
+
+**Option 2: Mit AWS CLI (alternativ)**
+
+```bash
+# User Pool ID abrufen
+cd projects/yogaswap
+USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
+
+# Admin-User erstellen
+# WICHTIG: --username ist der Nickname (muss eindeutig sein)
+aws cognito-idp admin-create-user \
+  --user-pool-id $USER_POOL_ID \
+  --username admin \
+  --user-attributes Name=email,Value=admin@example.com Name=email_verified,Value=true Name=nickname,Value=admin Name=custom:role,Value=admin \
+  --message-action SUPPRESS \
+  --temporary-password "MeinPasswort123!"
+
+# User zur Admin-Gruppe hinzufügen
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id $USER_POOL_ID \
+  --username admin \
+  --group-name admin
+
+# Optional: Passwort permanent setzen (damit User nicht beim ersten Login ändern muss)
+aws cognito-idp admin-set-user-password \
+  --user-pool-id $USER_POOL_ID \
+  --username admin \
+  --password "MeinPasswort123!" \
+  --permanent
+```
+
+**Hinweis:** Der `--username` Parameter ist der Nickname (muss eindeutig sein). Die E-Mail kann mehrfach verwendet werden.
+
+**Option 3: Über die AWS Console**
+
+1. Gehe zur AWS Console → Cognito → User Pools
+2. Wähle deinen User Pool aus
+3. Klicke auf "Users" → "Create user"
+4. **Username:** Gib den Nickname ein (muss eindeutig sein)
+5. **Email:** Gib die E-Mail ein (kann mehrfach verwendet werden)
+6. Setze ein temporäres Passwort
+7. Nach dem Erstellen: Klicke auf den User → "Groups" → Füge zur Gruppe "admin" hinzu
+
+**Hinweis:** Der Username in Cognito ist der Nickname (muss eindeutig sein). Die E-Mail kann mehrfach verwendet werden.
+
+**Nach dem Erstellen des Admin-Users:**
+
+1. Logge dich im Frontend ein:
+   - Öffne die CloudFront-URL im Browser
+   - Login mit Nickname und Passwort
+2. Über das AdminPanel kannst du weitere User einladen (E-Mail-Versand erfordert konfiguriertes SES)
+
+**⚠️ Hinweis zu E-Mails (SES):**
+- Die Lambda-Funktion `createParticipants` versucht, E-Mails über SES zu versenden
+- **SES Sandbox-Modus:** In diesem Modus können nur verifizierte E-Mail-Adressen E-Mails senden/empfangen
+- **SES-Absender konfigurieren:** Setze `ses_source_email` in `terraform.tfvars` auf eine verifizierte E-Mail-Adresse
+- **SES in Terraform:** IAM-Berechtigungen sind bereits konfiguriert. Die E-Mail-Adresse/Domain muss **manuell in AWS SES Console verifiziert werden** (siehe unten)
+
+**Optionen für den Absender:**
+
+1. **E-Mail-Adresse verifizieren (für Entwicklung/Test):**
+   - AWS Console → SES → Verified identities → Create identity → Email address
+   - E-Mail-Adresse eingeben und Verifizierungs-E-Mail bestätigen
+   - Setze in `terraform.tfvars`: `ses_source_email = "deine-email@example.com"`
+   - **Beispiel:** `ses_source_email = "yogaswap@example.com"`
+   - **Wichtig:** Nach Änderung von `ses_source_email` muss die Lambda neu deployed werden:
+     ```bash
+     cd projects/yogaswap
+     tofu apply
+     ```
+     Dies aktualisiert die Environment Variable `SES_SOURCE_EMAIL` in der `create-participants` Lambda-Funktion.
+   - **Hinweis:** Die IAM-Berechtigungen sind bereits in Terraform konfiguriert, nur die Verifizierung muss manuell erfolgen
+
+2. **Domain verifizieren (empfohlen für Produktion):**
+   - AWS Console → SES → Verified identities → Create identity → Domain
+   - Domain eingeben (z.B. `yogaswap.de`)
+   - DNS-Einträge in deinem Domain-Provider hinzufügen (SES zeigt dir die Werte)
+   - **Optional:** Nutze `projects/yogaswap/ses.tf` mit `aws_ses_domain_identity` für Terraform-Management
+   - Dann kannst du alle E-Mails von dieser Domain senden (z.B. `yogaswap@yogaswap.de`, `support@yogaswap.de`)
+   - **Vorteil:** Alle E-Mails von der Domain möglich, keine einzelne Adress-Verifizierung nötig
+
+3. **Sandbox verlassen (für Produktion):**
+   - AWS Console → SES → Request production access
+   - Ermöglicht höhere Limits und keine Empfänger-Verifizierung
+
+**Wichtig - Lambda nach SES-Konfiguration neu deployen:**
+- Nach Änderung von `ses_source_email` in `terraform.tfvars` muss die Lambda-Funktion neu deployed werden:
+  ```bash
+  cd projects/yogaswap
+  tofu apply
+  ```
+- Dies aktualisiert die Environment Variable `SES_SOURCE_EMAIL` in der `create-participants` Lambda-Funktion
+- **Ohne `tofu apply` wird die neue E-Mail-Adresse nicht verwendet!**
+
+**Problem: Lambda verwendet immer noch alte E-Mail-Adresse (z.B. `yogaswap@example.com`)**
+
+Falls die Lambda immer noch die alte E-Mail-Adresse verwendet, obwohl du `ses_source_email` in `terraform.tfvars` gesetzt hast:
+
+1. **Ist `ses_source_email` in `terraform.tfvars` korrekt gesetzt?**
+   ```bash
+   cd projects/yogaswap
+   cat terraform.tfvars | grep ses_source_email
+   ```
+   Sollte deine verifizierte E-Mail-Adresse zeigen (nicht `yogaswap@example.com`).
+
+2. **Wird die Variable von Terraform erkannt?**
+   ```bash
+   cd projects/yogaswap
+   tofu plan | grep -i ses_source_email
+   ```
+   Sollte eine Änderung anzeigen, falls die Variable geändert wurde.
+
+3. **Lambda Environment Variable in AWS überprüfen:**
+   ```bash
+   cd projects/yogaswap
+   PROJECT_NAME=$(grep "^project" terraform.tfvars | cut -d'"' -f2)
+   aws lambda get-function-configuration \
+     --function-name "${PROJECT_NAME}-create-participants" \
+     --query 'Environment.Variables.SES_SOURCE_EMAIL' \
+     --output text
+   ```
+   Dies zeigt die tatsächlich gesetzte Environment Variable in AWS.
+
+4. **Environment Variable in Lambda-Logs prüfen:**
+   Die Lambda loggt jetzt automatisch alle Environment Variables. Nach dem Neu-Deployment:
+   - Erstelle einen neuen User über das AdminPanel
+   - Gehe zu AWS Console → CloudWatch → Log Groups
+   - Suche nach `/aws/lambda/${PROJECT_NAME}-create-participants`
+   - In den neuesten Logs findest du:
+     ```
+     Environment Variables: { SES_SOURCE_EMAIL: "...", ... }
+     📧 Verwende SES Source Email: "..."
+     ```
+   Oder via AWS CLI:
+   ```bash
+   PROJECT_NAME=$(grep "^project" terraform.tfvars | cut -d'"' -f2)
+   aws logs tail "/aws/lambda/${PROJECT_NAME}-create-participants" --follow --format short | grep -E "Environment Variables|SES Source Email"
+   ```
+
+5. **Falls die Variable nicht aktualisiert wurde:**
+
+   **Problem:** Terraform erkennt die Änderung nicht, weil der State noch den alten Wert hat oder die `source_code_hash` Änderung noch nicht greift.
+   
+   **Lösung 1: Lambda explizit ersetzen (empfohlen, wenn `tofu plan` keine Änderung zeigt):**
+   ```bash
+   cd projects/yogaswap
+   tofu apply -replace="aws_lambda_function.lambda[\"create_participants\"]"
+   ```
+   Das zwingt Terraform, die Lambda neu zu deployen und die Environment Variables zu aktualisieren.
+   
+   **Wichtig:** Wenn `tofu plan` keine Änderung für die Lambda zeigt (wie in deinem Fall), dann muss die Lambda explizit ersetzt werden!
+   
+   **Lösung 2: Lambda-Code leicht ändern (um source_code_hash zu ändern):**
+   ```bash
+   cd backend
+   npm run build-lambdas
+   npm run zip
+   cd ../projects/yogaswap
+   tofu apply
+   ```
+   
+   **Lösung 3: State refreshen und prüfen:**
+   ```bash
+   cd projects/yogaswap
+   tofu refresh
+   tofu plan
+   ```
+   Prüfe, ob `tofu plan` jetzt eine Änderung anzeigt. Falls ja, führe `tofu apply` aus.
+
+**Bis die E-Mail-Adresse verifiziert und deployed ist:**
+- Wenn die E-Mail nicht versendet werden kann, zeigt das AdminPanel das temporäre Passwort an
+- Du kannst es dann persönlich übermitteln
+
+---
+
+### 🔧 Passwort für existierenden Admin-User permanent setzen
+
+**Falls dein Admin-User bereits erstellt wurde und das Passwort als temporär gesetzt ist:**
+
+Du kannst das Passwort für einen existierenden User permanent setzen (damit keine Passwortänderung beim ersten Login erforderlich ist):
+
+**Mit AWS CLI:**
+```bash
+# User Pool ID abrufen
+cd projects/yogaswap
+USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
+
+# Passwort permanent setzen
+aws cognito-idp admin-set-user-password \
+  --user-pool-id $USER_POOL_ID \
+  --username admin \
+  --password "MeinPasswort123!" \
+  --permanent
+```
+
+**Ersetze:**
+- `admin` → Dein Nickname/Username
+- `MeinPasswort123!` → Dein gewünschtes Passwort
+
+**Nach diesem Befehl:** Du kannst dich direkt mit dem Passwort einloggen, ohne es ändern zu müssen!
+
+**Alternative: Invite-Seite verwenden**
+Falls du das temporäre Passwort kennst, kannst du auch die `/invite` Seite verwenden:
+1. Öffne: `https://deine-cloudfront-url/invite?nickname=admin&email=admin@example.com`
+2. Gib das temporäre Passwort ein
+3. Setze ein neues Passwort
+
+**Tipp:** Beim nächsten Mal gib beim Erstellen des Admin-Users immer ein Passwort an, damit es automatisch permanent gesetzt wird.

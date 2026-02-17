@@ -1,10 +1,10 @@
 import { useCallback, useEffect} from "react";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
-import { Swap, CourseDateOverride, Course } from "@shared/types";
+import { Swap, CourseDateOverride, Course, User } from "shared/types";
 import { createSwap, deleteSwap, getSwaps, getSwapsByStatus, processPromotions, updateSwap } from "../api/swaps";
 import { createOverride, getOverrides, updateOverride } from "../api/overrides";
-import { User } from "src/types";
+
 
 export function useCourseSwaps(
   courses: Course[],

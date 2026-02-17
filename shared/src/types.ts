@@ -26,3 +26,18 @@ export type Course = {
   participants: string[]; // Nicknames
   dates: string[]; // Liste der Termine
 };
+
+// Union-Typ für Benutzerrollen
+export type UserRole = 'admin' | 'instructor' | 'participant' | 'trial';
+
+// Schnittstelle für Benutzer
+export interface User {
+  // Eindeutiger Benutzername, dient als Primärschlüssel in DynamoDB und Cognito
+  nickname: string;
+  // E-Mail für Benachrichtigungen, kann sich bei mehreren Benutzern wiederholen
+  email: string;
+  // Benutzerrolle: admin (voller Zugriff), instructor (Kursverwaltung), participant (Standard), trial (Schnupperteilnehmer)
+  role: UserRole;
+  // Benutzerspezifische Einstellungen, z. B. Benachrichtigungspräferenzen, flexibel für zukünftige Erweiterungen
+  //settings?: Record<string, unknown>;
+}

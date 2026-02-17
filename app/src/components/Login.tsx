@@ -1,26 +1,33 @@
+// app/src/components/Login.tsx
+import { User } from "shared/types";
+import { loadCurrentUser } from "shared/lib/storage";
 import { useState } from "react";
-import { users } from "../data/users";
-import { saveCurrentUser } from "../lib/storage";
-import type { User } from "../types";
-//import "./Login.css"; // optional, falls du eigenes login-css möchtest
+import { useCognitoAuth } from "../auth/useCognitoAuth";
 
 type Props = {
   onLogin: (user: User) => void;
 };
 
 export default function Login({ onLogin }: Props) {
-  const [email, setEmail] = useState("luna@example.com");
-  const [password, setPassword] = useState("1234");
-  const [error, setError] = useState<string | null>(null);
+  const [username, setUsername] = useState("admin");  // Checkmark Spitzname!
+  const [password, setPassword] = useState("Hallo123!");
+  const { login, isLoading, error } = useCognitoAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  console.log('Login component rendered');
+  console.log('Using auth: useCognitoAuth');
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) {
-      saveCurrentUser(user);
-      onLogin(user);
-    } else {
-      setError("Invalid email or password");
+    console.log('Login button clicked!');  // Checkmark DEBUG!
+    console.log('Credentials:', { username, password });
+
+    const success = await login({ username, password }); 
+    console.log('Login success?', success);
+
+    if (success) {
+      const user = loadCurrentUser();
+      console.log('User loaded:', user);
+      onLogin(user!);
     }
   };
 
@@ -29,11 +36,12 @@ export default function Login({ onLogin }: Props) {
       <h1>YogaSwap Login</h1>
       <form onSubmit={handleSubmit} className="todo-form">
         <input
-          type="email"
-          placeholder="email"
-          value={email}
+          type="text"
+          placeholder="Spitzname"
+          value={username}
           autoComplete="username"
-          onChange={e => setEmail(e.target.value)}
+          onChange={e => setUsername(e.target.value)}
+          disabled={isLoading}
         />
         <input
           type="password"
@@ -41,14 +49,17 @@ export default function Login({ onLogin }: Props) {
           value={password}
           autoComplete="current-password"
           onChange={e => setPassword(e.target.value)}
+          disabled={isLoading}
         />
-        <button type="submit">Login</button>
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? "Lädt..." : "Login"}
+        </button>
       </form>
 
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
       <p style={{ fontSize: 12, opacity: 0.8 }}>
-        Demo-Zugang: z. B. <code>luna@example.com</code> / <code>1234</code>
+        Demo: <code>admin</code> / <code>Hallo123!</code>
       </p>
     </div>
   );

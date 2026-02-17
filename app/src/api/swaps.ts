@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { CourseDateOverride, Swap } from '@shared/types';
+import { CourseDateOverride, Swap } from 'shared/types';
 
 export async function getSwaps(user: string, fromDate?: string, fromCourseId?: number, toDate?: string, toCourseId?: number, status?: string): Promise<Swap[]> {
   try {
@@ -78,16 +78,6 @@ export async function getSwapsByStatus(status: string): Promise<Swap[]> {
     return [];
   }
 }
-
-// Verarbeitet die Wartelisten für alle Kurse
-// export async function processPromotions(): Promise<void> {
-//   try {
-//     await axios.post('/process-promotions', {});
-//   } catch (error) {
-//     console.error('Failed to process promotions:', error);
-//     throw error;
-//   }
-// }
 
 export async function processPromotions(): Promise<{
   message: string;

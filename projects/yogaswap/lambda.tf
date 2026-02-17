@@ -38,6 +38,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Resource = each.value.s3_resources
       }] : [],
       # CloudWatch Logs-Berechtigungen
+      # Action = ["logs:*"], ???
       [{
         Effect = "Allow",
         Action = [
@@ -46,7 +47,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "logs:PutLogEvents"
         ],
         Resource = "*"
-      }]
+      }],
+      try(each.value.additional_policies, [])
     )
   })
 }
@@ -59,10 +61,23 @@ resource "aws_lambda_function" "lambda" {
   runtime           = "nodejs18.x"
   role              = aws_iam_role.lambda_role[each.key].arn
   filename          = "${path.module}/../../backend/zips/${each.value.file_name}"
-  source_code_hash  = filebase64sha256("${path.module}/../../backend/zips/${each.value.file_name}")
+  # Kombiniere Source Code Hash mit Environment Variables Hash, damit Lambda bei Environment-Änderungen neu deployed wird
+  source_code_hash  = sha256(join(",", [
+    filebase64sha256("${path.module}/../../backend/zips/${each.value.file_name}"),
+    jsonencode(merge(
+      each.value.tables,
+      try(each.value.environment, {})
+    ))
+  ]))
 
-  environment {
-    variables = each.value.tables
+  dynamic "environment" {
+    for_each = length(merge(each.value.tables, try(each.value.environment, {}))) > 0 ? [1] : []
+    content {
+      variables = merge(
+        each.value.tables,
+        try(each.value.environment, {})
+      )
+    }
   }
 }
 

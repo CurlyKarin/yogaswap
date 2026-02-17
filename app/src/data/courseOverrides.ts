@@ -1,4 +1,4 @@
-import type { CourseDateOverride } from "@shared/types";
+import type { CourseDateOverride } from "shared/types";
 
 export const courseDateOverrides: CourseDateOverride[] = [
   {

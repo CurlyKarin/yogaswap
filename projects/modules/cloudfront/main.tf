@@ -105,6 +105,22 @@ resource "aws_cloudfront_distribution" "spa" {
     compress = true
   }
 
+  ordered_cache_behavior {
+    path_pattern     = "/participants"
+    target_origin_id = "api-gateway-backend"
+    allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods   = ["GET", "HEAD"]
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = true
+      cookies { 
+        forward = "none" 
+      }
+      headers      = ["Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"]
+    }
+  }
+
   default_cache_behavior {
     allowed_methods  = ["GET", "HEAD"]
     cached_methods   = ["GET", "HEAD"]
@@ -113,11 +129,12 @@ resource "aws_cloudfront_distribution" "spa" {
     viewer_protocol_policy = "redirect-to-https"
 
     forwarded_values {
-      query_string = false
+      query_string = true
       cookies {
         forward = "none"
       }
     }
+
     min_ttl     = 0
     default_ttl = 0
     max_ttl     = 0
@@ -127,12 +144,14 @@ resource "aws_cloudfront_distribution" "spa" {
     error_code         = 403
     response_code      = 200
     response_page_path = "/index.html"
+    error_caching_min_ttl = 0
   }
 
   custom_error_response {
     error_code         = 404
     response_code      = 200
     response_page_path = "/index.html"
+    error_caching_min_ttl = 0
   }
 
   viewer_certificate {

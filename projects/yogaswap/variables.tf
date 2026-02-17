@@ -11,6 +11,12 @@ variable "region" {
   default = "eu-central-1" 
 }
 
+variable "ses_source_email" {
+  description = "E-Mail-Adresse für SES-Absender (muss in AWS SES verifiziert sein)"
+  type        = string
+  default     = "yogaswap@example.com"
+}
+
 variable "lambdas" {
   description = "Map von Lambda-Funktionen und deren Eigenschaften"
   type = map(object({

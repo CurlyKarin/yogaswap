@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { CourseDateOverride } from '@yogaswap/shared';
+import { CourseDateOverride } from 'shared/types';
 
 export async function getOverrides(sinceDate?: string): Promise<CourseDateOverride[]> {
   try {

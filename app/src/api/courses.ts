@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Course } from '@yogaswap/shared';
+import { Course } from 'shared/types';
 
 export async function getCourses(): Promise<Course[]> {
   try {

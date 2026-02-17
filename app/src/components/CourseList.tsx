@@ -1,8 +1,7 @@
-import type { User } from "../types";
 import CourseCard from "./CourseCard";
 import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState } from "react";
-import { Course, CourseDateOverride, Swap} from "@shared/types";
+import { Course, CourseDateOverride, Swap, User} from "shared/types";
 import { getSwaps } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
 import { getCourseDates } from "../lib/dates";

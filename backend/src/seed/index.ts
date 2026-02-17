@@ -344,7 +344,7 @@ async function seedOverrides(tableName: string, items: any[]) {
       console.error("   Siehe auch: projects/yogaswap/DEPLOYMENT_STEPS.md");
       console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     } else {
-      console.error("❌ Seeding failed:", err);
+    console.error("❌ Seeding failed:", err);
     }
     process.exit(1);
   }

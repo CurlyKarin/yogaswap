@@ -306,18 +306,21 @@ tofu apply -target=module.swaps_table -target=module.course_overrides_table -tar
 
 **Hinweis:** Das S3-Bucket wird ohne die CloudFront-Policy erstellt. Die Policy wird in Schritt 3 hinzugefügt, wenn CloudFront erstellt wird.
 
-### Schritt 11.2: Lambda-Funktionen und API Gateway erstellen
+### Schritt 11.2: Cognito, Lambda-Funktionen und API Gateway erstellen
 
-Jetzt erstellen wir die Lambda-Funktionen und das API Gateway:
+Jetzt erstellen wir Cognito (wird von Lambda-Funktionen benötigt), die Lambda-Funktionen und das API Gateway:
 
 ```bash
-tofu apply -target=aws_lambda_function.lambda -target=module.yogaswap_api
+tofu apply -target=aws_cognito_user_pool.yogaswap -target=aws_cognito_user_pool_client.yogaswap_app -target=aws_cognito_user_group.admin -target=aws_cognito_user_group.instructor -target=aws_cognito_user_group.participant -target=aws_lambda_function.lambda -target=aws_iam_role.lambda_role -target=aws_iam_role_policy.lambda_policy -target=module.yogaswap_api
 ```
 
 **Was passiert:**
-- Erstellt alle Lambda-Funktionen (11 Stück)
+- Erstellt Cognito User Pool (für Authentifizierung)
+- Erstellt Cognito App Client
+- Erstellt Cognito User Groups (admin, instructor, participant)
+- Erstellt alle Lambda-Funktionen (12 Stück, inkl. create-participants)
 - Erstellt API Gateway mit allen Routen
-- Verknüpft Lambdas mit DynamoDB-Tabellen
+- Verknüpft Lambdas mit DynamoDB-Tabellen und Cognito
 - Dauer: ~3-5 Minuten
 
 **Bestätigung:** Tippe `yes` wenn gefragt wird.
@@ -417,6 +420,150 @@ npm run seed
 
 ---
 
+## 👤 Schritt 14: Cognito User Groups prüfen und ggf. erstellen
+
+**⚠️ Wichtig:** Die User Groups sollten automatisch in Schritt 11.2 erstellt worden sein. Falls sie fehlen (z.B. bei älteren Deployments), musst du sie jetzt erstellen.
+
+**1. User Pool ID abrufen:**
+```bash
+cd projects/yogaswap
+USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
+echo "User Pool ID: $USER_POOL_ID"
+```
+
+**2. User Groups erstellen (falls noch nicht vorhanden):**
+```bash
+cd ../../backend
+node scripts/createGroups.js $USER_POOL_ID
+```
+
+Das Script ist idempotent - es erstellt nur fehlende Groups und ignoriert bereits existierende. Du solltest sehen:
+```
+✅ Group 'admin' created
+✅ Group 'instructor' created
+✅ Group 'participant' created
+✅ All groups processed
+```
+
+Falls alle Groups bereits existieren:
+```
+ℹ️ Group 'admin' already exists
+ℹ️ Group 'instructor' already exists
+ℹ️ Group 'participant' already exists
+✅ All groups processed
+```
+
+---
+
+## 👤 Schritt 15: Ersten Admin-User erstellen
+
+**⚠️ Wichtig:** Nach dem Deployment musst du den ersten Admin-User manuell erstellen, bevor du dich anmelden kannst.
+
+**1. User Pool ID abrufen (falls noch nicht gemacht):**
+```bash
+cd projects/yogaswap
+USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
+```
+
+**2. Admin-User erstellen:**
+```bash
+cd ../../backend
+node scripts/createAdminUser.js $USER_POOL_ID admin@example.com admin MeinPasswort123!
+```
+
+**Ersetze:**
+- `admin@example.com` → Deine E-Mail-Adresse (kann mehrfach verwendet werden)
+- `admin` → Dein gewünschter Nickname (**muss eindeutig sein** - wird als Username verwendet)
+- `MeinPasswort123!` → Dein gewünschtes Passwort
+
+**⚠️ Wichtig:** 
+- Der **Nickname** muss eindeutig sein (wird als Username in Cognito verwendet)
+- Die **E-Mail** kann mehrfach verwendet werden (z.B. mehrere User mit gleicher E-Mail)
+- Beim Login wird der **Nickname** verwendet, nicht die E-Mail
+
+**3. Login testen:**
+1. Öffne die CloudFront-URL im Browser (aus `tofu output cloudfront_domain`)
+2. Logge dich mit dem Nickname und Passwort ein
+3. Du solltest als Admin eingeloggt sein
+
+**Nach dem Login:**
+- Über das AdminPanel kannst du weitere User einladen
+- Die Einladungs-E-Mails werden über SES versendet (siehe Hinweis unten)
+
+---
+
+## 📧 Schritt 16: SES E-Mail-Adresse konfigurieren (optional, aber empfohlen)
+
+**Damit Einladungs-E-Mails versendet werden können, musst du eine E-Mail-Adresse in AWS SES verifizieren.**
+
+**1. E-Mail-Adresse in AWS SES verifizieren:**
+1. Gehe zu AWS Console → SES → Verified identities
+2. Klicke auf "Create identity" → "Email address"
+3. Gib deine E-Mail-Adresse ein (z.B. `yogaswap@example.com`)
+4. Bestätige die Verifizierungs-E-Mail, die an diese Adresse gesendet wird
+
+**2. E-Mail-Adresse in `terraform.tfvars` setzen:**
+```bash
+cd projects/yogaswap
+# Öffne terraform.tfvars und setze:
+# ses_source_email = "deine-verifizierte-email@example.com"
+```
+
+**3. Lambda neu deployen (wichtig!):**
+Nach Änderung von `ses_source_email` muss die Lambda-Funktion neu deployed werden, damit die Environment Variable aktualisiert wird:
+
+```bash
+cd projects/yogaswap
+tofu apply
+```
+
+**Das ist wichtig!** Ohne `tofu apply` wird die neue E-Mail-Adresse nicht in der Lambda verwendet.
+
+**Nach dem Deployment:**
+- Einladungs-E-Mails können nun versendet werden
+- Falls die E-Mail nicht versendet werden kann, zeigt das AdminPanel das temporäre Passwort an
+
+**Hinweise:**
+- In AWS SES Sandbox-Modus können E-Mails nur an verifizierte E-Mail-Adressen gesendet werden
+- Für Produktion: Verlasse den Sandbox-Modus oder verifiziere deine Domain in SES
+- Siehe auch `README.md` für weitere Optionen (Domain-Verifizierung, etc.)
+
+---
+
+## 🔧 Problem: Passwort muss beim ersten Login geändert werden
+
+**Falls dein Admin-User bereits erstellt wurde und das Passwort als temporär gesetzt ist:**
+
+Du kannst das Passwort für einen existierenden User permanent setzen (damit keine Passwortänderung erforderlich ist):
+
+**Mit AWS CLI:**
+```bash
+# User Pool ID abrufen
+cd projects/yogaswap
+USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
+
+# Passwort permanent setzen (ersetzt das temporäre Passwort)
+aws cognito-idp admin-set-user-password \
+  --user-pool-id $USER_POOL_ID \
+  --username admin \
+  --password "MeinPasswort123!" \
+  --permanent
+```
+
+**Ersetze:**
+- `admin` → Dein Nickname/Username
+- `MeinPasswort123!` → Dein gewünschtes Passwort
+
+**Nach diesem Befehl:** Du kannst dich direkt mit dem Passwort einloggen, ohne es ändern zu müssen!
+
+**Alternative: Invite-Seite verwenden**
+Falls du das temporäre Passwort kennst, kannst du auch die `/invite` Seite verwenden:
+1. Öffne: `https://deine-cloudfront-url/invite?nickname=admin&email=admin@example.com`
+2. Gib das temporäre Passwort ein
+3. Setze ein neues Passwort
+
+---
+
 ## 🔄 Alternative: Alles auf einmal mit Deployment-Script (erst nach 1. Deployment!)
 
 **⚠️ Hinweis:** Das Deployment-Script ist für **spätere Updates** gedacht. Beim ersten Mal solltest du die 3 Schritte manuell durchführen (siehe Schritt 11).
@@ -486,10 +633,15 @@ source ~/.zshrc
 - [ ] `terraform.tfvars` erstellt und konfiguriert
 - [ ] Terraform initialisiert (`tofu init`)
 - [ ] Schritt 1: DynamoDB-Tabellen und S3-Bucket erstellt
-- [ ] Schritt 2: Lambdas und API Gateway erstellt
+- [ ] Schritt 2: Cognito, Lambdas und API Gateway erstellt
 - [ ] Schritt 3: CloudFront und S3-Bucket-Policy erstellt
 - [ ] URLs abgerufen (`tofu output`)
-- [ ] (Optional) Seed-Daten geladen (`PROJECT_NAME="..." npm run seed`)
+- [ ] Cognito-Environment-Variablen für lokale Entwicklung konfiguriert (`.env.local`)
+- [ ] Cognito User Groups geprüft/erstellt (`node scripts/createGroups.js ...`)
+- [ ] Ersten Admin-User erstellt (`node scripts/createAdminUser.js ...`)
+- [ ] (Optional) Seed-Daten geladen (`npm run seed`)
+- [ ] (Optional) SES E-Mail-Adresse verifiziert und in `terraform.tfvars` gesetzt
+- [ ] (Optional) Lambda nach SES-Konfiguration neu deployed (`tofu apply`)
 
 ---
 
@@ -509,7 +661,7 @@ source ~/.zshrc
 cd projects/yogaswap
 tofu init
 tofu apply -target=module.swaps_table -target=module.course_overrides_table -target=module.courses_table -target=module.spa_site
-tofu apply -target=aws_lambda_function.lambda -target=aws_iam_role.lambda_role -target=aws_iam_role_policy.lambda_policy -target=module.yogaswap_api
+tofu apply -target=aws_cognito_user_pool.yogaswap -target=aws_cognito_user_pool_client.yogaswap_app -target=aws_cognito_user_group.admin -target=aws_cognito_user_group.instructor -target=aws_cognito_user_group.participant -target=aws_lambda_function.lambda -target=aws_iam_role.lambda_role -target=aws_iam_role_policy.lambda_policy -target=module.yogaswap_api
 tofu apply
 
 # Spätere Deployments (alles auf einmal)
