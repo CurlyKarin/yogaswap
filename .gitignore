@@ -58,6 +58,8 @@ lerna-debug.log*
 *.tfstate.backup
 .terraform/
 .terraform.lock.hcl
+tfplan
+tfplan.*
 crash.log
 crash.*.log
 override.tf
