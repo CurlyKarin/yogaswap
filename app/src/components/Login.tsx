@@ -8,9 +8,13 @@ type Props = {
   onLogin: (user: User) => void;
 };
 
+// Demo: voreingestellter Nutzer (später nur in Demo-Variante oder ganz entfernen)
+const DEMO_USERNAME = "Luna";
+const DEMO_PASSWORD = "Hallo123!";
+
 export default function Login({ onLogin }: Props) {
-  const [username, setUsername] = useState("admin");  // Checkmark Spitzname!
-  const [password, setPassword] = useState("Hallo123!");
+  const [username, setUsername] = useState(DEMO_USERNAME);
+  const [password, setPassword] = useState(DEMO_PASSWORD);
   const { login, isLoading, error } = useCognitoAuth();
 
   console.log('Login component rendered');
@@ -59,7 +63,7 @@ export default function Login({ onLogin }: Props) {
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
       <p style={{ fontSize: 12, opacity: 0.8 }}>
-        Demo: <code>admin</code> / <code>Hallo123!</code>
+        Demo: <code>{DEMO_USERNAME}</code> / <code>{DEMO_PASSWORD}</code>
       </p>
     </div>
   );
