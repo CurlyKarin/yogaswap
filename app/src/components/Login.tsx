@@ -17,20 +17,11 @@ export default function Login({ onLogin }: Props) {
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const { login, isLoading, error } = useCognitoAuth();
 
-  console.log('Login component rendered');
-  console.log('Using auth: useCognitoAuth');
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login button clicked!');  // Checkmark DEBUG!
-    console.log('Credentials:', { username, password });
-
-    const success = await login({ username, password }); 
-    console.log('Login success?', success);
-
+    const success = await login({ username, password });
     if (success) {
       const user = loadCurrentUser();
-      console.log('User loaded:', user);
       onLogin(user!);
     }
   };
@@ -49,7 +40,7 @@ export default function Login({ onLogin }: Props) {
         />
         <input
           type="password"
-          placeholder="password"
+          placeholder="Passwort"
           value={password}
           autoComplete="current-password"
           onChange={e => setPassword(e.target.value)}

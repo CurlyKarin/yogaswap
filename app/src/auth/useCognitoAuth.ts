@@ -3,9 +3,8 @@ import { signIn, signOut, fetchAuthSession } from 'aws-amplify/auth';
 import { saveCurrentUser, loadCurrentUser, clearCurrentUser } from 'shared/lib/storage';
 import { useCallback, useState } from 'react';
 import { User, UserRole } from 'shared/types';
-import { useNavigate } from 'react-router-dom';  // Checkmark IMPORT!
+import { useNavigate } from 'react-router-dom';
 
-// Checkmark Rückgabetyp definieren
 type AuthReturn = {
   user: User | null;
   isLoading: boolean;
@@ -21,23 +20,15 @@ export const useCognitoAuth = (): AuthReturn => {
   const navigate = useNavigate();
 
   const login = useCallback(async (credentials: { username: string; password: string }) => {
-    console.log('useCognitoAuth.login called!');  // Checkmark MUSS ERSCHEINEN!
     setIsLoading(true);
     setError(null);
     try {
-      console.log('Calling signIn...');
       const result = await signIn({
         username: credentials.username,
         password: credentials.password,
       });
 
-      console.log('signIn SUCCESS:', result);
-
-      // Checkmark Alle möglichen NEW_PASSWORD Fälle
-      if (
-        result.nextStep?.signInStep?.includes('NEW_PASSWORD_REQUIRED')
-      ) {
-        console.log('Redirecting to /change-password');
+      if (result.nextStep?.signInStep?.includes('NEW_PASSWORD_REQUIRED')) {
         navigate('/change-password', {
           state: { username: credentials.username },
         });
@@ -45,7 +36,6 @@ export const useCognitoAuth = (): AuthReturn => {
         return false;
       }
 
-      // Normaler Login
       const session = await fetchAuthSession();
       const payload = session.tokens?.idToken?.payload;
 
@@ -59,24 +49,18 @@ export const useCognitoAuth = (): AuthReturn => {
       setUser(user);
       return true;
     } catch (err: any) {
-      console.error('LOGIN FAILED!');
-      console.error('Error:', err);
-      console.error('Name:', err.name);
-      console.error('Message:', err.message);
-      console.error('Stack:', err.stack);
       setError(err.message || 'Login fehlgeschlagen');
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [navigate]);
 
   const logout = useCallback(async () => {
     try {
-      console.log('Global Sign Out...');
       await signOut({ global: true });
-    } catch (err: any) {
-      console.error('SignOut Error:', err);
+    } catch {
+      // User ist lokal trotzdem ausgeloggt
     }
     clearCurrentUser();
     setUser(null);
