@@ -7,6 +7,9 @@ import CourseList from "./components/CourseList";
 import AdminPanel from "./components/AdminPanel";
 import Invite from "./components/Invite";
 import ChangePassword from "./components/changePassword";
+import Impressum from "./components/Impressum";
+import Datenschutz from "./components/Datenschutz";
+import { Link } from "react-router-dom";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
 import { User, UserRole } from "shared/types";
 
@@ -109,6 +112,12 @@ function MainApp() {
       )}
 
       {currentUser?.role === "admin" && <AdminPanel />}
+
+      <footer className="app-footer">
+        <Link to="/impressum">Impressum</Link>
+        <span className="sep">·</span>
+        <Link to="/datenschutz">Datenschutz</Link>
+      </footer>
     </div>
   );
 }
@@ -130,9 +139,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/invite" element={<InviteWithRedirect />} />
-      <Route path="/change-password" element={<ChangePassword />} />  // Checkmark OBEN!
-      <Route path="/login" element={<Login onLogin={() => {}} />} />   // Checkmark Optional
-      <Route path="*" element={<MainApp />} />                        // Checkmark ZULETZT!
+      <Route path="/change-password" element={<ChangePassword />} />
+      <Route path="/login" element={<Login onLogin={() => {}} />} />
+      <Route path="/impressum" element={<div className="app-container"><Impressum /></div>} />
+      <Route path="/datenschutz" element={<div className="app-container"><Datenschutz /></div>} />
+      <Route path="*" element={<MainApp />} />
     </Routes>
   );
 }
