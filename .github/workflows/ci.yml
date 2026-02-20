@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install shared & build
+        run: |
+          cd shared && npm ci && npm run build && cd ..
+
+      - name: App – install, build, test
+        run: |
+          cd app && npm ci && npm run build && npm run test && cd ..
+
+      - name: Backend – install, build, test
+        run: |
+          cd backend && npm ci && npm run build && npm test && cd ..
