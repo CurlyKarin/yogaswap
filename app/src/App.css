@@ -173,6 +173,79 @@ button:disabled {
   margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;
 }
 
+/* Footer (Impressum / Datenschutz) */
+.app-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e8e8e8;
+  font-size: 14px;
+  color: #666;
+}
+.app-footer a {
+  color: #555;
+  text-decoration: none;
+}
+.app-footer a:hover {
+  text-decoration: underline;
+}
+.app-footer .sep {
+  margin: 0 0.5rem;
+}
+
+/* Rechtliche Seiten (Impressum, Datenschutz) */
+.legal-page {
+  text-align: left;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.legal-page h1 {
+  margin-bottom: 0.5rem;
+}
+.legal-page h2 {
+  font-size: 1rem;
+  margin: 1.25rem 0 0.5rem;
+  color: #333;
+}
+.legal-page section p {
+  margin: 0 0 0.5rem;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.legal-page section a {
+  color: #555;
+  text-decoration: underline;
+}
+.legal-page section a:hover {
+  color: #333;
+}
+.legal-back {
+  margin-bottom: 1rem;
+}
+.legal-back a {
+  color: #666;
+  text-decoration: none;
+  font-size: 14px;
+}
+.legal-back a:hover {
+  text-decoration: underline;
+}
+.legal-nav {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e8e8e8;
+  font-size: 14px;
+}
+.legal-nav a {
+  color: #555;
+  text-decoration: none;
+}
+.legal-nav a:hover {
+  text-decoration: underline;
+}
+.legal-nav .sep {
+  margin: 0 0.5rem;
+}
+
 /* Responsive */
 @media (max-width: 1023px) {
   .grid { grid-template-columns: repeat(2, 1fr); }
