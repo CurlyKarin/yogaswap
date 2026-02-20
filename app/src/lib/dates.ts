@@ -51,6 +51,7 @@ export function sameInstant(a: Date | string, b: Date | string): boolean {
 // }
 
 export function toDateKey(date: Date): string {
+  if (isNaN(date.getTime())) return ""; // ungültiges Datum → kein Crash
   return date.toISOString().slice(0, 10); // "YYYY-MM-DD"
 }
 
@@ -63,6 +64,8 @@ function collectCourseDates(
   settings: SwapSettings,
   referenceDate: Date
 ) {
+  if (isNaN(referenceDate.getTime())) return []; // ungültiges Datum → keine Termine
+
   const now = new Date();
 
   const windowStart = new Date(referenceDate);

@@ -104,14 +104,20 @@ export default function CourseList({ currentUser }: Props) {
   }, [currentUser?.nickname]);
 
   if (loading) {
-    console.log('Rendering loading state...');
     return <div>Loading...</div>;
   }
   if (error) {
-    console.log('Rendering error state:', error);
     return <div>{error}</div>;
   }
-  console.log('Rendering courses:', courses);
+
+  const coursesWithUpcoming = courses.filter((c) => getCourseDates(c).length > 0);
+  if (courses.length === 0 || coursesWithUpcoming.length === 0) {
+    return (
+      <div className="muted" style={{ textAlign: "center", padding: "2rem" }}>
+        Aktuell keine Termine zum Anzeigen. Es gibt nur vergangene Termine oder noch keine Kurse.
+      </div>
+    );
+  }
 
   return (
     <>

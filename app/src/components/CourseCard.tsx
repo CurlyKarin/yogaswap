@@ -37,9 +37,6 @@ export default function CourseCard({
   requestSwap,
   cancelSwap,
 }: Props) {
-  console.log('CourseCard swaps:', swaps); // Debugging
-  console.log('CourseCard overrides:', overrides); // Debugging
-  
   const [selectedDate, setSelectedDate] = useState<string>(
     dates[0]?.toISOString() || ""
   );
@@ -59,10 +56,11 @@ export default function CourseCard({
     [overrides, course.id, selectedDate]
   );
 
-  const participants = override ? override.participants : course.participants;
-  const swapped = override?.swapped ?? [];
+  const hasNoUpcomingDates = dates.length === 0;
+  const participants = hasNoUpcomingDates ? course.participants : (override ? override.participants : course.participants);
+  const swapped = hasNoUpcomingDates ? [] : (override?.swapped ?? []);
   const freeSpots = course.capacity - participants.length;
-  const waitlist = override?.waitlist ?? [];
+  const waitlist = hasNoUpcomingDates ? [] : (override?.waitlist ?? []);
 
   const isParticipant = participants.includes(userName);
   const originallyParticipant = course.participants.includes(userName);
@@ -132,9 +130,6 @@ export default function CourseCard({
   const pendingCount = pendingSwapsFromOrigin.length;
   const hasPendingRequestsFromOrigin = pendingCount > 0;
 
-  console.log('swapForThisTerm:', swapForThisTerm); // Debugging
-
-  // ------------------ return ------------------
   return (
     <div className="course-card">
       <div className="course-head">
@@ -155,16 +150,21 @@ export default function CourseCard({
       <div className="course-row">
         <div className="muted">Termine:</div>
         <select
-          value={selectedDate}
+          value={hasNoUpcomingDates ? "" : selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
+          disabled={hasNoUpcomingDates}
         >
-          {dates
-            .filter((d) => d >= new Date()) // nur zukünftige im Dropdown
-            .map((date, index) => (
-              <option key={index} value={date.toISOString()}>
-                {date.toLocaleDateString()}
-              </option>
-            ))}
+          {hasNoUpcomingDates ? (
+            <option value="">—</option>
+          ) : (
+            dates
+              .filter((d) => d >= new Date())
+              .map((date, index) => (
+                <option key={index} value={date.toISOString()}>
+                  {date.toLocaleDateString()}
+                </option>
+              ))
+          )}
         </select>
       </div>
 
@@ -205,7 +205,13 @@ export default function CourseCard({
         </div>
       </div>
 
-      {isParticipant || originallyParticipant ? (
+      {hasNoUpcomingDates && (
+        <div className="course-row">
+          <span className="muted small">Zur Zeit sind keine zukünftigen Termine für diesen Kurs geplant.</span>
+        </div>
+      )}
+
+      {!hasNoUpcomingDates && (isParticipant || originallyParticipant) ? (
         <div className="actions">
           {swapForThisTerm ? (
             <>
@@ -279,9 +285,9 @@ export default function CourseCard({
               )}
         </div>
 
-      ) : (
+      ) : !hasNoUpcomingDates ? (
         <>
-        {swapForWaitlist ? (
+          {swapForWaitlist ? (
             <div className="actions">
               <button
                 className="secondary danger"
@@ -290,15 +296,14 @@ export default function CourseCard({
                 Tauschanfrage abbrechen
               </button>
             </div>
-        ) : (
-          <div className="muted">Nicht in diesem Termin eingetragen</div>   
-        )
-      }
-      </>
-      )}
-      
-      {/* 🆕 Status-Text jetzt separat unter den Buttons */}
-      {allSwapsForThisTerm.length > 0 && (
+          ) : (
+            <div className="muted">Nicht in diesem Termin eingetragen</div>
+          )}
+        </>
+      ) : null}
+
+      {/* Status-Text separat unter den Buttons */}
+      {!hasNoUpcomingDates && allSwapsForThisTerm.length > 0 && (
         <div className="muted small status-text">
           {allSwapsForThisTerm.map((swap, idx) => (
             <div key={idx}>
@@ -329,8 +334,8 @@ export default function CourseCard({
           ))}
         </div>
       )}
-      {/* Swap-Modal (noch ohne Terminliste anderer Kurse; bestätigt nur den Swap-Intent) */}
-      {showSwapModal && (
+      {/* Swap-Modal */}
+      {!hasNoUpcomingDates && showSwapModal && (
         <div className="modal-backdrop">
           <div className="modal">
             <h4>
