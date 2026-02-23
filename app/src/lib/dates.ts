@@ -2,8 +2,7 @@
 import { CourseDateOverride, Course, User } from "shared/types";
 import type { SwapSettings } from "../types";
 
-export function getCourseDates(course: Course) {
-  const now = new Date();
+export function getCourseDates(course: Course, now: Date = new Date()) {
   const [hours, minutes] = course.time.split(":").map(Number);
   return course.dates
     .map((d) => {
@@ -62,11 +61,10 @@ function collectCourseDates(
   overrides: CourseDateOverride[],
   currentUser: User,
   settings: SwapSettings,
-  referenceDate: Date
+  referenceDate: Date,
+  now: Date = new Date()
 ) {
   if (isNaN(referenceDate.getTime())) return []; // ungültiges Datum → keine Termine
-
-  const now = new Date();
 
   const windowStart = new Date(referenceDate);
   windowStart.setDate(windowStart.getDate() + settings.minOffsetDays);
@@ -121,14 +119,16 @@ export function getAvailableDates(
   overrides: CourseDateOverride[],
   currentUser: User,
   settings: SwapSettings,
-  referenceDate: Date
+  referenceDate: Date,
+  now: Date = new Date()
 ) {
   return collectCourseDates(
     allCourses,
     overrides,
     currentUser,
     settings,
-    referenceDate
+    referenceDate,
+    now
   )
     .filter((x) => !x.isFull && !x.userAlreadyInThisCourse)
     .map(({ course, date, time }) => ({ course, date, time }));
@@ -140,14 +140,16 @@ export function getWaitlistDates(
   overrides: CourseDateOverride[],
   currentUser: User,
   settings: SwapSettings,
-  referenceDate: Date
+  referenceDate: Date,
+  now: Date = new Date()
 ) {
   return collectCourseDates(
     allCourses,
     overrides,
     currentUser,
     settings,
-    referenceDate
+    referenceDate,
+    now
   )
     .filter((x) => x.isFull && !x.userAlreadyInThisCourse)
     .map(({ course, date, time }) => ({ course, date, time }));
