@@ -114,9 +114,13 @@ function MainApp() {
       {currentUser?.role === "admin" && <AdminPanel />}
 
       <footer className="app-footer">
+        <span className="copyright">© {new Date().getFullYear()} Karin Schrader</span>
+        <span className="sep">·</span>
         <Link to="/impressum">Impressum</Link>
         <span className="sep">·</span>
         <Link to="/datenschutz">Datenschutz</Link>
+        <span className="sep">·</span>
+        <a href="https://github.com/curlykarin/yogaswap" target="_blank" rel="noopener noreferrer">Lizenz (MIT)</a>
       </footer>
     </div>
   );
