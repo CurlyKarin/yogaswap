@@ -84,3 +84,9 @@ backend/zips/*.zip
 
 # Frontend build outputs (already covered by build/, but more specific)
 app/build/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/

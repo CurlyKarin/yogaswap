@@ -26,6 +26,10 @@ jobs:
         run: |
           cd app && npm ci && npm run build && npm run test && cd ..
 
+      - name: App – E2E (Playwright)
+        run: |
+          cd app && npx playwright install --with-deps chromium && npm run test:e2e
+
       - name: Backend – install, build, test
         run: |
           cd backend && npm ci && npm run build && npm test && cd ..
