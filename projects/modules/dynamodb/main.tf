@@ -2,7 +2,7 @@ resource "aws_dynamodb_table" "this" {
   name         = var.name
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = var.hash_key
-  range_key      = var.range_key
+  range_key    = var.range_key
 
   dynamic "attribute" {
     for_each = var.attributes
@@ -15,10 +15,20 @@ resource "aws_dynamodb_table" "this" {
   dynamic "global_secondary_index" {
     for_each = var.global_secondary_index
     content {
-      name               = global_secondary_index.value.name
-      hash_key           = global_secondary_index.value.hash_key
-      range_key          = try(global_secondary_index.value.range_key, null)
-      projection_type    = global_secondary_index.value.projection_type
+      name            = global_secondary_index.value.name
+      projection_type = global_secondary_index.value.projection_type
+
+      key_schema {
+        attribute_name = global_secondary_index.value.hash_key
+        key_type       = "HASH"
+      }
+      dynamic "key_schema" {
+        for_each = try(global_secondary_index.value.range_key, null) != null ? [1] : []
+        content {
+          attribute_name = global_secondary_index.value.range_key
+          key_type       = "RANGE"
+        }
+      }
     }
   }
 }

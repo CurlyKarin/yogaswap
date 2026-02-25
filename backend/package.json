@@ -7,7 +7,7 @@
     "build": "tsc --build",
     "build-lambdas": "tsc --build src/lambdas/createSwap/tsconfig.json src/lambdas/deleteSwap/tsconfig.json src/lambdas/updateSwap/tsconfig.json src/lambdas/createOverride/tsconfig.json src/lambdas/updateOverride/tsconfig.json src/lambdas/deleteOverride/tsconfig.json src/lambdas/getCourses/tsconfig.json src/lambdas/getOverrides/tsconfig.json src/lambdas/getSwaps/tsconfig.json src/lambdas/getSwapsByStatus/tsconfig.json src/lambdas/createParticipants/tsconfig.json src/lambdas/processPromotions/tsconfig.json",
     "zip": "node scripts/zipLambdas.mjs",
-    "build-and-zip": "npm run build-lambdas && npm run zip-lambdas",
+    "build-and-zip": "npm run build-lambdas && npm run zip",
     "seed": "ts-node src/seed/index.ts",
     "seed:build": "npm run build && node dist/seed/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
