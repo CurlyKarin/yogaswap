@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc --build",
-    "build-lambdas": "tsc --build src/lambdas/createSwap/tsconfig.json src/lambdas/deleteSwap/tsconfig.json src/lambdas/updateSwap/tsconfig.json src/lambdas/createOverride/tsconfig.json src/lambdas/updateOverride/tsconfig.json",
+    "build-lambdas": "tsc --build src/lambdas/createSwap/tsconfig.json src/lambdas/deleteSwap/tsconfig.json src/lambdas/updateSwap/tsconfig.json src/lambdas/createOverride/tsconfig.json src/lambdas/updateOverride/tsconfig.json src/lambdas/deleteOverride/tsconfig.json src/lambdas/getCourses/tsconfig.json src/lambdas/getOverrides/tsconfig.json src/lambdas/getSwaps/tsconfig.json src/lambdas/getSwapsByStatus/tsconfig.json src/lambdas/createParticipants/tsconfig.json src/lambdas/processPromotions/tsconfig.json",
     "zip": "node scripts/zipLambdas.mjs",
     "build-and-zip": "npm run build-lambdas && npm run zip-lambdas",
     "seed": "ts-node src/seed/index.ts",
