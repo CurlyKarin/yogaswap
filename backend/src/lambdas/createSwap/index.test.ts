@@ -68,6 +68,16 @@ describe('createSwap Lambda', () => {
     );
   });
 
+  test('returns 500 if body is invalid JSON', async () => {
+    const event = { body: 'not valid json' } as any;
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(500);
+    expect(JSON.parse(result.body).error).toBe('Failed to create swap');
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
   test('returns 500 if DynamoDB fails', async () => {
     mockSend.mockRejectedValueOnce(new Error('DynamoDB error'));
 

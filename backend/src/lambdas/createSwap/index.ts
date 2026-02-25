@@ -5,9 +5,9 @@ const client = new DynamoDBClient({ region: 'eu-central-1' });
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.SWAPS_TABLE;
-  const swap = event.body ? JSON.parse(event.body) : {};
 
   try {
+    const swap = event.body ? JSON.parse(event.body) : {};
     if (!swap.user || !swap.fromCourseId || !swap.fromDate || !swap.toCourseId || !swap.toDate || !swap.status) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }

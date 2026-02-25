@@ -50,6 +50,15 @@ describe('createParticipants Lambda', () => {
       body: JSON.stringify(body),
     } as any);
 
+  test('returns 400 if request body is missing', async () => {
+    const event = { body: undefined } as any;
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toBe('Missing request body');
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+  });
+
   test('returns 400 if required fields are missing', async () => {
     const event = baseEvent({ email: 'test@example.com' }); // missing nickname and role
     const result = await handler(event);

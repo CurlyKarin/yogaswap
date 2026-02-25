@@ -122,6 +122,29 @@ describe('getOverrides Lambda', () => {
     ]);
   });
 
+  it('should return empty array when courseId is invalid (non-numeric)', async () => {
+    dynamoMock.on(ScanCommand).resolves({
+      Items: [
+        {
+          courseId: { S: '1' },
+          date: { S: '2025-10-01' },
+          participants: { L: [] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
+        },
+      ],
+    });
+
+    const event: Partial<APIGatewayProxyEvent> = {
+      queryStringParameters: { courseId: 'abc' },
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body)).toEqual([]);
+  });
+
   it('should handle DynamoDB errors', async () => {
     dynamoMock.on(ScanCommand).rejects(new Error('DynamoDB failure'));
 
