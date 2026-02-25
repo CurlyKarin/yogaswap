@@ -517,6 +517,27 @@ Das Frontend läuft dann auf `http://localhost:5173` (oder einem anderen Port).
 
 **Hinweis**: Für API-Aufrufe musst du einen Proxy konfigurieren oder die API-URL in der Vite-Konfiguration anpassen.
 
+### App-Tests (Vitest)
+
+Unit- und API-Tests im Frontend:
+
+```bash
+cd app
+npm test
+```
+
+### E2E-Tests (Playwright)
+
+End-to-End-Tests im Browser (Startseite, Impressum, ggf. erweiterbar mit Testuser-Login):
+
+```bash
+cd app
+npm run test:e2e
+```
+
+Vor dem ersten Lauf ggf. Browser installieren: `npx playwright install chromium`.  
+Details und geplante Erweiterungen: **[app/e2e/README.md](./app/e2e/README.md)**.
+
 ### Backend-Tests ausführen
 
 ```bash
