@@ -22,8 +22,11 @@ export const handler = async (event: any) => {
     BASE_URL: process.env.BASE_URL
   });  
 
+  if (event.body == null) {
+    return { statusCode: 400, body: JSON.stringify({ error: "Missing request body" }) };
+  }
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
-  const { email, nickname, role } = body;
+  const { email, nickname, role } = body ?? {};
 
   if (!email || !nickname || !role) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing required fields" }) };
