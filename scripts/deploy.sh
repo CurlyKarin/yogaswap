@@ -12,29 +12,13 @@ echo "🚀 YogaSwap Deployment Script"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Prüfen, ob ein Projektname übergeben wurde
-if [ -z "$1" ]; then
-    echo "📝 Kein Projektname angegeben."
-    echo ""
-    echo "Verwendung: $0 <projektname> [--skip-build] [--skip-plan]"
-    echo ""
-    echo "Beispiele:"
-    echo "  $0 yogaswap-backend-demo-prod"
-    echo "  $0 yogaswap-backend-demo-2025"
-    echo "  $0 yogaswap-backend-demo-karin"
-    echo ""
-    echo "Optionen:"
-    echo "  --skip-build    Überspringe Build-Schritte (nutze vorhandene Builds)"
-    echo "  --skip-plan     Überspringe 'tofu plan' (führe direkt 'tofu apply' aus)"
-    echo ""
-    exit 1
-fi
-
-PROJECT_NAME="$1"
 SKIP_BUILD=false
 SKIP_PLAN=false
+AUTO_APPROVE=false
+OVERWRITE_TFVARS=false
 
-# Optionen parsen
+# Optionen und optionalen Projektname parsen
+PROJECT_NAME_ARG=""
 for arg in "$@"; do
     case $arg in
         --skip-build)
@@ -43,8 +27,51 @@ for arg in "$@"; do
         --skip-plan)
             SKIP_PLAN=true
             ;;
+        --auto-approve)
+            AUTO_APPROVE=true
+            ;;
+        --overwrite-tfvars)
+            OVERWRITE_TFVARS=true
+            ;;
+        -*)
+            ;;
+        *)
+            [ -z "$PROJECT_NAME_ARG" ] && PROJECT_NAME_ARG="$arg"
+            ;;
     esac
 done
+
+# Projektname: aus Argument oder aus bestehender terraform.tfvars
+TFVARS_FILE="$SCRIPT_DIR/../projects/yogaswap/terraform.tfvars"
+if [ -n "$PROJECT_NAME_ARG" ]; then
+    PROJECT_NAME="$PROJECT_NAME_ARG"
+elif [ -f "$TFVARS_FILE" ]; then
+    PROJECT_NAME=$(grep "^project" "$TFVARS_FILE" 2>/dev/null | cut -d'"' -f2 || echo "")
+    if [ -z "$PROJECT_NAME" ]; then
+        echo "❌ In terraform.tfvars konnte kein 'project' gefunden werden."
+        exit 1
+    fi
+    echo "📦 Projektname aus terraform.tfvars: $PROJECT_NAME"
+else
+    echo "📝 Kein Projektname angegeben und keine terraform.tfvars vorhanden."
+    echo ""
+    echo "Verwendung: $0 [<projektname>] [Optionen]"
+    echo ""
+    echo "  Ohne Projektname wird der Wert aus projects/yogaswap/terraform.tfvars verwendet (falls vorhanden)."
+    echo ""
+    echo "Optionen:"
+    echo "  --skip-build        Überspringe Build-Schritte (nutze vorhandene Builds)"
+    echo "  --skip-plan         Überspringe 'tofu plan' (führe direkt 'tofu apply' aus)"
+    echo "  --auto-approve      Keine interaktiven Bestätigungen (Plan/Apply direkt ausführen)"
+    echo "  --overwrite-tfvars  Bestehende terraform.tfvars mit Projektname überschreiben"
+    echo ""
+    echo "Beispiele:"
+    echo "  $0                                    # Projekt aus tfvars, mit Bestätigungen"
+    echo "  $0 yogaswap-backend-demo-karin        # Neues Projekt oder tfvars anlegen"
+    echo "  $0 --auto-approve                     # Deploy ohne Rückfragen (z.B. CI)"
+    echo ""
+    exit 1
+fi
 
 echo "📦 Projektname: $PROJECT_NAME"
 echo "   Bucket-Name wird: ${PROJECT_NAME}-site"
@@ -128,27 +155,22 @@ EOF
     echo "✅ terraform.tfvars erstellt mit Projektname: $PROJECT_NAME"
     echo ""
 else
-    # Prüfen, ob der Projektname bereits gesetzt ist
     CURRENT_PROJECT=$(grep "^project" terraform.tfvars 2>/dev/null | cut -d'"' -f2 || echo "")
     if [ -n "$CURRENT_PROJECT" ] && [ "$CURRENT_PROJECT" != "$PROJECT_NAME" ]; then
-        echo "⚠️  terraform.tfvars existiert bereits mit anderem Projektnamen: $CURRENT_PROJECT"
-        read -p "   Überschreiben? (j/n): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[JjYy]$ ]]; then
-            # Aktualisiere nur die project-Zeile
+        if [ "$OVERWRITE_TFVARS" = true ]; then
             if [[ "$OSTYPE" == "darwin"* ]]; then
-                # macOS
                 sed -i '' "s/^project = .*/project = \"$PROJECT_NAME\"/" terraform.tfvars
             else
-                # Linux
                 sed -i "s/^project = .*/project = \"$PROJECT_NAME\"/" terraform.tfvars
             fi
-            echo "✅ terraform.tfvars aktualisiert"
+            echo "✅ terraform.tfvars mit Projektname $PROJECT_NAME aktualisiert (--overwrite-tfvars)"
         else
-            echo "ℹ️  Verwende vorhandenen Projektnamen: $CURRENT_PROJECT"
+            echo "ℹ️  terraform.tfvars existiert mit Projektnamen: $CURRENT_PROJECT"
+            echo "   Deployment verwendet diesen Namen. Zum Überschreiben: --overwrite-tfvars"
+            PROJECT_NAME="$CURRENT_PROJECT"
         fi
     else
-        echo "✅ terraform.tfvars gefunden"
+        echo "✅ terraform.tfvars gefunden (project = $PROJECT_NAME)"
     fi
     echo ""
 fi
@@ -165,12 +187,13 @@ if [ "$SKIP_PLAN" = false ]; then
     echo "📋 Erstelle Deployment-Plan..."
     $TERRAFORM_CMD plan
     echo ""
-    
-    read -p "✅ Plan erstellt. Deployment ausführen? (j/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[JjYy]$ ]]; then
-        echo "❌ Deployment abgebrochen"
-        exit 0
+    if [ "$AUTO_APPROVE" = false ]; then
+        read -p "✅ Plan erstellt. Deployment ausführen? (j/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[JjYy]$ ]]; then
+            echo "❌ Deployment abgebrochen"
+            exit 0
+        fi
     fi
 else
     echo "⏭️  Überspringe Plan (--skip-plan)"
@@ -180,7 +203,11 @@ fi
 # Apply ausführen
 echo "🚀 Starte Deployment..."
 echo ""
-$TERRAFORM_CMD apply
+if [ "$AUTO_APPROVE" = true ]; then
+    $TERRAFORM_CMD apply -auto-approve
+else
+    $TERRAFORM_CMD apply
+fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
