@@ -31,6 +31,7 @@ YogaSwap ist eine vollständige Serverless-Webanwendung bestehend aus:
 - **Backend**: AWS Lambda-Funktionen (Serverless)
 - **Infrastruktur**: DynamoDB, API Gateway, CloudFront, S3
 - **Deployment**: Terraform/OpenTofu
+- **Tests**: Vitest (App Unit/API), Playwright (App E2E), Jest (Backend Lambda)
 
 ---
 
@@ -538,7 +539,9 @@ npm run test:e2e
 Vor dem ersten Lauf ggf. Browser installieren: `npx playwright install chromium`.  
 Details und geplante Erweiterungen: **[app/e2e/README.md](./app/e2e/README.md)**.
 
-### Backend-Tests ausführen
+### Backend-Tests (Jest)
+
+Unit-Tests für die Lambda-Handler (DynamoDB etc. gemockt):
 
 ```bash
 cd backend
