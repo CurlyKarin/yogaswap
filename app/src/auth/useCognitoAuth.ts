@@ -48,8 +48,8 @@ export const useCognitoAuth = (): AuthReturn => {
       saveCurrentUser(user);
       setUser(user);
       return true;
-    } catch (err: any) {
-      setError(err.message || 'Login fehlgeschlagen');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login fehlgeschlagen");
       return false;
     } finally {
       setIsLoading(false);
