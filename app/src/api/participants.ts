@@ -17,10 +17,14 @@ export interface InviteUserResponse {
 
 export async function inviteUser(data: InviteUserRequest): Promise<InviteUserResponse> {
   try {
-    const response = await axios.post('/participants', data);
+    const response = await axios.post<InviteUserResponse>('/participants', data);
     return response.data; // { success: true } oder { error: "Nickname already exists" }
-  } catch (error: any) {
-    console.error('Einladung fehlgeschlagen:', error.response?.data || error.message);
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error('Einladung fehlgeschlagen:', error.response?.data || error.message);
+    } else {
+      console.error('Einladung fehlgeschlagen:', error);
+    }
     return { error: "Request failed" };
   }
 }
