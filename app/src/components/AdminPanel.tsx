@@ -37,7 +37,7 @@ export default function AdminPanel() {
       } else {
         setError("Fehler beim Senden");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setError("Fehler beim Senden");
     } finally {
@@ -63,7 +63,7 @@ export default function AdminPanel() {
           onChange={(e) => setEmail(e.target.value)}
           disabled={loading}
         />
-        <select value={role} onChange={(e) => setRole(e.target.value as any)} disabled={loading}>
+        <select value={role} onChange={(e) => setRole(e.target.value as "participant" | "instructor" | "admin")} disabled={loading}>
           <option value="participant">Teilnehmer</option>
           <option value="instructor">Kursleiter</option>
           <option value="admin">Admin</option>
