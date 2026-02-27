@@ -24,7 +24,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
             console.log(`Lösche localStorage für ${storedUser.nickname}, da neuer User ${nicknameParam} Passwort setzt`);
             localStorage.removeItem('yogaswap_user');
           }
-        } catch (e) {
+        } catch {
           // Ignore parse errors
         }
       }
@@ -87,9 +87,9 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       // success
       onSuccess?.();
       navigate("/", { replace: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Invite error:", err);
-      const msg = err?.message || String(err);
+      const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("Incorrect username or password") || msg.includes("NotAuthorizedException")) {
         setError("Benutzername oder temporäres Passwort ist falsch. Bitte Admin um neue Einladung.");
       } else if (msg.includes("UserNotFoundException")) {
