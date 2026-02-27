@@ -1,4 +1,4 @@
-import { useCallback, useEffect} from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
 import { Swap, CourseDateOverride, Course, User } from "shared/types";
@@ -15,7 +15,7 @@ export function useCourseSwaps(
   currentUser: User,
   fetchData: () => Promise<() => void>
 ) {
-  
+  const requestSwapRef = useRef<(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => Promise<void>>(null!);
   // Filtere Overrides für aktuelle und zukünftige Termine
   // Fallback auf leeres Array, wenn overrides undefined oder kein Array ist
   const filteredOverrides = overrides;
@@ -141,7 +141,9 @@ export function useCourseSwaps(
         console.error('Error in onToggleAbsence:', err);
       }
     },
-    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData]
+    // courses, currentUser.nickname kept so callback updates when they change
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setOverrides/setSwaps stable; courses/nickname intentional
+    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps]
   );
 
   /**
@@ -186,7 +188,7 @@ export function useCourseSwaps(
 
         if (hasWaitlist) {
           // automatischer Fallback: statt direktem Eintragen -> Warteliste
-          requestSwap(fromCourse, fromDateIso, toCourseId, toDateIso, userName);
+          requestSwapRef.current(fromCourse, fromDateIso, toCourseId, toDateIso, userName);
           alert("Dieser Termin hat bereits eine Warteliste. Du wurdest in die Warteliste eingetragen.");
           return;
         }
@@ -302,7 +304,9 @@ export function useCourseSwaps(
         await fetchData();
       }
     },
-    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData]
+    // requestSwap via ref to avoid circular dependency (confirmSwap -> requestSwap)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps]
   );
 
   /**
@@ -419,7 +423,8 @@ export function useCourseSwaps(
         await fetchData();
       }
     },
-    [swaps, currentUser.nickname, fetchData]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentUser.nickname intentional for refresh
+    [swaps, currentUser.nickname, fetchData, setOverrides, setSwaps]
   );
 
   /**
@@ -524,8 +529,11 @@ export function useCourseSwaps(
         await fetchData();
       }
     },
-    [courses, swaps, currentUser.nickname, fetchData]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentUser.nickname intentional for refresh
+    [courses, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps]
   );
+
+  requestSwapRef.current = requestSwap;
 
   console.log("return useCourseSwaps");
 
