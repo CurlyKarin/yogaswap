@@ -25,7 +25,6 @@ jobs:
       - name: App – install, lint, build, test
         run: |
           cd app && npm ci && npm run lint && npm run build && npm run test && cd ..
-        continue-on-error: true  # Lint blockiert noch nicht; Fehler file-by-file beheben, dann entfernen
 
       - name: App – E2E (Playwright)
         run: |
