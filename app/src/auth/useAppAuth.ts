@@ -1,9 +1,10 @@
 // app/src/auth/useAppAuth.ts
 
-import { useCognitoAuth } from './useCognitoAuth';
-import { useAuth } from './useAuth';
-
+import { useAuth } from "./useAuth";
+import { useCognitoAuth } from "./useCognitoAuth";
 
 export const useAppAuth = () => {
-  return import.meta.env.DEV ? useAuth() : useCognitoAuth();
+  const devAuth = useAuth();
+  const cognitoAuth = useCognitoAuth();
+  return import.meta.env.DEV ? devAuth : cognitoAuth;
 };

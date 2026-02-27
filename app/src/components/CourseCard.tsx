@@ -71,7 +71,7 @@ export default function CourseCard({
       getAvailableDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
         (a, b) => a.date.getTime() - b.date.getTime()
       ),
-    [allCourses, overrides, currentUser, swapSettings, selectedDate]
+    [allCourses, overrides, currentUser, selectedDate]
   );
 
   const waitlistDates = useMemo(
@@ -79,7 +79,7 @@ export default function CourseCard({
       getWaitlistDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
         (a, b) => a.date.getTime() - b.date.getTime()
       ),
-    [allCourses, overrides, currentUser, swapSettings, selectedDate]
+    [allCourses, overrides, currentUser, selectedDate]
   );
 
   const swapForThisTerm = useMemo(

@@ -42,8 +42,8 @@ export default function ChangePassword() {
       }
 
       navigate('/');
-    } catch (err: any) {
-      setError(err.message || 'Fehler');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Fehler");
     } finally {
       setLoading(false);
     }

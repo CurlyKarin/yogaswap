@@ -1,5 +1,10 @@
-import axios from 'axios';
-import { CourseDateOverride, Swap } from 'shared/types';
+import axios from "axios";
+import { CourseDateOverride, Swap } from "shared/types";
+
+type ApiSwap = Omit<Swap, "fromCourseId" | "toCourseId"> & {
+  fromCourseId: string;
+  toCourseId: string;
+};
 
 export async function getSwaps(user: string, fromDate?: string, fromCourseId?: number, toDate?: string, toCourseId?: number, status?: string): Promise<Swap[]> {
   try {
@@ -10,18 +15,18 @@ export async function getSwaps(user: string, fromDate?: string, fromCourseId?: n
     if (toCourseId) params.toCourseId = toCourseId.toString();
     if (status) params.status = status;
 
-    console.log('getSwaps params:', params);
-    const response = await axios.get('/swaps', { params });
+    console.log("getSwaps params:", params);
+    const response = await axios.get<ApiSwap[]>("/swaps", { params });
     let data = response.data;
-    console.log('getSwaps initial response:', data);
+    console.log("getSwaps initial response:", data);
     if (data.length === 0) {
-      console.log('Retrying getSwaps...');
+      console.log("Retrying getSwaps...");
       await new Promise(resolve => setTimeout(resolve, 1000));
-      const retryResponse = await axios.get('/swaps', { params });
+      const retryResponse = await axios.get<ApiSwap[]>("/swaps", { params });
       data = retryResponse.data;
-      console.log('getSwaps retry response:', data);
+      console.log("getSwaps retry response:", data);
     }
-    return data.map((item: any) => ({
+    return data.map((item) => ({
       user: item.user,
       fromCourseId: parseInt(item.fromCourseId),
       fromDate: item.fromDate,

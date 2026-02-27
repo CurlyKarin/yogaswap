@@ -12,24 +12,13 @@ import Datenschutz from "./components/Datenschutz";
 import { Link } from "react-router-dom";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
 import { User, UserRole } from "shared/types";
-
-// Checkmark useAppAuth ZUERST definieren
-// app/src/App.tsx
-// NACH der Definition von useAppAuth
-export const useAppAuth = () => {
-  console.log("useAppAuth called, DEV:", import.meta.env.DEV);
-  return import.meta.env.DEV ? useAuth() : useCognitoAuth();
-};
-
-// Checkmark Imports NACH useAppAuth
-import { useCognitoAuth } from "./auth/useCognitoAuth";
-import { useAuth } from "./auth/useAuth";
+import { useAppAuth } from "./auth/useAppAuth";
 import { fetchAuthSession } from "aws-amplify/auth";
 
 // Checkmark Haupt-App als Komponente
 function MainApp() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const { login, logout, isLoading, error } = useAppAuth();
+  const { logout, isLoading, error } = useAppAuth();
 
   // App.tsx
   useEffect(() => {

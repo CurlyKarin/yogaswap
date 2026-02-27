@@ -21,7 +21,7 @@ export default function Datenschutz() {
       <section>
         <h2>2. Erhobene Daten und Zweck</h2>
         <p>
-          Beim Nutzen von YogaSwap werden Anmeldedaten (z. B. E-Mail, Anzeigename) und kursbezogene Daten (Terminbuchungen, Tauschanfragen) verarbeitet. Zweck ist die Bereitstellung der Kurs- und Tauschfunktion.
+          Beim Nutzen von YogaSwap werden Anmeldedaten (z. B. E-Mail, Anzeigename) und kursbezogene Daten (Terminbuchungen, Tauschanfragen) verarbeitet. Zweck ist die Bereitstellung der Kurs- und Tauschfunktion.
         </p>
       </section>
 
@@ -42,7 +42,7 @@ export default function Datenschutz() {
           erreichbar. Dabei können technisch bedingt Verbindungsdaten (IP, Zeitpunkt) an den Betreiber übermittelt werden.
         </p>
         <p>
-          Für Anmeldung und Kontenverwaltung nutzt YogaSwap den Dienst Amazon Cognito (Teil der AWS-Cloud). Dabei werden E-Mail, Anzeigename und Zugangsdaten bei AWS verarbeitet. Kurs- und Tauschdaten werden in der Datenbank DynamoDB (AWS) gespeichert. Die Speicherorte können außerhalb der EU liegen (USA u. a.); AWS bietet hierzu vertragliche Garantien (Auftragsverarbeitung).
+          Für Anmeldung und Kontenverwaltung nutzt YogaSwap den Dienst Amazon Cognito (Teil der AWS-Cloud). Dabei werden E-Mail, Anzeigename und Zugangsdaten bei AWS verarbeitet. Kurs- und Tauschdaten werden in der Datenbank DynamoDB (AWS) gespeichert. Die Speicherorte können außerhalb der EU liegen (USA u. a.); AWS bietet hierzu vertragliche Garantien (Auftragsverarbeitung).
         </p>
       </section>
 
