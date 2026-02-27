@@ -2,8 +2,8 @@ import { useCallback, useEffect} from "react";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
 import { Swap, CourseDateOverride, Course, User } from "shared/types";
-import { createSwap, deleteSwap, getSwaps, getSwapsByStatus, processPromotions, updateSwap } from "../api/swaps";
-import { createOverride, getOverrides, updateOverride } from "../api/overrides";
+import { createSwap, deleteSwap, processPromotions } from "../api/swaps";
+import { createOverride, updateOverride } from "../api/overrides";
 
 
 export function useCourseSwaps(
@@ -346,7 +346,7 @@ export function useCourseSwaps(
         // 1) Overrides zuerst bereinigen
         setOverrides((prev) => {
           return prev.map((o) => {
-            let newO = { ...o };
+            const newO = { ...o };
             const before = { ...o }; // vorheriger Zustand für Debug
 
             // Ursprungstermin
@@ -538,9 +538,4 @@ export function useCourseSwaps(
     onToggleAbsence,
   };
 
-
-}
-
-function delay(arg0: number) {
-  throw new Error("Function not implemented.");
 }
