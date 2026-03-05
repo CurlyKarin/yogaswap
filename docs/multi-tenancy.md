@@ -28,7 +28,7 @@ Ziel: **Klare Mandantentrennung**, ohne die Domänenlogik unnötig zu verkompliz
 
 - **User–Tenant-Membership**  
   - Verknüpft `User` und `Tenant` mit einer Rolle und optionalen Rechten/Scopes.  
-  - Beispiel: `UserTenantMembership { userId, tenantId, role: 'admin' | 'instructor' | 'participant' | 'trial', scopes?: ... }`.
+  - Beispiel: `UserTenantMembership { userId, tenantId, role: 'admin' | 'instructor' | 'participant', scopes?: ... }`.
 
 ---
 
@@ -77,16 +77,14 @@ Ziel: **Klare Mandantentrennung**, ohne die Domänenlogik unnötig zu verkompliz
 - Neue Struktur (konkrete Typdefinition folgt in `shared/src/types.ts`):
 
   ```ts
-  type UserTenantRole = 'admin' | 'instructor' | 'participant' | 'trial';
+  type UserTenantRole = 'admin' | 'instructor' | 'participant';
 
   interface UserTenantMembership {
     userId: string;      // Referenz auf User (z. B. nickname oder eigene userId)
     tenantId: string;
     role: UserTenantRole;
     // Optional: zusätzliche Flags, z. B. ob Instructor alle Kurse sehen darf
-    // scopes?: {
-    //   canSeeAllCourses?: boolean;
-    // };
+    // canSeeAllCourses?: boolean;
   }
   ```
 
