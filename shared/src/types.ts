@@ -36,6 +36,10 @@ export type Course = {
   dates: string[]; // Liste der Termine
   // Optional zugeordnete Kursleiter (Nicknames oder User-IDs)
   instructors?: string[];
+  // Optionaler Standort / Studio innerhalb eines Tenants
+  studioId?: string;
+  // Optionaler Raum für zeitliche/örtliche Planung
+  roomId?: string;
 };
 
 // Union-Typ für Benutzerrollen
