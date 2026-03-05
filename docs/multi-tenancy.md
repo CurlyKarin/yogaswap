@@ -135,6 +135,23 @@ Ziel: **Klare Mandantentrennung**, ohne die Domänenlogik unnötig zu verkompliz
     - Ein Instructor kann nicht zwei Kurse gleichzeitig haben (raumunabhängig).
   - Konfliktprüfung findet beim Anlegen/Ändern von Kursen/Terminen im Backend statt.
 
+**Aktueller Stand:** Studio und Raum sind derzeit nur als optionale IDs am Kurs vorgesehen (`Course.studioId`, `Course.roomId`). Eigene Tabellen/Entitäten für Room und Studio kommen später.
+
+---
+
+## Aktueller Stand der Typen (shared)
+
+Die folgenden Erweiterungen sind in `shared/src/types.ts` umgesetzt (alle neuen Felder optional, damit bestehende Daten und Deploys unverändert laufen):
+
+- **Course:** `tenantId?`, `instructors?` (Kursleiter), `studioId?`, `roomId?`
+- **CourseDateOverride:** `tenantId?`, `anonymousTrialCount?` (anonyme Schnupperplätze/Blocker ohne User)
+- **Swap:** `tenantId?`
+- **User:** `authUserId?` (Login-Verknüpfung; leer bei NoInternet-/verwalteten Teilnehmern), `managedByUserId?` (z. B. verwaltender Trainer)
+- **UserTenantMembership:** `userId`, `tenantId`, `role`, `canSeeAllCourses?`
+
+**Rollen:** Nur noch `admin` | `instructor` | `participant` (keine Rolle `trial`; Schnupper über `anonymousTrialCount`, Springer später als `participant` mit Settings).  
+**E-Mail:** Ist bewusst nicht eindeutig; mehrere User pro E-Mail sind erlaubt (Tests, verwaltete Teilnehmer).
+
 ---
 
 ## Request-Kontext & Sicherheit
