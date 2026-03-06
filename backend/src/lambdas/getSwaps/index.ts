@@ -4,7 +4,29 @@ import { Swap } from "@yogaswap/shared";
 
 const client = new DynamoDBClient({ region: "eu-central-1" });
 
+const DEFAULT_TENANT_ID = "default-tenant";
+
+type TenantContext = {
+  tenantId: string;
+  userId?: string | null;
+};
+
+function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
+  const userId =
+    event.requestContext?.authorizer?.principalId ??
+    event.queryStringParameters?.user ??
+    null;
+
+  return {
+    tenantId: DEFAULT_TENANT_ID,
+    userId: userId ?? undefined,
+  };
+}
+
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const { tenantId, userId } = getTenantContext(event);
+  console.log("getSwaps tenant context", { tenantId, userId });
+
   const user = event.queryStringParameters?.user;
   if (!user) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing user parameter' }) };

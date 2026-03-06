@@ -4,6 +4,25 @@ import { Swap, CourseDateOverride, Course } from "@yogaswap/shared";
 
 const client = new DynamoDBClient({ region: "eu-central-1" });
 
+const DEFAULT_TENANT_ID = "default-tenant";
+
+type TenantContext = {
+  tenantId: string;
+  userId?: string | null;
+};
+
+function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
+  const userId =
+    event.requestContext?.authorizer?.principalId ??
+    event.queryStringParameters?.user ??
+    null;
+
+  return {
+    tenantId: DEFAULT_TENANT_ID,
+    userId: userId ?? undefined,
+  };
+}
+
 // Hardcodierter Zeitpuffer (in Minuten) vor Kursbeginn für Nachrücken
 const PROMOTION_TIME_BUFFER_MINUTES = 30;
 
@@ -112,6 +131,9 @@ async function createOverrideHelper(override: CourseDateOverride): Promise<void>
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
+    const { tenantId, userId } = getTenantContext(event);
+    console.log("processPromotions tenant context", { tenantId, userId });
+
     let body;
     if (!event.body) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing request body' }) };
