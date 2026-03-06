@@ -1,10 +1,32 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
 
+const DEFAULT_TENANT_ID = 'default-tenant';
+
+type TenantContext = {
+  tenantId: string;
+  userId?: string | null;
+};
+
+function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
+  const userId =
+    event.requestContext?.authorizer?.principalId ??
+    event.queryStringParameters?.user ??
+    null;
+
+  return {
+    tenantId: DEFAULT_TENANT_ID,
+    userId: userId ?? undefined,
+  };
+}
+
 const client = new DynamoDBClient({ region: 'eu-central-1' });
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
+    const { tenantId, userId } = getTenantContext(event);
+    console.log('getCourses tenant context', { tenantId, userId });
+
     const result = await client.send(
       new ScanCommand({
         TableName: process.env.COURSES_TABLE,
