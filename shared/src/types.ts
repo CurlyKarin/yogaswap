@@ -1,3 +1,11 @@
+/** Standard-Tenant-ID bis Multi-Tenancy vollständig aktiv ist */
+export const DEFAULT_TENANT_ID = "default-tenant";
+
+export type TenantContext = {
+  tenantId: string;
+  userId?: string | null;
+};
+
 export type CourseDateOverride = {
   // Zugehöriger Tenant (wird bei Multi-Tenancy Pflicht, aktuell optional für Migration)
   tenantId?: string;
