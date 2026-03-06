@@ -1,13 +1,12 @@
-import { ScanCommand } from "@aws-sdk/client-dynamodb";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { handler } from "./index";
 
-// DynamoDB Mock Setup
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
-    ScanCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -62,9 +61,11 @@ describe("getCourses Lambda", () => {
       },
     ]);
 
-    expect(ScanCommand).toHaveBeenCalledWith(
+    expect(QueryCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: "test-courses",
+        KeyConditionExpression: "tenantId = :tid",
+        ExpressionAttributeValues: { ":tid": { S: "default-tenant" } },
         ConsistentRead: true,
       })
     );

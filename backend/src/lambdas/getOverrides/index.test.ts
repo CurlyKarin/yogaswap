@@ -1,5 +1,5 @@
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { handler } from './index';
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 
@@ -12,7 +12,7 @@ beforeEach(() => {
 
 describe('getOverrides Lambda', () => {
   it('should return all overrides', async () => {
-    dynamoMock.on(ScanCommand).resolves({
+    dynamoMock.on(QueryCommand).resolves({
       Items: [
         {
           courseId: { S: '1' },
@@ -43,23 +43,19 @@ describe('getOverrides Lambda', () => {
     expect(dynamoMock.calls()).toHaveLength(1);
     expect(dynamoMock.call(0).args[0].input).toMatchObject({
       TableName: 'yogaswap-backend-demo-courseOverrides-table',
+      KeyConditionExpression: 'tenantId = :tid',
+      ExpressionAttributeValues: { ':tid': { S: 'default-tenant' } },
     });
   });
 
-  it('should filter by courseId', async () => {
-    dynamoMock.on(ScanCommand).resolves({
+  it('should filter by courseId (Query mit begins_with courseId_date)', async () => {
+    // Bei courseId=1 liefert die Query nur Items mit courseId_date beginning with "1_"
+    dynamoMock.on(QueryCommand).resolves({
       Items: [
         {
           courseId: { S: '1' },
           date: { S: '2025-10-01' },
           participants: { L: [{ S: 'Luna' }] },
-          swapped: { L: [] },
-          waitlist: { L: [] },
-        },
-        {
-          courseId: { S: '2' },
-          date: { S: '2025-10-02' },
-          participants: { L: [{ S: 'Kai' }] },
           swapped: { L: [] },
           waitlist: { L: [] },
         },
@@ -82,10 +78,14 @@ describe('getOverrides Lambda', () => {
         waitlist: [],
       },
     ]);
+    expect(dynamoMock.call(0).args[0].input).toMatchObject({
+      KeyConditionExpression: 'tenantId = :tid AND begins_with(courseId_date, :cid)',
+      ExpressionAttributeValues: { ':tid': { S: 'default-tenant' }, ':cid': { S: '1_' } },
+    });
   });
 
   it('should filter by sinceDate', async () => {
-    dynamoMock.on(ScanCommand).resolves({
+    dynamoMock.on(QueryCommand).resolves({
       Items: [
         {
           courseId: { S: '1' },
@@ -122,18 +122,8 @@ describe('getOverrides Lambda', () => {
     ]);
   });
 
-  it('should return empty array when courseId is invalid (non-numeric)', async () => {
-    dynamoMock.on(ScanCommand).resolves({
-      Items: [
-        {
-          courseId: { S: '1' },
-          date: { S: '2025-10-01' },
-          participants: { L: [] },
-          swapped: { L: [] },
-          waitlist: { L: [] },
-        },
-      ],
-    });
+  it('should return empty array when courseId has no overrides', async () => {
+    dynamoMock.on(QueryCommand).resolves({ Items: [] });
 
     const event: Partial<APIGatewayProxyEvent> = {
       queryStringParameters: { courseId: 'abc' },
@@ -146,7 +136,7 @@ describe('getOverrides Lambda', () => {
   });
 
   it('should handle DynamoDB errors', async () => {
-    dynamoMock.on(ScanCommand).rejects(new Error('DynamoDB failure'));
+    dynamoMock.on(QueryCommand).rejects(new Error('DynamoDB failure'));
 
     const event: Partial<APIGatewayProxyEvent> = {
       queryStringParameters: {},

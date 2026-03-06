@@ -34,9 +34,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
 
+    const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
+    const user_swapId = `${swap.user}#${swapId}`;
+    const tenantId_user = `${tenantId}#${swap.user}`;
     const dynamoItem = {
-      swapId: { S: `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}` },
+      tenantId: { S: tenantId },
+      user_swapId: { S: user_swapId },
       user: { S: swap.user },
+      swapId: { S: swapId },
       fromCourseId: { S: swap.fromCourseId.toString() },
       fromDate: { S: swap.fromDate },
       toCourseId: { S: swap.toCourseId.toString() },
@@ -44,6 +49,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       status: { S: swap.status },
       fromDate_fromCourseId_status: { S: `${swap.fromDate}_${swap.fromCourseId}_${swap.status}` },
       toDate_toCourseId_status: { S: `${swap.toDate}_${swap.toCourseId}_${swap.status}` },
+      tenantId_user: { S: tenantId_user },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));

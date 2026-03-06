@@ -130,7 +130,7 @@ locals {
       name           = "get-courses"
       file_name      = "getCourses.zip"
       table_arns     = [module.courses_table.table_arn]
-      dynamodb_actions = ["dynamodb:Scan", "dynamodb:GetItem"]
+      dynamodb_actions = ["dynamodb:Query", "dynamodb:GetItem"]
       tables = {
         "COURSES_TABLE" = module.courses_table.table_name
       }

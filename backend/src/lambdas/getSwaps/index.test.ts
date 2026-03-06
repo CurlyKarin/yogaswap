@@ -70,13 +70,9 @@ describe("getSwaps Lambda", () => {
       expect.objectContaining({
         TableName: "test-swaps",
         IndexName: "GSI_From",
-        KeyConditionExpression: "#u = :u AND begins_with(#f, :f)",
-        ExpressionAttributeNames: expect.objectContaining({
-          "#u": "user",
-          "#f": "fromDate_fromCourseId_status",
-        }),
+        KeyConditionExpression: "tenantId_user = :tu AND begins_with(fromDate_fromCourseId_status, :f)",
         ExpressionAttributeValues: expect.objectContaining({
-          ":u": { S: "Nia" },
+          ":tu": { S: "default-tenant#Nia" },
           ":f": { S: "2025-10-01_1" },
         }),
       })
@@ -97,10 +93,10 @@ describe("getSwaps Lambda", () => {
     expect(QueryCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         IndexName: "GSI_To",
-        KeyConditionExpression: "#u = :u AND begins_with(#t, :t)",
-        ExpressionAttributeNames: expect.objectContaining({
-          "#u": "user",
-          "#t": "toDate_toCourseId_status",
+        KeyConditionExpression: "tenantId_user = :tu AND begins_with(toDate_toCourseId_status, :t)",
+        ExpressionAttributeValues: expect.objectContaining({
+          ":tu": { S: "default-tenant#Nia" },
+          ":t": { S: "2025-10-05_3" },
         }),
       })
     );
@@ -117,9 +113,10 @@ describe("getSwaps Lambda", () => {
 
     expect(QueryCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        KeyConditionExpression: "#u = :u",
-        ExpressionAttributeNames: expect.objectContaining({
-          "#u": "user",
+        KeyConditionExpression: "tenantId = :tid AND begins_with(user_swapId, :uprefix)",
+        ExpressionAttributeValues: expect.objectContaining({
+          ":tid": { S: "default-tenant" },
+          ":uprefix": { S: "Nia#" },
         }),
       })
     );

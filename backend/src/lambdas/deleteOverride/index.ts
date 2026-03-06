@@ -34,12 +34,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing courseId or date' }) };
     }
 
+    const courseId_date = `${courseId}_${date}`;
     await client.send(
       new DeleteItemCommand({
         TableName: tableName,
         Key: {
-          courseId: { S: courseId },
-          date: { S: date },
+          tenantId: { S: tenantId },
+          courseId_date: { S: courseId_date },
         },
       })
     );

@@ -75,10 +75,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     updateExpression = updateExpression.slice(0, -1); // Entferne letztes Komma
 
+    const courseId_date = `${courseId}_${date}`;
     await client.send(
       new UpdateItemCommand({
         TableName: tableName,
-        Key: { courseId: { S: courseId }, date: { S: date } },
+        Key: { tenantId: { S: tenantId }, courseId_date: { S: courseId_date } },
         UpdateExpression: updateExpression,
         ExpressionAttributeNames: expressionAttributeNames,
         ExpressionAttributeValues: expressionAttributeValues,

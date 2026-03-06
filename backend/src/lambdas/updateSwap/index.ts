@@ -69,11 +69,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
   const [fromDate, fromCourseId, toDate, toCourseId] = parts;
 
+  const user_swapId = `${user}#${swapId}`;
   const command = new UpdateItemCommand({
     TableName: process.env.SWAPS_TABLE,
     Key: {
-      swapId: { S: swapId },
-      user: { S: user },
+      tenantId: { S: tenantId },
+      user_swapId: { S: user_swapId },
     },
     UpdateExpression: "SET #status = :status, fromDate_fromCourseId_status = :fromStatus, toDate_toCourseId_status = :toStatus",
     ExpressionAttributeNames: {

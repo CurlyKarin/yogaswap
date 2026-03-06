@@ -36,11 +36,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 
+  const user_swapId = `${user}#${swapId}`;
   const command = new DeleteItemCommand({
     TableName: process.env.SWAPS_TABLE,
     Key: {
-      swapId: { S: swapId },
-      user: { S: user },
+      tenantId: { S: tenantId },
+      user_swapId: { S: user_swapId },
     },
   });
 

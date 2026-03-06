@@ -1,13 +1,12 @@
-import { ScanCommand } from "@aws-sdk/client-dynamodb";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { handler } from "./index";
 
-// DynamoDB Mock Setup
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
-    ScanCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -72,12 +71,15 @@ describe("getSwapsByStatus Lambda", () => {
     expect(body[0].status).toBe("pending");
     expect(body[1].status).toBe("pending");
 
-    expect(ScanCommand).toHaveBeenCalledWith(
+    expect(QueryCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: "test-swaps",
+        KeyConditionExpression: "tenantId = :tid",
         FilterExpression: "#s = :s",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":s": { S: "pending" } },
+        ExpressionAttributeValues: expect.objectContaining({
+          ":tid": { S: "default-tenant" },
+          ":s": { S: "pending" },
+        }),
         ConsistentRead: true,
       })
     );

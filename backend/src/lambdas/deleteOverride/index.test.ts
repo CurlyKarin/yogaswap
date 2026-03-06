@@ -54,8 +54,8 @@ describe("deleteOverride Lambda", () => {
       expect.objectContaining({
         TableName: "test-overrides",
         Key: {
-          courseId: { S: "course-123" },
-          date: { S: "2025-10-01" },
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "course-123_2025-10-01" },
         },
       })
     );

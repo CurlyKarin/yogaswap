@@ -67,6 +67,8 @@ const OVERRIDES_TABLE = process.env.OVERRIDES_TABLE || `${PROJECT_NAME}-courseOv
 const COURSES_TABLE = process.env.COURSES_TABLE || `${PROJECT_NAME}-courses-table`;
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "eu-central-1";
 
+const DEFAULT_TENANT_ID = "default-tenant";
+
 const client = new DynamoDBClient({ region: AWS_REGION });
 
 // Prüfe ob eine Tabelle existiert
@@ -242,18 +244,22 @@ async function seedTable(tableName: string, items: any[]) {
 
 async function seedSwaps(tableName: string, items: any[]) {
   for (const item of items) {
+    const swapId = `${item.fromDate}_${item.fromCourseId}_${item.toDate}_${item.toCourseId}`;
+    const user_swapId = `${item.user}#${swapId}`;
+    const tenantId_user = `${DEFAULT_TENANT_ID}#${item.user}`;
     const dynamoItem: Record<string, any> = {
+      tenantId: { S: DEFAULT_TENANT_ID },
+      user_swapId: { S: user_swapId },
       user: { S: item.user },
-      swapId: { S: `${item.fromDate}_${item.fromCourseId}_${item.toDate}_${item.toCourseId}` }, // eindeutiger Range Key
+      swapId: { S: swapId },
       fromDate: { S: item.fromDate },
-      fromCourseId: { N: item.fromCourseId.toString() },
+      fromCourseId: { S: item.fromCourseId.toString() },
       toDate: { S: item.toDate },
-      toCourseId: { N: item.toCourseId.toString() },
+      toCourseId: { S: item.toCourseId.toString() },
       status: { S: item.status },
-
-      // zusammengesetzte Keys für GSIs
       fromDate_fromCourseId_status: { S: `${item.fromDate}_${item.fromCourseId}_${item.status}` },
       toDate_toCourseId_status: { S: `${item.toDate}_${item.toCourseId}_${item.status}` },
+      tenantId_user: { S: tenantId_user },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));
@@ -261,14 +267,17 @@ async function seedSwaps(tableName: string, items: any[]) {
   }
 }
 
-// Seed-Funktion für Courses-Tabelle
+// Seed-Funktion für Courses-Tabelle (tenant-scoped: tenantId + courseId)
 async function seedCourses(tableName: string, items: any[]) {
   for (const item of items) {
     if (!item.id || !item.name || !item.weekday || !item.time || !item.capacity || !item.dates) {
       console.warn(`⚠️ Skipping invalid course item:`, item);
       continue;
     }
+    const courseId = item.id.toString();
     const dynamoItem: Record<string, any> = {
+      tenantId: { S: DEFAULT_TENANT_ID },
+      courseId: { S: courseId },
       id: { N: item.id.toString() },
       name: { S: item.name },
       weekday: { S: item.weekday },
@@ -283,14 +292,17 @@ async function seedCourses(tableName: string, items: any[]) {
   }
 }
 
-// Seed-Funktion für CourseOverrides-Tabelle
+// Seed-Funktion für CourseOverrides-Tabelle (tenant-scoped: tenantId + courseId_date)
 async function seedOverrides(tableName: string, items: any[]) {
   for (const item of items) {
     if (!item.courseId || !item.date) {
       console.warn(`⚠️ Skipping invalid override item:`, item);
       continue;
     }
+    const courseId_date = `${item.courseId}_${item.date}`;
     const dynamoItem: Record<string, any> = {
+      tenantId: { S: DEFAULT_TENANT_ID },
+      courseId_date: { S: courseId_date },
       courseId: { S: item.courseId.toString() },
       date: { S: item.date },
       participants: { L: (item.participants || []).map((p: string) => ({ S: p })) },

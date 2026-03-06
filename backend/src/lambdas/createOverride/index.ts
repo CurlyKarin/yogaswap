@@ -48,7 +48,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 400, body: JSON.stringify({ error: 'Invalid waitlist array' }) };
     }
 
+    const courseId_date = `${override.courseId}_${override.date}`;
     const dynamoItem = {
+      tenantId: { S: tenantId },
+      courseId_date: { S: courseId_date },
       courseId: { S: override.courseId.toString() },
       date: { S: override.date },
       participants: { L: participants.map((p: string) => ({ S: p })) },

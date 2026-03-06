@@ -1,5 +1,5 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { DynamoDBClient, ScanCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, QueryCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { Swap, CourseDateOverride, Course } from "@yogaswap/shared";
 
 const client = new DynamoDBClient({ region: "eu-central-1" });
@@ -45,8 +45,9 @@ function isCourseInFuture(courseDate: string, courseTime: string, now: Date): bo
   }
 }
 
-// Hilfsfunktion: Override aktualisieren
+// Hilfsfunktion: Override aktualisieren (tenant-scoped)
 async function updateOverrideHelper(
+  tenantId: string,
   courseId: number,
   date: string,
   updates: {
@@ -80,11 +81,12 @@ async function updateOverrideHelper(
     return;
   }
 
+  const courseId_date = `${courseId}_${date}`;
   const command = new UpdateItemCommand({
     TableName: process.env.OVERRIDES_TABLE,
     Key: {
-      courseId: { S: courseId.toString() },
-      date: { S: date },
+      tenantId: { S: tenantId },
+      courseId_date: { S: courseId_date },
     },
     UpdateExpression: `SET ${updateExpressionParts.join(", ")}`,
     ExpressionAttributeNames: expressionAttributeNames,
@@ -106,11 +108,14 @@ async function updateOverrideHelper(
   }
 }
 
-// Hilfsfunktion: Override erstellen
-async function createOverrideHelper(override: CourseDateOverride): Promise<void> {
+// Hilfsfunktion: Override erstellen (tenant-scoped)
+async function createOverrideHelper(tenantId: string, override: CourseDateOverride): Promise<void> {
+  const courseId_date = `${override.courseId}_${override.date}`;
   const command = new PutItemCommand({
     TableName: process.env.OVERRIDES_TABLE,
     Item: {
+      tenantId: { S: tenantId },
+      courseId_date: { S: courseId_date },
       courseId: { S: override.courseId.toString() },
       date: { S: override.date },
       participants: { L: (override.participants || []).map((p) => ({ S: p })) },
@@ -151,12 +156,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       changed = false;
       iterations++;
 
-      // 1) Alle pending Swaps laden (Scan mit Filter)
-      const pendingSwapsCommand = new ScanCommand({
+      // 1) Alle pending Swaps des Tenants laden
+      const pendingSwapsCommand = new QueryCommand({
         TableName: process.env.SWAPS_TABLE,
+        KeyConditionExpression: "tenantId = :tid",
         FilterExpression: "#s = :s",
         ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":s": { S: "pending" } },
+        ExpressionAttributeValues: { ":tid": { S: tenantId }, ":s": { S: "pending" } },
         ConsistentRead: true,
       });
       const pendingSwapsData = await client.send(pendingSwapsCommand);
@@ -170,14 +176,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }));
       console.log('pendingSwaps:', pendingSwaps);
 
-      // 2) Alle Courses laden
-      const coursesCommand = new ScanCommand({
+      // 2) Alle Courses des Tenants laden
+      const coursesCommand = new QueryCommand({
         TableName: process.env.COURSES_TABLE,
+        KeyConditionExpression: "tenantId = :tid",
+        ExpressionAttributeValues: { ":tid": { S: tenantId } },
         ConsistentRead: true,
       });
       const coursesData = await client.send(coursesCommand);
       const courses: Course[] = (coursesData.Items || []).map((item) => ({
-        id: Number(item.id.N!),
+        id: Number(item.id?.N ?? item.courseId?.S ?? 0),
         name: item.name.S!,
         weekday: item.weekday.S!,
         time: item.time.S!,
@@ -187,9 +195,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }));
       console.log('courses:', courses);
 
-      // 3) Alle Overrides laden
-      const overridesCommand = new ScanCommand({
+      // 3) Alle Overrides des Tenants laden
+      const overridesCommand = new QueryCommand({
         TableName: process.env.OVERRIDES_TABLE,
+        KeyConditionExpression: "tenantId = :tid",
+        ExpressionAttributeValues: { ":tid": { S: tenantId } },
         ConsistentRead: true,
       });
       const overridesData = await client.send(overridesCommand);
@@ -241,11 +251,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
         // 5) Swap auf 'active' setzen
         const swapId = `${correspondingSwap.fromDate}_${correspondingSwap.fromCourseId}_${correspondingSwap.toDate}_${correspondingSwap.toCourseId}`;
+        const user_swapId = `${promotedUser}#${swapId}`;
         const updateSwapCommand = new UpdateItemCommand({
           TableName: process.env.SWAPS_TABLE,
           Key: {
-            swapId: { S: swapId },
-            user: { S: promotedUser },
+            tenantId: { S: tenantId },
+            user_swapId: { S: user_swapId },
           },
           UpdateExpression: "SET #status = :status, fromDate_fromCourseId_status = :fromStatus, toDate_toCourseId_status = :toStatus",
           ExpressionAttributeNames: {
@@ -271,7 +282,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           newSwapped,
           newWaitlist,
         });
-        await updateOverrideHelper(override.courseId, override.date, {
+        await updateOverrideHelper(tenantId, override.courseId, override.date, {
           participants: newParticipants,
           swapped: newSwapped,
           waitlist: newWaitlist,
@@ -294,7 +305,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             newOriginSwapped,
             newOriginWaitlist,
           });
-          await updateOverrideHelper(correspondingSwap.fromCourseId, correspondingSwap.fromDate, {
+          await updateOverrideHelper(tenantId, correspondingSwap.fromCourseId, correspondingSwap.fromDate, {
             participants: newOriginParticipants,
             swapped: newOriginSwapped,
             waitlist: newOriginWaitlist,
@@ -310,7 +321,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               waitlist: [],
             };
             console.log('Creating origin override:', newOriginOverride);
-            await createOverrideHelper(newOriginOverride);
+            await createOverrideHelper(tenantId, newOriginOverride);
           }
         }
 
@@ -324,11 +335,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         );
         for (const originSwap of pendingOriginSwaps) {
           const originSwapId = `${originSwap.fromDate}_${originSwap.fromCourseId}_${originSwap.toDate}_${originSwap.toCourseId}`;
+          const originUser_swapId = `${promotedUser}#${originSwapId}`;
           const deleteCommand = new DeleteItemCommand({
             TableName: process.env.SWAPS_TABLE,
             Key: {
-              swapId: { S: originSwapId },
-              user: { S: promotedUser },
+              tenantId: { S: tenantId },
+              user_swapId: { S: originUser_swapId },
             },
           });
           console.log('Deleting swap:', { originSwapId, user: promotedUser });
@@ -344,7 +356,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               date: originSwap.toDate,
               newTargetWaitlist,
             });
-            await updateOverrideHelper(originSwap.toCourseId, originSwap.toDate, {
+            await updateOverrideHelper(tenantId, originSwap.toCourseId, originSwap.toDate, {
               waitlist: newTargetWaitlist,
             });
           }
@@ -364,9 +376,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
-    // 9) Aktualisierte Swaps und Overrides laden
-    const updatedSwapsCommand = new ScanCommand({
+    // 9) Aktualisierte Swaps und Overrides des Tenants laden
+    const updatedSwapsCommand = new QueryCommand({
       TableName: process.env.SWAPS_TABLE,
+      KeyConditionExpression: "tenantId = :tid",
+      ExpressionAttributeValues: { ":tid": { S: tenantId } },
       ConsistentRead: true,
     });
     const updatedSwapsData = await client.send(updatedSwapsCommand);
@@ -379,8 +393,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       status: item.status.S as Swap["status"],
     }));
 
-    const updatedOverridesCommand = new ScanCommand({
+    const updatedOverridesCommand = new QueryCommand({
       TableName: process.env.OVERRIDES_TABLE,
+      KeyConditionExpression: "tenantId = :tid",
+      ExpressionAttributeValues: { ":tid": { S: tenantId } },
       ConsistentRead: true,
     });
     const updatedOverridesData = await client.send(updatedOverridesCommand);

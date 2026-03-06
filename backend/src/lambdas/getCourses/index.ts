@@ -1,5 +1,5 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 
 const DEFAULT_TENANT_ID = 'default-tenant';
 
@@ -28,14 +28,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     console.log('getCourses tenant context', { tenantId, userId });
 
     const result = await client.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: process.env.COURSES_TABLE,
+        KeyConditionExpression: 'tenantId = :tid',  // :tid = Platzhalter für tenantId (PK)
+        ExpressionAttributeValues: { ':tid': { S: tenantId } },
         ConsistentRead: true,
       })
     );
 
-    const courses = (result.Items || []).map((item) => ({
-      id: Number(item.id.N!),
+    const items = result.Items || [];
+    if (items.length === 0) {
+      console.log("getCourses: Query returned 0 items for tenantId=", tenantId);
+    }
+    const courses = items.map((item) => ({
+      id: Number(item.id?.N ?? item.courseId?.S ?? 0),
       name: item.name.S!,
       weekday: item.weekday.S!,
       time: item.time.S!,
