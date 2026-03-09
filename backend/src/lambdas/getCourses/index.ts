@@ -14,8 +14,13 @@ function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
     event.queryStringParameters?.user ??
     null;
 
+  const tenantId =
+    event.headers?.['x-tenant-id'] ??
+    event.headers?.['X-Tenant-ID'] ??
+    DEFAULT_TENANT_ID;
+
   return {
-    tenantId: DEFAULT_TENANT_ID,
+    tenantId,
     userId: userId ?? undefined,
   };
 }

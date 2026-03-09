@@ -71,6 +71,25 @@ describe("getCourses Lambda", () => {
     );
   });
 
+  test("uses tenantId from x-tenant-id header", async () => {
+    mockSend.mockResolvedValueOnce({ Items: [] });
+
+    const eventWithHeader = {
+      headers: {
+        "x-tenant-id": "custom-studio"
+      }
+    } as any;
+
+    await handler(eventWithHeader);
+
+    expect(QueryCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        KeyConditionExpression: "tenantId = :tid",
+        ExpressionAttributeValues: { ":tid": { S: "custom-studio" } },
+      })
+    );
+  });
+
   test("returns empty array if no items found", async () => {
     mockSend.mockResolvedValueOnce({ Items: [] });
 
