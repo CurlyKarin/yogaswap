@@ -23,8 +23,19 @@ jest.mock('@aws-sdk/client-ses', () => {
   };
 });
 
+// Mock DynamoDB
+jest.mock('@aws-sdk/client-dynamodb', () => {
+  const mockSend = jest.fn();
+  return {
+    DynamoDBClient: jest.fn(() => ({ send: mockSend })),
+    PutItemCommand: jest.fn((input) => input),
+    mockSend,
+  };
+});
+
 const { mockSend: cognitoMockSend } = jest.requireMock('@aws-sdk/client-cognito-identity-provider');
 const { mockSend: sesMockSend } = jest.requireMock('@aws-sdk/client-ses');
+const { mockSend: dynamoMockSend } = jest.requireMock('@aws-sdk/client-dynamodb');
 
 describe('createParticipants Lambda', () => {
   const OLD_ENV = process.env;
@@ -36,9 +47,11 @@ describe('createParticipants Lambda', () => {
       USER_POOL_ID: 'test-user-pool-id',
       BASE_URL: 'https://yogaswap.example.com',
       SES_SOURCE_EMAIL: 'yogaswap@example.com',
+      MEMBERSHIPS_TABLE: 'test-memberships-table',
     };
     cognitoMockSend.mockReset();
     sesMockSend.mockReset();
+    dynamoMockSend.mockReset();
   });
 
   afterAll(() => {
@@ -79,6 +92,7 @@ describe('createParticipants Lambda', () => {
       nickname: 'testuser',
       role: 'participant',
     });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
 
     const result = await handler(event);
 
@@ -118,6 +132,19 @@ describe('createParticipants Lambda', () => {
       expect.objectContaining({
         Source: 'yogaswap@example.com',
         Destination: { ToAddresses: ['test@example.com'] },
+      })
+    );
+
+    // Verify DynamoDB call
+    expect(dynamoMockSend).toHaveBeenCalledTimes(1);
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-memberships-table',
+        Item: expect.objectContaining({
+          tenantId: { S: 'test-tenant' },
+          userId: { S: 'testuser' },
+          role: { S: 'participant' },
+        }),
       })
     );
   });

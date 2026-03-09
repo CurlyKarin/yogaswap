@@ -140,9 +140,11 @@ locals {
     "create_participants" = {
       name           = "create-participants"
       file_name      = "createParticipants.zip"
-      table_arns     = []
-      dynamodb_actions = []
-      tables = { }
+      table_arns     = [module.memberships_table.table_arn]
+      dynamodb_actions = ["dynamodb:PutItem"]
+      tables = {
+        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+      }
       s3_actions     = []
       s3_resources   = []
       additional_policies = [

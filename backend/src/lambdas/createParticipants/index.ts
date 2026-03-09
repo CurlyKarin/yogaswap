@@ -1,8 +1,18 @@
 import { AdminCreateUserCommand, AdminAddUserToGroupCommand, CognitoIdentityProviderClient, AdminSetUserPasswordCommand} from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
+import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
+const dynamodb = new DynamoDBClient({ region: process.env.AWS_REGION || "eu-central-1" });
+
+const DEFAULT_TENANT_ID = "default-tenant";
+
+function getTenantId(event: any): string {
+  // Behandle baseEvent-Mock (event.headers ist in tests teils undefined, daher Fallback prüfen)
+  const headers = event.headers || {};
+  return headers['x-tenant-id'] || headers['X-Tenant-ID'] || DEFAULT_TENANT_ID;
+}
 
 function generateSafeTempPassword(length = 10) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*";
@@ -84,6 +94,28 @@ export const handler = async (event: any) => {
     }));
   } catch (err: any) {
     console.warn("Group assignment error (ignored):", err.message);
+  }
+
+  // 3. UserTenantMembership in DynamoDB speichern
+  const tenantId = getTenantId(event);
+  try {
+    if (process.env.MEMBERSHIPS_TABLE) {
+      await dynamodb.send(new PutItemCommand({
+        TableName: process.env.MEMBERSHIPS_TABLE,
+        Item: {
+          tenantId: { S: tenantId },
+          userId: { S: username },
+          role: { S: role }
+        }
+      }));
+      console.log(`Membership saved in DynamoDB: user=${username}, tenant=${tenantId}, role=${role}`);
+    } else {
+      console.warn("MEMBERSHIPS_TABLE environment variable not set, skipping DynamoDB write.");
+    }
+  } catch (err: any) {
+    console.error("Failed to save membership in DynamoDB:", err);
+    // Wir werfen hier keinen Fehler, da der User in Cognito bereits existiert,
+    // aber wir loggen es deutlich.
   }
 
   // Build link (only nickname in the URL)

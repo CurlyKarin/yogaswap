@@ -54,10 +54,40 @@ module "courses_table" {
   ]
 }
 
+# -------------------------------------------------------------
+# Multi-Tenancy / Settings Tabellen
+# -------------------------------------------------------------
+
+# Tenants: PK = tenantId
+# Speichert z. B. Settings, Name, Impressum des Studios
+module "tenants_table" {
+  source     = "../modules/dynamodb"
+  name       = "${var.project}-tenants-table"
+  hash_key   = "tenantId"
+  attributes = [
+    { name = "tenantId", type = "S" }
+  ]
+}
+
+# Memberships: PK = tenantId, SK = userId (Nickname)
+# Speichert die Rolle (admin, instructor, participant) des Users in diesem Tenant
+module "memberships_table" {
+  source     = "../modules/dynamodb"
+  name       = "${var.project}-memberships-table"
+  hash_key   = "tenantId"
+  range_key  = "userId"
+  attributes = [
+    { name = "tenantId", type = "S" },
+    { name = "userId", type = "S" }
+  ]
+}
+
 output "table_names" {
   value = [
     module.swaps_table.table_name,
     module.course_overrides_table.table_name,
-    module.courses_table.table_name
+    module.courses_table.table_name,
+    module.tenants_table.table_name,
+    module.memberships_table.table_name
   ]
 }
