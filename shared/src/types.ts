@@ -73,12 +73,46 @@ export interface User {
 // Rolle eines Users innerhalb eines bestimmten Tenants
 export type UserTenantRole = UserRole;
 
-// Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Scopes
+// Fachliche Entität für ein Yogastudio / eine Organisation (Tenant).
+// Kann später in einer eigenen Tabelle gespeichert und über Admin-UIs bearbeitet werden.
+export interface Tenant {
+  tenantId: string;
+  /** Anzeigename des Studios / der Organisation */
+  name: string;
+  /** Konfigurierbare Einstellungen für Sichtbarkeit & Berechtigungen */
+  settings?: TenantSettings;
+}
+
+// Tenant-weite Einstellungen für Sichtbarkeit & Berechtigungen.
+// Alle Felder sind optional, damit bestehende Tenants ohne Migration funktionieren.
+export interface TenantSettings {
+  /**
+   * Dürfen Instructor:innen standardmäßig alle Kurse des Tenants sehen?
+   * Wenn false/undefined: Instructor:innen sehen nur Kurse, in denen sie als Instructor eingetragen sind.
+   */
+  instructorCanSeeAllCourses?: boolean;
+  /**
+   * Dürfen Instructor:innen Teilnehmer:innen einladen?
+   * Wenn false/undefined: Nur Admins dürfen einladen.
+   */
+  instructorCanInviteParticipants?: boolean;
+  /**
+   * Sehen Teilnehmer:innen nur Kurse, an denen ihre Instructor:innen beteiligt sind?
+   * Wenn false/undefined: Teilnehmer:innen sehen alle freigeschalteten Kurse des Tenants.
+   */
+  participantsSeeOnlyOwnInstructors?: boolean;
+}
+
+// Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.
 export interface UserTenantMembership {
   // Referenz auf User (aktuell der nickname; kann später auf eine separate userId wechseln)
   userId: string;
   tenantId: string;
   role: UserTenantRole;
-  // Optional: feiner granulare Berechtigungen, z. B. Instructor sieht alle Kurse
-  canSeeAllCourses?: boolean;
+  /**
+   * Individuelle Ausnahme: diese Instructor-Person darf alle Kurse sehen,
+   * unabhängig vom Tenant-Default (TenantSettings.instructorCanSeeAllCourses).
+   * Wird nur ausgewertet, wenn role === "instructor".
+   */
+  instructorCanSeeAllCoursesOverride?: boolean;
 }

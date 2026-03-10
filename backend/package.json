@@ -10,6 +10,7 @@
     "build-and-zip": "npm run build-lambdas && npm run zip",
     "seed": "ts-node src/seed/index.ts",
     "seed:build": "npm run build && node dist/seed/index.js",
+    "seed:tenants": "ts-node src/scripts/seed_tenants.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test": "jest"
   },
