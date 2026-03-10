@@ -1,46 +1,39 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import { Swap } from "@yogaswap/shared";
+import { getTenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
+const client = dynamoClient;
 
-const DEFAULT_TENANT_ID = "default-tenant";
+export const handler = async (
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> => {
+  const tableName = process.env.SWAPS_TABLE;
 
-type TenantContext = {
-  tenantId: string;
-  userId?: string | null;
-};
+  if (!tableName) {
+    console.error("SWAPS_TABLE env var is not set");
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "SWAPS_TABLE env var is not set" }),
+    };
+  }
 
-function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
-  const userId =
-    event.requestContext?.authorizer?.principalId ??
-    event.queryStringParameters?.user ??
-    null;
-
-  const tenantId =
-    event.headers?.['x-tenant-id'] ??
-    event.headers?.['X-Tenant-ID'] ??
-    DEFAULT_TENANT_ID;
-
-  return {
-    tenantId,
-    userId: userId ?? undefined,
-  };
-}
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const { tenantId, userId } = getTenantContext(event);
   console.log("getSwapsByStatus tenant context", { tenantId, userId });
 
   const status = event.queryStringParameters?.status;
   if (!status) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Missing status parameter' }) };
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Missing status parameter" }),
+    };
   }
 
   const command = new QueryCommand({
-    TableName: process.env.SWAPS_TABLE,
-    KeyConditionExpression: "tenantId = :tid",   // :tid = tenantId (PK)
-    FilterExpression: "#s = :s",                  // :s = status
+    TableName: tableName,
+    KeyConditionExpression: "tenantId = :tid", // :tid = tenantId (PK)
+    FilterExpression: "#s = :s", // :s = status
     ExpressionAttributeNames: { "#s": "status" },
     ExpressionAttributeValues: { ":tid": { S: tenantId }, ":s": { S: status } },
     ConsistentRead: true,

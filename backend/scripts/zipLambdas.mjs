@@ -16,6 +16,7 @@ if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 fs.readdirSync(distDir).forEach((lambda) => {
   const lambdaPath = path.join(distDir, lambda);
   if (!fs.statSync(lambdaPath).isDirectory()) return;
+  if (lambda === "shared") return; // shared wird gebundled, kein eigenes Zip nötig
 
   const indexPath = path.join(lambdaPath, "index.js");
   if (!fs.existsSync(indexPath)) {
@@ -27,6 +28,7 @@ fs.readdirSync(distDir).forEach((lambda) => {
   const archive = archiver("zip", { zlib: { level: 9 } });
 
   archive.pipe(output);
+  // Nur das esbuild-Bundle einpacken – keine Tests, keine Buildreste
   archive.file(indexPath, { name: "index.js" });
   archive.finalize();
 

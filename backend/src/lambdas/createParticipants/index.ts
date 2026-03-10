@@ -1,10 +1,11 @@
 import { AdminCreateUserCommand, AdminAddUserToGroupCommand, CognitoIdentityProviderClient, AdminSetUserPasswordCommand} from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
-import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { dynamoClient } from "../shared/dynamoClient";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
-const dynamodb = new DynamoDBClient({ region: process.env.AWS_REGION || "eu-central-1" });
+const dynamodb = dynamoClient;
 
 const DEFAULT_TENANT_ID = "default-tenant";
 

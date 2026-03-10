@@ -1,49 +1,42 @@
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
+import { getTenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const DEFAULT_TENANT_ID = 'default-tenant';
+const client = dynamoClient;
 
-type TenantContext = {
-  tenantId: string;
-  userId?: string | null;
-};
+export const handler = async (
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> => {
+  const tableName = process.env.COURSES_TABLE;
 
-function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
-  const userId =
-    event.requestContext?.authorizer?.principalId ??
-    event.queryStringParameters?.user ??
-    null;
+  if (!tableName) {
+    console.error("COURSES_TABLE env var is not set");
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "COURSES_TABLE env var is not set" }),
+    };
+  }
 
-  const tenantId =
-    event.headers?.['x-tenant-id'] ??
-    event.headers?.['X-Tenant-ID'] ??
-    DEFAULT_TENANT_ID;
-
-  return {
-    tenantId,
-    userId: userId ?? undefined,
-  };
-}
-
-const client = new DynamoDBClient({ region: 'eu-central-1' });
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
     const { tenantId, userId } = getTenantContext(event);
     console.log('getCourses tenant context', { tenantId, userId });
 
     const result = await client.send(
       new QueryCommand({
-        TableName: process.env.COURSES_TABLE,
-        KeyConditionExpression: 'tenantId = :tid',  // :tid = Platzhalter für tenantId (PK)
-        ExpressionAttributeValues: { ':tid': { S: tenantId } },
+        TableName: tableName,
+        KeyConditionExpression: "tenantId = :tid", // :tid = Platzhalter für tenantId (PK)
+        ExpressionAttributeValues: { ":tid": { S: tenantId } },
         ConsistentRead: true,
-      })
+      }),
     );
 
     const items = result.Items || [];
     if (items.length === 0) {
-      console.log("getCourses: Query returned 0 items for tenantId=", tenantId);
+      console.log(
+        "getCourses: Query returned 0 items for tenantId=",
+        tenantId,
+      );
     }
     const courses = items.map((item) => ({
       id: Number(item.id?.N ?? item.courseId?.S ?? 0),

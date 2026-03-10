@@ -1,32 +1,10 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import type { CourseDateOverride } from "@yogaswap/shared";
+import { getTenantContext, TenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
-
-const DEFAULT_TENANT_ID = "default-tenant";
-
-type TenantContext = {
-  tenantId: string;
-  userId?: string | null;
-};
-
-function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
-  const userId =
-    event.requestContext?.authorizer?.principalId ??
-    event.queryStringParameters?.user ??
-    null;
-
-  const tenantId =
-    event.headers?.['x-tenant-id'] ??
-    event.headers?.['X-Tenant-ID'] ??
-    DEFAULT_TENANT_ID;
-
-  return {
-    tenantId,
-    userId: userId ?? undefined,
-  };
-}
+const client = dynamoClient;
 
 export const handler = async (
   event: APIGatewayProxyEvent

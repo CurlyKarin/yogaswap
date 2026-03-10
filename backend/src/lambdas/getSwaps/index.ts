@@ -1,40 +1,33 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import { Swap } from "@yogaswap/shared";
+import { getTenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
+const client = dynamoClient;
 
-const DEFAULT_TENANT_ID = "default-tenant";
+export const handler = async (
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> => {
+  const tableName = process.env.SWAPS_TABLE;
 
-type TenantContext = {
-  tenantId: string;
-  userId?: string | null;
-};
+  if (!tableName) {
+    console.error("SWAPS_TABLE env var is not set");
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "SWAPS_TABLE env var is not set" }),
+    };
+  }
 
-function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
-  const userId =
-    event.requestContext?.authorizer?.principalId ??
-    event.queryStringParameters?.user ??
-    null;
-
-  const tenantId =
-    event.headers?.['x-tenant-id'] ??
-    event.headers?.['X-Tenant-ID'] ??
-    DEFAULT_TENANT_ID;
-
-  return {
-    tenantId,
-    userId: userId ?? undefined,
-  };
-}
-
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const { tenantId, userId } = getTenantContext(event);
   console.log("getSwaps tenant context", { tenantId, userId });
 
   const user = event.queryStringParameters?.user;
   if (!user) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Missing user parameter' }) };
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Missing user parameter" }),
+    };
   }
 
   const fromDate = event.queryStringParameters?.fromDate;
@@ -48,7 +41,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   if (fromDate && fromCourseId) {
     // GSI_From: :tu = tenantId#user (PK), :f = Präfix fromDate_fromCourseId
     command = new QueryCommand({
-      TableName: process.env.SWAPS_TABLE,
+      TableName: tableName,
       IndexName: "GSI_From",
       KeyConditionExpression: "tenantId_user = :tu AND begins_with(fromDate_fromCourseId_status, :f)",
       ExpressionAttributeValues: {
@@ -60,7 +53,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } else if (toDate && toCourseId) {
     // GSI_To: :tu = tenantId#user (PK), :t = Präfix toDate_toCourseId
     command = new QueryCommand({
-      TableName: process.env.SWAPS_TABLE,
+      TableName: tableName,
       IndexName: "GSI_To",
       KeyConditionExpression: "tenantId_user = :tu AND begins_with(toDate_toCourseId_status, :t)",
       ExpressionAttributeValues: {
@@ -72,7 +65,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } else {
     // Haupttabelle: :tid = tenantId (PK), :uprefix = user# für alle Swaps des Users
     command = new QueryCommand({
-      TableName: process.env.SWAPS_TABLE,
+      TableName: tableName,
       KeyConditionExpression: "tenantId = :tid AND begins_with(user_swapId, :uprefix)",
       ExpressionAttributeValues: {
         ":tid": { S: tenantId },

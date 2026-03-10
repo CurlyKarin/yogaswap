@@ -3,8 +3,8 @@
     "target": "es2020",
     "module": "commonjs",
     "lib": ["es2020"],
-    "outDir": "../../dist/lambdas/getSwapsByStatus",
-    "rootDir": ".",
+    "outDir": "../../dist/lambdas",
+    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,6 +12,6 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["index.ts"],
+  "include": ["index.ts", "../shared/**/*.ts"],
   "exclude": ["node_modules", "*.test.ts"]
 }

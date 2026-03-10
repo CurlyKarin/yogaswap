@@ -1,32 +1,10 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { DynamoDBClient, QueryCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
+import { QueryCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { Swap, CourseDateOverride, Course } from "@yogaswap/shared";
+import { getTenantContext, TenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
-
-const DEFAULT_TENANT_ID = "default-tenant";
-
-type TenantContext = {
-  tenantId: string;
-  userId?: string | null;
-};
-
-function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
-  const userId =
-    event.requestContext?.authorizer?.principalId ??
-    event.queryStringParameters?.user ??
-    null;
-
-  const tenantId =
-    event.headers?.['x-tenant-id'] ??
-    event.headers?.['X-Tenant-ID'] ??
-    DEFAULT_TENANT_ID;
-
-  return {
-    tenantId,
-    userId: userId ?? undefined,
-  };
-}
+const client = dynamoClient;
 
 // Hardcodierter Zeitpuffer (in Minuten) vor Kursbeginn für Nachrücken
 const PROMOTION_TIME_BUFFER_MINUTES = 30;
