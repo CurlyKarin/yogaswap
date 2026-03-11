@@ -94,7 +94,7 @@ function MainApp() {
     };
 
     loadTenantContext();
-  }, [currentUser?.nickname, currentUser?.role]);
+  }, [currentUser]);
 
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {

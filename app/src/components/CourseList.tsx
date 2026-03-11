@@ -1,6 +1,6 @@
 import CourseCard from "./CourseCard";
 import { useCourseSwaps } from "./useCourseSwaps";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Course, CourseDateOverride, Swap, User, Tenant, UserTenantMembership } from "shared/types";
 import { getSwaps } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
@@ -21,7 +21,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       console.log("Fetching courses, overrides, and swaps...", {
         user: currentUser.nickname,
@@ -49,11 +49,11 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser.nickname]);
 
   useEffect(() => {
     fetchData();
-  }, [currentUser.nickname]);
+  }, [fetchData]);
 
   const {
     confirmSwap,

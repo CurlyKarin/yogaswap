@@ -1,32 +1,70 @@
 import { describe, it, expect } from "vitest";
-import { canInviteParticipants, canSeeAllCourses, canSeeCourse } from "shared/permissions";
+import {
+  canInviteParticipants,
+  canSeeAllCourses,
+  canSeeCourse,
+} from "shared/permissions";
+import type {
+  UserTenantMembership,
+  TenantSettings,
+  Course,
+} from "shared/types";
 
 describe("permissions", () => {
-  const adminMembership = { role: "admin" } as any;
-  const instructorMembership = { role: "instructor" } as any;
-  const instructorWithOverrideTrue = {
+  const adminMembership: UserTenantMembership = {
+    userId: "admin-user",
+    tenantId: "tenant-1",
+    role: "admin",
+  };
+
+  const instructorMembership: UserTenantMembership = {
+    userId: "instructor-user",
+    tenantId: "tenant-1",
+    role: "instructor",
+  };
+
+  const instructorWithOverrideTrue: UserTenantMembership = {
+    userId: "instructor-override-true",
+    tenantId: "tenant-1",
     role: "instructor",
     instructorCanSeeAllCoursesOverride: true,
-  } as any;
-  const instructorWithOverrideFalse = {
+  };
+
+  const instructorWithOverrideFalse: UserTenantMembership = {
+    userId: "instructor-override-false",
+    tenantId: "tenant-1",
     role: "instructor",
     instructorCanSeeAllCoursesOverride: false,
-  } as any;
-  const participantMembership = { role: "participant" } as any;
+  };
 
-  const defaultSettings = {
+  const participantMembership: UserTenantMembership = {
+    userId: "participant-user",
+    tenantId: "tenant-1",
+    role: "participant",
+  };
+
+  const defaultSettings: TenantSettings = {
     instructorCanInviteParticipants: true,
     instructorCanSeeAllCourses: true,
     participantsSeeOnlyOwnInstructors: false,
-  } as any;
+  };
 
-  const restrictiveSettings = {
+  const restrictiveSettings: TenantSettings = {
     instructorCanInviteParticipants: false,
     instructorCanSeeAllCourses: false,
     participantsSeeOnlyOwnInstructors: true,
-  } as any;
+  };
 
-  const dummyCourse = {} as any;
+  const dummyCourse: Course = {
+    tenantId: "tenant-1",
+    id: 1,
+    name: "Dummy",
+    weekday: "Mon",
+    time: "10:00",
+    capacity: 10,
+    participants: [],
+    dates: [],
+  };
 
   describe("canInviteParticipants", () => {
     it("erlaubt Admins immer, Teilnehmer:innen einzuladen", () => {

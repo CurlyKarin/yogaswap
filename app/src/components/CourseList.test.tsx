@@ -29,21 +29,21 @@ const mockedGetSwaps = getSwaps as unknown as ReturnType<typeof vi.fn>;
 
 const baseUser: User = {
   nickname: "alice",
-} as any;
+  email: "",
+  role: "participant",
+};
 
 const baseTenant: Tenant = {
-  id: "default-tenant",
+  tenantId: "default-tenant",
   name: "Default Tenant",
-  settings: {
-    visibility: "public",
-  },
-} as any;
+  settings: {},
+};
 
 const baseMembership: UserTenantMembership = {
   tenantId: "default-tenant",
   userId: "alice",
   role: "participant",
-} as any;
+};
 
 describe("CourseList", () => {
   beforeEach(() => {
@@ -53,6 +53,7 @@ describe("CourseList", () => {
   it("zeigt während des Ladens 'Loading...' an und rendert anschließend Kurse (mit zukünftigen Terminen)", async () => {
     const mockCourses: Course[] = [
       {
+        tenantId: "default-tenant",
         id: 1,
         name: "Yoga Basic",
         weekday: "Monday",
@@ -60,7 +61,7 @@ describe("CourseList", () => {
         capacity: 10,
         participants: ["alice"],
         dates: ["2099-06-16"],
-      } as any,
+      },
     ];
 
     mockedGetCourses.mockResolvedValue(mockCourses);

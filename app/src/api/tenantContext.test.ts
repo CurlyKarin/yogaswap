@@ -14,21 +14,24 @@ describe("getTenantContext", () => {
   });
 
   it("ruft GET /tenant-context ohne user-Param auf, wenn kein user übergeben wird", async () => {
+    type TestTenant = NonNullable<TenantContextResponse["tenant"]>;
+    type TestMembership = NonNullable<TenantContextResponse["membership"]>;
+
     const mockResponse: TenantContextResponse = {
       tenantId: "default-tenant",
       userId: "alice",
       tenant: {
-        id: "default-tenant",
+        tenantId: "default-tenant",
         name: "Default Tenant",
         settings: {
-          visibility: "public",
+          instructorCanSeeAllCourses: true,
         },
-      } as any,
+      } as TestTenant,
       membership: {
         tenantId: "default-tenant",
         userId: "alice",
         role: "participant",
-      } as any,
+      } as TestMembership,
     };
 
     mockedAxios.get = vi.fn().mockResolvedValue({ data: mockResponse });
