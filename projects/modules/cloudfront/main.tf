@@ -63,6 +63,20 @@ resource "aws_cloudfront_distribution" "spa" {
     compress = true
   }
   ordered_cache_behavior {
+    path_pattern     = "/tenant-context*"
+    allowed_methods  = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "api-gateway-backend"
+    viewer_protocol_policy = "redirect-to-https"
+    forwarded_values {
+      query_string = true
+      cookies {
+        forward = "none"
+      }
+    }
+    compress = true
+  }
+  ordered_cache_behavior {
     path_pattern     = "/course-overrides*"
     allowed_methods  = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"]
     cached_methods   = ["GET", "HEAD"]
@@ -167,8 +181,6 @@ resource "aws_cloudfront_distribution" "spa" {
   tags = {
     Name = "${var.bucket_name}-cloudfront"
   }
-
-  #depends_on = [aws_cloudfront_origin_access_control.spa]
 }
 
 output "distribution_id" {
