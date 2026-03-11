@@ -1,31 +1,52 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import { Swap } from "@yogaswap/shared";
+import { getTenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
+const client = dynamoClient;
 
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const status = event.queryStringParameters?.status;
-  if (!status) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Missing status parameter' }) };
+export const handler = async (
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> => {
+  const tableName = process.env.SWAPS_TABLE;
+
+  if (!tableName) {
+    console.error("SWAPS_TABLE env var is not set");
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "SWAPS_TABLE env var is not set" }),
+    };
   }
 
-  const command = new ScanCommand({
-    TableName: process.env.SWAPS_TABLE,
-    FilterExpression: "#s = :s",
+  const { tenantId, userId } = getTenantContext(event);
+  console.log("getSwapsByStatus tenant context", { tenantId, userId });
+
+  const status = event.queryStringParameters?.status;
+  if (!status) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Missing status parameter" }),
+    };
+  }
+
+  const command = new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: "tenantId = :tid", // :tid = tenantId (PK)
+    FilterExpression: "#s = :s", // :s = status
     ExpressionAttributeNames: { "#s": "status" },
-    ExpressionAttributeValues: { ":s": { S: status } },
+    ExpressionAttributeValues: { ":tid": { S: tenantId }, ":s": { S: status } },
     ConsistentRead: true,
   });
 
   try {
-    console.log('getSwapsByStatus ScanCommand:', command.input);
+    console.log('getSwapsByStatus QueryCommand:', command.input);
     const data = await client.send(command);
     const items: Swap[] = (data.Items || []).map((item) => ({
       user: item.user.S!,
-      fromCourseId: Number(item.fromCourseId.S!),
+      fromCourseId: Number(item.fromCourseId?.S ?? item.fromCourseId?.N ?? 0),
       fromDate: item.fromDate.S!,
-      toCourseId: Number(item.toCourseId.S!),
+      toCourseId: Number(item.toCourseId?.S ?? item.toCourseId?.N ?? 0),
       toDate: item.toDate.S!,
       status: item.status.S as Swap["status"],
     }));

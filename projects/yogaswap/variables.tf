@@ -38,7 +38,7 @@ variable "lambdas" {
       name           = "get-coursedateoverrides"
       file_name         = "getOverrides.zip"
       table_arns     = [] # Wird später gefüllt
-      dynamodb_actions = ["dynamodb:Scan", "dynamodb:GetItem"]
+      dynamodb_actions = ["dynamodb:Query", "dynamodb:GetItem"]
       s3_actions     = []
     }
   }

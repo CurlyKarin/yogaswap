@@ -1,12 +1,16 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { DynamoDBClient, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
+import { DeleteItemCommand } from "@aws-sdk/client-dynamodb";
+import { getTenantContext, TenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
+const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const { tenantId, userId } = getTenantContext(event);
   const swapId = event.pathParameters?.swapId;
   const user = event.queryStringParameters?.user;
   console.log('DeleteSwap params:', { swapId, user });
+  console.log('deleteSwap tenant context:', { tenantId, userId });
   
   if (!swapId || !user) {
     return {
@@ -15,11 +19,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 
+  const user_swapId = `${user}#${swapId}`;
   const command = new DeleteItemCommand({
     TableName: process.env.SWAPS_TABLE,
     Key: {
-      swapId: { S: swapId },
-      user: { S: user },
+      tenantId: { S: tenantId },
+      user_swapId: { S: user_swapId },
     },
   });
 

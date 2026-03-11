@@ -33,10 +33,11 @@ describe('createOverride Lambda', () => {
     // Es wird genau ein PutItemCommand erwartet
     expect(dynamoMock.calls()).toHaveLength(1);
 
-    // Das gesendete Item soll Listenattribute ("L") enthalten
     expect(dynamoMock.call(0).args[0].input).toMatchObject({
       TableName: 'yogaswap-backend-demo-courseOverrides-table',
       Item: {
+        tenantId: { S: 'default-tenant' },
+        courseId_date: { S: '1_2025-10-01' },
         courseId: { S: '1' },
         date: { S: '2025-10-01' },
         participants: { L: [{ S: 'Luna' }] },

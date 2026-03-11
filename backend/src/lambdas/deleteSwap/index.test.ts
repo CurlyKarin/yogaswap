@@ -54,7 +54,7 @@ describe("deleteSwap Lambda", () => {
     expect(DeleteItemCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: "test-swaps",
-        Key: { swapId: { S: "abc123" }, user: { S: "Nia" } },
+        Key: { tenantId: { S: "default-tenant" }, user_swapId: { S: "Nia#abc123" } },
       })
     );
   });

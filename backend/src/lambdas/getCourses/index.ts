@@ -1,19 +1,45 @@
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
+import { getTenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const client = new DynamoDBClient({ region: 'eu-central-1' });
+const client = dynamoClient;
 
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+export const handler = async (
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> => {
+  const tableName = process.env.COURSES_TABLE;
+
+  if (!tableName) {
+    console.error("COURSES_TABLE env var is not set");
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "COURSES_TABLE env var is not set" }),
+    };
+  }
+
   try {
+    const { tenantId, userId } = getTenantContext(event);
+    console.log('getCourses tenant context', { tenantId, userId });
+
     const result = await client.send(
-      new ScanCommand({
-        TableName: process.env.COURSES_TABLE,
+      new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: "tenantId = :tid", // :tid = Platzhalter für tenantId (PK)
+        ExpressionAttributeValues: { ":tid": { S: tenantId } },
         ConsistentRead: true,
-      })
+      }),
     );
 
-    const courses = (result.Items || []).map((item) => ({
-      id: Number(item.id.N!),
+    const items = result.Items || [];
+    if (items.length === 0) {
+      console.log(
+        "getCourses: Query returned 0 items for tenantId=",
+        tenantId,
+      );
+    }
+    const courses = items.map((item) => ({
+      id: Number(item.id?.N ?? item.courseId?.S ?? 0),
       name: item.name.S!,
       weekday: item.weekday.S!,
       time: item.time.S!,

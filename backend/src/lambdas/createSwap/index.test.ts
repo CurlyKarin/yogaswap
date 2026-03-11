@@ -59,10 +59,13 @@ describe('createSwap Lambda', () => {
       expect.objectContaining({
         TableName: 'test-swaps',
         Item: expect.objectContaining({
+          tenantId: { S: 'default-tenant' },
+          user_swapId: { S: 'Nia#2025-10-01_c1_2025-10-05_c2' },
           user: { S: 'Nia' },
           fromCourseId: { S: 'c1' },
           toCourseId: { S: 'c2' },
           status: { S: 'pending' },
+          tenantId_user: { S: 'default-tenant#Nia' },
         }),
       })
     );

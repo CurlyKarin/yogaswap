@@ -1,9 +1,14 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { getTenantContext, TenantContext } from '../shared/tenantContext';
+import { dynamoClient } from '../shared/dynamoClient';
 
-const client = new DynamoDBClient({ region: 'eu-central-1' });
+const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const { tenantId, userId } = getTenantContext(event);
+  console.log('createSwap tenant context', { tenantId, userId });
+
   const tableName = process.env.SWAPS_TABLE;
 
   try {
@@ -12,9 +17,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
 
+    const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
+    const user_swapId = `${swap.user}#${swapId}`;
+    const tenantId_user = `${tenantId}#${swap.user}`;
     const dynamoItem = {
-      swapId: { S: `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}` },
+      tenantId: { S: tenantId },
+      user_swapId: { S: user_swapId },
       user: { S: swap.user },
+      swapId: { S: swapId },
       fromCourseId: { S: swap.fromCourseId.toString() },
       fromDate: { S: swap.fromDate },
       toCourseId: { S: swap.toCourseId.toString() },
@@ -22,6 +32,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       status: { S: swap.status },
       fromDate_fromCourseId_status: { S: `${swap.fromDate}_${swap.fromCourseId}_${swap.status}` },
       toDate_toCourseId_status: { S: `${swap.toDate}_${swap.toCourseId}_${swap.status}` },
+      tenantId_user: { S: tenantId_user },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));

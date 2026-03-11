@@ -97,8 +97,8 @@ describe("updateSwap Lambda", () => {
     // das Mock-Setup (jest.mock) gibt das UpdateItemCommand-Input zurück, also sind die Felder dort
     expect(sentArg.TableName).toBe("test-swaps");
     expect(sentArg.Key).toEqual({
-      swapId: { S: "2025-10-01_1_2025-10-02_2" },
-      user: { S: "luna" },
+      tenantId: { S: "default-tenant" },
+      user_swapId: { S: "luna#2025-10-01_1_2025-10-02_2" },
     });
     expect(sentArg.ExpressionAttributeValues).toMatchObject({
       ":status": { S: "approved" },

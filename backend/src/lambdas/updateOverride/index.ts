@@ -1,9 +1,13 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDBClient, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { getTenantContext, TenantContext } from '../shared/tenantContext';
+import { dynamoClient } from '../shared/dynamoClient';
 
-const client = new DynamoDBClient({ region: 'eu-central-1' });
+const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const { tenantId, userId } = getTenantContext(event);
+  console.log('updateOverride tenant context', { tenantId, userId });
   const tableName = process.env.OVERRIDES_TABLE;
   const courseId = event.pathParameters?.courseId;
   const date = event.pathParameters?.date;
@@ -54,10 +58,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     updateExpression = updateExpression.slice(0, -1); // Entferne letztes Komma
 
+    const courseId_date = `${courseId}_${date}`;
     await client.send(
       new UpdateItemCommand({
         TableName: tableName,
-        Key: { courseId: { S: courseId }, date: { S: date } },
+        Key: { tenantId: { S: tenantId }, courseId_date: { S: courseId_date } },
         UpdateExpression: updateExpression,
         ExpressionAttributeNames: expressionAttributeNames,
         ExpressionAttributeValues: expressionAttributeValues,

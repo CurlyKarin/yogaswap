@@ -1,9 +1,13 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { getTenantContext, TenantContext } from "../shared/tenantContext";
+import { dynamoClient } from "../shared/dynamoClient";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
+const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const { tenantId, userId } = getTenantContext(event);
+  console.log("updateSwap tenant context", { tenantId, userId });
   const swapId = event.pathParameters?.swapId;
   const user = event.queryStringParameters?.user;
   if (!swapId || !user) {
@@ -48,11 +52,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
   const [fromDate, fromCourseId, toDate, toCourseId] = parts;
 
+  const user_swapId = `${user}#${swapId}`;
   const command = new UpdateItemCommand({
     TableName: process.env.SWAPS_TABLE,
     Key: {
-      swapId: { S: swapId },
-      user: { S: user },
+      tenantId: { S: tenantId },
+      user_swapId: { S: user_swapId },
     },
     UpdateExpression: "SET #status = :status, fromDate_fromCourseId_status = :fromStatus, toDate_toCourseId_status = :toStatus",
     ExpressionAttributeNames: {

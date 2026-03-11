@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "test": "npm run test --prefix app && npm run test --prefix backend",
+    "lint": "npm run lint --prefix app"
+  },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.888.0",
     "axios": "^1.12.2",

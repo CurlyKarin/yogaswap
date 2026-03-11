@@ -1,5 +1,5 @@
 import { handler } from "./index";
-import { DynamoDBClient, ScanCommand, UpdateItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, QueryCommand, UpdateItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { mockClient } from "aws-sdk-client-mock";
 
 const ddbMock = mockClient(DynamoDBClient);
@@ -32,8 +32,8 @@ test("returns 400 if request body is missing", async () => {
   expect(body.error).toContain("Missing request body");
 });
 
-test("returns 500 if DynamoDB scan throws", async () => {
-  ddbMock.on(ScanCommand).rejects(new Error("DynamoDB error"));
+test("returns 500 if DynamoDB query throws", async () => {
+  ddbMock.on(QueryCommand).rejects(new Error("DynamoDB error"));
 
   const event = makeEvent({ currentUser: "testuser" });
   const result = await handler(event);
@@ -42,9 +42,8 @@ test("returns 500 if DynamoDB scan throws", async () => {
   expect(body.error).toBe("Failed to process promotions");
 });
 
-test("returns 200 if all scans return empty lists", async () => {
-  // Drei Scans werden aufgerufen: SWAPS, COURSES, OVERRIDES
-  ddbMock.on(ScanCommand).resolves({ Items: [] });
+test("returns 200 if all queries return empty lists", async () => {
+  ddbMock.on(QueryCommand).resolves({ Items: [] });
 
   const event = makeEvent({ currentUser: "testuser" });
   const result = await handler(event);
@@ -87,8 +86,9 @@ test("returns 200 and can promote when data is in the future (fixed now)", async
 
   ddbMock.on(UpdateItemCommand).resolves({});
   ddbMock.on(PutItemCommand).resolves({});
+  // Queries: iter1: pending, courses, overrides; iter2: pending, courses, overrides; final: swaps, overrides
   ddbMock
-    .on(ScanCommand)
+    .on(QueryCommand)
     .resolvesOnce({ Items: [pendingSwap] })
     .resolvesOnce({ Items: [course] })
     .resolvesOnce({ Items: [overrideWithWaitlist] })

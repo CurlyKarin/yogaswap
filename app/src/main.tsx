@@ -5,6 +5,10 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App';
 import { Amplify } from 'aws-amplify';
+import axios from 'axios';
+
+// Konfiguriere Axios für Tenant-Header
+axios.defaults.headers.common['x-tenant-id'] = 'default-tenant';
 
 // Checkmark DEBUG: Prüfe Config
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID;

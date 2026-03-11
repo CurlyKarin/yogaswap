@@ -1,17 +1,20 @@
 import CourseCard from "./CourseCard";
 import { useCourseSwaps } from "./useCourseSwaps";
-import { useCallback, useEffect, useState } from "react";
-import { Course, CourseDateOverride, Swap, User} from "shared/types";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { Course, CourseDateOverride, Swap, User, Tenant, UserTenantMembership } from "shared/types";
 import { getSwaps } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
 import { getCourseDates } from "../lib/dates";
 import { getCourses } from "../api/courses";
+import { canSeeCourse } from "shared/permissions";
 
 type Props = {
   currentUser: User;
+  tenant?: Tenant;
+  membership?: UserTenantMembership;
 };
 
-export default function CourseList({ currentUser }: Props) {
+export default function CourseList({ currentUser, tenant, membership }: Props) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -19,42 +22,37 @@ export default function CourseList({ currentUser }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    let isCancelled = false;
     try {
-      console.log("Fetching courses, overrides, and swaps...", { user: currentUser?.nickname });
+      console.log("Fetching courses, overrides, and swaps...", {
+        user: currentUser.nickname,
+      });
       setLoading(true);
       const [courseData, overrideData, swapsData] = await Promise.all([
         getCourses(),
         getOverrides(),
-        currentUser?.nickname ? getSwaps(currentUser.nickname) : Promise.resolve([]),
+        getSwaps(currentUser.nickname),
       ]);
-      console.log("Data fetched:", { courseData, overrideData, swapsData });
-      if (!isCancelled) {
-        setCourses(courseData.sort((a, b) => a.id - b.id));
-        setOverrides(Array.isArray(overrideData) ? overrideData : []);
-        setSwaps(swapsData);
-        setLoading(false);
-        setError(null);
-      }
+
+      console.log("Data fetched:", {
+        courseData,
+        overrideData,
+        swapsData,
+      });
+      setCourses(courseData.sort((a, b) => a.id - b.id));
+      setOverrides(Array.isArray(overrideData) ? overrideData : []);
+      setSwaps(swapsData);
+      setError(null);
     } catch (err) {
       console.error("Error in fetchData:", err);
-      if (!isCancelled) {
-        setError("Failed to load data");
-        setLoading(false);
-        setSwaps([]);
-      }
+      setError("Failed to load data");
+      setSwaps([]);
+    } finally {
+      setLoading(false);
     }
-    return () => {
-      isCancelled = true;
-    };
-  }, [currentUser?.nickname]);
+  }, [currentUser.nickname]);
 
   useEffect(() => {
-    const run = async () => {
-      await fetchData();
-      setError(null);
-    };
-    run();
+    fetchData();
   }, [fetchData]);
 
   const {
@@ -62,8 +60,16 @@ export default function CourseList({ currentUser }: Props) {
     requestSwap,
     cancelSwap,
     onToggleAbsence,
-    overrides: filteredOverrides
-  } = useCourseSwaps(courses, overrides, setOverrides, swaps, setSwaps, currentUser, fetchData);
+    overrides: filteredOverrides,
+  } = useCourseSwaps(
+    courses,
+    overrides,
+    setOverrides,
+    swaps,
+    setSwaps,
+    currentUser,
+    fetchData,
+  );
 
   // 👉 Debug-Ausgabe bei jedem Swaps-Update
   useEffect(() => {
@@ -76,6 +82,18 @@ export default function CourseList({ currentUser }: Props) {
     console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
   }, [currentUser?.nickname]);
 
+  const visibleCourses = useMemo(() => {
+    if (!tenant?.settings || !membership) {
+      return courses;
+    }
+    return courses.filter((course) =>
+      canSeeCourse(membership, tenant.settings, course, {
+        isTaughtByUser: course.instructors?.includes(currentUser.nickname),
+        isBookedByUser: course.participants.includes(currentUser.nickname),
+      }),
+    );
+  }, [courses, tenant?.settings, membership, currentUser.nickname]);
+
   if (loading) {
     return <div>Loading...</div>;
   }
@@ -83,8 +101,8 @@ export default function CourseList({ currentUser }: Props) {
     return <div>{error}</div>;
   }
 
-  const coursesWithUpcoming = courses.filter((c) => getCourseDates(c).length > 0);
-  if (courses.length === 0 || coursesWithUpcoming.length === 0) {
+  const coursesWithUpcoming = visibleCourses.filter((c) => getCourseDates(c).length > 0);
+  if (visibleCourses.length === 0 || coursesWithUpcoming.length === 0) {
     return (
       <div className="muted" style={{ textAlign: "center", padding: "2rem" }}>
         Aktuell keine Termine zum Anzeigen. Es gibt nur vergangene Termine oder noch keine Kurse.
@@ -95,7 +113,7 @@ export default function CourseList({ currentUser }: Props) {
   return (
     <>
       <div className="grid">
-        {courses.map((course) => {
+        {visibleCourses.map((course) => {
           const dates = getCourseDates(course);
           return (
             <CourseCard

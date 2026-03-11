@@ -1,9 +1,13 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { getTenantContext, TenantContext } from '../shared/tenantContext';
+import { dynamoClient } from '../shared/dynamoClient';
 
-const client = new DynamoDBClient({ region: 'eu-central-1' });
+const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const { tenantId, userId } = getTenantContext(event);
+  console.log('createOverride tenant context', { tenantId, userId });
   const tableName = process.env.OVERRIDES_TABLE;
   const override = JSON.parse(event.body || '{}');
 
@@ -27,7 +31,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 400, body: JSON.stringify({ error: 'Invalid waitlist array' }) };
     }
 
+    const courseId_date = `${override.courseId}_${override.date}`;
     const dynamoItem = {
+      tenantId: { S: tenantId },
+      courseId_date: { S: courseId_date },
       courseId: { S: override.courseId.toString() },
       date: { S: override.date },
       participants: { L: participants.map((p: string) => ({ S: p })) },

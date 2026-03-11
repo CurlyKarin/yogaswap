@@ -130,7 +130,7 @@ locals {
       name           = "get-courses"
       file_name      = "getCourses.zip"
       table_arns     = [module.courses_table.table_arn]
-      dynamodb_actions = ["dynamodb:Scan", "dynamodb:GetItem"]
+      dynamodb_actions = ["dynamodb:Query", "dynamodb:GetItem"]
       tables = {
         "COURSES_TABLE" = module.courses_table.table_name
       }
@@ -140,9 +140,11 @@ locals {
     "create_participants" = {
       name           = "create-participants"
       file_name      = "createParticipants.zip"
-      table_arns     = []
-      dynamodb_actions = []
-      tables = { }
+      table_arns     = [module.memberships_table.table_arn]
+      dynamodb_actions = ["dynamodb:PutItem"]
+      tables = {
+        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+      }
       s3_actions     = []
       s3_resources   = []
       additional_policies = [
@@ -161,11 +163,26 @@ locals {
           Resource = "*"
         }
       ]
-      environment = {  # Checkmark HINZUFÜGEN!
+      environment = {
         USER_POOL_ID = aws_cognito_user_pool.yogaswap.id
         BASE_URL     = module.cloudfront_spa.distribution_url
         SES_SOURCE_EMAIL = var.ses_source_email  # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
       }
+    },
+    "get_tenant_context" = {
+      name           = "get-tenant-context"
+      file_name      = "getTenantContext.zip"
+      table_arns     = [
+        module.tenants_table.table_arn,
+        module.memberships_table.table_arn
+      ]
+      dynamodb_actions = ["dynamodb:GetItem"]
+      tables = {
+        "TENANTS_TABLE"     = module.tenants_table.table_name
+        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+      }
+      s3_actions     = []
+      s3_resources   = []
     }
   }
    # Map für Lambda-ARNs
@@ -185,6 +202,7 @@ locals {
     "POST /process-promotions" = "process_promotions"
     "GET /courses" = "get_courses"
     "POST /participants" = "create_participants"
+    "GET /tenant-context" = "get_tenant_context"
   }
 
   build_files = fileset("../../app/build", "**")

@@ -11,13 +11,18 @@ import Impressum from "./components/Impressum";
 import Datenschutz from "./components/Datenschutz";
 import { Link } from "react-router-dom";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
-import { User, UserRole } from "shared/types";
+import { User, UserRole, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
 import { fetchAuthSession } from "aws-amplify/auth";
+import { getTenantContext } from "./api/tenantContext";
+import { canInviteParticipants } from "shared/permissions";
 
 // Checkmark Haupt-App als Komponente
 function MainApp() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [membership, setMembership] = useState<UserTenantMembership | null>(null);
+  const [canInvite, setCanInvite] = useState(false);
   const { logout, isLoading, error } = useAppAuth();
 
   // App.tsx
@@ -55,6 +60,41 @@ function MainApp() {
 
     initAuth();
   }, []); 
+
+  // Tenant-Kontext laden, sobald ein User existiert
+  useEffect(() => {
+    if (!currentUser) {
+      setTenant(null);
+      setMembership(null);
+      setCanInvite(false);
+      return;
+    }
+
+    const loadTenantContext = async () => {
+      try {
+        const ctx = await getTenantContext(currentUser.nickname);
+        setTenant(ctx.tenant);
+        setMembership(ctx.membership);
+
+        if (ctx.membership) {
+          setCanInvite(
+            canInviteParticipants(ctx.membership, ctx.tenant?.settings),
+          );
+        } else {
+          // Fallback: Admins ohne Membership dürfen weiterhin einladen
+          setCanInvite(currentUser.role === "admin");
+        }
+      } catch (err) {
+        console.error("Fehler beim Laden des Tenant-Kontexts:", err);
+        setTenant(null);
+        setMembership(null);
+        // Im Fehlerfall ebenfalls auf Admin-Rolle zurückfallen
+        setCanInvite(currentUser.role === "admin");
+      }
+    };
+
+    loadTenantContext();
+  }, [currentUser]);
 
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {
@@ -96,11 +136,15 @@ function MainApp() {
           <p className="muted" style={{ textAlign: "center", marginBottom: 16 }}>
             Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
           </p>
-          <CourseList currentUser={currentUser} />
+          <CourseList
+            currentUser={currentUser}
+            tenant={tenant ?? undefined}
+            membership={membership ?? undefined}
+          />
         </>
       )}
 
-      {currentUser?.role === "admin" && <AdminPanel />}
+      {currentUser && canInvite && <AdminPanel />}
 
       <footer className="app-footer">
         <span className="copyright">© {new Date().getFullYear()} Karin Schrader</span>

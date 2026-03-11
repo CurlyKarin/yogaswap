@@ -43,8 +43,8 @@ describe('updateOverride Lambda', () => {
 
     expect(call.TableName).toBe('yogaswap-backend-demo-courseOverrides-table');
     expect(call.Key).toEqual({
-      courseId: { S: '1' },
-      date: { S: '2025-10-01' },
+      tenantId: { S: 'default-tenant' },
+      courseId_date: { S: '1_2025-10-01' },
     });
     expect(call.UpdateExpression).toBe('SET #participants = :participants, #swapped = :swapped');
     expect(call.ExpressionAttributeNames).toEqual({
