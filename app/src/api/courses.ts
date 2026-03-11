@@ -20,6 +20,6 @@ export async function getCourses(): Promise<Course[]> {
     }));
   } catch (error) {
     console.error("Fehler beim Laden der Courses:", error);
-    throw error; // weiterwerfen, damit CourseList "Failed to load data" anzeigen kann
+    return [];
   }
 }

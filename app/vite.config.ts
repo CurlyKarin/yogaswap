@@ -21,7 +21,8 @@ export default defineConfig({
     include: ['react', 'react-dom'],
   },
   test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/*.test.tsx', 'src/**/*.spec.tsx'],
+    setupFiles: 'src/test/setupTests.ts',
   },
 } as import('vite').UserConfig);

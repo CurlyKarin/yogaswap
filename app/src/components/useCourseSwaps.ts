@@ -13,7 +13,7 @@ export function useCourseSwaps(
   swaps: Swap[], 
   setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, 
   currentUser: User,
-  fetchData: () => Promise<() => void>
+  fetchData: () => Promise<void>
 ) {
   const requestSwapRef = useRef<(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => Promise<void>>(null!);
   // Filtere Overrides für aktuelle und zukünftige Termine
