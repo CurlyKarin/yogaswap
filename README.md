@@ -6,11 +6,11 @@
 ![AWS](https://img.shields.io/badge/AWS-Serverless-FF9900?style=flat&logo=amazonaws&logoColor=white)
 ![Terraform](https://img.shields.io/badge/OpenTofu%2FTerraform-IaC-7B42BC?style=flat&logo=terraform&logoColor=white)
 
-**Serverless-SaaS-Plattform für Yoga-Kursverwaltung und Kursplatz-Tausch**
+**Serverless-SaaS-Plattform für Multi-Tenancy‑Yoga-Kursverwaltung und Kursplatz-Tausch**
 
-YogaSwap ermöglicht Yogastudios die Verwaltung und den Tausch von Kursplätzen zwischen Teilnehmenden – inkl. automatischem Wartelisten-Management und rollenbasierter Zugriffskontrolle.
+YogaSwap ermöglicht Yogastudios in einer Multi-Tenant-Architektur die Verwaltung und den Tausch von Kursplätzen zwischen Teilnehmenden – inkl. automatischem Wartelisten-Management und rollenbasierter Zugriffskontrolle.
 
-**▶ [Live-Demo ansehen](https://d1cvi2br361w6h.cloudfront.net)** *(Anmeldung erforderlich)*
+**▶ [Live-Demo ansehen](https://app.yogaswap.de)** *(Anmeldung erforderlich)*
 
 ---
 
@@ -19,6 +19,7 @@ YogaSwap ermöglicht Yogastudios die Verwaltung und den Tausch von Kursplätzen 
 - **Kursplatz-Tausch** – Teilnehmende können Kursplätze untereinander tauschen
 - **Automatisches Wartelisten-Management** – Aufrückungen bei freien Plätzen
 - **Rollenbasierte Zugriffe** – Admin, Instructor, Participant mit unterschiedlichen Rechten
+- **Multi-Tenancy** – mehrere Yogastudios (Tenants) mit getrennten Kursen und Teilnehmer:innen
 - **Einladungssystem** – E-Mail-Einladungen für neue Nutzer (via AWS SES)
 - **Responsive UI** – Nutzbar auf Desktop und mobilen Geräten
 
