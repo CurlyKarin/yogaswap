@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 import CourseCard from "./CourseCard";
 import type { Course, CourseDateOverride, Swap, User } from "shared/types";

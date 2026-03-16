@@ -19,7 +19,6 @@ vi.mock("../lib/waitlist", () => ({
 }));
 
 const { createSwap, deleteSwap, processPromotions } = await import("../api/swaps");
-const { createOverride, updateOverride } = await import("../api/overrides");
 
 const baseUser: User = {
   nickname: "alice",
@@ -71,7 +70,21 @@ describe("useCourseSwaps", () => {
     });
 
     const { result } = renderHook(() =>
-      useCourseSwaps([course], [baseOverride], setOverrides as any, [], setSwaps as any, baseUser, fetchData),
+      useCourseSwaps(
+        [course],
+        [baseOverride],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
     );
 
     await act(async () => {
@@ -83,7 +96,9 @@ describe("useCourseSwaps", () => {
 
   it("requestSwap legt Swap mit Status 'pending' an und ruft processPromotions auf", async () => {
     const fetchData = vi.fn().mockResolvedValue(undefined);
-    const setOverrides = vi.fn((updater) => updater([baseOverride]));
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([baseOverride]),
+    );
     const setSwaps = vi.fn();
 
     (processPromotions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -92,7 +107,21 @@ describe("useCourseSwaps", () => {
     });
 
     const { result } = renderHook(() =>
-      useCourseSwaps([course], [baseOverride], setOverrides as any, [], setSwaps as any, baseUser, fetchData),
+      useCourseSwaps(
+        [course],
+        [baseOverride],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
     );
 
     await act(async () => {
@@ -107,7 +136,9 @@ describe("useCourseSwaps", () => {
 
   it("confirmSwap bricht ab, wenn der Zieltermin inzwischen voll ist", async () => {
     const fetchData = vi.fn().mockResolvedValue(undefined);
-    const setOverrides = vi.fn((updater) => updater([baseOverride]));
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([baseOverride]),
+    );
     const setSwaps = vi.fn();
 
     const fullTargetCourse: Course = {
@@ -125,9 +156,15 @@ describe("useCourseSwaps", () => {
       useCourseSwaps(
         [course, fullTargetCourse],
         [baseOverride],
-        setOverrides as any,
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
         [],
-        setSwaps as any,
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
         baseUser,
         fetchData,
       ),
@@ -146,7 +183,9 @@ describe("useCourseSwaps", () => {
 
   it("cancelSwap löscht Swaps und ruft deleteSwap sowie processPromotions auf", async () => {
     const fetchData = vi.fn().mockResolvedValue(undefined);
-    const setOverrides = vi.fn((updater) => updater([baseOverride]));
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([baseOverride]),
+    );
     const setSwaps = vi.fn();
 
     (processPromotions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -155,7 +194,21 @@ describe("useCourseSwaps", () => {
     });
 
     const { result } = renderHook(() =>
-      useCourseSwaps([course], [baseOverride], setOverrides as any, [pendingSwap], setSwaps as any, baseUser, fetchData),
+      useCourseSwaps(
+        [course],
+        [baseOverride],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [pendingSwap],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
     );
 
     await act(async () => {
