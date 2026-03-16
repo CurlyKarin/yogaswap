@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import React from "react";
 import CourseCard from "./CourseCard";
 import type { Course, CourseDateOverride, Swap, User } from "shared/types";
@@ -63,6 +63,25 @@ function renderCourseCard(overrides: Partial<React.ComponentProps<typeof CourseC
 }
 
 describe("CourseCard", () => {
+  it("zeigt Hinweis, wenn keine zukünftigen Termine vorhanden sind", () => {
+    const courseWithoutFutureDates: Course = {
+      ...baseCourse,
+      dates: ["2000-01-01"],
+    };
+
+    renderCourseCard({
+      course: courseWithoutFutureDates,
+      dates: [],
+      overrides: [],
+    });
+
+    expect(
+      screen.getByText(/Zur Zeit sind keine zukünftigen Termine für diesen Kurs geplant\./i),
+    ).toBeInTheDocument();
+    const select = screen.getByRole("combobox");
+    expect(select).toBeDisabled();
+  });
+
   it("ruft onToggleAbsence auf, wenn 'Termin absagen' geklickt wird", () => {
     const onToggleAbsence = vi.fn();
 
@@ -91,6 +110,77 @@ describe("CourseCard", () => {
     const [swapArg, clickedCourseId] = cancelSwap.mock.calls[0];
     expect(swapArg).toEqual(baseSwap);
     expect(clickedCourseId).toBe(1);
+  });
+
+  it("zeigt Status-Text für eine pending Tauschanfrage an", () => {
+    const swaps: Swap[] = [
+      {
+        ...baseSwap,
+        status: "pending",
+      },
+    ];
+
+    const targetCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Advanced",
+    };
+
+    renderCourseCard({
+      swaps,
+      allCourses: [baseCourse, targetCourse],
+    });
+
+    expect(
+      screen.getByText(/Tauschanfrage für .*Yoga Advanced/i),
+    ).toBeInTheDocument();
+  });
+
+  it("öffnet das Swap-Modal und ruft confirmSwap bzw. requestSwap korrekt auf", () => {
+    const confirmSwap = vi.fn();
+    const requestSwap = vi.fn();
+
+    const alternativeCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Abend",
+      dates: ["2099-06-20"],
+      participants: [],
+    };
+
+    const overrideWithWaitlist: CourseDateOverride = {
+      courseId: 2,
+      date: "2099-06-21",
+      participants: ["bob"],
+      swapped: [],
+      waitlist: [],
+    };
+
+    renderCourseCard({
+      confirmSwap,
+      requestSwap,
+      allCourses: [baseCourse, alternativeCourse],
+      overrides: [baseOverride, overrideWithWaitlist],
+    });
+
+    // Swap-Modal öffnen (es kann mehrere gleich benannte Buttons geben)
+    const [swapButton] = screen.getAllByRole("button", { name: /Tauschen anfragen/i });
+    fireEvent.click(swapButton);
+
+    expect(screen.getByText(/Tauschanfrage starten/i)).toBeInTheDocument();
+
+    // Es gibt in diesem Szenario keine passenden Ersatztermine
+    expect(
+      screen.getByText(/Keine passenden Ersatztermine verfügbar/i),
+    ).toBeInTheDocument();
+
+    // Button ist deaktiviert und bleibt es auch, da keine Auswahl möglich ist
+    const confirmButton = screen.getByRole("button", { name: /Bestätigen/i });
+    expect(confirmButton).toBeDisabled();
+
+    fireEvent.click(confirmButton);
+    expect(confirmSwap).not.toHaveBeenCalled();
+    expect(requestSwap).not.toHaveBeenCalled();
   });
 });
 
