@@ -185,5 +185,47 @@ describe("CourseList", () => {
       expect(screen.getByText("Kurs B")).toBeInTheDocument();
     });
   });
+
+  it("rendert alle Kurse ohne Filter, wenn kein Tenant und keine Membership übergeben werden", async () => {
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Monday",
+        time: "10:00",
+        capacity: 10,
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+      {
+        tenantId: "default-tenant",
+        id: 2,
+        name: "Kurs B",
+        weekday: "Tuesday",
+        time: "11:00",
+        capacity: 10,
+        participants: [],
+        dates: ["2099-06-17"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    const { canSeeCourse } = await import("shared/permissions");
+
+    render(<CourseList currentUser={baseUser} />);
+
+    // Kurse werden ohne Filter gerendert (können mehrfach vorkommen)
+    const kursAElements = await screen.findAllByText("Kurs A");
+    const kursBElements = await screen.findAllByText("Kurs B");
+    expect(kursAElements.length).toBeGreaterThan(0);
+    expect(kursBElements.length).toBeGreaterThan(0);
+
+    // Ohne Tenant/Membership wird canSeeCourse nicht aufgerufen
+    expect(canSeeCourse).not.toHaveBeenCalled();
+  });
 });
 
