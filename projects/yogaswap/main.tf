@@ -70,9 +70,9 @@ locals {
       s3_resources = []
     },
     "get_coursedateoverrides" = {
-      name           = var.lambdas["get_coursedateoverrides"].name
-      file_name      = var.lambdas["get_coursedateoverrides"].file_name
-      table_arns     = [module.course_overrides_table.table_arn]
+      name             = var.lambdas["get_coursedateoverrides"].name
+      file_name        = var.lambdas["get_coursedateoverrides"].file_name
+      table_arns       = [module.course_overrides_table.table_arn]
       dynamodb_actions = var.lambdas["get_coursedateoverrides"].dynamodb_actions
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
@@ -227,12 +227,20 @@ module "cloudfront_spa" {
   acm_certificate_arn     = var.cloudfront_acm_certificate_arn
 }
 
-resource "random_id" "invalidation" {
-  byte_length = 4
-  keepers = {
-    # Erzeuge neue ID bei jedem Plan/Apply, um Invalidierung zu triggern
-    always_run = timestamp()
+resource "null_resource" "cloudfront_invalidation" {
+  triggers = {
+    build_hash      = local.build_hash
+    distribution_id = module.cloudfront_spa.distribution_id
   }
+
+  provisioner "local-exec" {
+    command = "aws cloudfront create-invalidation --distribution-id ${self.triggers.distribution_id} --paths '/*'"
+  }
+
+  depends_on = [
+    aws_s3_object.spa_files,
+    null_resource.upload_frontend,
+  ]
 }
 
 output "api_url" {
