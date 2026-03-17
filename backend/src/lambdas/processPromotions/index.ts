@@ -1,7 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { QueryCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { Swap, CourseDateOverride, Course } from "@yogaswap/shared";
-import { getTenantContext, TenantContext } from "../shared/tenantContext";
+import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
 
 const client = dynamoClient;

@@ -7,8 +7,8 @@ resource "aws_iam_role" "lambda_role" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Action    = "sts:AssumeRole",
-      Effect    = "Allow",
+      Action = "sts:AssumeRole",
+      Effect = "Allow",
       Principal = {
         Service = "lambda.amazonaws.com"
       }
@@ -56,13 +56,13 @@ resource "aws_iam_role_policy" "lambda_policy" {
 resource "aws_lambda_function" "lambda" {
   for_each = local.lambda_configs
 
-  function_name     = "${var.project}-${each.value.name}"
-  handler           = "index.handler"
-  runtime           = "nodejs18.x"
-  role              = aws_iam_role.lambda_role[each.key].arn
-  filename          = "${path.module}/../../backend/zips/${each.value.file_name}"
+  function_name = "${var.project}-${each.value.name}"
+  handler       = "index.handler"
+  runtime       = "nodejs18.x"
+  role          = aws_iam_role.lambda_role[each.key].arn
+  filename      = "${path.module}/../../backend/zips/${each.value.file_name}"
   # Kombiniere Source Code Hash mit Environment Variables Hash, damit Lambda bei Environment-Änderungen neu deployed wird
-  source_code_hash  = sha256(join(",", [
+  source_code_hash = sha256(join(",", [
     filebase64sha256("${path.module}/../../backend/zips/${each.value.file_name}"),
     jsonencode(merge(
       each.value.tables,

@@ -32,7 +32,7 @@ async function run() {
       if (groupResponse.Groups && groupResponse.Groups.length > 0) {
         role = groupResponse.Groups[0].GroupName || "participant";
       }
-    } catch (e) {
+    } catch (_e) {
       console.warn(`Could not fetch groups for ${username}, defaulting to participant`);
     }
 

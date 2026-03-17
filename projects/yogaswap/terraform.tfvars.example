@@ -24,3 +24,12 @@ region = "eu-central-1"
 # Wichtig: Diese E-Mail-Adresse muss in AWS SES Console verifiziert werden!
 ses_source_email = "yogaswap@example.com"
 
+# Optional: Custom Domain für CloudFront (SPA)
+# Wenn du `app.yogaswap.de` über CloudFront nutzen willst, setze:
+# - cloudfront_aliases
+# - cloudfront_acm_certificate_arn (ACM Zertifikat in us-east-1!)
+#
+# Beispiel:
+# cloudfront_aliases = ["app.yogaswap.de"]
+# cloudfront_acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
