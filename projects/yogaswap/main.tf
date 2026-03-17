@@ -70,9 +70,9 @@ locals {
       s3_resources = []
     },
     "get_coursedateoverrides" = {
-      name             = var.lambdas["get_coursedateoverrides"].name
-      file_name        = var.lambdas["get_coursedateoverrides"].file_name
-      table_arns       = [module.course_overrides_table.table_arn]
+      name           = var.lambdas["get_coursedateoverrides"].name
+      file_name      = var.lambdas["get_coursedateoverrides"].file_name
+      table_arns     = [module.course_overrides_table.table_arn]
       dynamodb_actions = var.lambdas["get_coursedateoverrides"].dynamodb_actions
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
