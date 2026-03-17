@@ -39,8 +39,54 @@ export const handler = async (event: any) => {
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
   const { email, nickname, role } = body ?? {};
 
-  if (!email || !nickname || !role) {
+  const emailNormalized = typeof email === "string" ? email.trim() : "";
+  const hasEmail = emailNormalized.length > 0;
+
+  if (!nickname || !role) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing required fields" }) };
+  }
+
+  // Email optional: if missing/empty, skip Cognito and SES and only write membership to DynamoDB.
+  if (!hasEmail) {
+    const tenantId = getTenantId(event);
+    try {
+      if (process.env.MEMBERSHIPS_TABLE) {
+        await dynamodb.send(
+          new PutItemCommand({
+            TableName: process.env.MEMBERSHIPS_TABLE,
+            Item: {
+              tenantId: { S: tenantId },
+              userId: { S: nickname },
+              role: { S: role },
+            },
+          }),
+        );
+        console.log(
+          `Membership saved in DynamoDB (no email): user=${nickname}, tenant=${tenantId}, role=${role}`,
+        );
+      } else {
+        console.warn(
+          "MEMBERSHIPS_TABLE environment variable not set, skipping DynamoDB write.",
+        );
+      }
+    } catch (err: any) {
+      console.error("Failed to save membership in DynamoDB:", err);
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "Failed to create participant" }),
+      };
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        success: true,
+        username: nickname,
+        emailSent: false,
+        warning:
+          "E-Mail fehlt – Cognito/SES übersprungen. Teilnehmer wurde nur in DynamoDB angelegt.",
+      }),
+    };
   }
 
   // raw temporary password (safe characters)
@@ -58,7 +104,7 @@ export const handler = async (event: any) => {
       Username: nickname, // Nickname muss einzigartig sein
       TemporaryPassword: rawPassword ,
       UserAttributes: [
-        { Name: "email", Value: email },
+        { Name: "email", Value: emailNormalized },
         { Name: "email_verified", Value: "true" },
         { Name: "nickname", Value: username },
         { Name: "custom:role", Value: role }
@@ -122,7 +168,7 @@ export const handler = async (event: any) => {
   // Build link (only nickname in the URL)
   const baseUrlEnv = process.env.BASE_URL || "";
   const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
-  const link = `${baseUrl}/invite?nickname=${encodeURIComponent(username)}&email=${encodeURIComponent(email)}`;
+  const link = `${baseUrl}/invite?nickname=${encodeURIComponent(username)}&email=${encodeURIComponent(emailNormalized)}`;
 
   // Send invitation email (temp password shown in email body)
   const emailHtml = `
@@ -143,14 +189,14 @@ export const handler = async (event: any) => {
     console.log(`📧 process.env.SES_SOURCE_EMAIL = "${process.env.SES_SOURCE_EMAIL}"`);
     await ses.send(new SendEmailCommand({
       Source: sesSourceEmail,
-      Destination: { ToAddresses: [email] },
+      Destination: { ToAddresses: [emailNormalized] },
       Message: {
         Subject: { Data: "YogaSwap Einladung" },
         Body: { Html: { Data: emailHtml } }
       }
     }));
     emailSent = true;
-    console.log("SES email sent successfully to", email);
+    console.log("SES email sent successfully to", emailNormalized);
   } catch (err: any) {
     console.warn("SES send warning:", err?.message || err);
     // do not fail user creation if SES can't send (depending on your policy)

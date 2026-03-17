@@ -81,6 +81,41 @@ describe('createParticipants Lambda', () => {
     expect(cognitoMockSend).not.toHaveBeenCalled();
   });
 
+  test('creates a foreign-managed participant if email is empty (skips Cognito/SES)', async () => {
+    const event = baseEvent({
+      email: '',
+      nickname: 'noligin',
+      role: 'participant',
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.username).toBe('noligin');
+    expect(body.emailSent).toBe(false);
+    expect(body.warning).toMatch(/Cognito\/SES übersprungen/i);
+
+    // Cognito + SES should not be called
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(sesMockSend).not.toHaveBeenCalled();
+
+    // DynamoDB should be called to store membership
+    expect(dynamoMockSend).toHaveBeenCalledTimes(1);
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-memberships-table',
+        Item: expect.objectContaining({
+          tenantId: { S: 'test-tenant' },
+          userId: { S: 'noligin' },
+          role: { S: 'participant' },
+        }),
+      })
+    );
+  });
+
   test('successfully creates a new user', async () => {
     cognitoMockSend
       .mockResolvedValueOnce({}) // AdminCreateUserCommand

@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { UpdateItemCommand } from '@aws-sdk/client-dynamodb';
-import { getTenantContext, TenantContext } from '../shared/tenantContext';
+import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 
 const client = dynamoClient;

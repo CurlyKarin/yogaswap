@@ -87,7 +87,7 @@ async function tableExists(tableName: string): Promise<boolean> {
 }
 
 // Liste alle Tabellen auf, die zum Projekt passen könnten
-async function listSimilarTables(prefix: string): Promise<string[]> {
+async function listSimilarTables(_prefix: string): Promise<string[]> {
   try {
     const result = await client.send(new ListTablesCommand({}));
     const allTables = result.TableNames || [];
@@ -222,23 +222,6 @@ async function checkTablesExist(): Promise<void> {
     
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     process.exit(1);
-  }
-}
-
-async function seedTable(tableName: string, items: any[]) {
-  for (const item of items) {
-    await client.send(
-      new PutItemCommand({
-        TableName: tableName,
-        Item: Object.fromEntries(
-          Object.entries(item).map(([k, v]) => [
-            k,
-            { S: typeof v === "string" ? v : JSON.stringify(v) },
-          ])
-        ),
-      })
-    );
-    console.log(`✅ Inserted into ${tableName}:`, item);
   }
 }
 
