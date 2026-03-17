@@ -1,10 +1,10 @@
 # Tenant-scoped: PK = tenantId, SK = user_swapId (user#swapId)
 # GSI_From/GSI_To: PK = tenantId_user, SK = fromDate_... / toDate_...
 module "swaps_table" {
-  source     = "../modules/dynamodb"
-  name       = "${var.project}-swaps-table"
-  hash_key   = "tenantId"
-  range_key  = "user_swapId"
+  source    = "../modules/dynamodb"
+  name      = "${var.project}-swaps-table"
+  hash_key  = "tenantId"
+  range_key = "user_swapId"
 
   attributes = [
     { name = "tenantId", type = "S" },
@@ -32,10 +32,10 @@ module "swaps_table" {
 
 # Tenant-scoped: PK = tenantId, SK = courseId_date (courseId_date)
 module "course_overrides_table" {
-  source     = "../modules/dynamodb"
-  name       = "${var.project}-courseOverrides-table"
-  hash_key   = "tenantId"
-  range_key  = "courseId_date"
+  source    = "../modules/dynamodb"
+  name      = "${var.project}-courseOverrides-table"
+  hash_key  = "tenantId"
+  range_key = "courseId_date"
   attributes = [
     { name = "tenantId", type = "S" },
     { name = "courseId_date", type = "S" }
@@ -44,10 +44,10 @@ module "course_overrides_table" {
 
 # Tenant-scoped: PK = tenantId, SK = courseId (string, z. B. "1", "2")
 module "courses_table" {
-  source     = "../modules/dynamodb"
-  name       = "${var.project}-courses-table"
-  hash_key   = "tenantId"
-  range_key  = "courseId"
+  source    = "../modules/dynamodb"
+  name      = "${var.project}-courses-table"
+  hash_key  = "tenantId"
+  range_key = "courseId"
   attributes = [
     { name = "tenantId", type = "S" },
     { name = "courseId", type = "S" }
@@ -61,9 +61,9 @@ module "courses_table" {
 # Tenants: PK = tenantId
 # Speichert z. B. Settings, Name, Impressum des Studios
 module "tenants_table" {
-  source     = "../modules/dynamodb"
-  name       = "${var.project}-tenants-table"
-  hash_key   = "tenantId"
+  source   = "../modules/dynamodb"
+  name     = "${var.project}-tenants-table"
+  hash_key = "tenantId"
   attributes = [
     { name = "tenantId", type = "S" }
   ]
@@ -72,10 +72,10 @@ module "tenants_table" {
 # Memberships: PK = tenantId, SK = userId (Nickname)
 # Speichert die Rolle (admin, instructor, participant) des Users in diesem Tenant
 module "memberships_table" {
-  source     = "../modules/dynamodb"
-  name       = "${var.project}-memberships-table"
-  hash_key   = "tenantId"
-  range_key  = "userId"
+  source    = "../modules/dynamodb"
+  name      = "${var.project}-memberships-table"
+  hash_key  = "tenantId"
+  range_key = "userId"
   attributes = [
     { name = "tenantId", type = "S" },
     { name = "userId", type = "S" }

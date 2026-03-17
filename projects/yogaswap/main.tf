@@ -2,155 +2,155 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0.0" 
+      version = ">= 5.0.0"
     }
   }
   backend "local" {}
 }
 
-provider "aws" { 
-    region = var.region
+provider "aws" {
+  region = var.region
 }
 
 locals {
   lambda_configs = {
     "get_swaps" = {
-      name           = var.lambdas["get_swaps"].name
-      file_name      = var.lambdas["get_swaps"].file_name
-      table_arns     = [module.swaps_table.table_arn]
+      name             = var.lambdas["get_swaps"].name
+      file_name        = var.lambdas["get_swaps"].file_name
+      table_arns       = [module.swaps_table.table_arn]
       dynamodb_actions = var.lambdas["get_swaps"].dynamodb_actions
       tables = {
         "SWAPS_TABLE" = module.swaps_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "get_swaps_by_status" = {
-      name           = "get-swaps-by-status"
-      file_name      = "getSwapsByStatus.zip"
-      table_arns     = [module.swaps_table.table_arn]
+      name             = "get-swaps-by-status"
+      file_name        = "getSwapsByStatus.zip"
+      table_arns       = [module.swaps_table.table_arn]
       dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query"]
       tables = {
         "SWAPS_TABLE" = module.swaps_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "create_swap" = {
-      name           = "create-swap"
-      file_name      = "createSwap.zip"
-      table_arns     = [module.swaps_table.table_arn]
+      name             = "create-swap"
+      file_name        = "createSwap.zip"
+      table_arns       = [module.swaps_table.table_arn]
       dynamodb_actions = ["dynamodb:PutItem"]
       tables = {
         "SWAPS_TABLE" = module.swaps_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "update_swap" = {
-      name           = "update-swap"
-      file_name      = "updateSwap.zip"
-      table_arns     = [module.swaps_table.table_arn]
+      name             = "update-swap"
+      file_name        = "updateSwap.zip"
+      table_arns       = [module.swaps_table.table_arn]
       dynamodb_actions = ["dynamodb:UpdateItem"]
       tables = {
         "SWAPS_TABLE" = module.swaps_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "delete_swap" = {
-      name           = "delete-swap"
-      file_name      = "deleteSwap.zip"
-      dynamodb_actions = ["dynamodb:DeleteItem"]      
-      table_arns     = [module.swaps_table.table_arn]
+      name             = "delete-swap"
+      file_name        = "deleteSwap.zip"
+      dynamodb_actions = ["dynamodb:DeleteItem"]
+      table_arns       = [module.swaps_table.table_arn]
       tables = {
         "SWAPS_TABLE" = module.swaps_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "get_coursedateoverrides" = {
-      name           = var.lambdas["get_coursedateoverrides"].name
-      file_name      = var.lambdas["get_coursedateoverrides"].file_name
-      table_arns     = [module.course_overrides_table.table_arn]
+      name             = var.lambdas["get_coursedateoverrides"].name
+      file_name        = var.lambdas["get_coursedateoverrides"].file_name
+      table_arns       = [module.course_overrides_table.table_arn]
       dynamodb_actions = var.lambdas["get_coursedateoverrides"].dynamodb_actions
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "create_override" = {
-      name           = "create-override"
-      file_name      = "createOverride.zip"
-      table_arns     = [module.course_overrides_table.table_arn]
+      name             = "create-override"
+      file_name        = "createOverride.zip"
+      table_arns       = [module.course_overrides_table.table_arn]
       dynamodb_actions = ["dynamodb:PutItem"]
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "update_override" = {
-      name           = "update-override"
-      file_name      = "updateOverride.zip"
-      table_arns     = [module.course_overrides_table.table_arn]
+      name             = "update-override"
+      file_name        = "updateOverride.zip"
+      table_arns       = [module.course_overrides_table.table_arn]
       dynamodb_actions = ["dynamodb:UpdateItem"]
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "delete_override" = {
-      name           = "delete-override"
-      file_name      = "deleteOverride.zip"
-      dynamodb_actions = ["dynamodb:DeleteItem"]      
-      table_arns     = [module.course_overrides_table.table_arn]
+      name             = "delete-override"
+      file_name        = "deleteOverride.zip"
+      dynamodb_actions = ["dynamodb:DeleteItem"]
+      table_arns       = [module.course_overrides_table.table_arn]
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "process_promotions" = {
-      name           = "process-promotions"
-      file_name      = "processPromotions.zip"
-      table_arns     = [module.swaps_table.table_arn, module.course_overrides_table.table_arn, module.courses_table.table_arn]
+      name             = "process-promotions"
+      file_name        = "processPromotions.zip"
+      table_arns       = [module.swaps_table.table_arn, module.course_overrides_table.table_arn, module.courses_table.table_arn]
       dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
       tables = {
-        "SWAPS_TABLE" = module.swaps_table.table_name
+        "SWAPS_TABLE"     = module.swaps_table.table_name
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
-        "COURSES_TABLE" = module.courses_table.table_name
+        "COURSES_TABLE"   = module.courses_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "get_courses" = {
-      name           = "get-courses"
-      file_name      = "getCourses.zip"
-      table_arns     = [module.courses_table.table_arn]
+      name             = "get-courses"
+      file_name        = "getCourses.zip"
+      table_arns       = [module.courses_table.table_arn]
       dynamodb_actions = ["dynamodb:Query", "dynamodb:GetItem"]
       tables = {
         "COURSES_TABLE" = module.courses_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     },
     "create_participants" = {
-      name           = "create-participants"
-      file_name      = "createParticipants.zip"
-      table_arns     = [module.memberships_table.table_arn]
+      name             = "create-participants"
+      file_name        = "createParticipants.zip"
+      table_arns       = [module.memberships_table.table_arn]
       dynamodb_actions = ["dynamodb:PutItem"]
       tables = {
         "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
       additional_policies = [
         {
-          Effect   = "Allow"
-          Action   = [
+          Effect = "Allow"
+          Action = [
             "cognito-idp:AdminCreateUser",
             "cognito-idp:AdminAddUserToGroup",
             "cognito-idp:AdminSetUserPassword"
@@ -164,15 +164,15 @@ locals {
         }
       ]
       environment = {
-        USER_POOL_ID = aws_cognito_user_pool.yogaswap.id
-        BASE_URL     = module.cloudfront_spa.distribution_url
-        SES_SOURCE_EMAIL = var.ses_source_email  # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
+        USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
+        BASE_URL         = module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = var.ses_source_email # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
       }
     },
     "get_tenant_context" = {
-      name           = "get-tenant-context"
-      file_name      = "getTenantContext.zip"
-      table_arns     = [
+      name      = "get-tenant-context"
+      file_name = "getTenantContext.zip"
+      table_arns = [
         module.tenants_table.table_arn,
         module.memberships_table.table_arn
       ]
@@ -181,28 +181,28 @@ locals {
         "TENANTS_TABLE"     = module.tenants_table.table_name
         "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
       }
-      s3_actions     = []
-      s3_resources   = []
+      s3_actions   = []
+      s3_resources = []
     }
   }
-   # Map für Lambda-ARNs
+  # Map für Lambda-ARNs
   lambda_arns = { for k, v in aws_lambda_function.lambda : k => v.arn }
 
   # API Gateway Routen
   api_routes = {
-    "GET /swaps" = "get_swaps"
-    "GET /swaps/status" = "get_swaps_by_status"
-    "GET /course-overrides" = "get_coursedateoverrides"
-    "POST /swaps" = "create_swap"
-    "PUT /swaps/{swapId}" = "update_swap"
-    "DELETE /swaps/{swapId}" = "delete_swap"
-    "POST /course-overrides" = "create_override"
-    "PUT /course-overrides/{courseId}/{date}" = "update_override"
+    "GET /swaps"                                 = "get_swaps"
+    "GET /swaps/status"                          = "get_swaps_by_status"
+    "GET /course-overrides"                      = "get_coursedateoverrides"
+    "POST /swaps"                                = "create_swap"
+    "PUT /swaps/{swapId}"                        = "update_swap"
+    "DELETE /swaps/{swapId}"                     = "delete_swap"
+    "POST /course-overrides"                     = "create_override"
+    "PUT /course-overrides/{courseId}/{date}"    = "update_override"
     "DELETE /course-overrides/{courseId}/{date}" = "delete_override"
-    "POST /process-promotions" = "process_promotions"
-    "GET /courses" = "get_courses"
-    "POST /participants" = "create_participants"
-    "GET /tenant-context" = "get_tenant_context"
+    "POST /process-promotions"                   = "process_promotions"
+    "GET /courses"                               = "get_courses"
+    "POST /participants"                         = "create_participants"
+    "GET /tenant-context"                        = "get_tenant_context"
   }
 
   build_files = fileset("../../app/build", "**")
@@ -211,18 +211,20 @@ locals {
 
 #--------------apigateway--------------------
 module "yogaswap_api" {
-  source       = "../modules/apigatewayv2"
-  name         = "${var.project}-api"
-  lambda_arns  = local.lambda_arns
-  routes       = local.api_routes
+  source      = "../modules/apigatewayv2"
+  name        = "${var.project}-api"
+  lambda_arns = local.lambda_arns
+  routes      = local.api_routes
 }
 #---------------cloudfront------------------
 
 module "cloudfront_spa" {
-  source      = "../modules/cloudfront"
-  bucket_name = module.spa_site.bucket_name
-  bucket_domain_name = module.spa_site.bucket_regional_domain
+  source                  = "../modules/cloudfront"
+  bucket_name             = module.spa_site.bucket_name
+  bucket_domain_name      = module.spa_site.bucket_regional_domain
   api_gateway_domain_name = replace(module.yogaswap_api.api_endpoint, "https://", "")
+  aliases                 = var.cloudfront_aliases
+  acm_certificate_arn     = var.cloudfront_acm_certificate_arn
 }
 
 resource "random_id" "invalidation" {

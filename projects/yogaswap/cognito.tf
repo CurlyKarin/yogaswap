@@ -23,10 +23,10 @@ resource "aws_cognito_user_pool" "yogaswap" {
   }
 
   schema {
-    attribute_data_type      = "String"
-    mutable                  = true
-    name                     = "email"
-    required                 = true
+    attribute_data_type = "String"
+    mutable             = true
+    name                = "email"
+    required            = true
 
     string_attribute_constraints {
       min_length = 1
@@ -35,10 +35,10 @@ resource "aws_cognito_user_pool" "yogaswap" {
   }
 
   schema {
-    attribute_data_type      = "String"
-    mutable                  = true
-    name                     = "role"
-    required                 = false
+    attribute_data_type = "String"
+    mutable             = true
+    name                = "role"
+    required            = false
 
     string_attribute_constraints {
       min_length = 1
@@ -47,10 +47,10 @@ resource "aws_cognito_user_pool" "yogaswap" {
   }
 
   schema {
-    attribute_data_type      = "String"
-    mutable                  = true
-    name                     = "nickname"
-    required                 = true
+    attribute_data_type = "String"
+    mutable             = true
+    name                = "nickname"
+    required            = true
 
     string_attribute_constraints {
       min_length = 1
@@ -73,8 +73,8 @@ resource "aws_cognito_user_pool_client" "yogaswap_app" {
   generate_secret = false
 
   callback_urls = [
-    "https://${module.cloudfront_spa.distribution_url}", 
-    "http://localhost:5173"]
+    "https://${module.cloudfront_spa.distribution_url}",
+  "http://localhost:5173"]
 
   logout_urls = [
     "https://${module.cloudfront_spa.distribution_url}",
@@ -86,7 +86,7 @@ resource "aws_cognito_user_group" "admin" {
   name         = "admin"
   user_pool_id = aws_cognito_user_pool.yogaswap.id
   description  = "Administratoren"
-  precedence   = 0    # niedrigere Zahl = höhere Priorität falls mehrere Rollen relevant sind
+  precedence   = 0 # niedrigere Zahl = höhere Priorität falls mehrere Rollen relevant sind
   # optional: role_arn = aws_iam_role.some_role.arn
 }
 

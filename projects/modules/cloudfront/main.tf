@@ -12,6 +12,18 @@ variable "api_gateway_domain_name" {
   type = string
 }
 
+variable "aliases" {
+  type        = list(string)
+  description = "Alternate domain names (CNAMEs) for the CloudFront distribution (e.g. app.yogaswap.de)"
+  default     = []
+}
+
+variable "acm_certificate_arn" {
+  type        = string
+  description = "ACM certificate ARN (must be in us-east-1) to use for aliases. Leave empty to use CloudFront default cert."
+  default     = ""
+}
+
 resource "aws_cloudfront_origin_access_control" "spa" {
   name                              = "${var.bucket_name}-oac"
   description                       = "OAC for S3 static site"
@@ -24,6 +36,8 @@ resource "aws_cloudfront_distribution" "spa" {
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
+
+  aliases = var.aliases
 
   # Origin API Gateway
   origin {
@@ -168,8 +182,21 @@ resource "aws_cloudfront_distribution" "spa" {
     error_caching_min_ttl = 0
   }
 
-  viewer_certificate {
-    cloudfront_default_certificate = true
+  dynamic "viewer_certificate" {
+    for_each = var.acm_certificate_arn != "" ? [1] : []
+    content {
+      acm_certificate_arn            = var.acm_certificate_arn
+      ssl_support_method             = "sni-only"
+      minimum_protocol_version       = "TLSv1.2_2021"
+      cloudfront_default_certificate = false
+    }
+  }
+
+  dynamic "viewer_certificate" {
+    for_each = var.acm_certificate_arn == "" ? [1] : []
+    content {
+      cloudfront_default_certificate = true
+    }
   }
 
   restrictions {
