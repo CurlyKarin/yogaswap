@@ -134,7 +134,7 @@ resource "aws_cloudfront_distribution" "spa" {
   }
 
   ordered_cache_behavior {
-    path_pattern     = "/participants"
+    path_pattern     = "/participants*"
     target_origin_id = "api-gateway-backend"
     allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods   = ["GET", "HEAD"]
@@ -147,6 +147,8 @@ resource "aws_cloudfront_distribution" "spa" {
       }
       headers      = ["Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"]
     }
+
+    compress = true
   }
 
   default_cache_behavior {
