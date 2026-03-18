@@ -39,6 +39,51 @@ describe("AdminPanel", () => {
     expect(button).toBeDisabled();
   });
 
+  it("ermöglicht fremdverwaltete Teilnehmer ohne E-Mail (ohne Login) und ruft inviteUser ohne email auf", async () => {
+    mockedInviteUser.mockResolvedValue({
+      success: true,
+      emailSent: false,
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(
+      within(panel).getByRole("checkbox", {
+        name: /Teilnehmer ohne Login anlegen/i,
+      }),
+    );
+
+    fireEvent.change(within(panel).getByPlaceholderText("Spitzname"), {
+      target: { value: "alice" },
+    });
+
+    // E-Mail Feld ist ausgeblendet
+    expect(within(panel).queryByPlaceholderText("E-Mail")).toBeNull();
+
+    // Rolle ist deaktiviert (fix auf participant)
+    const roleSelect = within(panel).getByRole("combobox");
+    expect(roleSelect).toBeDisabled();
+
+    const button = within(panel).getByRole("button", { name: /Anlegen/i });
+    expect(button).not.toBeDisabled();
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        nickname: "alice",
+        role: "participant",
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        within(panel).getByText(/wurde ohne Login angelegt/i),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("sendet Einladung erfolgreich und leert die Felder (E-Mail versendet)", async () => {
     mockedInviteUser.mockResolvedValue({
       success: true,
