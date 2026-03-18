@@ -77,7 +77,7 @@ export default function AdminPanel() {
             }}
             disabled={loading}
           />
-          Fremdverwalteter Teilnehmer (ohne Login)
+          Teilnehmer ohne Login anlegen (später einladen)
         </label>
 
         <input

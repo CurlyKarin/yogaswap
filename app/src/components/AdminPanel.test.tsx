@@ -51,7 +51,7 @@ describe("AdminPanel", () => {
 
     fireEvent.click(
       within(panel).getByRole("checkbox", {
-        name: /Fremdverwalteter Teilnehmer \(ohne Login\)/i,
+        name: /Teilnehmer ohne Login anlegen/i,
       }),
     );
 
