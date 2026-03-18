@@ -30,6 +30,6 @@ jobs:
         run: |
           cd app && npx playwright install --with-deps chromium && npm run test:e2e
 
-      - name: Backend – install, build, test
+      - name: Backend – install, lint, build, test
         run: |
-          cd backend && npm ci && npm run build && npm test && cd ..
+          cd backend && npm ci && npm run lint && npm run build && npm test && cd ..
