@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 export interface InviteUserRequest {
-  email: string;
+  email?: string;
   nickname: string;
   role: "participant" | "instructor" | "admin";
 }
@@ -13,6 +13,8 @@ export interface InviteUserResponse {
   tempPassword?: string;  // Temporäres Passwort (nur wenn E-Mail nicht versendet wurde)
   warning?: string;       // Warnung, z.B. wenn E-Mail nicht versendet werden konnte
   emailSent?: boolean;    // Ob E-Mail erfolgreich versendet wurde
+  username?: string;
+  link?: string;
 }
 
 export async function inviteUser(data: InviteUserRequest): Promise<InviteUserResponse> {

@@ -5,23 +5,35 @@ export default function AdminPanel() {
   const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState("");
   const [role, setRole] = useState<"participant" | "instructor" | "admin">("participant");
+  const [foreignManaged, setForeignManaged] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const handleInvite = async () => {
-    if (!email || !nickname) return;
+    if (!nickname) return;
+    if (!foreignManaged && !email) return;
     setLoading(true);
     setMessage("");
     setError("");
 
     try {
-      const result = await inviteUser({ email, nickname, role });
+      const effectiveRole = foreignManaged ? "participant" : role;
+      const payload = foreignManaged
+        ? { nickname, role: effectiveRole }
+        : { email, nickname, role: effectiveRole };
+
+      const result = await inviteUser(payload);
 
       if (result.error === "Nickname already exists") {
         setError("Dieser Spitzname ist bereits vergeben.");
       } else if (result.success) {
-        if (result.emailSent) {
+        if (foreignManaged) {
+          setMessage(
+            `✅ Teilnehmer '${nickname}' wurde ohne Login angelegt.\n` +
+            `Hinweis: Es wird keine Einladung per E-Mail verschickt.`
+          );
+        } else if (result.emailSent) {
           setMessage(`✅ Einladung per E-Mail gesendet an ${email}`);
         } else {
           // E-Mail nicht versendet - zeige temporäres Passwort
@@ -34,6 +46,8 @@ export default function AdminPanel() {
         }
         setEmail("");
         setNickname("");
+        setForeignManaged(false);
+        setRole("participant");
       } else {
         setError("Fehler beim Senden");
       }
@@ -49,6 +63,23 @@ export default function AdminPanel() {
     <div style={{ padding: "1rem", border: "1px solid #ccc", margin: "1rem 0", borderRadius: 8 }}>
       <h3>Teilnehmer einladen</h3>
       <div style={{ display: "grid", gap: "0.5rem", maxWidth: 400 }}>
+        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={foreignManaged}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setForeignManaged(checked);
+              if (checked) {
+                setEmail("");
+                setRole("participant");
+              }
+            }}
+            disabled={loading}
+          />
+          Fremdverwalteter Teilnehmer (ohne Login)
+        </label>
+
         <input
           type="text"
           placeholder="Spitzname"
@@ -56,20 +87,37 @@ export default function AdminPanel() {
           onChange={(e) => setNickname(e.target.value)}
           disabled={loading}
         />
-        <input
-          type="email"
-          placeholder="E-Mail"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
-        />
-        <select value={role} onChange={(e) => setRole(e.target.value as "participant" | "instructor" | "admin")} disabled={loading}>
+        {!foreignManaged && (
+          <input
+            type="email"
+            placeholder="E-Mail"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+          />
+        )}
+        <select
+          value={role}
+          onChange={(e) =>
+            setRole(e.target.value as "participant" | "instructor" | "admin")
+          }
+          disabled={loading || foreignManaged}
+        >
           <option value="participant">Teilnehmer</option>
           <option value="instructor">Kursleiter</option>
           <option value="admin">Admin</option>
         </select>
-        <button onClick={handleInvite} disabled={loading || !email || !nickname}>
-          {loading ? "Wird gesendet..." : "Einladen"}
+        <button
+          onClick={handleInvite}
+          disabled={loading || !nickname || (!foreignManaged && !email)}
+        >
+          {loading
+            ? foreignManaged
+              ? "Wird angelegt..."
+              : "Wird gesendet..."
+            : foreignManaged
+              ? "Anlegen"
+              : "Einladen"}
         </button>
 
         {message && (
