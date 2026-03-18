@@ -136,10 +136,36 @@ export interface ParticipantProfile {
   inviteSentAt?: string;
 
   /** Optional: flexible, tenant-spezifische Teilnehmer-Einstellungen. */
-  settings?: Record<string, unknown>;
+  settings?: ParticipantSettings;
 }
 
 export type ParticipantStatus = "no_login" | "invited" | "active";
+
+/**
+ * Teilnehmer-spezifische Einstellungen.
+ *
+ * Design-Ziel: offen für Erweiterungen, aber mit typsicheren "bekannten" Feldern,
+ * sobald ihr konkrete Use-Cases (Waitlist/Notifications) implementiert.
+ */
+export type ParticipantSettings = {
+  /**
+   * Wenn gesetzt: Teilnehmer möchte nicht mehr nachrücken, wenn der Kurs weniger
+   * als X Minuten in der Zukunft liegt.
+   */
+  waitlistNoPromoteWithinMinutes?: number;
+
+  /** Benachrichtigungspräferenzen (MVP-freundlich, später erweiterbar). */
+  notifications?: {
+    enabled?: boolean;
+    /** z.B. "swap_active", "swap_pending", "waitlist_promoted" */
+    events?: string[];
+    /** z.B. ["email"] */
+    channels?: Array<"email">;
+  };
+
+  /** Erweiterungspunkt für zukünftige Einstellungen. */
+  [key: string]: unknown;
+};
 
 /**
  * Ableitung des Teilnehmer-Status aus Profilfeldern (ohne eigenes Status-Feld).
