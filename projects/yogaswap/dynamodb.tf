@@ -82,12 +82,26 @@ module "memberships_table" {
   ]
 }
 
+# Participants: PK = tenantId, SK = userId (Nickname)
+# Speichert Teilnehmerprofil-Daten (optional E-Mail, Einladungsstatus, Settings)
+module "participants_table" {
+  source    = "../modules/dynamodb"
+  name      = "${var.project}-participants-table"
+  hash_key  = "tenantId"
+  range_key = "userId"
+  attributes = [
+    { name = "tenantId", type = "S" },
+    { name = "userId", type = "S" }
+  ]
+}
+
 output "table_names" {
   value = [
     module.swaps_table.table_name,
     module.course_overrides_table.table_name,
     module.courses_table.table_name,
     module.tenants_table.table_name,
-    module.memberships_table.table_name
+    module.memberships_table.table_name,
+    module.participants_table.table_name
   ]
 }

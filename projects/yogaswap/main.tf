@@ -140,10 +140,11 @@ locals {
     "create_participants" = {
       name             = "create-participants"
       file_name        = "createParticipants.zip"
-      table_arns       = [module.memberships_table.table_arn]
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn]
       dynamodb_actions = ["dynamodb:PutItem"]
       tables = {
-        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -174,12 +175,14 @@ locals {
       file_name = "getTenantContext.zip"
       table_arns = [
         module.tenants_table.table_arn,
-        module.memberships_table.table_arn
+        module.memberships_table.table_arn,
+        module.participants_table.table_arn
       ]
       dynamodb_actions = ["dynamodb:GetItem"]
       tables = {
-        "TENANTS_TABLE"     = module.tenants_table.table_name
-        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
