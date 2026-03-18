@@ -116,3 +116,38 @@ export interface UserTenantMembership {
    */
   instructorCanSeeAllCoursesOverride?: boolean;
 }
+
+/**
+ * Teilnehmerprofil innerhalb eines Tenants.
+ * Dient als stabile, erweiterbare Entität für Teilnehmerverwaltung (E-Mail optional, Settings, Einladungsstatus).
+ */
+export interface ParticipantProfile {
+  tenantId: string;
+  /** Aktuell: Nickname. Kann später auf eine stabile ID migriert werden. */
+  userId: string;
+
+  /** Optional: Kontakt-E-Mail (kann nachgetragen/aktualisiert werden). */
+  email?: string;
+
+  /** Optional: Verknüpfung zur Auth-Identität (z.B. Cognito sub). */
+  authUserId?: string | null;
+
+  /** Optional: Zeitpunkt der letzten Einladung (ISO timestamp). */
+  inviteSentAt?: string;
+
+  /** Optional: flexible, tenant-spezifische Teilnehmer-Einstellungen. */
+  settings?: Record<string, unknown>;
+}
+
+export type ParticipantStatus = "no_login" | "invited" | "active";
+
+/**
+ * Ableitung des Teilnehmer-Status aus Profilfeldern (ohne eigenes Status-Feld).
+ */
+export function getParticipantStatus(
+  profile: Pick<ParticipantProfile, "authUserId" | "inviteSentAt">,
+): ParticipantStatus {
+  if (profile.authUserId) return "active";
+  if (profile.inviteSentAt) return "invited";
+  return "no_login";
+}
