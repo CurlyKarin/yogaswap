@@ -1,11 +1,11 @@
 // app/api/participants.ts
 import axios from 'axios';
-import type { ParticipantProfile, ParticipantStatus, ParticipantSettings } from 'shared/types';
+import type { ParticipantProfile, ParticipantStatus, ParticipantSettings, UserRole } from 'shared/types';
 
 export interface InviteUserRequest {
   email?: string;
   nickname: string;
-  role: "participant" | "instructor" | "admin";
+  role: UserRole;
 }
 
 export interface InviteUserResponse {
