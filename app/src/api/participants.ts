@@ -1,5 +1,6 @@
 // app/api/participants.ts
 import axios from 'axios';
+import type { ParticipantProfile, ParticipantStatus, ParticipantSettings } from 'shared/types';
 
 export interface InviteUserRequest {
   email?: string;
@@ -17,6 +18,15 @@ export interface InviteUserResponse {
   link?: string;
 }
 
+export type ParticipantWithStatus = ParticipantProfile & { status: ParticipantStatus };
+
+export interface UpdateParticipantRequest {
+  email?: string | null;
+  settings?: ParticipantSettings;
+  inviteSentAt?: string | null;
+  authUserId?: string | null;
+}
+
 export async function inviteUser(data: InviteUserRequest): Promise<InviteUserResponse> {
   try {
     const response = await axios.post<InviteUserResponse>('/participants', data);
@@ -29,4 +39,18 @@ export async function inviteUser(data: InviteUserRequest): Promise<InviteUserRes
     }
     return { error: "Request failed" };
   }
+}
+
+export async function getParticipants(search?: string): Promise<ParticipantWithStatus[]> {
+  const config = search ? { params: { search } } : undefined;
+  const response = await axios.get<ParticipantWithStatus[]>('/participants', config);
+  return response.data;
+}
+
+export async function updateParticipant(
+  userId: string,
+  data: UpdateParticipantRequest,
+): Promise<ParticipantWithStatus> {
+  const response = await axios.put<ParticipantWithStatus>(`/participants/${encodeURIComponent(userId)}`, data);
+  return response.data;
 }
