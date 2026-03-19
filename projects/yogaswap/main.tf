@@ -137,6 +137,28 @@ locals {
       s3_actions   = []
       s3_resources = []
     },
+    "get_participants" = {
+      name             = "get-participants"
+      file_name        = "getParticipants.zip"
+      table_arns       = [module.participants_table.table_arn]
+      dynamodb_actions = ["dynamodb:Query"]
+      tables = {
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+    },
+    "update_participant" = {
+      name             = "update-participant"
+      file_name        = "updateParticipant.zip"
+      table_arns       = [module.participants_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
+      tables = {
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+    },
     "create_participants" = {
       name             = "create-participants"
       file_name        = "createParticipants.zip"
@@ -204,7 +226,9 @@ locals {
     "DELETE /course-overrides/{courseId}/{date}" = "delete_override"
     "POST /process-promotions"                   = "process_promotions"
     "GET /courses"                               = "get_courses"
+    "GET /participants"                          = "get_participants"
     "POST /participants"                         = "create_participants"
+    "PUT /participants/{userId}"                 = "update_participant"
     "GET /tenant-context"                        = "get_tenant_context"
   }
 

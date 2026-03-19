@@ -2,17 +2,21 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import AdminPanel from "./AdminPanel";
-import { inviteUser } from "../api/participants";
+import { getParticipants, inviteUser } from "../api/participants";
 
 vi.mock("../api/participants", () => ({
   inviteUser: vi.fn(),
+  getParticipants: vi.fn(),
+  updateParticipant: vi.fn(),
 }));
 
 const mockedInviteUser = inviteUser as unknown as ReturnType<typeof vi.fn>;
+const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
 
 describe("AdminPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedGetParticipants.mockResolvedValue([]);
   });
 
   it("deaktiviert den Einladen-Button, wenn Email oder Nickname fehlen", () => {
@@ -169,6 +173,26 @@ describe("AdminPanel", () => {
 
     await waitFor(() => {
       expect(within(panel).getByText(/Fehler beim Senden/i)).toBeInTheDocument();
+    });
+  });
+
+  it("lädt Teilnehmerliste für die Verwaltung", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+      expect(within(panel).getByText("no_login")).toBeInTheDocument();
     });
   });
 });

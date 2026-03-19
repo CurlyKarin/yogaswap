@@ -1,5 +1,10 @@
-import { useState } from "react";
-import { inviteUser } from "../api/participants";
+import { useEffect, useState } from "react";
+import {
+  getParticipants,
+  inviteUser,
+  updateParticipant,
+  type ParticipantWithStatus,
+} from "../api/participants";
 
 export default function AdminPanel() {
   const [email, setEmail] = useState("");
@@ -9,6 +14,42 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [participantsMessage, setParticipantsMessage] = useState("");
+  const [participantsError, setParticipantsError] = useState("");
+  const [emailDraftByUserId, setEmailDraftByUserId] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadParticipants() {
+      setParticipantsLoading(true);
+      setParticipantsError("");
+      try {
+        const list = await getParticipants();
+        if (cancelled) return;
+        setParticipants(list);
+        setEmailDraftByUserId(
+          Object.fromEntries(list.map((p) => [p.userId, p.email ?? ""])),
+        );
+      } catch {
+        if (!cancelled) {
+        setParticipantsError("Konnte Teilnehmer nicht laden.");
+        }
+      }
+
+      if (!cancelled) {
+        setParticipantsLoading(false);
+      }
+    }
+
+    loadParticipants();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleInvite = async () => {
     if (!nickname) return;
@@ -56,6 +97,25 @@ export default function AdminPanel() {
       setError("Fehler beim Senden");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateEmail = async (userId: string) => {
+    setParticipantsMessage("");
+    setParticipantsError("");
+
+    const draft = emailDraftByUserId[userId] ?? "";
+    const normalized = draft.trim();
+    try {
+      const updated = await updateParticipant(userId, {
+        email: normalized ? normalized : null,
+      });
+
+      setParticipants((prev) => prev.map((p) => (p.userId === userId ? updated : p)));
+      setEmailDraftByUserId((prev) => ({ ...prev, [userId]: updated.email ?? "" }));
+      setParticipantsMessage(`✅ "${userId}" aktualisiert (Status: ${updated.status}).`);
+    } catch {
+      setParticipantsError("Fehler beim Speichern.");
     }
   };
   
@@ -127,6 +187,60 @@ export default function AdminPanel() {
         )}
         {error && <p style={{ margin: "0.5rem 0", color: "red" }}>{error}</p>}
  
+      </div>
+
+      <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #eee" }}>
+        <h3>Teilnehmer verwalten</h3>
+
+        {participantsMessage && (
+          <p style={{ margin: "0.5rem 0", color: "green", whiteSpace: "pre-line" }}>
+            {participantsMessage}
+          </p>
+        )}
+        {participantsError && (
+          <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }}>
+            {participantsError}
+          </p>
+        )}
+
+        {participantsLoading ? (
+          <p>Teilnehmer werden geladen...</p>
+        ) : participants.length === 0 ? (
+          <p>Keine Teilnehmer gefunden.</p>
+        ) : (
+          <div style={{ display: "grid", gap: "0.5rem", maxWidth: 720 }}>
+            {participants.map((p) => (
+              <div
+                key={p.userId}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "110px 110px 1fr auto",
+                  gap: "0.5rem",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>{p.userId}</span>
+                <span style={{ color: "#374151" }}>{p.status}</span>
+                <input
+                  type="email"
+                  value={emailDraftByUserId[p.userId] ?? ""}
+                  onChange={(e) =>
+                    setEmailDraftByUserId((prev) => ({
+                      ...prev,
+                      [p.userId]: e.target.value,
+                    }))
+                  }
+                />
+                <button
+                  onClick={() => handleUpdateEmail(p.userId)}
+                  disabled={participantsLoading}
+                >
+                  Speichern
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
