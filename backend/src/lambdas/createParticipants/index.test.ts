@@ -48,6 +48,7 @@ describe('createParticipants Lambda', () => {
       BASE_URL: 'https://yogaswap.example.com',
       SES_SOURCE_EMAIL: 'yogaswap@example.com',
       MEMBERSHIPS_TABLE: 'test-memberships-table',
+      PARTICIPANTS_TABLE: 'test-participants-table',
     };
     cognitoMockSend.mockReset();
     sesMockSend.mockReset();
@@ -102,8 +103,8 @@ describe('createParticipants Lambda', () => {
     expect(cognitoMockSend).not.toHaveBeenCalled();
     expect(sesMockSend).not.toHaveBeenCalled();
 
-    // DynamoDB should be called to store membership
-    expect(dynamoMockSend).toHaveBeenCalledTimes(1);
+    // DynamoDB should be called to store membership + participant profile
+    expect(dynamoMockSend).toHaveBeenCalledTimes(2);
     expect(dynamoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: 'test-memberships-table',
@@ -111,6 +112,15 @@ describe('createParticipants Lambda', () => {
           tenantId: { S: 'test-tenant' },
           userId: { S: 'noligin' },
           role: { S: 'participant' },
+        }),
+      })
+    );
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          tenantId: { S: 'test-tenant' },
+          userId: { S: 'noligin' },
         }),
       })
     );
@@ -170,8 +180,8 @@ describe('createParticipants Lambda', () => {
       })
     );
 
-    // Verify DynamoDB call
-    expect(dynamoMockSend).toHaveBeenCalledTimes(1);
+    // Verify DynamoDB call (membership + participant profile)
+    expect(dynamoMockSend).toHaveBeenCalledTimes(2);
     expect(dynamoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: 'test-memberships-table',
@@ -179,6 +189,16 @@ describe('createParticipants Lambda', () => {
           tenantId: { S: 'test-tenant' },
           userId: { S: 'testuser' },
           role: { S: 'participant' },
+        }),
+      })
+    );
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          tenantId: { S: 'test-tenant' },
+          userId: { S: 'testuser' },
+          email: { S: 'test@example.com' },
         }),
       })
     );

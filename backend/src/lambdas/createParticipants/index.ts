@@ -24,6 +24,37 @@ function generateSafeTempPassword(length = 10) {
   return pw;
 }
 
+async function saveParticipantProfile(params: {
+  tenantId: string;
+  userId: string;
+  email?: string;
+  inviteSentAt?: string;
+}) {
+  if (!process.env.PARTICIPANTS_TABLE) {
+    console.warn("PARTICIPANTS_TABLE environment variable not set, skipping participant profile write.");
+    return;
+  }
+
+  const item: Record<string, { S: string }> = {
+    tenantId: { S: params.tenantId },
+    userId: { S: params.userId },
+  };
+
+  if (params.email && params.email.trim()) {
+    item.email = { S: params.email.trim() };
+  }
+  if (params.inviteSentAt && params.inviteSentAt.trim()) {
+    item.inviteSentAt = { S: params.inviteSentAt };
+  }
+
+  await dynamodb.send(
+    new PutItemCommand({
+      TableName: process.env.PARTICIPANTS_TABLE,
+      Item: item,
+    }),
+  );
+}
+
 export const handler = async (event: any) => {
   console.log('EVENT:', JSON.stringify(event));
   // Debug: Environment Variables ausgeben
@@ -69,6 +100,11 @@ export const handler = async (event: any) => {
           "MEMBERSHIPS_TABLE environment variable not set, skipping DynamoDB write.",
         );
       }
+
+      await saveParticipantProfile({
+        tenantId,
+        userId: nickname,
+      });
     } catch (err: any) {
       console.error("Failed to save membership in DynamoDB:", err);
       return {
@@ -208,6 +244,17 @@ export const handler = async (event: any) => {
   // Do NOT log passwords in production normally, but log if email failed
   if (!emailSent) {
     console.warn(`⚠️ WICHTIG: E-Mail nicht versendet. User '${username}' benötigt temporäres Passwort: ${rawPassword}`);
+  }
+
+  try {
+    await saveParticipantProfile({
+      tenantId,
+      userId: username,
+      email: emailNormalized,
+      inviteSentAt: emailSent ? new Date().toISOString() : undefined,
+    });
+  } catch (err: any) {
+    console.warn("Failed to save participant profile (ignored):", err?.message || err);
   }
 
   return { 
