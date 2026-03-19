@@ -52,6 +52,7 @@ describe("updateParticipant Lambda", () => {
     const body = JSON.parse(result.body);
     expect(body.email).toBe("alice+new@example.com");
     expect(body.userId).toBe("alice");
+    expect(body.status).toBe("no_login");
     expect(mockSend).toHaveBeenCalledTimes(2);
   });
 
@@ -78,6 +79,46 @@ describe("updateParticipant Lambda", () => {
 
     expect(result.statusCode).toBe(400);
     expect(JSON.parse(result.body).error).toMatch(/settings must be an object/);
+  });
+
+  test("derives invited/active status when inviteSentAt/authUserId are set", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const resultInvited = await handler(
+      makeEvent({
+        body: JSON.stringify({ inviteSentAt: "2026-01-01T12:00:00.000Z" }),
+      }),
+    );
+
+    expect(resultInvited.statusCode).toBe(200);
+    expect(JSON.parse(resultInvited.body).status).toBe("invited");
+
+    mockSend.mockReset();
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          inviteSentAt: { S: "2026-01-01T12:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const resultActive = await handler(
+      makeEvent({
+        body: JSON.stringify({ authUserId: "cognito-sub-123" }),
+      }),
+    );
+
+    expect(resultActive.statusCode).toBe(200);
+    expect(JSON.parse(resultActive.body).status).toBe("active");
   });
 });
 

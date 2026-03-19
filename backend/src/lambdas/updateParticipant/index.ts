@@ -4,7 +4,11 @@ import {
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
-import type { ParticipantProfile, ParticipantSettings } from "@yogaswap/shared";
+import type {
+  ParticipantProfile,
+  ParticipantSettings,
+  ParticipantStatus,
+} from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 
@@ -16,6 +20,14 @@ type UpdateParticipantBody = {
   inviteSentAt?: string | null;
   authUserId?: string | null;
 };
+
+function deriveParticipantStatus(
+  profile: Pick<ParticipantProfile, "authUserId" | "inviteSentAt">,
+): ParticipantStatus {
+  if (profile.authUserId) return "active";
+  if (profile.inviteSentAt) return "invited";
+  return "no_login";
+}
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -125,7 +137,10 @@ export const handler = async (
 
     return {
       statusCode: 200,
-      body: JSON.stringify(updated),
+      body: JSON.stringify({
+        ...updated,
+        status: deriveParticipantStatus(updated),
+      }),
     };
   } catch (error) {
     console.error("Failed to update participant:", error);
