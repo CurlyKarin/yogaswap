@@ -1,14 +1,12 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { GetItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import {
-  type Tenant,
   type ParticipantProfile,
   type ParticipantStatus,
-  type UserTenantMembership,
 } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
-import { canManageParticipants } from "../shared/permissions";
+import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
 
@@ -44,32 +42,14 @@ export const handler = async (
   }
 
   try {
-    const membershipResp = await client.send(
-      new GetItemCommand({
-        TableName: membershipsTable,
-        Key: {
-          tenantId: { S: tenantId },
-          userId: { S: userId },
-        },
-        ConsistentRead: true,
-      }),
-    );
-    const membership = membershipResp.Item
-      ? (unmarshall(membershipResp.Item) as UserTenantMembership)
-      : undefined;
-    if (!membership) {
-      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
-    }
-
-    const tenantResp = await client.send(
-      new GetItemCommand({
-        TableName: tenantsTable,
-        Key: { tenantId: { S: tenantId } },
-        ConsistentRead: true,
-      }),
-    );
-    const tenant = tenantResp.Item ? (unmarshall(tenantResp.Item) as Tenant) : undefined;
-    if (!canManageParticipants(membership, tenant?.settings)) {
+    const canManage = await canActorManageParticipants({
+      client,
+      membershipsTable,
+      tenantsTable,
+      tenantId,
+      actorUserId: userId,
+    });
+    if (!canManage) {
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
 
