@@ -126,6 +126,99 @@ describe("getParticipants Lambda", () => {
     expect(body[0].userId).toBe("alice");
   });
 
+  test("filters by status", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: { tenantId: { S: "default-tenant" }, userId: { S: "admin" }, role: { S: "admin" } },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "no-login" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "invited" }, inviteSentAt: { S: "2026-01-01T12:00:00.000Z" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "active" }, authUserId: { S: "sub-1" } },
+      ],
+    });
+
+    const result = await handler(
+      makeEvent({
+        queryStringParameters: { status: "invited" },
+        requestContext: { authorizer: { principalId: "admin" } } as any,
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toHaveLength(1);
+    expect(body[0]).toEqual(expect.objectContaining({ userId: "invited", status: "invited" }));
+  });
+
+  test("filters by hasEmail=true", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: { tenantId: { S: "default-tenant" }, userId: { S: "admin" }, role: { S: "admin" } },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, email: { S: "alice@example.com" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "bob" } },
+      ],
+    });
+
+    const result = await handler(
+      makeEvent({
+        queryStringParameters: { hasEmail: "true" },
+        requestContext: { authorizer: { principalId: "admin" } } as any,
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toHaveLength(1);
+    expect(body[0].userId).toBe("alice");
+  });
+
+  test("sorts by nickname descending", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: { tenantId: { S: "default-tenant" }, userId: { S: "admin" }, role: { S: "admin" } },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "charlie" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "bob" } },
+      ],
+    });
+
+    const result = await handler(
+      makeEvent({
+        queryStringParameters: { sortBy: "nickname", sortOrder: "desc" },
+        requestContext: { authorizer: { principalId: "admin" } } as any,
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.map((p: { userId: string }) => p.userId)).toEqual(["charlie", "bob", "alice"]);
+  });
+
+  test("returns 400 for invalid status filter", async () => {
+    const result = await handler(
+      makeEvent({
+        queryStringParameters: { status: "unknown" },
+        requestContext: { authorizer: { principalId: "admin" } } as any,
+      }),
+    );
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Invalid status filter/);
+  });
+
   test("returns 500 when table env var is missing", async () => {
     process.env.PARTICIPANTS_TABLE = "";
     const result = await handler(makeEvent());

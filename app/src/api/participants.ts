@@ -27,6 +27,17 @@ export interface UpdateParticipantRequest {
   authUserId?: string | null;
 }
 
+export type ParticipantSortBy = "nickname" | "userId" | "email" | "status";
+export type ParticipantSortOrder = "asc" | "desc";
+
+export interface GetParticipantsRequest {
+  search?: string;
+  status?: ParticipantStatus;
+  hasEmail?: boolean;
+  sortBy?: ParticipantSortBy;
+  sortOrder?: ParticipantSortOrder;
+}
+
 export async function inviteUser(data: InviteUserRequest): Promise<InviteUserResponse> {
   try {
     const response = await axios.post<InviteUserResponse>('/participants', data);
@@ -41,8 +52,21 @@ export async function inviteUser(data: InviteUserRequest): Promise<InviteUserRes
   }
 }
 
-export async function getParticipants(search?: string): Promise<ParticipantWithStatus[]> {
-  const config = search ? { params: { search } } : undefined;
+export async function getParticipants(
+  request?: string | GetParticipantsRequest,
+): Promise<ParticipantWithStatus[]> {
+  const params: Record<string, string> = {};
+  if (typeof request === "string") {
+    if (request.trim()) params.search = request;
+  } else if (request) {
+    if (request.search?.trim()) params.search = request.search;
+    if (request.status) params.status = request.status;
+    if (typeof request.hasEmail === "boolean") params.hasEmail = String(request.hasEmail);
+    if (request.sortBy) params.sortBy = request.sortBy;
+    if (request.sortOrder) params.sortOrder = request.sortOrder;
+  }
+
+  const config = Object.keys(params).length > 0 ? { params } : undefined;
   const response = await axios.get<ParticipantWithStatus[]>('/participants', config);
   return response.data;
 }
