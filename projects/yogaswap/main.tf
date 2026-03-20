@@ -140,10 +140,12 @@ locals {
     "get_participants" = {
       name             = "get-participants"
       file_name        = "getParticipants.zip"
-      table_arns       = [module.participants_table.table_arn]
-      dynamodb_actions = ["dynamodb:Query"]
+      table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn]
+      dynamodb_actions = ["dynamodb:Query", "dynamodb:GetItem"]
       tables = {
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -151,10 +153,12 @@ locals {
     "update_participant" = {
       name             = "update-participant"
       file_name        = "updateParticipant.zip"
-      table_arns       = [module.participants_table.table_arn]
+      table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
       tables = {
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []

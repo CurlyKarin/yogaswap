@@ -7,9 +7,12 @@ import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import type {
   ParticipantProfile,
   ParticipantSettings,
-  ParticipantStatus,
+  Tenant,
+  UserTenantMembership,
 } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
+import { canManageParticipants } from "../shared/permissions";
+import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
@@ -21,22 +24,22 @@ type UpdateParticipantBody = {
   authUserId?: string | null;
 };
 
-function deriveParticipantStatus(
-  profile: Pick<ParticipantProfile, "authUserId" | "inviteSentAt">,
-): ParticipantStatus {
-  if (profile.authUserId) return "active";
-  if (profile.inviteSentAt) return "invited";
-  return "no_login";
-}
-
 export const handler = async (
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.PARTICIPANTS_TABLE;
+  const membershipsTable = process.env.MEMBERSHIPS_TABLE;
+  const tenantsTable = process.env.TENANTS_TABLE;
   if (!tableName) {
     return {
       statusCode: 500,
       body: JSON.stringify({ error: "PARTICIPANTS_TABLE env var is not set" }),
+    };
+  }
+  if (!membershipsTable || !tenantsTable) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "MEMBERSHIPS_TABLE or TENANTS_TABLE env var is not set" }),
     };
   }
 
@@ -65,9 +68,41 @@ export const handler = async (
     };
   }
 
-  const { tenantId } = getTenantContext(event);
+  const { tenantId, userId: actorUserId } = getTenantContext(event);
+  if (!actorUserId) {
+    return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+  }
 
   try {
+    const membershipResp = await client.send(
+      new GetItemCommand({
+        TableName: membershipsTable,
+        Key: {
+          tenantId: { S: tenantId },
+          userId: { S: actorUserId },
+        },
+        ConsistentRead: true,
+      }),
+    );
+    const membership = membershipResp.Item
+      ? (unmarshall(membershipResp.Item) as UserTenantMembership)
+      : undefined;
+    if (!membership) {
+      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+    }
+
+    const tenantResp = await client.send(
+      new GetItemCommand({
+        TableName: tenantsTable,
+        Key: { tenantId: { S: tenantId } },
+        ConsistentRead: true,
+      }),
+    );
+    const tenant = tenantResp.Item ? (unmarshall(tenantResp.Item) as Tenant) : undefined;
+    if (!canManageParticipants(membership, tenant?.settings)) {
+      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+    }
+
     const existingResp = await client.send(
       new GetItemCommand({
         TableName: tableName,

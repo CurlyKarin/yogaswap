@@ -6,6 +6,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
+    GetItemCommand: jest.fn((input) => input),
     QueryCommand: jest.fn((input) => input),
     mockSend,
   };
@@ -18,7 +19,12 @@ describe("getParticipants Lambda", () => {
 
   beforeEach(() => {
     jest.resetModules();
-    process.env = { ...OLD_ENV, PARTICIPANTS_TABLE: "test-participants" };
+    process.env = {
+      ...OLD_ENV,
+      PARTICIPANTS_TABLE: "test-participants",
+      MEMBERSHIPS_TABLE: "test-memberships",
+      TENANTS_TABLE: "test-tenants",
+    };
     mockSend.mockReset();
   });
 
@@ -36,6 +42,19 @@ describe("getParticipants Lambda", () => {
 
   test("returns participant list with derived status", async () => {
     mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "admin" },
+        role: { S: "admin" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        name: { S: "Demo" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
       Items: [
         {
           tenantId: { S: "default-tenant" },
@@ -51,7 +70,11 @@ describe("getParticipants Lambda", () => {
       ],
     });
 
-    const result = await handler(makeEvent());
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "admin" } } as any,
+      }),
+    );
     expect(result.statusCode).toBe(200);
 
     const body = JSON.parse(result.body);
@@ -71,6 +94,19 @@ describe("getParticipants Lambda", () => {
 
   test("filters by search over userId and email", async () => {
     mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "admin" },
+        role: { S: "admin" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        name: { S: "Demo" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
       Items: [
         { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, email: { S: "alice@example.com" } },
         { tenantId: { S: "default-tenant" }, userId: { S: "bob" }, email: { S: "bob@example.com" } },
@@ -80,6 +116,7 @@ describe("getParticipants Lambda", () => {
     const result = await handler(
       makeEvent({
         queryStringParameters: { search: "ali" },
+        requestContext: { authorizer: { principalId: "admin" } } as any,
       }),
     );
 
@@ -94,6 +131,35 @@ describe("getParticipants Lambda", () => {
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(500);
     expect(JSON.parse(result.body).error).toMatch(/PARTICIPANTS_TABLE/);
+  });
+
+  test("returns 403 when membership is missing", async () => {
+    mockSend.mockResolvedValueOnce({ Item: undefined });
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "intruder" } } as any,
+      }),
+    );
+    expect(result.statusCode).toBe(403);
+  });
+
+  test("returns 403 for participant role", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "p1" },
+        role: { S: "participant" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+    });
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "p1" } } as any,
+      }),
+    );
+    expect(result.statusCode).toBe(403);
   });
 });
 
