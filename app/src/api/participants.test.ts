@@ -59,6 +59,14 @@ describe("participants API (getParticipants/updateParticipant)", () => {
   beforeEach(() => {
     vi.mocked(axios.get).mockReset();
     vi.mocked(axios.put).mockReset();
+    localStorage.setItem(
+      "currentUser",
+      JSON.stringify({
+        nickname: "admin",
+        email: "admin@example.com",
+        role: "admin",
+      }),
+    );
   });
 
   it("getParticipants lädt Teilnehmer inkl. status", async () => {
@@ -73,7 +81,7 @@ describe("participants API (getParticipants/updateParticipant)", () => {
       { tenantId: "default-tenant", userId: "alice", status: "no_login" },
     ]);
 
-    expect(axios.get).toHaveBeenCalledWith("/participants", undefined);
+    expect(axios.get).toHaveBeenCalledWith("/participants", { params: { user: "admin" } });
   });
 
   it("getParticipants mit search nutzt Query-Param", async () => {
@@ -82,7 +90,17 @@ describe("participants API (getParticipants/updateParticipant)", () => {
     });
 
     await getParticipants("ali");
-    expect(axios.get).toHaveBeenCalledWith("/participants", { params: { search: "ali" } });
+    expect(axios.get).toHaveBeenCalledWith("/participants", { params: { user: "admin", search: "ali" } });
+  });
+
+  it("getParticipants wirft bei unerwartetem Response-Format", async () => {
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: { error: "Forbidden" },
+    });
+
+    await expect(getParticipants()).rejects.toThrow(
+      "Unexpected /participants response format",
+    );
   });
 
   it("getParticipants mit Filter/Sort-Optionen sendet alle Query-Params", async () => {
@@ -100,6 +118,7 @@ describe("participants API (getParticipants/updateParticipant)", () => {
 
     expect(axios.get).toHaveBeenCalledWith("/participants", {
       params: {
+        user: "admin",
         search: "ali",
         status: "invited",
         hasEmail: "true",
@@ -125,6 +144,7 @@ describe("participants API (getParticipants/updateParticipant)", () => {
     expect(axios.put).toHaveBeenCalledWith(
       "/participants/alice",
       { email: "alice@example.com" },
+      { params: { user: "admin" } },
     );
   });
 });

@@ -6,9 +6,25 @@ import './index.css';
 import App from './App';
 import { Amplify } from 'aws-amplify';
 import axios from 'axios';
+import { fetchAuthSession } from 'aws-amplify/auth';
 
 // Konfiguriere Axios für Tenant-Header
 axios.defaults.headers.common['x-tenant-id'] = 'default-tenant';
+
+// Fuegt fuer alle API-Requests den aktuellen Cognito-Token hinzu.
+axios.interceptors.request.use(async (config) => {
+  try {
+    const session = await fetchAuthSession();
+    const idToken = session.tokens?.idToken?.toString();
+    if (idToken) {
+      config.headers = config.headers ?? {};
+      config.headers.Authorization = `Bearer ${idToken}`;
+    }
+  } catch {
+    // Ohne Session bleibt der Request ohne Authorization-Header.
+  }
+  return config;
+});
 
 // Checkmark DEBUG: Prüfe Config
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID;

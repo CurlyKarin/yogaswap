@@ -66,10 +66,21 @@ export const handler = async (
   }
 
   if (!userId) {
+    console.warn("getParticipants forbidden: missing actor userId", { tenantId });
     return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
   }
 
   try {
+    console.log("getParticipants request", {
+      tenantId,
+      actorUserId: userId,
+      search,
+      statusFilter,
+      hasEmailFilter,
+      sortBy,
+      sortOrder,
+    });
+
     const canManage = await canActorManageParticipants({
       client,
       membershipsTable,
@@ -78,6 +89,10 @@ export const handler = async (
       actorUserId: userId,
     });
     if (!canManage) {
+      console.warn("getParticipants forbidden: actor cannot manage participants", {
+        tenantId,
+        actorUserId: userId,
+      });
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
 
@@ -93,6 +108,10 @@ export const handler = async (
     const profiles: ParticipantProfile[] = (result.Items || []).map((item) =>
       unmarshall(item) as ParticipantProfile,
     );
+    console.log("getParticipants query result", {
+      tenantId,
+      rawCount: profiles.length,
+    });
 
     const participants: ParticipantListItem[] = profiles
       .map((profile) => ({
@@ -125,6 +144,12 @@ export const handler = async (
         const cmp = left.localeCompare(right);
         return sortOrder === "desc" ? -cmp : cmp;
       });
+
+    console.log("getParticipants response", {
+      tenantId,
+      rawCount: profiles.length,
+      filteredCount: participants.length,
+    });
 
     return {
       statusCode: 200,

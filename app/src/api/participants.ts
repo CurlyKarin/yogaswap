@@ -1,6 +1,7 @@
 // app/api/participants.ts
 import axios from 'axios';
 import type { ParticipantProfile, ParticipantStatus, ParticipantSettings, UserRole } from 'shared/types';
+import { loadCurrentUser } from "shared/lib/storage";
 
 export interface InviteUserRequest {
   email?: string;
@@ -55,7 +56,9 @@ export async function inviteUser(data: InviteUserRequest): Promise<InviteUserRes
 export async function getParticipants(
   request?: string | GetParticipantsRequest,
 ): Promise<ParticipantWithStatus[]> {
+  const currentUser = loadCurrentUser();
   const params: Record<string, string> = {};
+  if (currentUser?.nickname) params.user = currentUser.nickname;
   if (typeof request === "string") {
     if (request.trim()) params.search = request;
   } else if (request) {
@@ -68,13 +71,24 @@ export async function getParticipants(
 
   const config = Object.keys(params).length > 0 ? { params } : undefined;
   const response = await axios.get<ParticipantWithStatus[]>('/participants', config);
-  return response.data;
+  if (Array.isArray(response.data)) {
+    return response.data;
+  }
+
+  throw new Error("Unexpected /participants response format");
 }
 
 export async function updateParticipant(
   userId: string,
   data: UpdateParticipantRequest,
 ): Promise<ParticipantWithStatus> {
-  const response = await axios.put<ParticipantWithStatus>(`/participants/${encodeURIComponent(userId)}`, data);
+  const currentUser = loadCurrentUser();
+  const params = currentUser?.nickname ? { user: currentUser.nickname } : undefined;
+  const config = params ? { params } : undefined;
+  const response = await axios.put<ParticipantWithStatus>(
+    `/participants/${encodeURIComponent(userId)}`,
+    data,
+    config,
+  );
   return response.data;
 }
