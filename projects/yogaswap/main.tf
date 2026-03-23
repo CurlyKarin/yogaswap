@@ -246,6 +246,16 @@ module "yogaswap_api" {
   name        = "${var.project}-api"
   lambda_arns = local.lambda_arns
   routes      = local.api_routes
+  jwt_issuer  = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.yogaswap.id}"
+  jwt_audience = [
+    aws_cognito_user_pool_client.yogaswap_app.id,
+  ]
+  protected_routes = [
+    "GET /participants",
+    "PUT /participants/{userId}",
+    "POST /participants",
+    "GET /tenant-context",
+  ]
 }
 #---------------cloudfront------------------
 
