@@ -30,13 +30,15 @@ export default function AdminPanel() {
       try {
         const list = await getParticipants();
         if (cancelled) return;
-        setParticipants(list);
+        const safeList = Array.isArray(list) ? list : [];
+        setParticipants(safeList);
         setEmailDraftByUserId(
-          Object.fromEntries(list.map((p) => [p.userId, p.email ?? ""])),
+          Object.fromEntries(safeList.map((p) => [p.userId, p.email ?? ""])),
         );
-      } catch {
+      } catch (err) {
+        console.error("Failed to load participants", err);
         if (!cancelled) {
-        setParticipantsError("Konnte Teilnehmer nicht laden.");
+          setParticipantsError("Konnte Teilnehmer nicht laden.");
         }
       }
 
@@ -118,6 +120,7 @@ export default function AdminPanel() {
       setParticipantsError("Fehler beim Speichern.");
     }
   };
+  const safeParticipants = Array.isArray(participants) ? participants : [];
   
   return (
     <div style={{ padding: "1rem", border: "1px solid #ccc", margin: "1rem 0", borderRadius: 8 }}>
@@ -205,11 +208,11 @@ export default function AdminPanel() {
 
         {participantsLoading ? (
           <p>Teilnehmer werden geladen...</p>
-        ) : participants.length === 0 ? (
+        ) : safeParticipants.length === 0 ? (
           <p>Keine Teilnehmer gefunden.</p>
         ) : (
           <div style={{ display: "grid", gap: "0.5rem", maxWidth: 720 }}>
-            {participants.map((p) => (
+            {safeParticipants.map((p) => (
               <div
                 key={p.userId}
                 style={{

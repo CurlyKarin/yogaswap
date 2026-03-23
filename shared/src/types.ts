@@ -101,6 +101,11 @@ export interface TenantSettings {
    * Wenn false/undefined: Teilnehmer:innen sehen alle freigeschalteten Kurse des Tenants.
    */
   participantsSeeOnlyOwnInstructors?: boolean;
+  /**
+   * Dürfen Instructor:innen Teilnehmerprofile (Liste/Updates) verwalten?
+   * Default für undefined: true (MVP-freundlich), kann tenant-spezifisch deaktiviert werden.
+   */
+  instructorCanManageParticipants?: boolean;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

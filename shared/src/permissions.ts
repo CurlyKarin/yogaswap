@@ -5,6 +5,16 @@ import type {
 } from "./types";
 
 /**
+ * Hinweis:
+ * Diese Datei ist die fachliche Source-of-Truth fuer Permissions.
+ * Aktuell existiert zusaetzlich eine technische Kopie in
+ * `backend/src/lambdas/shared/permissions.ts`, damit Backend-Tests/Lambda-Bundles
+ * ohne ESM/Jest-Interop-Probleme laufen.
+ * Bei Aenderungen bitte beide Stellen synchron halten, bis die Build-Toolchain
+ * vereinheitlicht ist.
+ */
+
+/**
  * Darf diese Membership Teilnehmer:innen einladen?
  * - Admin: immer ja
  * - Instructor: nur, wenn TenantSettings.instructorCanInviteParticipants === true
@@ -17,6 +27,24 @@ export function canInviteParticipants(
   if (membership.role === "admin") return true;
   if (membership.role === "instructor") {
     return !!settings?.instructorCanInviteParticipants;
+  }
+  return false;
+}
+
+/**
+ * Darf diese Membership Teilnehmerprofile verwalten (Liste/Update)?
+ * - Admin: immer ja
+ * - Instructor: abhängig von TenantSettings.instructorCanManageParticipants
+ *   - undefined => true (Default)
+ * - Participant: nie
+ */
+export function canManageParticipants(
+  membership: UserTenantMembership,
+  settings: TenantSettings | undefined,
+): boolean {
+  if (membership.role === "admin") return true;
+  if (membership.role === "instructor") {
+    return settings?.instructorCanManageParticipants ?? true;
   }
   return false;
 }

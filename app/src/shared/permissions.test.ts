@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   canInviteParticipants,
+  canManageParticipants,
   canSeeAllCourses,
   canSeeCourse,
 } from "shared/permissions";
@@ -81,6 +82,36 @@ describe("permissions", () => {
     it("erlaubt Participant nie Einladungen", () => {
       expect(canInviteParticipants(participantMembership, defaultSettings)).toBe(false);
       expect(canInviteParticipants(participantMembership, undefined)).toBe(false);
+    });
+  });
+
+  describe("canManageParticipants", () => {
+    it("erlaubt Admins immer Teilnehmerverwaltung", () => {
+      expect(canManageParticipants(adminMembership, undefined)).toBe(true);
+      expect(canManageParticipants(adminMembership, restrictiveSettings)).toBe(true);
+    });
+
+    it("erlaubt Instructor standardmäßig (undefined => true)", () => {
+      expect(canManageParticipants(instructorMembership, undefined)).toBe(true);
+    });
+
+    it("respektiert instructorCanManageParticipants im Tenant-Setting", () => {
+      expect(
+        canManageParticipants(instructorMembership, {
+          ...defaultSettings,
+          instructorCanManageParticipants: true,
+        }),
+      ).toBe(true);
+      expect(
+        canManageParticipants(instructorMembership, {
+          ...defaultSettings,
+          instructorCanManageParticipants: false,
+        }),
+      ).toBe(false);
+    });
+
+    it("verbietet Participant die Teilnehmerverwaltung", () => {
+      expect(canManageParticipants(participantMembership, defaultSettings)).toBe(false);
     });
   });
 

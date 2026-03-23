@@ -85,6 +85,40 @@ describe("participants API (getParticipants/updateParticipant)", () => {
     expect(axios.get).toHaveBeenCalledWith("/participants", { params: { search: "ali" } });
   });
 
+  it("getParticipants wirft bei unerwartetem Response-Format", async () => {
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: { error: "Forbidden" },
+    });
+
+    await expect(getParticipants()).rejects.toThrow(
+      "Unexpected /participants response format",
+    );
+  });
+
+  it("getParticipants mit Filter/Sort-Optionen sendet alle Query-Params", async () => {
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: [],
+    });
+
+    await getParticipants({
+      search: "ali",
+      status: "invited",
+      hasEmail: true,
+      sortBy: "nickname",
+      sortOrder: "desc",
+    });
+
+    expect(axios.get).toHaveBeenCalledWith("/participants", {
+      params: {
+        search: "ali",
+        status: "invited",
+        hasEmail: "true",
+        sortBy: "nickname",
+        sortOrder: "desc",
+      },
+    });
+  });
+
   it("updateParticipant PUT aktualisiert Profil und liefert status", async () => {
     vi.mocked(axios.put).mockResolvedValueOnce({
       data: {

@@ -87,6 +87,13 @@ resource "aws_cloudfront_distribution" "spa" {
       cookies {
         forward = "none"
       }
+      headers = [
+        "Authorization",
+        "x-tenant-id",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+      ]
     }
     compress = true
   }
@@ -145,7 +152,13 @@ resource "aws_cloudfront_distribution" "spa" {
       cookies { 
         forward = "none" 
       }
-      headers      = ["Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"]
+      headers = [
+        "Authorization",
+        "x-tenant-id",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+      ]
     }
 
     compress = true
