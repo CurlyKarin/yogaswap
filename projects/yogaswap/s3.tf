@@ -36,8 +36,17 @@ resource "aws_s3_object" "spa_files" {
     svg  = "image/svg+xml"
   }, regex("\\.([^.]+)$", each.value)[0], "binary/octet-stream")
 
+  # SPA-Cache-Strategie:
+  # - index.html immer frisch pruefen
+  # - versionierte Assets aggressiv cachen
+  cache_control = each.value == "index.html" ? "no-cache, must-revalidate" : "public, max-age=31536000, immutable"
+
   # Debugging: Logge hochgeladene Dateien
   provisioner "local-exec" {
     command = "echo 'Uploading ${each.value} to S3 bucket ${module.spa_site.bucket_name}'"
   }
+
+  depends_on = [
+    null_resource.upload_frontend,
+  ]
 }
