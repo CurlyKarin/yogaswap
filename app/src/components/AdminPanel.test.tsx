@@ -193,9 +193,9 @@ describe("AdminPanel", () => {
 
     await waitFor(() => {
       expect(within(panel).getByText("alice")).toBeInTheDocument();
-      expect(within(panel).getByText("participant")).toBeInTheDocument();
+      expect(within(panel).getByText("Teilnehmerin")).toBeInTheDocument();
       expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
-      expect(within(panel).getByText("no_login")).toBeInTheDocument();
+      expect(within(panel).getByLabelText("Status: ohne Login")).toBeInTheDocument();
       expect(within(panel).getByLabelText("Bearbeiten alice")).toBeDisabled();
       expect(within(panel).getByLabelText("Löschen alice")).toBeDisabled();
     });

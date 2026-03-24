@@ -5,6 +5,31 @@ import {
   inviteUser,
   type ParticipantWithStatus,
 } from "../api/participants";
+import type { UserRole } from "shared/types";
+
+const ROLE_LABELS_DE: Record<UserRole, string> = {
+  admin: "Admin",
+  instructor: "Kursleitung",
+  participant: "Teilnehmerin",
+};
+
+function getRoleLabel(role: UserRole | undefined): string {
+  if (!role) return "-";
+  return ROLE_LABELS_DE[role] ?? role;
+}
+
+function getStatusPresentation(status: ParticipantWithStatus["status"]): {
+  color: string;
+  label: string;
+} {
+  if (status === "active") {
+    return { color: "#16a34a", label: "registriert" };
+  }
+  if (status === "invited") {
+    return { color: "#ca8a04", label: "eingeladen" };
+  }
+  return { color: "#6b7280", label: "ohne Login" };
+}
 
 export default function AdminPanel() {
   const [email, setEmail] = useState("");
@@ -220,8 +245,21 @@ export default function AdminPanel() {
                 }}
               >
                 <span style={{ fontWeight: 600 }}>{p.userId}</span>
-                <span style={{ color: "#374151" }}>{p.role ?? "-"}</span>
-                <span style={{ color: "#374151" }}>{p.status}</span>
+                <span style={{ color: "#374151" }}>{getRoleLabel(p.role)}</span>
+                <span
+                  title={getStatusPresentation(p.status).label}
+                  aria-label={`Status: ${getStatusPresentation(p.status).label}`}
+                  style={{ display: "inline-flex", justifyContent: "center" }}
+                >
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      backgroundColor: getStatusPresentation(p.status).color,
+                    }}
+                  />
+                </span>
                 <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
                 <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
                   <button type="button" title={`Bearbeiten ${p.userId}`} aria-label={`Bearbeiten ${p.userId}`} disabled>
