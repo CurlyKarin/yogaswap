@@ -112,27 +112,27 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       {emailDisplay && <p>Für: <strong>{emailDisplay}</strong></p>}
       <p>Benutzername: <strong>{nicknameParam}</strong></p>
 
-      <form onSubmit={handleSubmit}>
-        <label style={{ fontSize: 14 }}>
+      <form onSubmit={handleSubmit} className="invite-form">
+        <label style={{ fontSize: 16 }}>
           Temporäres Passwort (aus der E-Mail)
           <input
             type="text"
             value={tempPassword}
             onChange={(e) => setTempPassword(e.target.value.trim())}
             disabled={loading}
-            style={{ width: "100%", padding: "0.5rem", marginTop: 6, marginBottom: 12 }}
+            style={{ width: "100%", padding: "0.5rem", marginTop: 6, marginBottom: 12, fontSize: 16 }}
             placeholder="Temporäres Passwort hier eingeben"
           />
         </label>
 
-        <label style={{ fontSize: 14 }}>
+        <label style={{ fontSize: 16 }}>
           Neues Passwort (min. 6 Zeichen)
           <input
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             disabled={loading}
-            style={{ width: "100%", padding: "0.5rem", marginTop: 6, marginBottom: 12 }}
+            style={{ width: "100%", padding: "0.5rem", marginTop: 6, marginBottom: 12, fontSize: 16 }}
             placeholder="Neues Passwort"
             minLength={6}
           />
@@ -140,7 +140,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
 
         {error && <p style={{ color: "red" }}>{error}</p>}
 
-        <button type="submit" disabled={loading} style={{ width: "100%", padding: "0.6rem", marginTop: 8 }}>
+        <button type="submit" disabled={loading} className="btn-primary btn-block">
           {loading ? "Verarbeite…" : "Passwort setzen"}
         </button>
       </form>

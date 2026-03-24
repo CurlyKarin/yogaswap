@@ -9,6 +9,7 @@ import Invite from "./components/Invite";
 import ChangePassword from "./components/changePassword";
 import Impressum from "./components/Impressum";
 import Datenschutz from "./components/Datenschutz";
+import OpenSourceLicenses from "./components/OpenSourceLicenses";
 import { Link } from "react-router-dom";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
 import { User, UserRole, Tenant, UserTenantMembership } from "shared/types";
@@ -132,7 +133,7 @@ function MainApp() {
       {!currentUser ? (
         <Login onLogin={handleLogin} />
       ) : (
-        <>
+        <section className="main-section main-section-courses">
           <p className="muted" style={{ textAlign: "center", marginBottom: 16 }}>
             Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
           </p>
@@ -141,10 +142,14 @@ function MainApp() {
             tenant={tenant ?? undefined}
             membership={membership ?? undefined}
           />
-        </>
+        </section>
       )}
 
-      {currentUser && canInvite && <AdminPanel />}
+      {currentUser && canInvite && (
+        <section className="main-section main-section-admin">
+          <AdminPanel />
+        </section>
+      )}
 
       <footer className="app-footer">
         <span className="copyright">© {new Date().getFullYear()} Karin Schrader</span>
@@ -153,7 +158,7 @@ function MainApp() {
         <span className="sep">·</span>
         <Link to="/datenschutz">Datenschutz</Link>
         <span className="sep">·</span>
-        <a href="https://github.com/curlykarin/yogaswap" target="_blank" rel="noopener noreferrer">Lizenz (MIT)</a>
+        <Link to="/open-source-lizenzen">Open-Source-Lizenzen</Link>
       </footer>
     </div>
   );
@@ -180,6 +185,7 @@ export default function App() {
       <Route path="/login" element={<Login onLogin={() => {}} />} />
       <Route path="/impressum" element={<div className="app-container"><Impressum /></div>} />
       <Route path="/datenschutz" element={<div className="app-container"><Datenschutz /></div>} />
+      <Route path="/open-source-lizenzen" element={<div className="app-container"><OpenSourceLicenses /></div>} />
       <Route path="*" element={<MainApp />} />
     </Routes>
   );

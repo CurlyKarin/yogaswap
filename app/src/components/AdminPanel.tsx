@@ -1,10 +1,35 @@
 import { useEffect, useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   getParticipants,
   inviteUser,
-  updateParticipant,
   type ParticipantWithStatus,
 } from "../api/participants";
+import type { UserRole } from "shared/types";
+
+const ROLE_LABELS_DE: Record<UserRole, string> = {
+  admin: "Admin",
+  instructor: "Kursleitung",
+  participant: "Teilnehmerin",
+};
+
+function getRoleLabel(role: UserRole | undefined): string {
+  if (!role) return "-";
+  return ROLE_LABELS_DE[role] ?? role;
+}
+
+function getStatusPresentation(status: ParticipantWithStatus["status"]): {
+  color: string;
+  label: string;
+} {
+  if (status === "active") {
+    return { color: "#16a34a", label: "registriert" };
+  }
+  if (status === "invited") {
+    return { color: "#ca8a04", label: "eingeladen" };
+  }
+  return { color: "#6b7280", label: "ohne Login" };
+}
 
 export default function AdminPanel() {
   const [email, setEmail] = useState("");
@@ -17,9 +42,8 @@ export default function AdminPanel() {
 
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [participantsMessage, setParticipantsMessage] = useState("");
   const [participantsError, setParticipantsError] = useState("");
-  const [emailDraftByUserId, setEmailDraftByUserId] = useState<Record<string, string>>({});
+  const [participantsSearch, setParticipantsSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -28,13 +52,17 @@ export default function AdminPanel() {
       setParticipantsLoading(true);
       setParticipantsError("");
       try {
-        const list = await getParticipants();
+        const searchValue = participantsSearch.trim();
+        const list = await getParticipants(
+          searchValue
+            ? {
+                search: searchValue,
+              }
+            : undefined,
+        );
         if (cancelled) return;
         const safeList = Array.isArray(list) ? list : [];
         setParticipants(safeList);
-        setEmailDraftByUserId(
-          Object.fromEntries(safeList.map((p) => [p.userId, p.email ?? ""])),
-        );
       } catch (err) {
         console.error("Failed to load participants", err);
         if (!cancelled) {
@@ -51,7 +79,7 @@ export default function AdminPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [participantsSearch]);
 
   const handleInvite = async () => {
     if (!nickname) return;
@@ -102,28 +130,10 @@ export default function AdminPanel() {
     }
   };
 
-  const handleUpdateEmail = async (userId: string) => {
-    setParticipantsMessage("");
-    setParticipantsError("");
-
-    const draft = emailDraftByUserId[userId] ?? "";
-    const normalized = draft.trim();
-    try {
-      const updated = await updateParticipant(userId, {
-        email: normalized ? normalized : null,
-      });
-
-      setParticipants((prev) => prev.map((p) => (p.userId === userId ? updated : p)));
-      setEmailDraftByUserId((prev) => ({ ...prev, [userId]: updated.email ?? "" }));
-      setParticipantsMessage(`✅ "${userId}" aktualisiert (Status: ${updated.status}).`);
-    } catch {
-      setParticipantsError("Fehler beim Speichern.");
-    }
-  };
   const safeParticipants = Array.isArray(participants) ? participants : [];
   
   return (
-    <div style={{ padding: "1rem", border: "1px solid #ccc", margin: "1rem 0", borderRadius: 8 }}>
+    <div className="admin-panel">
       <h3>Teilnehmer einladen</h3>
       <div style={{ display: "grid", gap: "0.5rem", maxWidth: 400 }}>
         <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -171,6 +181,7 @@ export default function AdminPanel() {
           <option value="admin">Admin</option>
         </select>
         <button
+          className="btn-primary"
           onClick={handleInvite}
           disabled={loading || !nickname || (!foreignManaged && !email)}
         >
@@ -193,13 +204,26 @@ export default function AdminPanel() {
       </div>
 
       <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #eee" }}>
-        <h3>Teilnehmer verwalten</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+          <h3 style={{ margin: 0 }}>Teilnehmer verwalten</h3>
+          <button type="button" title="Neuer Teilnehmer (folgt)" aria-label="Neuer Teilnehmer" disabled>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+              <Plus size={16} aria-hidden="true" />
+              Neu
+            </span>
+          </button>
+        </div>
+        <div style={{ marginBottom: "0.5rem" }}>
+          <input
+            type="search"
+            placeholder="Suche (Nickname oder E-Mail)"
+            aria-label="Teilnehmer suchen"
+            value={participantsSearch}
+            onChange={(e) => setParticipantsSearch(e.target.value)}
+            style={{ width: "100%", maxWidth: 360 }}
+          />
+        </div>
 
-        {participantsMessage && (
-          <p style={{ margin: "0.5rem 0", color: "green", whiteSpace: "pre-line" }}>
-            {participantsMessage}
-          </p>
-        )}
         {participantsError && (
           <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }}>
             {participantsError}
@@ -211,37 +235,65 @@ export default function AdminPanel() {
         ) : safeParticipants.length === 0 ? (
           <p>Keine Teilnehmer gefunden.</p>
         ) : (
-          <div style={{ display: "grid", gap: "0.5rem", maxWidth: 720 }}>
-            {safeParticipants.map((p) => (
+          <div className="participants-table">
+            <div className="participants-table-scroll">
+              <div className="participants-table-inner">
               <div
-                key={p.userId}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "110px 110px 1fr auto",
-                  gap: "0.5rem",
-                  alignItems: "center",
-                }}
-              >
-                <span style={{ fontWeight: 600 }}>{p.userId}</span>
-                <span style={{ color: "#374151" }}>{p.status}</span>
-                <input
-                  type="email"
-                  value={emailDraftByUserId[p.userId] ?? ""}
-                  onChange={(e) =>
-                    setEmailDraftByUserId((prev) => ({
-                      ...prev,
-                      [p.userId]: e.target.value,
-                    }))
-                  }
-                />
-                <button
-                  onClick={() => handleUpdateEmail(p.userId)}
-                  disabled={participantsLoading}
-                >
-                  Speichern
-                </button>
+              style={{
+                display: "grid",
+                gridTemplateColumns: "130px 110px 110px 1fr 84px",
+                gap: "0.5rem",
+                alignItems: "center",
+                fontWeight: 600,
+                marginBottom: "0.5rem",
+              }}
+            >
+              <span>Nickname</span>
+              <span>Rolle</span>
+              <span>Status</span>
+              <span>E-Mail</span>
+              <span>Aktion</span>
               </div>
-            ))}
+              {safeParticipants.map((p) => (
+                <div
+                  key={p.userId}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "130px 110px 110px 1fr 84px",
+                    gap: "0.5rem",
+                    alignItems: "center",
+                    padding: "0.25rem 0",
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>{p.userId}</span>
+                  <span style={{ color: "#374151" }}>{getRoleLabel(p.role)}</span>
+                  <span
+                    title={getStatusPresentation(p.status).label}
+                    aria-label={`Status: ${getStatusPresentation(p.status).label}`}
+                    style={{ display: "inline-flex", justifyContent: "center" }}
+                  >
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        backgroundColor: getStatusPresentation(p.status).color,
+                      }}
+                    />
+                  </span>
+                  <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
+                  <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
+                    <button type="button" title={`Bearbeiten ${p.userId}`} aria-label={`Bearbeiten ${p.userId}`} disabled>
+                      <Pencil size={14} aria-hidden="true" />
+                    </button>
+                    <button type="button" title={`Löschen ${p.userId}`} aria-label={`Löschen ${p.userId}`} disabled>
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

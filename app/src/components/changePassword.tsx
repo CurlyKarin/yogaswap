@@ -59,10 +59,11 @@ export default function ChangePassword() {
           placeholder="Neues Passwort"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          style={{ fontSize: 16 }}
           required
         />
         {error && <p style={{ color: 'crimson' }}>{error}</p>}
-        <button type="submit" disabled={loading}>
+        <button type="submit" disabled={loading} className="btn-primary btn-block">
           Speichern
         </button>
       </form>

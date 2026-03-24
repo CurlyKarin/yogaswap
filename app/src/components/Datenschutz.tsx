@@ -71,6 +71,8 @@ export default function Datenschutz() {
         <Link to="/">Zur Startseite</Link>
         <span className="sep">·</span>
         <Link to="/impressum">Impressum</Link>
+        <span className="sep">·</span>
+        <Link to="/open-source-lizenzen">Open-Source-Lizenzen</Link>
       </nav>
     </div>
   );

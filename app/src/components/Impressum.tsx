@@ -55,6 +55,8 @@ export default function Impressum() {
         <Link to="/">Zur Startseite</Link>
         <span className="sep">·</span>
         <Link to="/datenschutz">Datenschutz</Link>
+        <span className="sep">·</span>
+        <Link to="/open-source-lizenzen">Open-Source-Lizenzen</Link>
       </nav>
     </div>
   );
