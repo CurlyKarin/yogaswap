@@ -170,6 +170,47 @@ button:disabled {
   padding: 10px;
   border-radius: 8px;
   border: 1px solid #ddd;
+  font-size: 16px;
+}
+
+.auth-form input,
+.auth-form select,
+.auth-form textarea,
+.auth-form button {
+  font-size: 16px;
+}
+
+.invite-form input,
+.invite-form select,
+.invite-form textarea,
+.invite-form button {
+  font-size: 16px;
+}
+
+/* Wiederverwendbare Button-Varianten */
+.btn-block {
+  width: 100%;
+}
+
+.btn-primary {
+  padding: 0.7rem 0.9rem;
+  margin-top: 0.5rem;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.btn-primary:disabled {
+  background: #93c5fd;
+  border-color: #93c5fd;
+  color: #f8fafc;
 }
 
 .modal-backdrop {

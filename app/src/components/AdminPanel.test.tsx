@@ -200,5 +200,44 @@ describe("AdminPanel", () => {
       expect(within(panel).getByLabelText("Löschen alice")).toBeDisabled();
     });
   });
+
+  it("lädt Teilnehmerliste neu mit Suchbegriff", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "no_login",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "bob",
+          role: "participant",
+          email: "bob@example.com",
+          status: "active",
+        },
+      ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.change(within(panel).getByLabelText("Teilnehmer suchen"), {
+      target: { value: "bob" },
+    });
+
+    await waitFor(() => {
+      expect(mockedGetParticipants).toHaveBeenLastCalledWith({ search: "bob" });
+      expect(within(panel).getByText("bob")).toBeInTheDocument();
+    });
+  });
 });
 

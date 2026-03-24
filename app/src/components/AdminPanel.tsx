@@ -43,6 +43,7 @@ export default function AdminPanel() {
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participantsError, setParticipantsError] = useState("");
+  const [participantsSearch, setParticipantsSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +52,14 @@ export default function AdminPanel() {
       setParticipantsLoading(true);
       setParticipantsError("");
       try {
-        const list = await getParticipants();
+        const searchValue = participantsSearch.trim();
+        const list = await getParticipants(
+          searchValue
+            ? {
+                search: searchValue,
+              }
+            : undefined,
+        );
         if (cancelled) return;
         const safeList = Array.isArray(list) ? list : [];
         setParticipants(safeList);
@@ -71,7 +79,7 @@ export default function AdminPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [participantsSearch]);
 
   const handleInvite = async () => {
     if (!nickname) return;
@@ -203,6 +211,16 @@ export default function AdminPanel() {
               Neu
             </span>
           </button>
+        </div>
+        <div style={{ marginBottom: "0.5rem" }}>
+          <input
+            type="search"
+            placeholder="Suche (Nickname oder E-Mail)"
+            aria-label="Teilnehmer suchen"
+            value={participantsSearch}
+            onChange={(e) => setParticipantsSearch(e.target.value)}
+            style={{ width: "100%", maxWidth: 360 }}
+          />
         </div>
 
         {participantsError && (

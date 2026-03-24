@@ -46,7 +46,7 @@ export default function Login({ onLogin }: Props) {
           onChange={e => setPassword(e.target.value)}
           disabled={isLoading}
         />
-        <button type="submit" disabled={isLoading}>
+        <button type="submit" disabled={isLoading} className="btn-primary btn-block">
           {isLoading ? "Lädt..." : "Login"}
         </button>
       </form>
