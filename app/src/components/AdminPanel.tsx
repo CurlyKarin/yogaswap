@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   getParticipants,
   inviteUser,
@@ -169,7 +170,15 @@ export default function AdminPanel() {
       </div>
 
       <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #eee" }}>
-        <h3>Teilnehmer verwalten</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+          <h3 style={{ margin: 0 }}>Teilnehmer verwalten</h3>
+          <button type="button" title="Neuer Teilnehmer (folgt)" aria-label="Neuer Teilnehmer" disabled>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+              <Plus size={16} aria-hidden="true" />
+              Neu
+            </span>
+          </button>
+        </div>
 
         {participantsError && (
           <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }}>
@@ -216,10 +225,10 @@ export default function AdminPanel() {
                 <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
                 <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
                   <button type="button" title={`Bearbeiten ${p.userId}`} aria-label={`Bearbeiten ${p.userId}`} disabled>
-                    ✏️
+                    <Pencil size={14} aria-hidden="true" />
                   </button>
                   <button type="button" title={`Löschen ${p.userId}`} aria-label={`Löschen ${p.userId}`} disabled>
-                    🗑️
+                    <Trash2 size={14} aria-hidden="true" />
                   </button>
                 </div>
               </div>
