@@ -125,7 +125,7 @@ export default function AdminPanel() {
   const safeParticipants = Array.isArray(participants) ? participants : [];
   
   return (
-    <div style={{ padding: "1rem", border: "1px solid #ccc", margin: "1rem 0", borderRadius: 8 }}>
+    <div className="admin-panel">
       <h3>Teilnehmer einladen</h3>
       <div style={{ display: "grid", gap: "0.5rem", maxWidth: 400 }}>
         <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -216,8 +216,10 @@ export default function AdminPanel() {
         ) : safeParticipants.length === 0 ? (
           <p>Keine Teilnehmer gefunden.</p>
         ) : (
-          <div style={{ maxHeight: 360, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: "0.5rem" }}>
-            <div
+          <div className="participants-table">
+            <div className="participants-table-scroll">
+              <div className="participants-table-inner">
+              <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "130px 110px 110px 1fr 84px",
@@ -232,45 +234,47 @@ export default function AdminPanel() {
               <span>Status</span>
               <span>E-Mail</span>
               <span>Aktion</span>
-            </div>
-            {safeParticipants.map((p) => (
-              <div
-                key={p.userId}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "130px 110px 110px 1fr 84px",
-                  gap: "0.5rem",
-                  alignItems: "center",
-                  padding: "0.25rem 0",
-                }}
-              >
-                <span style={{ fontWeight: 600 }}>{p.userId}</span>
-                <span style={{ color: "#374151" }}>{getRoleLabel(p.role)}</span>
-                <span
-                  title={getStatusPresentation(p.status).label}
-                  aria-label={`Status: ${getStatusPresentation(p.status).label}`}
-                  style={{ display: "inline-flex", justifyContent: "center" }}
-                >
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      backgroundColor: getStatusPresentation(p.status).color,
-                    }}
-                  />
-                </span>
-                <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
-                <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
-                  <button type="button" title={`Bearbeiten ${p.userId}`} aria-label={`Bearbeiten ${p.userId}`} disabled>
-                    <Pencil size={14} aria-hidden="true" />
-                  </button>
-                  <button type="button" title={`Löschen ${p.userId}`} aria-label={`Löschen ${p.userId}`} disabled>
-                    <Trash2 size={14} aria-hidden="true" />
-                  </button>
-                </div>
               </div>
-            ))}
+              {safeParticipants.map((p) => (
+                <div
+                  key={p.userId}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "130px 110px 110px 1fr 84px",
+                    gap: "0.5rem",
+                    alignItems: "center",
+                    padding: "0.25rem 0",
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>{p.userId}</span>
+                  <span style={{ color: "#374151" }}>{getRoleLabel(p.role)}</span>
+                  <span
+                    title={getStatusPresentation(p.status).label}
+                    aria-label={`Status: ${getStatusPresentation(p.status).label}`}
+                    style={{ display: "inline-flex", justifyContent: "center" }}
+                  >
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        backgroundColor: getStatusPresentation(p.status).color,
+                      }}
+                    />
+                  </span>
+                  <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
+                  <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
+                    <button type="button" title={`Bearbeiten ${p.userId}`} aria-label={`Bearbeiten ${p.userId}`} disabled>
+                      <Pencil size={14} aria-hidden="true" />
+                    </button>
+                    <button type="button" title={`Löschen ${p.userId}`} aria-label={`Löschen ${p.userId}`} disabled>
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

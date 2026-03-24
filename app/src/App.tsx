@@ -133,7 +133,7 @@ function MainApp() {
       {!currentUser ? (
         <Login onLogin={handleLogin} />
       ) : (
-        <>
+        <section className="main-section main-section-courses">
           <p className="muted" style={{ textAlign: "center", marginBottom: 16 }}>
             Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
           </p>
@@ -142,10 +142,14 @@ function MainApp() {
             tenant={tenant ?? undefined}
             membership={membership ?? undefined}
           />
-        </>
+        </section>
       )}
 
-      {currentUser && canInvite && <AdminPanel />}
+      {currentUser && canInvite && (
+        <section className="main-section main-section-admin">
+          <AdminPanel />
+        </section>
+      )}
 
       <footer className="app-footer">
         <span className="copyright">© {new Date().getFullYear()} Karin Schrader</span>
