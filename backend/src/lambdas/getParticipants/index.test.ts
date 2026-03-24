@@ -69,6 +69,12 @@ describe("getParticipants Lambda", () => {
         },
       ],
     });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, role: { S: "participant" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "bob" }, role: { S: "instructor" } },
+      ],
+    });
 
     const result = await handler(
       makeEvent({
@@ -79,8 +85,8 @@ describe("getParticipants Lambda", () => {
 
     const body = JSON.parse(result.body);
     expect(body).toEqual([
-      expect.objectContaining({ userId: "alice", status: "invited" }),
-      expect.objectContaining({ userId: "bob", status: "active" }),
+      expect.objectContaining({ userId: "alice", status: "invited", role: "participant" }),
+      expect.objectContaining({ userId: "bob", status: "active", role: "instructor" }),
     ]);
 
     expect(QueryCommand).toHaveBeenCalledWith(
@@ -112,6 +118,12 @@ describe("getParticipants Lambda", () => {
         { tenantId: { S: "default-tenant" }, userId: { S: "bob" }, email: { S: "bob@example.com" } },
       ],
     });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, role: { S: "participant" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "bob" }, role: { S: "admin" } },
+      ],
+    });
 
     const result = await handler(
       makeEvent({
@@ -138,6 +150,13 @@ describe("getParticipants Lambda", () => {
         { tenantId: { S: "default-tenant" }, userId: { S: "no-login" } },
         { tenantId: { S: "default-tenant" }, userId: { S: "invited" }, inviteSentAt: { S: "2026-01-01T12:00:00.000Z" } },
         { tenantId: { S: "default-tenant" }, userId: { S: "active" }, authUserId: { S: "sub-1" } },
+      ],
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "no-login" }, role: { S: "participant" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "invited" }, role: { S: "instructor" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "active" }, role: { S: "admin" } },
       ],
     });
 
@@ -167,6 +186,12 @@ describe("getParticipants Lambda", () => {
         { tenantId: { S: "default-tenant" }, userId: { S: "bob" } },
       ],
     });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, role: { S: "participant" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "bob" }, role: { S: "participant" } },
+      ],
+    });
 
     const result = await handler(
       makeEvent({
@@ -193,6 +218,13 @@ describe("getParticipants Lambda", () => {
         { tenantId: { S: "default-tenant" }, userId: { S: "alice" } },
         { tenantId: { S: "default-tenant" }, userId: { S: "charlie" } },
         { tenantId: { S: "default-tenant" }, userId: { S: "bob" } },
+      ],
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, role: { S: "participant" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "charlie" }, role: { S: "participant" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "bob" }, role: { S: "participant" } },
       ],
     });
 

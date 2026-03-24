@@ -18,7 +18,7 @@ export interface InviteUserResponse {
   link?: string;
 }
 
-export type ParticipantWithStatus = ParticipantProfile & { status: ParticipantStatus };
+export type ParticipantWithStatus = ParticipantProfile & { status: ParticipantStatus; role?: UserRole };
 
 export interface UpdateParticipantRequest {
   email?: string | null;

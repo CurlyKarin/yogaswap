@@ -4,6 +4,8 @@ import { unmarshall } from "@aws-sdk/util-dynamodb";
 import {
   type ParticipantProfile,
   type ParticipantStatus,
+  type UserRole,
+  type UserTenantMembership,
 } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
@@ -14,6 +16,7 @@ const client = dynamoClient;
 
 type ParticipantListItem = ParticipantProfile & {
   status: ParticipantStatus;
+  role?: UserRole;
 };
 
 type SortBy = "nickname" | "userId" | "email" | "status";
@@ -108,6 +111,22 @@ export const handler = async (
     const profiles: ParticipantProfile[] = (result.Items || []).map((item) =>
       unmarshall(item) as ParticipantProfile,
     );
+
+    const membershipsResult = await client.send(
+      new QueryCommand({
+        TableName: membershipsTable,
+        KeyConditionExpression: "tenantId = :tid",
+        ExpressionAttributeValues: { ":tid": { S: tenantId } },
+        ConsistentRead: true,
+      }),
+    );
+    const memberships: UserTenantMembership[] = (membershipsResult.Items || []).map((item) =>
+      unmarshall(item) as UserTenantMembership,
+    );
+    const roleByUserId = new Map<string, UserRole>(
+      memberships.map((m) => [m.userId, m.role]),
+    );
+
     console.log("getParticipants query result", {
       tenantId,
       rawCount: profiles.length,
@@ -117,6 +136,7 @@ export const handler = async (
       .map((profile) => ({
         ...profile,
         status: deriveParticipantStatus(profile),
+        role: roleByUserId.get(profile.userId),
       }))
       .filter((p) => {
         if (search) {

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   getParticipants,
   inviteUser,
-  updateParticipant,
   type ParticipantWithStatus,
 } from "../api/participants";
 
@@ -17,9 +16,7 @@ export default function AdminPanel() {
 
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [participantsMessage, setParticipantsMessage] = useState("");
   const [participantsError, setParticipantsError] = useState("");
-  const [emailDraftByUserId, setEmailDraftByUserId] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -32,9 +29,6 @@ export default function AdminPanel() {
         if (cancelled) return;
         const safeList = Array.isArray(list) ? list : [];
         setParticipants(safeList);
-        setEmailDraftByUserId(
-          Object.fromEntries(safeList.map((p) => [p.userId, p.email ?? ""])),
-        );
       } catch (err) {
         console.error("Failed to load participants", err);
         if (!cancelled) {
@@ -102,24 +96,6 @@ export default function AdminPanel() {
     }
   };
 
-  const handleUpdateEmail = async (userId: string) => {
-    setParticipantsMessage("");
-    setParticipantsError("");
-
-    const draft = emailDraftByUserId[userId] ?? "";
-    const normalized = draft.trim();
-    try {
-      const updated = await updateParticipant(userId, {
-        email: normalized ? normalized : null,
-      });
-
-      setParticipants((prev) => prev.map((p) => (p.userId === userId ? updated : p)));
-      setEmailDraftByUserId((prev) => ({ ...prev, [userId]: updated.email ?? "" }));
-      setParticipantsMessage(`✅ "${userId}" aktualisiert (Status: ${updated.status}).`);
-    } catch {
-      setParticipantsError("Fehler beim Speichern.");
-    }
-  };
   const safeParticipants = Array.isArray(participants) ? participants : [];
   
   return (
@@ -195,11 +171,6 @@ export default function AdminPanel() {
       <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #eee" }}>
         <h3>Teilnehmer verwalten</h3>
 
-        {participantsMessage && (
-          <p style={{ margin: "0.5rem 0", color: "green", whiteSpace: "pre-line" }}>
-            {participantsMessage}
-          </p>
-        )}
         {participantsError && (
           <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }}>
             {participantsError}
@@ -211,35 +182,46 @@ export default function AdminPanel() {
         ) : safeParticipants.length === 0 ? (
           <p>Keine Teilnehmer gefunden.</p>
         ) : (
-          <div style={{ display: "grid", gap: "0.5rem", maxWidth: 720 }}>
+          <div style={{ maxHeight: 360, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: "0.5rem" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "130px 110px 110px 1fr 84px",
+                gap: "0.5rem",
+                alignItems: "center",
+                fontWeight: 600,
+                marginBottom: "0.5rem",
+              }}
+            >
+              <span>Nickname</span>
+              <span>Rolle</span>
+              <span>Status</span>
+              <span>E-Mail</span>
+              <span>Aktion</span>
+            </div>
             {safeParticipants.map((p) => (
               <div
                 key={p.userId}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "110px 110px 1fr auto",
+                  gridTemplateColumns: "130px 110px 110px 1fr 84px",
                   gap: "0.5rem",
                   alignItems: "center",
+                  padding: "0.25rem 0",
                 }}
               >
                 <span style={{ fontWeight: 600 }}>{p.userId}</span>
+                <span style={{ color: "#374151" }}>{p.role ?? "-"}</span>
                 <span style={{ color: "#374151" }}>{p.status}</span>
-                <input
-                  type="email"
-                  value={emailDraftByUserId[p.userId] ?? ""}
-                  onChange={(e) =>
-                    setEmailDraftByUserId((prev) => ({
-                      ...prev,
-                      [p.userId]: e.target.value,
-                    }))
-                  }
-                />
-                <button
-                  onClick={() => handleUpdateEmail(p.userId)}
-                  disabled={participantsLoading}
-                >
-                  Speichern
-                </button>
+                <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
+                <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
+                  <button type="button" title={`Bearbeiten ${p.userId}`} aria-label={`Bearbeiten ${p.userId}`} disabled>
+                    ✏️
+                  </button>
+                  <button type="button" title={`Löschen ${p.userId}`} aria-label={`Löschen ${p.userId}`} disabled>
+                    🗑️
+                  </button>
+                </div>
               </div>
             ))}
           </div>
