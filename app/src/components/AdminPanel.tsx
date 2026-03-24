@@ -181,6 +181,7 @@ export default function AdminPanel() {
           <option value="admin">Admin</option>
         </select>
         <button
+          className="btn-primary"
           onClick={handleInvite}
           disabled={loading || !nickname || (!foreignManaged && !email)}
         >
