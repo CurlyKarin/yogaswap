@@ -51,6 +51,15 @@ export default function AdminPanel() {
   const [editingSaving, setEditingSaving] = useState(false);
   const [editingError, setEditingError] = useState("");
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createNickname, setCreateNickname] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createRole, setCreateRole] = useState<"participant" | "instructor" | "admin">(
+    "participant",
+  );
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState("");
+
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
     setParticipantsError("");
@@ -210,6 +219,58 @@ export default function AdminPanel() {
       setEditingSaving(false);
     }
   };
+
+  const openCreate = () => {
+    setCreateOpen(true);
+    setCreateNickname("");
+    setCreateEmail("");
+    setCreateRole("participant");
+    setCreateError("");
+    setCreateSaving(false);
+  };
+
+  const saveCreate = async () => {
+    const nicknameValue = createNickname.trim();
+    const emailValue = createEmail.trim();
+    if (!nicknameValue) {
+      setCreateError("Bitte einen Nickname eingeben.");
+      return;
+    }
+    const isValidEmailOrEmpty =
+      emailValue.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
+    if (!isValidEmailOrEmpty) {
+      setCreateError("Bitte eine gültige E-Mail-Adresse eingeben (oder leer lassen).");
+      return;
+    }
+
+    setCreateSaving(true);
+    setCreateError("");
+    try {
+      // #67: Teilnehmer anlegen ohne Einladung (kein Cognito/SES).
+      // Wir legen zunächst ohne E-Mail an, speichern E-Mail (falls vorhanden) danach separat im Profil.
+      const result = await inviteUser({ nickname: nicknameValue, role: createRole });
+      if (result.error === "Nickname already exists") {
+        setCreateError("Dieser Spitzname ist bereits vergeben.");
+        return;
+      }
+      if (!result.success) {
+        setCreateError("Teilnehmer konnte nicht angelegt werden.");
+        return;
+      }
+
+      if (emailValue.length > 0) {
+        await updateParticipant(nicknameValue, { email: emailValue });
+      }
+
+      setCreateOpen(false);
+      await refreshParticipants();
+    } catch (err) {
+      console.error("Failed to create participant", err);
+      setCreateError("Teilnehmer konnte nicht angelegt werden.");
+    } finally {
+      setCreateSaving(false);
+    }
+  };
   
   return (
     <div className="admin-panel">
@@ -285,7 +346,13 @@ export default function AdminPanel() {
       <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #eee" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
           <h3 style={{ margin: 0 }}>Teilnehmer verwalten</h3>
-          <button type="button" title="Neuer Teilnehmer (folgt)" aria-label="Neuer Teilnehmer" disabled>
+          <button
+            type="button"
+            title="Neuer Teilnehmer"
+            aria-label="Neuer Teilnehmer"
+            onClick={openCreate}
+            disabled={createSaving || editingSaving}
+          >
             <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
               <Plus size={16} aria-hidden="true" />
               Neu
@@ -417,6 +484,90 @@ export default function AdminPanel() {
                 disabled={editingSaving}
               >
                 {editingSaving ? "Speichere..." : "Speichern"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {createOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer anlegen">
+          <div className="modal">
+            <h4>Teilnehmer anlegen</h4>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label>
+                Nickname
+                <input
+                  type="text"
+                  placeholder="Spitzname"
+                  value={createNickname}
+                  onChange={(e) => setCreateNickname(e.target.value)}
+                  disabled={createSaving}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    borderRadius: 8,
+                    border: "1px solid #ddd",
+                    fontSize: 16,
+                  }}
+                />
+              </label>
+
+              <label>
+                E-Mail (optional)
+                <input
+                  type="email"
+                  placeholder="E-Mail"
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  disabled={createSaving}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    borderRadius: 8,
+                    border: "1px solid #ddd",
+                    fontSize: 16,
+                  }}
+                />
+              </label>
+
+              <label>
+                Rolle
+                <select
+                  value={createRole}
+                  onChange={(e) =>
+                    setCreateRole(e.target.value as "participant" | "instructor" | "admin")
+                  }
+                  disabled={createSaving}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    borderRadius: 8,
+                    border: "1px solid #ddd",
+                    fontSize: 16,
+                  }}
+                >
+                  <option value="participant">Teilnehmer</option>
+                  <option value="instructor">Kursleiter</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+
+              {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" onClick={() => setCreateOpen(false)} disabled={createSaving}>
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={saveCreate}
+                disabled={createSaving}
+              >
+                {createSaving ? "Lege an..." : "Anlegen"}
               </button>
             </div>
           </div>
