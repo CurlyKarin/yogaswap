@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import AdminPanel from "./AdminPanel";
-import { getParticipants, inviteUser } from "../api/participants";
+import { getParticipants, inviteUser, updateParticipant } from "../api/participants";
 
 vi.mock("../api/participants", () => ({
   inviteUser: vi.fn(),
@@ -12,6 +12,7 @@ vi.mock("../api/participants", () => ({
 
 const mockedInviteUser = inviteUser as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
+const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
 
 describe("AdminPanel", () => {
   beforeEach(() => {
@@ -196,9 +197,83 @@ describe("AdminPanel", () => {
       expect(within(panel).getByText("Teilnehmerin")).toBeInTheDocument();
       expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
       expect(within(panel).getByLabelText("Status: ohne Login")).toBeInTheDocument();
-      expect(within(panel).getByLabelText("Bearbeiten alice")).toBeDisabled();
+      expect(within(panel).getByLabelText("Bearbeiten alice")).not.toBeDisabled();
       expect(within(panel).getByLabelText("Löschen alice")).toBeDisabled();
     });
+  });
+
+  it("bearbeitet E-Mail eines Teilnehmers über den Stift", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+    ]);
+
+    mockedUpdateParticipant.mockResolvedValueOnce({
+      tenantId: "default-tenant",
+      userId: "alice",
+      role: "participant",
+      email: "alice.new@example.com",
+      status: "no_login",
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    const emailInput = within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: "alice.new@example.com" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", { email: "alice.new@example.com" });
+      expect(within(panel).getByText("alice.new@example.com")).toBeInTheDocument();
+    });
+  });
+
+  it("validiert E-Mail Format beim Bearbeiten", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    const emailInput = within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: "not-an-email" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern/i }));
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/gültige E-Mail-Adresse/i)).toBeInTheDocument();
+    });
+    expect(mockedUpdateParticipant).not.toHaveBeenCalled();
   });
 
   it("lädt Teilnehmerliste neu mit Suchbegriff", async () => {

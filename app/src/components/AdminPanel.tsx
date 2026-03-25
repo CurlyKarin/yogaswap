@@ -3,6 +3,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   getParticipants,
   inviteUser,
+  updateParticipant,
   type ParticipantWithStatus,
 } from "../api/participants";
 import type { UserRole } from "shared/types";
@@ -44,6 +45,33 @@ export default function AdminPanel() {
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participantsError, setParticipantsError] = useState("");
   const [participantsSearch, setParticipantsSearch] = useState("");
+
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editingEmail, setEditingEmail] = useState("");
+  const [editingSaving, setEditingSaving] = useState(false);
+  const [editingError, setEditingError] = useState("");
+
+  const refreshParticipants = async () => {
+    setParticipantsLoading(true);
+    setParticipantsError("");
+    try {
+      const searchValue = participantsSearch.trim();
+      const list = await getParticipants(
+        searchValue
+          ? {
+              search: searchValue,
+            }
+          : undefined,
+      );
+      const safeList = Array.isArray(list) ? list : [];
+      setParticipants(safeList);
+    } catch (err) {
+      console.error("Failed to load participants", err);
+      setParticipantsError("Konnte Teilnehmer nicht laden.");
+    } finally {
+      setParticipantsLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +116,8 @@ export default function AdminPanel() {
     setMessage("");
     setError("");
 
+    let inviteSucceeded = false;
+
     try {
       const effectiveRole = foreignManaged ? "participant" : role;
       const payload = foreignManaged
@@ -99,6 +129,7 @@ export default function AdminPanel() {
       if (result.error === "Nickname already exists") {
         setError("Dieser Spitzname ist bereits vergeben.");
       } else if (result.success) {
+        inviteSucceeded = true;
         if (foreignManaged) {
           setMessage(
             `✅ Teilnehmer '${nickname}' wurde ohne Login angelegt.\n` +
@@ -128,9 +159,57 @@ export default function AdminPanel() {
     } finally {
       setLoading(false);
     }
+
+    // Zwischenschritt: Liste nach erfolgreichem Anlegen/Einladen aktualisieren,
+    // damit die gespeicherte E-Mail sofort sichtbar ist.
+    if (inviteSucceeded) await refreshParticipants();
   };
 
   const safeParticipants = Array.isArray(participants) ? participants : [];
+
+  const startEditEmail = (p: ParticipantWithStatus) => {
+    setEditingUserId(p.userId);
+    setEditingEmail(p.email ?? "");
+    setEditingError("");
+    setEditingSaving(false);
+  };
+
+  const saveEditEmail = async () => {
+    if (!editingUserId) return;
+    setEditingSaving(true);
+    setEditingError("");
+    try {
+      const trimmed = editingEmail.trim();
+      const isValidEmailOrEmpty =
+        trimmed.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+      if (!isValidEmailOrEmpty) {
+        setEditingError("Bitte eine gültige E-Mail-Adresse eingeben (oder leer lassen).");
+        return;
+      }
+      const nextEmail = trimmed.length > 0 ? trimmed : null;
+
+      await updateParticipant(editingUserId, { email: nextEmail });
+
+      // Lokales Update reicht für diesen Zwischen-Use-Case.
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.userId === editingUserId
+            ? {
+                ...p,
+                email: nextEmail ?? undefined,
+              }
+            : p,
+        ),
+      );
+
+      setEditingUserId(null);
+    } catch (err) {
+      console.error("Failed to update participant email", err);
+      setEditingError("E-Mail konnte nicht gespeichert werden.");
+    } finally {
+      setEditingSaving(false);
+    }
+  };
   
   return (
     <div className="admin-panel">
@@ -283,7 +362,13 @@ export default function AdminPanel() {
                   </span>
                   <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
                   <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
-                    <button type="button" title={`Bearbeiten ${p.userId}`} aria-label={`Bearbeiten ${p.userId}`} disabled>
+                    <button
+                      type="button"
+                      title={`Bearbeiten ${p.userId}`}
+                      aria-label={`Bearbeiten ${p.userId}`}
+                      disabled={participantsLoading || editingSaving}
+                      onClick={() => startEditEmail(p)}
+                    >
                       <Pencil size={14} aria-hidden="true" />
                     </button>
                     <button type="button" title={`Löschen ${p.userId}`} aria-label={`Löschen ${p.userId}`} disabled>
@@ -297,6 +382,46 @@ export default function AdminPanel() {
           </div>
         )}
       </div>
+
+      {editingUserId && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer E-Mail bearbeiten">
+          <div className="modal">
+            <h4>Teilnehmer bearbeiten</h4>
+            <p style={{ marginTop: 0, color: "#4b5563" }}>
+              User: <strong>{editingUserId}</strong>
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label>
+                E-Mail
+                <input
+                  type="email"
+                  placeholder="E-Mail"
+                  value={editingEmail}
+                  onChange={(e) => setEditingEmail(e.target.value)}
+                  disabled={editingSaving}
+                  style={{ width: "100%", padding: "0.5rem", borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
+                />
+              </label>
+              {editingError && <p style={{ color: "crimson", margin: 0 }}>{editingError}</p>}
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" onClick={() => setEditingUserId(null)} disabled={editingSaving}>
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={saveEditEmail}
+                disabled={editingSaving}
+              >
+                {editingSaving ? "Speichere..." : "Speichern"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
