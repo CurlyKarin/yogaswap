@@ -199,6 +199,7 @@ describe('createParticipants Lambda', () => {
           tenantId: { S: 'test-tenant' },
           userId: { S: 'testuser' },
           email: { S: 'test@example.com' },
+          inviteSentAt: expect.objectContaining({ S: expect.any(String) }),
         }),
       })
     );
@@ -314,6 +315,16 @@ describe('createParticipants Lambda', () => {
     expect(body.emailSent).toBe(false);
     expect(body.tempPassword).toBeDefined();
     expect(body.warning).toContain('E-Mail konnte nicht versendet werden');
+
+    // Even if SES fails, inviteSentAt should be stored so status becomes "invited".
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          inviteSentAt: expect.objectContaining({ S: expect.any(String) }),
+        }),
+      })
+    );
   });
 
   test('handles event.body as object (not string)', async () => {

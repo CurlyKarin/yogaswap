@@ -25,7 +25,7 @@ describe("AdminPanel", () => {
     const panel = container.querySelector("div");
     if (!panel) throw new Error("Panel not found");
 
-    const button = within(panel).getByRole("button", { name: /Einladen/i });
+    const button = within(panel).getByRole("button", { name: /^Einladen$/i });
     expect(button).toBeDisabled();
 
     // Nur Nickname
@@ -106,7 +106,7 @@ describe("AdminPanel", () => {
       target: { value: "alice@example.com" },
     });
 
-    const button = within(panel).getByRole("button", { name: /Einladen/i });
+    const button = within(panel).getByRole("button", { name: /^Einladen$/i });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -147,7 +147,7 @@ describe("AdminPanel", () => {
       target: { value: "alice@example.com" },
     });
 
-    fireEvent.click(within(panel).getByRole("button", { name: /Einladen/i }));
+    fireEvent.click(within(panel).getByRole("button", { name: /^Einladen$/i }));
 
     await waitFor(() => {
       expect(
@@ -170,7 +170,7 @@ describe("AdminPanel", () => {
       target: { value: "alice@example.com" },
     });
 
-    fireEvent.click(within(panel).getByRole("button", { name: /Einladen/i }));
+    fireEvent.click(within(panel).getByRole("button", { name: /^Einladen$/i }));
 
     await waitFor(() => {
       expect(within(panel).getByText(/Fehler beim Senden/i)).toBeInTheDocument();
@@ -197,8 +197,146 @@ describe("AdminPanel", () => {
       expect(within(panel).getByText("Teilnehmerin")).toBeInTheDocument();
       expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
       expect(within(panel).getByLabelText("Status: ohne Login")).toBeInTheDocument();
+      expect(within(panel).getByLabelText("Einladen alice")).not.toBeDisabled();
       expect(within(panel).getByLabelText("Bearbeiten alice")).not.toBeDisabled();
       expect(within(panel).getByLabelText("Löschen alice")).toBeDisabled();
+    });
+  });
+
+  it("sendet Einladung aus der Teilnehmerliste", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "no_login",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "invited",
+        },
+      ]);
+
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByLabelText("Einladen alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Einladen alice"));
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        email: "alice@example.com",
+        nickname: "alice",
+        role: "participant",
+      });
+      expect(within(panel).getByText(/Einladung gesendet an alice@example.com/i)).toBeInTheDocument();
+    });
+  });
+
+  it("sendet Einladungen gesammelt für ausgewählte Teilnehmer", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "no_login",
+        },
+        {
+          tenantId: "default-tenant",
+          userId: "bob",
+          role: "participant",
+          email: "bob@example.com",
+          status: "invited",
+        },
+        {
+          tenantId: "default-tenant",
+          userId: "carol",
+          role: "participant",
+          email: "carol@example.com",
+          status: "active",
+        },
+      ])
+      .mockResolvedValueOnce([
+        // Refresh nach Bulk: Status ist egal für den Test, wir liefern einfach erneut Daten.
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "invited",
+        },
+        {
+          tenantId: "default-tenant",
+          userId: "bob",
+          role: "participant",
+          email: "bob@example.com",
+          status: "invited",
+        },
+        {
+          tenantId: "default-tenant",
+          userId: "carol",
+          role: "participant",
+          email: "carol@example.com",
+          status: "active",
+        },
+      ]);
+
+    mockedInviteUser
+      .mockResolvedValueOnce({ success: true, emailSent: true })
+      .mockResolvedValueOnce({ success: true, emailSent: true });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+      expect(within(panel).getByText("bob")).toBeInTheDocument();
+      expect(within(panel).getByText("carol")).toBeInTheDocument();
+    });
+
+    // carol ist active → Checkbox disabled
+    expect(within(panel).getByLabelText("Auswählen carol")).toBeDisabled();
+
+    fireEvent.click(within(panel).getByLabelText("Auswählen alice"));
+    fireEvent.click(within(panel).getByLabelText("Auswählen bob"));
+
+    const bulkBtn = within(panel).getByRole("button", { name: /Ausgewählte einladen/i });
+    expect(bulkBtn).not.toBeDisabled();
+    fireEvent.click(bulkBtn);
+
+    await waitFor(() => {
+      // 2 Einladungen ausgelöst
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        email: "alice@example.com",
+        nickname: "alice",
+        role: "participant",
+      });
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        email: "bob@example.com",
+        nickname: "bob",
+        role: "participant",
+      });
+      // Refresh am Ende
+      expect(mockedGetParticipants).toHaveBeenCalledTimes(2);
     });
   });
 

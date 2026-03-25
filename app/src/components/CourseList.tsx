@@ -88,8 +88,8 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     }
     return courses.filter((course) =>
       canSeeCourse(membership, tenant.settings, course, {
-        isTaughtByUser: course.instructors?.includes(currentUser.nickname),
-        isBookedByUser: course.participants.includes(currentUser.nickname),
+        isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
+        isBookedByUser: course.participants.some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
       }),
     );
   }, [courses, tenant?.settings, membership, currentUser.nickname]);
