@@ -72,15 +72,31 @@ export const handler = async (
   }
 
   try {
-    const canManage = await canActorManageParticipants({
-      client,
-      membershipsTable,
-      tenantsTable,
-      tenantId,
-      actorUserId,
-    });
-    if (!canManage) {
-      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+    const hasAuthUserId =
+      Object.prototype.hasOwnProperty.call(body, "authUserId") &&
+      typeof body.authUserId === "string" &&
+      body.authUserId.trim().length > 0;
+
+    const hasOtherMutationKeys =
+      Object.prototype.hasOwnProperty.call(body, "email") ||
+      Object.prototype.hasOwnProperty.call(body, "settings") ||
+      Object.prototype.hasOwnProperty.call(body, "inviteSentAt");
+
+    // Allow a participant to self-link their own Cognito `sub` once after sign-up.
+    // This is required for participants created via invitation to move from "invited" -> "active".
+    const isSelfAuthLink = actorUserId === userId && hasAuthUserId && !hasOtherMutationKeys;
+
+    if (!isSelfAuthLink) {
+      const canManage = await canActorManageParticipants({
+        client,
+        membershipsTable,
+        tenantsTable,
+        tenantId,
+        actorUserId,
+      });
+      if (!canManage) {
+        return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+      }
     }
 
     const existingResp = await client.send(
