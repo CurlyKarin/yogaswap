@@ -214,5 +214,42 @@ describe("updateParticipant Lambda", () => {
     );
     expect(result.statusCode).toBe(403);
   });
+
+  test("allows self-linking authUserId when participant links their own sub", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          inviteSentAt: { S: "2026-01-01T12:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({ authUserId: "cognito-sub-123" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).status).toBe("active");
+    // Only: 1) existing participant lookup + 2) PutItem
+    expect(mockSend).toHaveBeenCalledTimes(2);
+  });
+
+  test("rejects self-linking when other fields are present", async () => {
+    mockSend.mockResolvedValueOnce({ Item: undefined }); // membership lookup -> forbidden
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({ authUserId: "cognito-sub-123", email: "x@example.com" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+  });
 });
 

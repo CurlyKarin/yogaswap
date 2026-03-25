@@ -4,6 +4,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { signIn, confirmSignIn, fetchAuthSession } from "@aws-amplify/auth";
 import { saveCurrentUser } from "shared/lib/storage";
 import { User, UserRole } from "shared/types";
+import { updateParticipant } from "../api/participants";
 
 export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const [searchParams] = useSearchParams();
@@ -82,6 +83,17 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
         };
         saveCurrentUser(user);
         console.log('User nach Passwort-Setzen gespeichert:', user);
+
+        // After an invite user completes sign-up, link their Cognito `sub` to the
+        // corresponding participant profile so the status moves invited -> active.
+        const sub = payload.sub as string | undefined;
+        if (typeof sub === "string" && sub.trim()) {
+          try {
+            await updateParticipant(user.nickname, { authUserId: sub });
+          } catch (err) {
+            console.error("Failed to link participant authUserId", err);
+          }
+        }
       }
 
       // success
