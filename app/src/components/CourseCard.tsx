@@ -62,8 +62,9 @@ export default function CourseCard({
   const freeSpots = course.capacity - participants.length;
   const waitlist = hasNoUpcomingDates ? [] : (override?.waitlist ?? []);
 
-  const isParticipant = participants.includes(userName);
-  const originallyParticipant = course.participants.includes(userName);
+  const userNameLower = userName.toLowerCase();
+  const isParticipant = participants.some((p) => p.toLowerCase() === userNameLower);
+  const originallyParticipant = course.participants.some((p) => p.toLowerCase() === userNameLower);
   const hasCancelled = originallyParticipant && !isParticipant;
 
   const availableSwapDates = useMemo(

@@ -24,5 +24,8 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/*.test.tsx', 'src/**/*.spec.tsx'],
     setupFiles: 'src/test/setupTests.ts',
+    // Viele Tests loggen sehr viel auf stdout/stderr. In manchen Terminals kann das den Run
+    // am Ende "hängen" lassen (Output-Buffer). Silent macht den Run zuverlässig.
+    silent: true,
   },
 } as import('vite').UserConfig);

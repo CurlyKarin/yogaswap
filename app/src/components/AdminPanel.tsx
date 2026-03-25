@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   getParticipants,
@@ -59,6 +59,16 @@ export default function AdminPanel() {
   );
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
+
+  const [inviteSendingByUserId, setInviteSendingByUserId] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [inviteResultByUserId, setInviteResultByUserId] = useState<Record<string, string>>({});
+  const [selectedInviteUserIds, setSelectedInviteUserIds] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [bulkInviteSending, setBulkInviteSending] = useState(false);
+  const [bulkInviteResult, setBulkInviteResult] = useState("");
 
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
@@ -174,7 +184,34 @@ export default function AdminPanel() {
     if (inviteSucceeded) await refreshParticipants();
   };
 
-  const safeParticipants = Array.isArray(participants) ? participants : [];
+  const safeParticipants = useMemo(
+    () => (Array.isArray(participants) ? participants : []),
+    [participants],
+  );
+  const isInviteEligible = (p: ParticipantWithStatus) => !!p.email && p.status !== "active";
+  const inviteEligibleUserIds = useMemo(
+    () => safeParticipants.filter(isInviteEligible).map((p) => p.userId),
+    [safeParticipants],
+  );
+  const selectedEligibleUserIds = inviteEligibleUserIds.filter((id) => !!selectedInviteUserIds[id]);
+  const allEligibleSelected =
+    inviteEligibleUserIds.length > 0 && selectedEligibleUserIds.length === inviteEligibleUserIds.length;
+
+  useEffect(() => {
+    // Selections sauber halten (z.B. nach Search/Refresh).
+    setSelectedInviteUserIds((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const id of inviteEligibleUserIds) {
+        if (prev[id]) next[id] = true;
+      }
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length && prevKeys.every((k) => prev[k] === next[k])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [inviteEligibleUserIds]);
 
   const startEditEmail = (p: ParticipantWithStatus) => {
     setEditingUserId(p.userId);
@@ -269,6 +306,100 @@ export default function AdminPanel() {
       setCreateError("Teilnehmer konnte nicht angelegt werden.");
     } finally {
       setCreateSaving(false);
+    }
+  };
+
+  const sendInviteForParticipant = async (
+    p: ParticipantWithStatus,
+    options?: { refreshAfter?: boolean },
+  ) => {
+    if (!p.email) return;
+    if (p.status === "active") return;
+
+    const refreshAfter = options?.refreshAfter ?? true;
+    const userId = p.userId;
+    const effectiveRole: UserRole = p.role ?? "participant";
+
+    setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
+    setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
+    try {
+      const result = await inviteUser({
+        email: p.email,
+        nickname: userId,
+        role: effectiveRole,
+      });
+
+      if (result.error) {
+        setInviteResultByUserId((prev) => ({ ...prev, [userId]: "Fehler beim Einladen." }));
+        return { ok: false as const };
+      }
+
+      if (result.emailSent) {
+        setInviteResultByUserId((prev) => ({
+          ...prev,
+          [userId]: `Einladung gesendet an ${p.email}.`,
+        }));
+      } else {
+        setInviteResultByUserId((prev) => ({
+          ...prev,
+          [userId]: "Einladung angestoßen, aber E-Mail konnte nicht versendet werden.",
+        }));
+      }
+
+      if (refreshAfter) {
+        await refreshParticipants();
+      }
+      return { ok: true as const };
+    } catch (err) {
+      console.error("Failed to send invite", err);
+      setInviteResultByUserId((prev) => ({ ...prev, [userId]: "Fehler beim Einladen." }));
+      return { ok: false as const };
+    } finally {
+      setInviteSendingByUserId((prev) => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  const toggleSelectedInviteUserId = (userId: string, checked: boolean) => {
+    setSelectedInviteUserIds((prev) => ({ ...prev, [userId]: checked }));
+  };
+
+  const toggleSelectAllEligible = (checked: boolean) => {
+    if (!checked) {
+      setSelectedInviteUserIds({});
+      return;
+    }
+    const next: Record<string, boolean> = {};
+    for (const id of inviteEligibleUserIds) next[id] = true;
+    setSelectedInviteUserIds(next);
+  };
+
+  const sendBulkInvites = async () => {
+    if (bulkInviteSending) return;
+    if (selectedEligibleUserIds.length === 0) return;
+
+    setBulkInviteSending(true);
+    setBulkInviteResult("");
+
+    let ok = 0;
+    let failed = 0;
+
+    try {
+      const byId = new Map(safeParticipants.map((p) => [p.userId, p]));
+      for (const userId of selectedEligibleUserIds) {
+        const p = byId.get(userId);
+        if (!p || !isInviteEligible(p)) continue;
+
+        // Pro User UI-Feedback beibehalten, aber Refresh erst am Ende.
+        const res = await sendInviteForParticipant(p, { refreshAfter: false });
+        if (res?.ok) ok += 1;
+        else failed += 1;
+      }
+    } finally {
+      await refreshParticipants();
+      setBulkInviteSending(false);
+      setBulkInviteResult(
+        failed > 0 ? `${ok} Einladung(en) gesendet, ${failed} fehlgeschlagen.` : `${ok} Einladung(en) gesendet.`,
+      );
     }
   };
   
@@ -369,6 +500,28 @@ export default function AdminPanel() {
             style={{ width: "100%", maxWidth: 360 }}
           />
         </div>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            aria-label="Ausgewählte einladen"
+            title={
+              selectedEligibleUserIds.length === 0
+                ? "Wähle Teilnehmer mit E-Mail aus"
+                : "Einladung an ausgewählte Teilnehmer senden/erneut senden"
+            }
+            disabled={
+              selectedEligibleUserIds.length === 0 ||
+              bulkInviteSending ||
+              participantsLoading ||
+              editingSaving ||
+              createSaving
+            }
+            onClick={sendBulkInvites}
+          >
+            {bulkInviteSending ? "Sende..." : `Ausgewählte einladen (${selectedEligibleUserIds.length})`}
+          </button>
+          {bulkInviteResult && <span style={{ color: "#374151", fontSize: 12 }}>{bulkInviteResult}</span>}
+        </div>
 
         {participantsError && (
           <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }}>
@@ -387,13 +540,22 @@ export default function AdminPanel() {
               <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "130px 110px 110px 1fr 84px",
+                gridTemplateColumns: "36px 130px 110px 110px 1fr 160px",
                 gap: "0.5rem",
                 alignItems: "center",
                 fontWeight: 600,
                 marginBottom: "0.5rem",
               }}
             >
+              <span style={{ display: "inline-flex", justifyContent: "center" }}>
+                <input
+                  type="checkbox"
+                  aria-label="Alle (einladbar) auswählen"
+                  checked={allEligibleSelected}
+                  disabled={inviteEligibleUserIds.length === 0 || participantsLoading || bulkInviteSending}
+                  onChange={(e) => toggleSelectAllEligible(e.target.checked)}
+                />
+              </span>
               <span>Nickname</span>
               <span>Rolle</span>
               <span>Status</span>
@@ -405,12 +567,28 @@ export default function AdminPanel() {
                   key={p.userId}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "130px 110px 110px 1fr 84px",
+                    gridTemplateColumns: "36px 130px 110px 110px 1fr 160px",
                     gap: "0.5rem",
                     alignItems: "center",
                     padding: "0.25rem 0",
                   }}
                 >
+                  <span style={{ display: "inline-flex", justifyContent: "center" }}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Auswählen ${p.userId}`}
+                      checked={!!selectedInviteUserIds[p.userId]}
+                      disabled={!isInviteEligible(p) || participantsLoading || bulkInviteSending}
+                      title={
+                        !p.email
+                          ? "E-Mail fehlt"
+                          : p.status === "active"
+                            ? "Bereits registriert"
+                            : "Auswählen"
+                      }
+                      onChange={(e) => toggleSelectedInviteUserId(p.userId, e.target.checked)}
+                    />
+                  </span>
                   <span style={{ fontWeight: 600 }}>{p.userId}</span>
                   <span style={{ color: "#374151" }}>{getRoleLabel(p.role)}</span>
                   <span
@@ -428,7 +606,35 @@ export default function AdminPanel() {
                     />
                   </span>
                   <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
-                  <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
+                  <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      title={
+                        !p.email
+                          ? "E-Mail fehlt"
+                          : p.status === "active"
+                            ? "Bereits registriert"
+                            : p.status === "invited"
+                              ? "Einladung erneut senden"
+                              : "Einladung senden"
+                      }
+                      aria-label={`${p.status === "invited" ? "Erneut einladen" : "Einladen"} ${p.userId}`}
+                      disabled={
+                        !p.email ||
+                        p.status === "active" ||
+                        !!inviteSendingByUserId[p.userId] ||
+                        participantsLoading ||
+                        editingSaving ||
+                        createSaving
+                      }
+                      onClick={() => sendInviteForParticipant(p)}
+                    >
+                      {inviteSendingByUserId[p.userId]
+                        ? "..."
+                        : p.status === "invited"
+                          ? "Erneut"
+                          : "Einladen"}
+                    </button>
                     <button
                       type="button"
                       title={`Bearbeiten ${p.userId}`}
@@ -442,6 +648,11 @@ export default function AdminPanel() {
                       <Trash2 size={14} aria-hidden="true" />
                     </button>
                   </div>
+                  {inviteResultByUserId[p.userId] && (
+                    <div style={{ gridColumn: "1 / -1", color: "#374151", fontSize: 12 }}>
+                      {inviteResultByUserId[p.userId]}
+                    </div>
+                  )}
                 </div>
               ))}
               </div>

@@ -1,7 +1,7 @@
 // src/components/Invite.tsx
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { signIn, confirmSignIn, fetchAuthSession } from "@aws-amplify/auth";
+import { signIn, confirmSignIn, fetchAuthSession, signOut } from "@aws-amplify/auth";
 import { saveCurrentUser } from "shared/lib/storage";
 import { User, UserRole } from "shared/types";
 import { updateParticipant } from "../api/participants";
@@ -32,11 +32,30 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
     }
   }, [nicknameParam]);
 
+  // Invite-Flow: sicherstellen, dass kein anderer Cognito-User eingeloggt ist.
+  // Sonst wirft Amplify bei signIn() -> UserAlreadyAuthenticatedException.
+  useEffect(() => {
+    if (!nicknameParam) return;
+    setAuthCleared(false);
+    (async () => {
+      try {
+        await signOut();
+      } catch {
+        // Wenn niemand eingeloggt ist, ist signOut ein No-Op.
+      }
+      setAuthCleared(true);
+    })();
+  }, [nicknameParam]);
+
   // user inputs
   const [tempPassword, setTempPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Wir blockieren den Submit, bis ein eventuelles vorheriges signOut abgeschlossen ist.
+  // Sonst kann Amplify bei signIn() -> UserAlreadyAuthenticatedException werfen.
+  const [authCleared, setAuthCleared] = useState(false);
 
   
   // Defensive normalization: if your pool is case-insensitive, sign in with lowercase
@@ -64,11 +83,37 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
     }
 
     try {
+      if (!authCleared) {
+        try {
+          await signOut();
+        } catch {
+          // ignore
+        }
+        setAuthCleared(true);
+      }
       // 1) Sign in with temporary password
-      const result = await signIn({ username: usernameForSignIn, password: tempPassword });
+      let result: { nextStep?: { signInStep?: string } } | null = null;
+      try {
+        result = (await signIn({
+          username: usernameForSignIn,
+          password: tempPassword,
+        })) as { nextStep?: { signInStep?: string } };
+      } catch (err: unknown) {
+        // Falls noch ein User eingeloggt ist (z.B. Admin), einmal ausloggen und erneut versuchen.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("UserAlreadyAuthenticatedException")) {
+          await signOut();
+          result = (await signIn({
+            username: usernameForSignIn,
+            password: tempPassword,
+          })) as { nextStep?: { signInStep?: string } };
+        } else {
+          throw err;
+        }
+      }
 
       // 2) If challenge required -> confirm with new password
-      if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+      if (result?.nextStep?.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
         await confirmSignIn({ challengeResponse: newPassword });
       }
 
@@ -152,7 +197,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
 
         {error && <p style={{ color: "red" }}>{error}</p>}
 
-        <button type="submit" disabled={loading} className="btn-primary btn-block">
+        <button
+          type="submit"
+          disabled={loading || !authCleared}
+          className="btn-primary btn-block"
+        >
           {loading ? "Verarbeite…" : "Passwort setzen"}
         </button>
       </form>

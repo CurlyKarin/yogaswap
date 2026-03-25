@@ -98,9 +98,10 @@ function collectCourseDates(
         const participants = override ? override.participants : course.participants;
 
         const isFull = participants.length >= course.capacity;
+        const currentUserLower = currentUser.nickname.toLowerCase();
         const userAlreadyInThisCourse =
-          participants.includes(currentUser.nickname) ||
-          course.participants.includes(currentUser.nickname);
+          participants.some((p) => p.toLowerCase() === currentUserLower) ||
+          course.participants.some((p) => p.toLowerCase() === currentUserLower);
 
         return {
           course,

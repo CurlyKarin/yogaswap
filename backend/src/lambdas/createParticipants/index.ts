@@ -246,12 +246,13 @@ export const handler = async (event: any) => {
     console.warn(`⚠️ WICHTIG: E-Mail nicht versendet. User '${username}' benötigt temporäres Passwort: ${rawPassword}`);
   }
 
+  const inviteSentAt = new Date().toISOString();
   try {
     await saveParticipantProfile({
       tenantId,
       userId: username,
       email: emailNormalized,
-      inviteSentAt: emailSent ? new Date().toISOString() : undefined,
+      inviteSentAt,
     });
   } catch (err: any) {
     console.warn("Failed to save participant profile (ignored):", err?.message || err);

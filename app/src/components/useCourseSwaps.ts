@@ -45,7 +45,7 @@ export function useCourseSwaps(
       // TODO: Prüfen, ob diese Prüfung notwendig ist (Kommentar im Originalcode)
       const hasSwap = swaps.some(
         (s: Swap) =>
-          s.user === userName &&
+          s.user.toLowerCase() === userName.toLowerCase() &&
           s.fromCourseId === course.id &&
           s.fromDate === dateIso &&
           s.status === 'active'
@@ -102,19 +102,25 @@ export function useCourseSwaps(
               };
 
         const courseCapacity = course.capacity;
-        const isIn = baseOverride.participants.includes(userName);
+        const userNameLower = userName.toLowerCase();
+        const isIn = baseOverride.participants.some((p) => p.toLowerCase() === userNameLower);
 
         let nextParticipants: string[];
         if (isIn) {
           // Absage: User entfernen
-          nextParticipants = baseOverride.participants.filter((p) => p !== userName);
+          // Removal case-insensitive, damit gemischte Alt-Daten korrekt funktionieren.
+          nextParticipants = baseOverride.participants.filter((p) => p.toLowerCase() !== userNameLower);
         } else {
           // Rücknahme: User hinzufügen, nur wenn Platz frei
           if (baseOverride.participants.length >= courseCapacity) {
             alert('Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.');
             return prev;
           }
-          nextParticipants = [...baseOverride.participants, userName];
+          // Keine Duplikate durch unterschiedliche Schreibweise zulassen.
+          nextParticipants = [
+            ...baseOverride.participants.filter((p) => p.toLowerCase() !== userNameLower),
+            userName,
+          ];
         }
 
         const nextOverride: CourseDateOverride = {
@@ -162,7 +168,7 @@ export function useCourseSwaps(
         // TODO: nur zur Sicherheit hier drin, Prüfen!!!
         const existing = swaps.find(
           (s) =>
-            s.user === userName &&
+            s.user.toLowerCase() === userName.toLowerCase() &&
             s.fromCourseId === fromCourse.id &&
             s.fromDate === fromDateIso &&
             s.status === "active"
@@ -235,13 +241,13 @@ export function useCourseSwaps(
               : {
                   courseId: fromCourse.id,
                   date: fromDateIso,
-                  participants: fromCourse.participants.filter((p) => p !== userName),
+                  participants: fromCourse.participants.filter((p) => p.toLowerCase() !== userName.toLowerCase()),
                   swapped: [],
                   waitlist: [],
                 };
           const originNextOverride: CourseDateOverride = {
             ...originOverride,
-            participants: originOverride.participants.filter((p) => p !== userName),
+            participants: originOverride.participants.filter((p) => p.toLowerCase() !== userName.toLowerCase()),
             swapped: originOverride.swapped ?? [],
             waitlist: originOverride.waitlist ?? [],
           };
@@ -262,9 +268,11 @@ export function useCourseSwaps(
                   swapped: [],
                   waitlist: [],
                 };
-          const newParticipants = targetOverride.participants.includes(userName)
+          const newParticipants = targetOverride.participants.some(
+            (p) => p.toLowerCase() === userName.toLowerCase()
+          )
             ? targetOverride.participants
-            : [...targetOverride.participants, userName];
+            : [...targetOverride.participants.filter((p) => p.toLowerCase() !== userName.toLowerCase()), userName];
           const targetNextOverride: CourseDateOverride = {
             ...targetOverride,
             participants: newParticipants,
@@ -442,7 +450,7 @@ export function useCourseSwaps(
         // 1) prüfen, ob schon ein Swap existiert
         const existing = swaps.find(
           (s) =>
-            s.user === userName &&
+            s.user.toLowerCase() === userName.toLowerCase() &&
             s.fromCourseId === fromCourse.id &&
             s.fromDate === fromDateIso &&
             s.toCourseId === toCourseId &&
@@ -472,7 +480,8 @@ export function useCourseSwaps(
           if (targetIdx >= 0) {
             const cur = updated[targetIdx];
             // nur hinzufügen, falls User nicht schon drin
-            if (!cur.waitlist?.includes(userName)) {
+            const userNameLowerForWaitlist = userName.toLowerCase();
+            if (!cur.waitlist?.some((p) => p.toLowerCase() === userNameLowerForWaitlist)) {
               nextOverride = {
                 ...cur,
                 waitlist: [...(cur.waitlist ?? []), userName],
