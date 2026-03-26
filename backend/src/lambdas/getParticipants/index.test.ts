@@ -138,6 +138,43 @@ describe("getParticipants Lambda", () => {
     expect(body[0].userId).toBe("alice");
   });
 
+  test("returns only participants that have a tenant membership", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "admin" },
+        role: { S: "admin" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        name: { S: "Demo" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, email: { S: "alice@example.com" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "ghost" }, email: { S: "ghost@example.com" } },
+      ],
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, role: { S: "participant" } },
+      ],
+    });
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "admin" } } as any,
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toHaveLength(1);
+    expect(body[0].userId).toBe("alice");
+  });
+
   test("filters by status", async () => {
     mockSend.mockResolvedValueOnce({
       Item: { tenantId: { S: "default-tenant" }, userId: { S: "admin" }, role: { S: "admin" } },

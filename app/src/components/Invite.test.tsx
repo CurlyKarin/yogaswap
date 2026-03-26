@@ -122,7 +122,7 @@ describe("Invite", () => {
 
     await waitFor(() => {
       expect(mockedSignIn).toHaveBeenCalledWith({
-        username: "alice",
+        username: "Alice",
         password: "temp-123",
       });
       expect(mockedConfirmSignIn).toHaveBeenCalledWith({

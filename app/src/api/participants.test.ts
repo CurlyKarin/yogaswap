@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getParticipants, inviteUser, updateParticipant } from "./participants";
+import {
+  deleteParticipant,
+  getParticipants,
+  inviteUser,
+  updateParticipant,
+} from "./participants";
 import axios from "axios";
 
 vi.mock("axios");
@@ -59,6 +64,7 @@ describe("participants API (getParticipants/updateParticipant)", () => {
   beforeEach(() => {
     vi.mocked(axios.get).mockReset();
     vi.mocked(axios.put).mockReset();
+    vi.mocked(axios.delete).mockReset();
   });
 
   it("getParticipants lädt Teilnehmer inkl. status", async () => {
@@ -136,5 +142,24 @@ describe("participants API (getParticipants/updateParticipant)", () => {
       "/participants/alice",
       { email: "alice@example.com" },
     );
+  });
+
+  it("deleteParticipant DELETE entfernt Teilnehmer und gibt Cleanup-Info zurück", async () => {
+    vi.mocked(axios.delete).mockResolvedValueOnce({
+      data: {
+        success: true,
+        membershipDeleted: true,
+        profileDeleted: true,
+      },
+    });
+
+    const result = await deleteParticipant("alice");
+
+    expect(result).toEqual({
+      success: true,
+      membershipDeleted: true,
+      profileDeleted: true,
+    });
+    expect(axios.delete).toHaveBeenCalledWith("/participants/alice");
   });
 });

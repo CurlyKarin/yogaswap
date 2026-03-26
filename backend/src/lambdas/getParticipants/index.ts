@@ -133,6 +133,7 @@ export const handler = async (
     });
 
     const participants: ParticipantListItem[] = profiles
+      .filter((profile) => roleByUserId.has(profile.userId))
       .map((profile) => ({
         ...profile,
         status: deriveParticipantStatus(profile),

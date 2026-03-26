@@ -31,6 +31,19 @@ describe("getTenantContext (lambda shared)", () => {
     });
   });
 
+  it("normalisiert userId aus JWT-Claims auf lowercase", () => {
+    const event = makeEvent({
+      requestContext: {
+        authorizer: {
+          jwt: { claims: { nickname: "Maya" } },
+        },
+      } as any,
+    });
+
+    const ctx = getTenantContext(event);
+    expect(ctx.userId).toBe("maya");
+  });
+
   it("verwendet principalId, wenn kein nickname im JWT vorhanden ist", () => {
     const event = makeEvent({
       requestContext: {

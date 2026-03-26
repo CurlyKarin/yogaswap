@@ -2,22 +2,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import AdminPanel from "./AdminPanel";
-import { getParticipants, inviteUser, updateParticipant } from "../api/participants";
+import { deleteParticipant, getParticipants, inviteUser, updateParticipant } from "../api/participants";
 
 vi.mock("../api/participants", () => ({
   inviteUser: vi.fn(),
   getParticipants: vi.fn(),
   updateParticipant: vi.fn(),
+  deleteParticipant: vi.fn(),
 }));
 
 const mockedInviteUser = inviteUser as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
+const mockedDeleteParticipant = deleteParticipant as unknown as ReturnType<typeof vi.fn>;
 
 describe("AdminPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedGetParticipants.mockResolvedValue([]);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   it("deaktiviert den Einladen-Button, wenn Email oder Nickname fehlen", () => {
@@ -199,7 +202,42 @@ describe("AdminPanel", () => {
       expect(within(panel).getByLabelText("Status: ohne Login")).toBeInTheDocument();
       expect(within(panel).getByLabelText("Einladen alice")).not.toBeDisabled();
       expect(within(panel).getByLabelText("Bearbeiten alice")).not.toBeDisabled();
-      expect(within(panel).getByLabelText("Löschen alice")).toBeDisabled();
+      expect(within(panel).getByLabelText("Löschen alice")).not.toBeDisabled();
+    });
+  });
+
+  it("löscht Teilnehmer aus der Teilnehmerliste", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "no_login",
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    mockedDeleteParticipant.mockResolvedValueOnce({
+      success: true,
+      membershipDeleted: true,
+      profileDeleted: true,
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Löschen alice"));
+
+    await waitFor(() => {
+      expect(mockedDeleteParticipant).toHaveBeenCalledWith("alice");
+      expect(within(panel).getByText(/Profil-Cleanup/i)).toBeInTheDocument();
     });
   });
 
@@ -387,6 +425,41 @@ describe("AdminPanel", () => {
       expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", { email: "alice@example.com" });
       expect(within(panel).getByText("alice")).toBeInTheDocument();
       expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
+    });
+  });
+
+  it("uebernimmt E-Mail in Create-Form anhand des Nicknames", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "invited",
+        },
+      ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "Alice" },
+    });
+    fireEvent.blur(within(dialog).getByPlaceholderText("Spitzname"));
+
+    await waitFor(() => {
+      expect((within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement).value).toBe(
+        "alice@example.com",
+      );
+      expect(
+        within(dialog).getByText(/E-Mail aus bestehendem Profil uebernommen\./i),
+      ).toBeInTheDocument();
     });
   });
 

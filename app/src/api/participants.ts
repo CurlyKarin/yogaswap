@@ -14,6 +14,7 @@ export interface InviteUserResponse {
   tempPassword?: string;  // Temporäres Passwort (nur wenn E-Mail nicht versendet wurde)
   warning?: string;       // Warnung, z.B. wenn E-Mail nicht versendet werden konnte
   emailSent?: boolean;    // Ob E-Mail erfolgreich versendet wurde
+  reactivated?: boolean;  // Ob ein bestehender Login nur reaktiviert wurde (ohne Passwort-Reset)
   username?: string;
   link?: string;
 }
@@ -82,6 +83,19 @@ export async function updateParticipant(
   const response = await axios.put<ParticipantWithStatus>(
     `/participants/${encodeURIComponent(userId)}`,
     data,
+  );
+  return response.data;
+}
+
+export interface DeleteParticipantResponse {
+  success: boolean;
+  membershipDeleted: boolean;
+  profileDeleted: boolean;
+}
+
+export async function deleteParticipant(userId: string): Promise<DeleteParticipantResponse> {
+  const response = await axios.delete<DeleteParticipantResponse>(
+    `/participants/${encodeURIComponent(userId)}`,
   );
   return response.data;
 }

@@ -58,8 +58,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const [authCleared, setAuthCleared] = useState(false);
 
   
-  // Defensive normalization: if your pool is case-insensitive, sign in with lowercase
-  const usernameForSignIn = nicknameParam ? nicknameParam.toLowerCase() : "";
+  const usernameForSignIn = nicknameParam ? nicknameParam.trim() : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,7 +133,8 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
         const sub = payload.sub as string | undefined;
         if (typeof sub === "string" && sub.trim()) {
           try {
-            await updateParticipant(user.nickname, { authUserId: sub });
+            // Use invite-link nickname as canonical participant id for linking.
+            await updateParticipant(usernameForSignIn, { authUserId: sub });
           } catch (err) {
             console.error("Failed to link participant authUserId", err);
           }

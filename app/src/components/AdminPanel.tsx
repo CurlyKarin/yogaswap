@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  deleteParticipant,
   getParticipants,
   inviteUser,
   updateParticipant,
@@ -40,6 +41,7 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [emailAutoFilled, setEmailAutoFilled] = useState(false);
 
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
@@ -59,6 +61,7 @@ export default function AdminPanel() {
   );
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [createEmailAutoFilled, setCreateEmailAutoFilled] = useState(false);
 
   const [inviteSendingByUserId, setInviteSendingByUserId] = useState<Record<string, boolean>>(
     {},
@@ -69,6 +72,7 @@ export default function AdminPanel() {
   );
   const [bulkInviteSending, setBulkInviteSending] = useState(false);
   const [bulkInviteResult, setBulkInviteResult] = useState("");
+  const [deleteRunningByUserId, setDeleteRunningByUserId] = useState<Record<string, boolean>>({});
 
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
@@ -154,6 +158,8 @@ export default function AdminPanel() {
             `✅ Teilnehmer '${nickname}' wurde ohne Login angelegt.\n` +
             `Hinweis: Es wird keine Einladung per E-Mail verschickt.`
           );
+        } else if (result.reactivated && result.emailSent) {
+          setMessage(`✅ Zugang für ${nickname} reaktiviert. Info-Mail wurde an ${email} gesendet.`);
         } else if (result.emailSent) {
           setMessage(`✅ Einladung per E-Mail gesendet an ${email}`);
         } else {
@@ -166,6 +172,7 @@ export default function AdminPanel() {
           );
         }
         setEmail("");
+        setEmailAutoFilled(false);
         setNickname("");
         setForeignManaged(false);
         setRole("participant");
@@ -188,6 +195,68 @@ export default function AdminPanel() {
     () => (Array.isArray(participants) ? participants : []),
     [participants],
   );
+  const getKnownEmailByNickname = (nicknameValue: string): string => {
+    const normalized = nicknameValue.trim().toLowerCase();
+    if (!normalized) return "";
+    const match = safeParticipants.find(
+      (p) => (p.userId || "").trim().toLowerCase() === normalized && !!p.email,
+    );
+    return match?.email ?? "";
+  };
+  const prefillInviteEmailByNickname = async (nicknameValue: string) => {
+    if (foreignManaged || email.trim()) return;
+    const normalized = nicknameValue.trim().toLowerCase();
+    if (!normalized) return;
+
+    const localEmail = getKnownEmailByNickname(normalized);
+    if (localEmail) {
+      setEmail(localEmail);
+      setEmailAutoFilled(true);
+      return;
+    }
+
+    try {
+      const remoteList = await getParticipants({ search: normalized });
+      const remoteMatch = remoteList.find(
+        (p) => (p.userId || "").trim().toLowerCase() === normalized && !!p.email,
+      );
+      if (remoteMatch?.email) {
+        setEmail((prev) => (prev.trim() ? prev : remoteMatch.email ?? ""));
+        setEmailAutoFilled(true);
+      } else {
+        setEmailAutoFilled(false);
+      }
+    } catch {
+      setEmailAutoFilled(false);
+    }
+  };
+  const prefillCreateEmailByNickname = async (nicknameValue: string) => {
+    if (createEmail.trim()) return;
+    const normalized = nicknameValue.trim().toLowerCase();
+    if (!normalized) return;
+
+    const localEmail = getKnownEmailByNickname(normalized);
+    if (localEmail) {
+      setCreateEmail(localEmail);
+      setCreateEmailAutoFilled(true);
+      return;
+    }
+
+    try {
+      const remoteList = await getParticipants({ search: normalized });
+      const remoteMatch = remoteList.find(
+        (p) => (p.userId || "").trim().toLowerCase() === normalized && !!p.email,
+      );
+      if (remoteMatch?.email) {
+        setCreateEmail((prev) => (prev.trim() ? prev : remoteMatch.email ?? ""));
+        setCreateEmailAutoFilled(true);
+      } else {
+        setCreateEmailAutoFilled(false);
+      }
+    } catch {
+      setCreateEmailAutoFilled(false);
+    }
+  };
   const isInviteEligible = (p: ParticipantWithStatus) => !!p.email && p.status !== "active";
   const inviteEligibleUserIds = useMemo(
     () => safeParticipants.filter(isInviteEligible).map((p) => p.userId),
@@ -261,6 +330,7 @@ export default function AdminPanel() {
     setCreateOpen(true);
     setCreateNickname("");
     setCreateEmail("");
+    setCreateEmailAutoFilled(false);
     setCreateRole("participant");
     setCreateError("");
     setCreateSaving(false);
@@ -296,7 +366,7 @@ export default function AdminPanel() {
       }
 
       if (emailValue.length > 0) {
-        await updateParticipant(nicknameValue, { email: emailValue });
+        await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
       }
 
       setCreateOpen(false);
@@ -337,7 +407,9 @@ export default function AdminPanel() {
       if (result.emailSent) {
         setInviteResultByUserId((prev) => ({
           ...prev,
-          [userId]: `Einladung gesendet an ${p.email}.`,
+          [userId]: result.reactivated
+            ? `Zugang reaktiviert. Info-Mail gesendet an ${p.email}.`
+            : `Einladung gesendet an ${p.email}.`,
         }));
       } else {
         setInviteResultByUserId((prev) => ({
@@ -402,6 +474,33 @@ export default function AdminPanel() {
       );
     }
   };
+
+  const deleteParticipantFromTenant = async (p: ParticipantWithStatus) => {
+    const userId = p.userId;
+    const confirmed = window.confirm(
+      `Teilnehmer "${userId}" aus diesem Studio entfernen?\n\n` +
+        `Hinweis: Mit Login bleibt das globale Profil erhalten. Ohne Login kann zusätzlich das Profil gelöscht werden, falls keine weitere Studio-Zuordnung existiert.`,
+    );
+    if (!confirmed) return;
+
+    setDeleteRunningByUserId((prev) => ({ ...prev, [userId]: true }));
+    setBulkInviteResult("");
+
+    try {
+      const result = await deleteParticipant(userId);
+      setBulkInviteResult(
+        result.profileDeleted
+          ? `Teilnehmer "${userId}" entfernt (inkl. Profil-Cleanup).`
+          : `Teilnehmer "${userId}" aus diesem Studio entfernt.`,
+      );
+      await refreshParticipants();
+    } catch (err) {
+      console.error("Failed to delete participant", err);
+      setBulkInviteResult(`Teilnehmer "${userId}" konnte nicht gelöscht werden.`);
+    } finally {
+      setDeleteRunningByUserId((prev) => ({ ...prev, [userId]: false }));
+    }
+  };
   
   return (
     <div className="admin-panel">
@@ -416,6 +515,7 @@ export default function AdminPanel() {
               setForeignManaged(checked);
               if (checked) {
                 setEmail("");
+                setEmailAutoFilled(false);
                 setRole("participant");
               }
             }}
@@ -428,17 +528,37 @@ export default function AdminPanel() {
           type="text"
           placeholder="Spitzname"
           value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
+          onChange={(e) => {
+            const nextNickname = e.target.value;
+            setNickname(nextNickname);
+            if (foreignManaged || email.trim()) return;
+            const suggestedEmail = getKnownEmailByNickname(nextNickname);
+            if (suggestedEmail) setEmail(suggestedEmail);
+            setEmailAutoFilled(!!suggestedEmail);
+          }}
+          onBlur={() => {
+            void prefillInviteEmailByNickname(nickname);
+          }}
           disabled={loading}
         />
         {!foreignManaged && (
-          <input
-            type="email"
-            placeholder="E-Mail"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
-          />
+          <>
+            <input
+              type="email"
+              placeholder="E-Mail"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailAutoFilled(false);
+              }}
+              disabled={loading}
+            />
+            {emailAutoFilled && (
+              <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                E-Mail aus bestehendem Profil uebernommen.
+              </p>
+            )}
+          </>
         )}
         <select
           value={role}
@@ -639,12 +759,25 @@ export default function AdminPanel() {
                       type="button"
                       title={`Bearbeiten ${p.userId}`}
                       aria-label={`Bearbeiten ${p.userId}`}
-                      disabled={participantsLoading || editingSaving}
+                      disabled={participantsLoading || editingSaving || !!deleteRunningByUserId[p.userId]}
                       onClick={() => startEditEmail(p)}
                     >
                       <Pencil size={14} aria-hidden="true" />
                     </button>
-                    <button type="button" title={`Löschen ${p.userId}`} aria-label={`Löschen ${p.userId}`} disabled>
+                    <button
+                      type="button"
+                      title={`Löschen ${p.userId}`}
+                      aria-label={`Löschen ${p.userId}`}
+                      disabled={
+                        participantsLoading ||
+                        editingSaving ||
+                        createSaving ||
+                        bulkInviteSending ||
+                        !!inviteSendingByUserId[p.userId] ||
+                        !!deleteRunningByUserId[p.userId]
+                      }
+                      onClick={() => deleteParticipantFromTenant(p)}
+                    >
                       <Trash2 size={14} aria-hidden="true" />
                     </button>
                   </div>
@@ -713,7 +846,17 @@ export default function AdminPanel() {
                   type="text"
                   placeholder="Spitzname"
                   value={createNickname}
-                  onChange={(e) => setCreateNickname(e.target.value)}
+                  onChange={(e) => {
+                    const nextNickname = e.target.value;
+                    setCreateNickname(nextNickname);
+                    if (createEmail.trim()) return;
+                    const suggestedEmail = getKnownEmailByNickname(nextNickname);
+                    if (suggestedEmail) setCreateEmail(suggestedEmail);
+                    setCreateEmailAutoFilled(!!suggestedEmail);
+                  }}
+                  onBlur={() => {
+                    void prefillCreateEmailByNickname(createNickname);
+                  }}
                   disabled={createSaving}
                   style={{
                     width: "100%",
@@ -731,7 +874,10 @@ export default function AdminPanel() {
                   type="email"
                   placeholder="E-Mail"
                   value={createEmail}
-                  onChange={(e) => setCreateEmail(e.target.value)}
+                  onChange={(e) => {
+                    setCreateEmail(e.target.value);
+                    setCreateEmailAutoFilled(false);
+                  }}
                   disabled={createSaving}
                   style={{
                     width: "100%",
@@ -741,6 +887,11 @@ export default function AdminPanel() {
                     fontSize: 16,
                   }}
                 />
+                {createEmailAutoFilled && (
+                  <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                    E-Mail aus bestehendem Profil uebernommen.
+                  </p>
+                )}
               </label>
 
               <label>
