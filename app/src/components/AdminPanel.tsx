@@ -53,6 +53,8 @@ export default function AdminPanel() {
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createEmailAutoFilled, setCreateEmailAutoFilled] = useState(false);
+  const [createOverwriteEmailOnReactivate, setCreateOverwriteEmailOnReactivate] = useState(false);
+  const [createReactivationUserId, setCreateReactivationUserId] = useState<string | null>(null);
 
   const [inviteSendingByUserId, setInviteSendingByUserId] = useState<Record<string, boolean>>(
     {},
@@ -135,12 +137,37 @@ export default function AdminPanel() {
     );
     return match?.email ?? "";
   };
+  const getKnownParticipantByNickname = (nicknameValue: string): ParticipantWithStatus | undefined => {
+    const normalized = nicknameValue.trim().toLowerCase();
+    if (!normalized) return undefined;
+    return safeParticipants.find((p) => (p.userId || "").trim().toLowerCase() === normalized);
+  };
+  const createMatch = getKnownParticipantByNickname(createNickname);
+  const createActiveConflict = !!createMatch && createMatch.status === "active";
+  const createSuggestedNickname = useMemo(() => {
+    if (!createActiveConflict) return "";
+    const base = createNickname.trim();
+    if (!base) return "";
+    const used = new Set(safeParticipants.map((p) => (p.userId || "").trim().toLowerCase()));
+    let idx = 1;
+    let candidate = `${base}${idx}`;
+    while (used.has(candidate.toLowerCase()) && idx < 1000) {
+      idx += 1;
+      candidate = `${base}${idx}`;
+    }
+    return candidate;
+  }, [createActiveConflict, createNickname, safeParticipants]);
   const prefillCreateEmailByNickname = async (nicknameValue: string) => {
     if (createEmail.trim()) return;
     const normalized = nicknameValue.trim().toLowerCase();
-    if (!normalized) return;
+    if (!normalized) {
+      setCreateReactivationUserId(null);
+      return;
+    }
 
-    const localEmail = getKnownEmailByNickname(normalized);
+    const localMatch = getKnownParticipantByNickname(normalized);
+    setCreateReactivationUserId(localMatch && localMatch.status !== "active" ? localMatch.userId : null);
+    const localEmail = localMatch?.email ?? "";
     if (localEmail) {
       setCreateEmail(localEmail);
       setCreateEmailAutoFilled(true);
@@ -150,7 +177,10 @@ export default function AdminPanel() {
     try {
       const remoteList = await getParticipants({ search: normalized });
       const remoteMatch = remoteList.find(
-        (p) => (p.userId || "").trim().toLowerCase() === normalized && !!p.email,
+        (p) => (p.userId || "").trim().toLowerCase() === normalized,
+      );
+      setCreateReactivationUserId(
+        remoteMatch && remoteMatch.status !== "active" ? remoteMatch.userId : null,
       );
       if (remoteMatch?.email) {
         setCreateEmail((prev) => (prev.trim() ? prev : remoteMatch.email ?? ""));
@@ -239,6 +269,8 @@ export default function AdminPanel() {
     setCreateRole("participant");
     setCreateError("");
     setCreateSaving(false);
+    setCreateOverwriteEmailOnReactivate(false);
+    setCreateReactivationUserId(null);
   };
 
   const saveCreate = async () => {
@@ -252,6 +284,14 @@ export default function AdminPanel() {
       emailValue.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
     if (!isValidEmailOrEmpty) {
       setCreateError("Bitte eine gültige E-Mail-Adresse eingeben (oder leer lassen).");
+      return;
+    }
+    if (createActiveConflict) {
+      setCreateError(
+        createSuggestedNickname
+          ? `Dieser Spitzname ist im Tenant bereits aktiv. Vorschlag: ${createSuggestedNickname}`
+          : "Dieser Spitzname ist im Tenant bereits aktiv.",
+      );
       return;
     }
 
@@ -270,8 +310,12 @@ export default function AdminPanel() {
         return;
       }
 
-      if (emailValue.length > 0) {
+      if (emailValue.length > 0 && (!result.reactivated || createOverwriteEmailOnReactivate)) {
         await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
+      } else if (emailValue.length > 0 && result.reactivated && !createOverwriteEmailOnReactivate) {
+        setBulkInviteResult(
+          "Reaktivierung: bestehende E-Mail blieb unverändert (kein Überschreiben).",
+        );
       }
 
       setCreateOpen(false);
@@ -664,6 +708,13 @@ export default function AdminPanel() {
                   onChange={(e) => {
                     const nextNickname = e.target.value;
                     setCreateNickname(nextNickname);
+                    const localMatch = getKnownParticipantByNickname(nextNickname);
+                    setCreateReactivationUserId(
+                      localMatch && localMatch.status !== "active" ? localMatch.userId : null,
+                    );
+                    if (localMatch?.status === "active") {
+                      setCreateOverwriteEmailOnReactivate(false);
+                    }
                     if (createEmail.trim()) return;
                     const suggestedEmail = getKnownEmailByNickname(nextNickname);
                     if (suggestedEmail) setCreateEmail(suggestedEmail);
@@ -707,7 +758,50 @@ export default function AdminPanel() {
                     E-Mail aus bestehendem Profil uebernommen.
                   </p>
                 )}
+                <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                  Bei Reaktivierung bleibt die bestehende E-Mail standardmaessig unveraendert.
+                </p>
               </label>
+              {createReactivationUserId && (
+                <>
+                  <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
+                    Reaktivierung erkannt fuer bestehenden Teilnehmer: {createReactivationUserId}
+                  </p>
+                  <p style={{ margin: "0.15rem 0 0", color: "#92400e", fontSize: 12 }}>
+                    Spitzname existiert bereits (case-insensitiv). Es wird kein neuer User angelegt.
+                  </p>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={createOverwriteEmailOnReactivate}
+                      onChange={(e) => setCreateOverwriteEmailOnReactivate(e.target.checked)}
+                      disabled={createSaving}
+                    />
+                    E-Mail bei Reaktivierung ueberschreiben
+                  </label>
+                </>
+              )}
+              {createActiveConflict && (
+                <div style={{ margin: "0.25rem 0 0", color: "#991b1b", fontSize: 12 }}>
+                  <p style={{ margin: 0 }}>
+                    Dieser Spitzname ist im aktuellen Tenant bereits aktiv.
+                  </p>
+                  {createSuggestedNickname && (
+                    <p style={{ margin: "0.15rem 0 0" }}>
+                      Vorschlag fuer neuen Nickname: <strong>{createSuggestedNickname}</strong>
+                      {" "}
+                      <button
+                        type="button"
+                        onClick={() => setCreateNickname(createSuggestedNickname)}
+                        disabled={createSaving}
+                        style={{ marginLeft: 6 }}
+                      >
+                        Uebernehmen
+                      </button>
+                    </p>
+                  )}
+                </div>
+              )}
 
               <label>
                 Rolle
@@ -735,16 +829,44 @@ export default function AdminPanel() {
             </div>
 
             <div className="modal-actions">
-              <button type="button" onClick={() => setCreateOpen(false)} disabled={createSaving}>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(false)}
+                disabled={createSaving}
+                style={{
+                  minWidth: 120,
+                  height: 38,
+                  padding: "0 0.75rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxSizing: "border-box",
+                }}
+              >
                 Abbrechen
               </button>
               <button
                 type="button"
                 className="btn-primary"
                 onClick={saveCreate}
-                disabled={createSaving}
+                disabled={createSaving || createActiveConflict}
+                style={{
+                  minWidth: 120,
+                  height: 38,
+                  padding: "0 0.75rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxSizing: "border-box",
+                }}
               >
-                {createSaving ? "Lege an..." : "Anlegen"}
+                {createSaving
+                  ? createReactivationUserId
+                    ? "Reaktiviere..."
+                    : "Lege an..."
+                  : createReactivationUserId
+                    ? "Reaktivieren"
+                    : "Anlegen"}
               </button>
             </div>
           </div>

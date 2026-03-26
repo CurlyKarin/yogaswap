@@ -272,6 +272,39 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("ueberschreibt E-Mail bei Reaktivierung standardmaessig nicht", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([]);
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+      reactivated: true,
+      username: "alice",
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "alice" },
+    });
+    fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
+      target: { value: "alice.new@example.com" },
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Anlegen$/i }));
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({ nickname: "alice", role: "participant" });
+      expect(mockedUpdateParticipant).not.toHaveBeenCalled();
+      expect(
+        within(panel).getByText(/bestehende E-Mail blieb unverändert/i),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("uebernimmt E-Mail in Create-Form anhand des Nicknames", async () => {
     mockedGetParticipants
       .mockResolvedValueOnce([])
@@ -304,7 +337,48 @@ describe("AdminPanel", () => {
       expect(
         within(dialog).getByText(/E-Mail aus bestehendem Profil uebernommen\./i),
       ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(/Reaktivierung erkannt fuer bestehenden Teilnehmer: alice/i),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(/Spitzname existiert bereits \(case-insensitiv\)/i),
+      ).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: /^Reaktivieren$/i })).toBeInTheDocument();
     });
+  });
+
+  it("blockt aktive Nicknames und bietet Vorschlag mit Suffix", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "Kai",
+        role: "participant",
+        email: "kai@example.com",
+        status: "active",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "kai" },
+    });
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByText(/bereits aktiv/i),
+      ).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: /Uebernehmen/i })).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: /^Anlegen$/i })).toBeDisabled();
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Uebernehmen/i }));
+    expect((within(dialog).getByPlaceholderText("Spitzname") as HTMLInputElement).value).toBe("kai1");
   });
 
   it("bearbeitet E-Mail eines Teilnehmers über den Stift", async () => {
