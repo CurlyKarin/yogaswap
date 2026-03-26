@@ -34,15 +34,6 @@ function getStatusPresentation(status: ParticipantWithStatus["status"]): {
 }
 
 export default function AdminPanel() {
-  const [email, setEmail] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [role, setRole] = useState<"participant" | "instructor" | "admin">("participant");
-  const [foreignManaged, setForeignManaged] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [emailAutoFilled, setEmailAutoFilled] = useState(false);
-
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participantsError, setParticipantsError] = useState("");
@@ -132,65 +123,6 @@ export default function AdminPanel() {
     };
   }, [participantsSearch]);
 
-  const handleInvite = async () => {
-    if (!nickname) return;
-    if (!foreignManaged && !email) return;
-    setLoading(true);
-    setMessage("");
-    setError("");
-
-    let inviteSucceeded = false;
-
-    try {
-      const effectiveRole = foreignManaged ? "participant" : role;
-      const payload = foreignManaged
-        ? { nickname, role: effectiveRole }
-        : { email, nickname, role: effectiveRole };
-
-      const result = await inviteUser(payload);
-
-      if (result.error === "Nickname already exists") {
-        setError("Dieser Spitzname ist bereits vergeben.");
-      } else if (result.success) {
-        inviteSucceeded = true;
-        if (foreignManaged) {
-          setMessage(
-            `✅ Teilnehmer '${nickname}' wurde ohne Login angelegt.\n` +
-            `Hinweis: Es wird keine Einladung per E-Mail verschickt.`
-          );
-        } else if (result.reactivated && result.emailSent) {
-          setMessage(`✅ Zugang für ${nickname} reaktiviert. Info-Mail wurde an ${email} gesendet.`);
-        } else if (result.emailSent) {
-          setMessage(`✅ Einladung per E-Mail gesendet an ${email}`);
-        } else {
-          // E-Mail nicht versendet - zeige temporäres Passwort
-          const tempPw = result.tempPassword || "(Passwort nicht verfügbar)";
-          setMessage(
-            `⚠️ User erstellt, aber E-Mail konnte nicht versendet werden.\n` +
-            `Temporäres Passwort für '${nickname}': ${tempPw}\n` +
-            `Bitte Passwort persönlich übermitteln.`
-          );
-        }
-        setEmail("");
-        setEmailAutoFilled(false);
-        setNickname("");
-        setForeignManaged(false);
-        setRole("participant");
-      } else {
-        setError("Fehler beim Senden");
-      }
-    } catch (err: unknown) {
-      console.error(err);
-      setError("Fehler beim Senden");
-    } finally {
-      setLoading(false);
-    }
-
-    // Zwischenschritt: Liste nach erfolgreichem Anlegen/Einladen aktualisieren,
-    // damit die gespeicherte E-Mail sofort sichtbar ist.
-    if (inviteSucceeded) await refreshParticipants();
-  };
-
   const safeParticipants = useMemo(
     () => (Array.isArray(participants) ? participants : []),
     [participants],
@@ -202,33 +134,6 @@ export default function AdminPanel() {
       (p) => (p.userId || "").trim().toLowerCase() === normalized && !!p.email,
     );
     return match?.email ?? "";
-  };
-  const prefillInviteEmailByNickname = async (nicknameValue: string) => {
-    if (foreignManaged || email.trim()) return;
-    const normalized = nicknameValue.trim().toLowerCase();
-    if (!normalized) return;
-
-    const localEmail = getKnownEmailByNickname(normalized);
-    if (localEmail) {
-      setEmail(localEmail);
-      setEmailAutoFilled(true);
-      return;
-    }
-
-    try {
-      const remoteList = await getParticipants({ search: normalized });
-      const remoteMatch = remoteList.find(
-        (p) => (p.userId || "").trim().toLowerCase() === normalized && !!p.email,
-      );
-      if (remoteMatch?.email) {
-        setEmail((prev) => (prev.trim() ? prev : remoteMatch.email ?? ""));
-        setEmailAutoFilled(true);
-      } else {
-        setEmailAutoFilled(false);
-      }
-    } catch {
-      setEmailAutoFilled(false);
-    }
   };
   const prefillCreateEmailByNickname = async (nicknameValue: string) => {
     if (createEmail.trim()) return;
@@ -504,97 +409,7 @@ export default function AdminPanel() {
   
   return (
     <div className="admin-panel">
-      <h3>Teilnehmer einladen</h3>
-      <div style={{ display: "grid", gap: "0.5rem", maxWidth: 400 }}>
-        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={foreignManaged}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              setForeignManaged(checked);
-              if (checked) {
-                setEmail("");
-                setEmailAutoFilled(false);
-                setRole("participant");
-              }
-            }}
-            disabled={loading}
-          />
-          Teilnehmer ohne Login anlegen (später einladen)
-        </label>
-
-        <input
-          type="text"
-          placeholder="Spitzname"
-          value={nickname}
-          onChange={(e) => {
-            const nextNickname = e.target.value;
-            setNickname(nextNickname);
-            if (foreignManaged || email.trim()) return;
-            const suggestedEmail = getKnownEmailByNickname(nextNickname);
-            if (suggestedEmail) setEmail(suggestedEmail);
-            setEmailAutoFilled(!!suggestedEmail);
-          }}
-          onBlur={() => {
-            void prefillInviteEmailByNickname(nickname);
-          }}
-          disabled={loading}
-        />
-        {!foreignManaged && (
-          <>
-            <input
-              type="email"
-              placeholder="E-Mail"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setEmailAutoFilled(false);
-              }}
-              disabled={loading}
-            />
-            {emailAutoFilled && (
-              <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                E-Mail aus bestehendem Profil uebernommen.
-              </p>
-            )}
-          </>
-        )}
-        <select
-          value={role}
-          onChange={(e) =>
-            setRole(e.target.value as "participant" | "instructor" | "admin")
-          }
-          disabled={loading || foreignManaged}
-        >
-          <option value="participant">Teilnehmer</option>
-          <option value="instructor">Kursleiter</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button
-          className="btn-primary"
-          onClick={handleInvite}
-          disabled={loading || !nickname || (!foreignManaged && !email)}
-        >
-          {loading
-            ? foreignManaged
-              ? "Wird angelegt..."
-              : "Wird gesendet..."
-            : foreignManaged
-              ? "Anlegen"
-              : "Einladen"}
-        </button>
-
-        {message && (
-          <p style={{ margin: "0.5rem 0", color: message.includes("⚠️") ? "orange" : "green", whiteSpace: "pre-line" }}>
-            {message}
-          </p>
-        )}
-        {error && <p style={{ margin: "0.5rem 0", color: "red" }}>{error}</p>}
- 
-      </div>
-
-      <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #eee" }}>
+      <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
           <h3 style={{ margin: 0 }}>Teilnehmer verwalten</h3>
           <button
