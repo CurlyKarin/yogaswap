@@ -13,11 +13,15 @@ export function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
   const claims = (event.requestContext as any)?.authorizer?.jwt?.claims;
   const nicknameFromJwt = claims?.nickname as string | undefined;
 
-  const userId =
+  const userIdRaw =
     nicknameFromJwt ??
     event.requestContext?.authorizer?.principalId ??
     event.queryStringParameters?.user ??
     null;
+  const userId =
+    typeof userIdRaw === "string" && userIdRaw.trim()
+      ? userIdRaw.trim().toLowerCase()
+      : null;
 
   const headers = event.headers || {};
   const tenantId =

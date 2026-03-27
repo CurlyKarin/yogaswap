@@ -84,7 +84,10 @@ export const handler = async (
 
     // Allow a participant to self-link their own Cognito `sub` once after sign-up.
     // This is required for participants created via invitation to move from "invited" -> "active".
-    const isSelfAuthLink = actorUserId === userId && hasAuthUserId && !hasOtherMutationKeys;
+    const isSelfAuthLink =
+      actorUserId?.toLowerCase() === userId.toLowerCase() &&
+      hasAuthUserId &&
+      !hasOtherMutationKeys;
 
     if (!isSelfAuthLink) {
       const canManage = await canActorManageParticipants({

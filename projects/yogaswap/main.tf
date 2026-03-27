@@ -163,11 +163,34 @@ locals {
       s3_actions   = []
       s3_resources = []
     },
+    "delete_participant" = {
+      name             = "delete-participant"
+      file_name        = "deleteParticipant.zip"
+      table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:Scan"]
+      tables = {
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+      additional_policies = [
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail"]
+          Resource = "*"
+        }
+      ]
+      environment = {
+        SES_SOURCE_EMAIL = var.ses_source_email
+      }
+    },
     "create_participants" = {
       name             = "create-participants"
       file_name        = "createParticipants.zip"
       table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn]
-      dynamodb_actions = ["dynamodb:PutItem"]
+      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Scan"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
@@ -192,7 +215,7 @@ locals {
       ]
       environment = {
         USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
-        BASE_URL         = module.cloudfront_spa.distribution_url
+        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
         SES_SOURCE_EMAIL = var.ses_source_email # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
       }
     },
@@ -233,6 +256,7 @@ locals {
     "GET /participants"                          = "get_participants"
     "POST /participants"                         = "create_participants"
     "PUT /participants/{userId}"                 = "update_participant"
+    "DELETE /participants/{userId}"              = "delete_participant"
     "GET /tenant-context"                        = "get_tenant_context"
   }
 
@@ -253,6 +277,7 @@ module "yogaswap_api" {
   protected_routes = [
     "GET /participants",
     "PUT /participants/{userId}",
+    "DELETE /participants/{userId}",
     "POST /participants",
     "GET /tenant-context",
   ]

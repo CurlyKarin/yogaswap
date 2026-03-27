@@ -224,8 +224,43 @@ button:disabled {
   border-radius: 8px; max-width: 480px; width: 90%;
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
+.modal.modal-compact {
+  max-width: 520px;
+}
 .modal-actions {
   margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;
+}
+.dialog-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.modal-actions.dialog-actions {
+  width: 100%;
+}
+.modal-action-btn {
+  min-width: 120px;
+  height: 38px;
+  margin: 0;
+  padding: 0 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  line-height: 1;
+  vertical-align: middle;
+}
+.modal-action-btn.btn-primary {
+  margin-top: 0;
+}
+.dialog-field {
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 16px;
+  box-sizing: border-box;
 }
 
 /* Footer (Impressum / Datenschutz) */

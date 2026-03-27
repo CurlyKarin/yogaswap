@@ -28,7 +28,9 @@ jest.mock('@aws-sdk/client-dynamodb', () => {
   const mockSend = jest.fn();
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
+    GetItemCommand: jest.fn((input) => input),
     PutItemCommand: jest.fn((input) => input),
+    ScanCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -53,6 +55,7 @@ describe('createParticipants Lambda', () => {
     cognitoMockSend.mockReset();
     sesMockSend.mockReset();
     dynamoMockSend.mockReset();
+    dynamoMockSend.mockResolvedValue({});
   });
 
   afterAll(() => {
@@ -104,7 +107,7 @@ describe('createParticipants Lambda', () => {
     expect(sesMockSend).not.toHaveBeenCalled();
 
     // DynamoDB should be called to store membership + participant profile
-    expect(dynamoMockSend).toHaveBeenCalledTimes(2);
+    expect(dynamoMockSend.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(dynamoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: 'test-memberships-table',
@@ -181,7 +184,7 @@ describe('createParticipants Lambda', () => {
     );
 
     // Verify DynamoDB call (membership + participant profile)
-    expect(dynamoMockSend).toHaveBeenCalledTimes(2);
+    expect(dynamoMockSend.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(dynamoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: 'test-memberships-table',
@@ -205,6 +208,43 @@ describe('createParticipants Lambda', () => {
     );
   });
 
+  test('keeps first entered casing as canonical user id', async () => {
+    cognitoMockSend
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'test@example.com',
+      nickname: 'Kai',
+      role: 'participant',
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.username).toBe('Kai');
+
+    expect(cognitoMockSend).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        Username: 'Kai',
+        UserAttributes: expect.arrayContaining([
+          { Name: 'nickname', Value: 'Kai' },
+        ]),
+      }),
+    );
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-memberships-table',
+        Item: expect.objectContaining({
+          userId: { S: 'Kai' },
+        }),
+      }),
+    );
+  });
+
   test('handles existing user by resetting password', async () => {
     const usernameExistsError = new Error('User already exists');
     (usernameExistsError as any).name = 'UsernameExistsException';
@@ -214,6 +254,7 @@ describe('createParticipants Lambda', () => {
       .mockResolvedValueOnce({}) // AdminSetUserPasswordCommand succeeds
       .mockResolvedValueOnce({}); // AdminAddUserToGroupCommand
     sesMockSend.mockResolvedValueOnce({}); // SendEmailCommand
+    dynamoMockSend.mockResolvedValueOnce({ Item: undefined }); // participant profile lookup -> no authUserId
 
     const event = baseEvent({
       email: 'existing@example.com',
@@ -237,6 +278,88 @@ describe('createParticipants Lambda', () => {
         Username: 'existinguser',
         Permanent: false,
       })
+    );
+  });
+
+  test('reactivates existing login without password reset when authUserId exists', async () => {
+    const usernameExistsError = new Error('User already exists');
+    (usernameExistsError as any).name = 'UsernameExistsException';
+
+    cognitoMockSend
+      .mockRejectedValueOnce(usernameExistsError) // AdminCreateUserCommand fails
+      .mockResolvedValueOnce({}); // AdminAddUserToGroupCommand
+    sesMockSend.mockResolvedValueOnce({});
+    dynamoMockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          userId: { S: 'existinguser' },
+          authUserId: { S: 'sub-123' },
+        },
+      }) // profile lookup in UsernameExists flow
+      .mockResolvedValueOnce({}) // membership write
+      .mockResolvedValueOnce({}); // participant profile write
+
+    const event = baseEvent({
+      email: 'existing@example.com',
+      nickname: 'existinguser',
+      role: 'participant',
+    });
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.emailSent).toBe(true);
+    expect(body.reactivated).toBe(true);
+    expect(body.tempPassword).toBeUndefined();
+
+    // No AdminSetUserPassword call in reactivation path.
+    expect(cognitoMockSend).toHaveBeenCalledTimes(2);
+  });
+
+  test('sends reactivation email when existing active user is reactivated without request email', async () => {
+    dynamoMockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          userId: { S: 'Nova' },
+          authUserId: { S: 'sub-999' },
+          email: { S: 'nova@example.com' },
+          cognitoUsername: { S: 'Nova' },
+        },
+      }) // canonical lookup by nicknameNormalized
+      .mockResolvedValueOnce({}) // membership write
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          userId: { S: 'Nova' },
+          authUserId: { S: 'sub-999' },
+          email: { S: 'nova@example.com' },
+        },
+      }) // saveParticipantProfile existing lookup
+      .mockResolvedValueOnce({}); // participant profile write
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      nickname: 'nova',
+      role: 'participant',
+    });
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.username).toBe('Nova');
+    expect(body.reactivated).toBe(true);
+    expect(body.emailSent).toBe(true);
+
+    // no Cognito flow in no-email path
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Destination: { ToAddresses: ['nova@example.com'] },
+      }),
     );
   });
 

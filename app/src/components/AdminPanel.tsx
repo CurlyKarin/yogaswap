@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  deleteParticipant,
   getParticipants,
   inviteUser,
   updateParticipant,
@@ -33,14 +34,6 @@ function getStatusPresentation(status: ParticipantWithStatus["status"]): {
 }
 
 export default function AdminPanel() {
-  const [email, setEmail] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [role, setRole] = useState<"participant" | "instructor" | "admin">("participant");
-  const [foreignManaged, setForeignManaged] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participantsError, setParticipantsError] = useState("");
@@ -59,6 +52,9 @@ export default function AdminPanel() {
   );
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [createEmailAutoFilled, setCreateEmailAutoFilled] = useState(false);
+  const [createOverwriteEmailOnReactivate, setCreateOverwriteEmailOnReactivate] = useState(false);
+  const [createReactivationUserId, setCreateReactivationUserId] = useState<string | null>(null);
 
   const [inviteSendingByUserId, setInviteSendingByUserId] = useState<Record<string, boolean>>(
     {},
@@ -69,6 +65,8 @@ export default function AdminPanel() {
   );
   const [bulkInviteSending, setBulkInviteSending] = useState(false);
   const [bulkInviteResult, setBulkInviteResult] = useState("");
+  const [deleteRunningByUserId, setDeleteRunningByUserId] = useState<Record<string, boolean>>({});
+  const [deleteTarget, setDeleteTarget] = useState<ParticipantWithStatus | null>(null);
 
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
@@ -128,66 +126,75 @@ export default function AdminPanel() {
     };
   }, [participantsSearch]);
 
-  const handleInvite = async () => {
-    if (!nickname) return;
-    if (!foreignManaged && !email) return;
-    setLoading(true);
-    setMessage("");
-    setError("");
-
-    let inviteSucceeded = false;
-
-    try {
-      const effectiveRole = foreignManaged ? "participant" : role;
-      const payload = foreignManaged
-        ? { nickname, role: effectiveRole }
-        : { email, nickname, role: effectiveRole };
-
-      const result = await inviteUser(payload);
-
-      if (result.error === "Nickname already exists") {
-        setError("Dieser Spitzname ist bereits vergeben.");
-      } else if (result.success) {
-        inviteSucceeded = true;
-        if (foreignManaged) {
-          setMessage(
-            `✅ Teilnehmer '${nickname}' wurde ohne Login angelegt.\n` +
-            `Hinweis: Es wird keine Einladung per E-Mail verschickt.`
-          );
-        } else if (result.emailSent) {
-          setMessage(`✅ Einladung per E-Mail gesendet an ${email}`);
-        } else {
-          // E-Mail nicht versendet - zeige temporäres Passwort
-          const tempPw = result.tempPassword || "(Passwort nicht verfügbar)";
-          setMessage(
-            `⚠️ User erstellt, aber E-Mail konnte nicht versendet werden.\n` +
-            `Temporäres Passwort für '${nickname}': ${tempPw}\n` +
-            `Bitte Passwort persönlich übermitteln.`
-          );
-        }
-        setEmail("");
-        setNickname("");
-        setForeignManaged(false);
-        setRole("participant");
-      } else {
-        setError("Fehler beim Senden");
-      }
-    } catch (err: unknown) {
-      console.error(err);
-      setError("Fehler beim Senden");
-    } finally {
-      setLoading(false);
-    }
-
-    // Zwischenschritt: Liste nach erfolgreichem Anlegen/Einladen aktualisieren,
-    // damit die gespeicherte E-Mail sofort sichtbar ist.
-    if (inviteSucceeded) await refreshParticipants();
-  };
-
   const safeParticipants = useMemo(
     () => (Array.isArray(participants) ? participants : []),
     [participants],
   );
+  const getKnownEmailByNickname = (nicknameValue: string): string => {
+    const normalized = nicknameValue.trim().toLowerCase();
+    if (!normalized) return "";
+    const match = safeParticipants.find(
+      (p) => (p.userId || "").trim().toLowerCase() === normalized && !!p.email,
+    );
+    return match?.email ?? "";
+  };
+  const getKnownParticipantByNickname = (nicknameValue: string): ParticipantWithStatus | undefined => {
+    const normalized = nicknameValue.trim().toLowerCase();
+    if (!normalized) return undefined;
+    return safeParticipants.find((p) => (p.userId || "").trim().toLowerCase() === normalized);
+  };
+  const createMatch = getKnownParticipantByNickname(createNickname);
+  const createActiveConflict = !!createMatch && createMatch.status === "active";
+  const createSuggestedNickname = useMemo(() => {
+    if (!createActiveConflict) return "";
+    const base = createNickname.trim();
+    if (!base) return "";
+    const used = new Set(safeParticipants.map((p) => (p.userId || "").trim().toLowerCase()));
+    let idx = 1;
+    let candidate = `${base}${idx}`;
+    while (used.has(candidate.toLowerCase()) && idx < 1000) {
+      idx += 1;
+      candidate = `${base}${idx}`;
+    }
+    return candidate;
+  }, [createActiveConflict, createNickname, safeParticipants]);
+  const prefillCreateEmailByNickname = async (nicknameValue: string) => {
+    if (createEmail.trim()) return;
+    const normalized = nicknameValue.trim().toLowerCase();
+    if (!normalized) {
+      setCreateReactivationUserId(null);
+      return;
+    }
+
+    const localMatch = getKnownParticipantByNickname(normalized);
+    setCreateReactivationUserId(localMatch && localMatch.status !== "active" ? localMatch.userId : null);
+    const localEmail = localMatch?.email ?? "";
+    if (localEmail) {
+      setCreateEmail(localEmail);
+      setCreateEmailAutoFilled(true);
+      return;
+    }
+
+    try {
+      const remoteList = await getParticipants({ search: normalized, includeOrphaned: true });
+      const remoteMatch = remoteList.find(
+        (p) => (p.userId || "").trim().toLowerCase() === normalized,
+      );
+      setCreateReactivationUserId(
+        remoteMatch && (!remoteMatch.role || remoteMatch.status !== "active")
+          ? remoteMatch.userId
+          : null,
+      );
+      if (remoteMatch?.email) {
+        setCreateEmail((prev) => (prev.trim() ? prev : remoteMatch.email ?? ""));
+        setCreateEmailAutoFilled(true);
+      } else {
+        setCreateEmailAutoFilled(false);
+      }
+    } catch {
+      setCreateEmailAutoFilled(false);
+    }
+  };
   const isInviteEligible = (p: ParticipantWithStatus) => !!p.email && p.status !== "active";
   const inviteEligibleUserIds = useMemo(
     () => safeParticipants.filter(isInviteEligible).map((p) => p.userId),
@@ -261,9 +268,12 @@ export default function AdminPanel() {
     setCreateOpen(true);
     setCreateNickname("");
     setCreateEmail("");
+    setCreateEmailAutoFilled(false);
     setCreateRole("participant");
     setCreateError("");
     setCreateSaving(false);
+    setCreateOverwriteEmailOnReactivate(false);
+    setCreateReactivationUserId(null);
   };
 
   const saveCreate = async () => {
@@ -277,6 +287,14 @@ export default function AdminPanel() {
       emailValue.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
     if (!isValidEmailOrEmpty) {
       setCreateError("Bitte eine gültige E-Mail-Adresse eingeben (oder leer lassen).");
+      return;
+    }
+    if (createActiveConflict) {
+      setCreateError(
+        createSuggestedNickname
+          ? `Dieser Spitzname ist im Tenant bereits aktiv. Vorschlag: ${createSuggestedNickname}`
+          : "Dieser Spitzname ist im Tenant bereits aktiv.",
+      );
       return;
     }
 
@@ -295,8 +313,33 @@ export default function AdminPanel() {
         return;
       }
 
-      if (emailValue.length > 0) {
-        await updateParticipant(nicknameValue, { email: emailValue });
+      if (emailValue.length > 0 && (!result.reactivated || createOverwriteEmailOnReactivate)) {
+        await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
+      } else if (emailValue.length > 0 && result.reactivated && !createOverwriteEmailOnReactivate) {
+        setBulkInviteResult(
+          "Reaktivierung: bestehende E-Mail blieb unverändert (kein Überschreiben).",
+        );
+      }
+
+      const effectiveEmail = emailValue || createEmail;
+      if (result.reactivated) {
+        if (result.emailSent) {
+          setBulkInviteResult(
+            effectiveEmail
+              ? `Reaktivierung: Info-Mail gesendet an ${effectiveEmail}.`
+              : "Reaktivierung: Info-Mail wurde gesendet.",
+          );
+        } else {
+          setBulkInviteResult("Reaktivierung erfolgt, aber E-Mail konnte nicht versendet werden.");
+        }
+      } else if (result.emailSent) {
+        setBulkInviteResult(
+          effectiveEmail
+            ? `Einladung gesendet an ${effectiveEmail}.`
+            : "Einladung wurde gesendet.",
+        );
+      } else if (effectiveEmail) {
+        setBulkInviteResult("Einladung angestoßen, aber E-Mail konnte nicht versendet werden.");
       }
 
       setCreateOpen(false);
@@ -337,7 +380,9 @@ export default function AdminPanel() {
       if (result.emailSent) {
         setInviteResultByUserId((prev) => ({
           ...prev,
-          [userId]: `Einladung gesendet an ${p.email}.`,
+          [userId]: result.reactivated
+            ? `Zugang reaktiviert. Info-Mail gesendet an ${p.email}.`
+            : `Einladung gesendet an ${p.email}.`,
         }));
       } else {
         setInviteResultByUserId((prev) => ({
@@ -402,79 +447,42 @@ export default function AdminPanel() {
       );
     }
   };
+
+  const confirmDeleteParticipant = async () => {
+    if (!deleteTarget) return;
+    const userId = deleteTarget.userId;
+    setDeleteRunningByUserId((prev) => ({ ...prev, [userId]: true }));
+    setBulkInviteResult("");
+
+    try {
+      const result = await deleteParticipant(userId);
+      setBulkInviteResult(
+        result.profileDeleted
+          ? `Teilnehmer "${userId}" entfernt (inkl. Profil-Cleanup).`
+          : `Teilnehmer "${userId}" aus diesem Studio entfernt.`,
+      );
+      if (result.notificationEmail) {
+        setBulkInviteResult((prev) =>
+          `${prev} ${
+            result.notificationEmailSent
+              ? `Info-Mail gesendet an ${result.notificationEmail}.`
+              : `Info-Mail an ${result.notificationEmail} konnte nicht versendet werden.`
+          }`,
+        );
+      }
+      setDeleteTarget(null);
+      await refreshParticipants();
+    } catch (err) {
+      console.error("Failed to delete participant", err);
+      setBulkInviteResult(`Teilnehmer "${userId}" konnte nicht gelöscht werden.`);
+    } finally {
+      setDeleteRunningByUserId((prev) => ({ ...prev, [userId]: false }));
+    }
+  };
   
   return (
     <div className="admin-panel">
-      <h3>Teilnehmer einladen</h3>
-      <div style={{ display: "grid", gap: "0.5rem", maxWidth: 400 }}>
-        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={foreignManaged}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              setForeignManaged(checked);
-              if (checked) {
-                setEmail("");
-                setRole("participant");
-              }
-            }}
-            disabled={loading}
-          />
-          Teilnehmer ohne Login anlegen (später einladen)
-        </label>
-
-        <input
-          type="text"
-          placeholder="Spitzname"
-          value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
-          disabled={loading}
-        />
-        {!foreignManaged && (
-          <input
-            type="email"
-            placeholder="E-Mail"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
-          />
-        )}
-        <select
-          value={role}
-          onChange={(e) =>
-            setRole(e.target.value as "participant" | "instructor" | "admin")
-          }
-          disabled={loading || foreignManaged}
-        >
-          <option value="participant">Teilnehmer</option>
-          <option value="instructor">Kursleiter</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button
-          className="btn-primary"
-          onClick={handleInvite}
-          disabled={loading || !nickname || (!foreignManaged && !email)}
-        >
-          {loading
-            ? foreignManaged
-              ? "Wird angelegt..."
-              : "Wird gesendet..."
-            : foreignManaged
-              ? "Anlegen"
-              : "Einladen"}
-        </button>
-
-        {message && (
-          <p style={{ margin: "0.5rem 0", color: message.includes("⚠️") ? "orange" : "green", whiteSpace: "pre-line" }}>
-            {message}
-          </p>
-        )}
-        {error && <p style={{ margin: "0.5rem 0", color: "red" }}>{error}</p>}
- 
-      </div>
-
-      <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #eee" }}>
+      <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
           <h3 style={{ margin: 0 }}>Teilnehmer verwalten</h3>
           <button
@@ -639,12 +647,25 @@ export default function AdminPanel() {
                       type="button"
                       title={`Bearbeiten ${p.userId}`}
                       aria-label={`Bearbeiten ${p.userId}`}
-                      disabled={participantsLoading || editingSaving}
+                      disabled={participantsLoading || editingSaving || !!deleteRunningByUserId[p.userId]}
                       onClick={() => startEditEmail(p)}
                     >
                       <Pencil size={14} aria-hidden="true" />
                     </button>
-                    <button type="button" title={`Löschen ${p.userId}`} aria-label={`Löschen ${p.userId}`} disabled>
+                    <button
+                      type="button"
+                      title={`Löschen ${p.userId}`}
+                      aria-label={`Löschen ${p.userId}`}
+                      disabled={
+                        participantsLoading ||
+                        editingSaving ||
+                        createSaving ||
+                        bulkInviteSending ||
+                        !!inviteSendingByUserId[p.userId] ||
+                        !!deleteRunningByUserId[p.userId]
+                      }
+                      onClick={() => setDeleteTarget(p)}
+                    >
                       <Trash2 size={14} aria-hidden="true" />
                     </button>
                   </div>
@@ -663,34 +684,37 @@ export default function AdminPanel() {
 
       {editingUserId && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer E-Mail bearbeiten">
-          <div className="modal">
+          <div className="modal modal-compact">
             <h4>Teilnehmer bearbeiten</h4>
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               User: <strong>{editingUserId}</strong>
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <label>
-                E-Mail
-                <input
-                  type="email"
-                  placeholder="E-Mail"
-                  value={editingEmail}
-                  onChange={(e) => setEditingEmail(e.target.value)}
-                  disabled={editingSaving}
-                  style={{ width: "100%", padding: "0.5rem", borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-                />
-              </label>
+            <div className="dialog-stack">
+              <input
+                type="email"
+                aria-label="E-Mail"
+                placeholder="E-Mail"
+                value={editingEmail}
+                onChange={(e) => setEditingEmail(e.target.value)}
+                disabled={editingSaving}
+                className="dialog-field"
+              />
               {editingError && <p style={{ color: "crimson", margin: 0 }}>{editingError}</p>}
             </div>
 
-            <div className="modal-actions">
-              <button type="button" onClick={() => setEditingUserId(null)} disabled={editingSaving}>
+            <div className="modal-actions dialog-actions">
+              <button
+                type="button"
+                className="modal-action-btn"
+                onClick={() => setEditingUserId(null)}
+                disabled={editingSaving}
+              >
                 Abbrechen
               </button>
               <button
                 type="button"
-                className="btn-primary"
+                className="btn-primary modal-action-btn"
                 onClick={saveEditEmail}
                 disabled={editingSaving}
               >
@@ -703,82 +727,170 @@ export default function AdminPanel() {
 
       {createOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer anlegen">
-          <div className="modal">
+          <div className="modal modal-compact">
             <h4>Teilnehmer anlegen</h4>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <label>
-                Nickname
-                <input
-                  type="text"
-                  placeholder="Spitzname"
-                  value={createNickname}
-                  onChange={(e) => setCreateNickname(e.target.value)}
-                  disabled={createSaving}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    borderRadius: 8,
-                    border: "1px solid #ddd",
-                    fontSize: 16,
-                  }}
-                />
-              </label>
-
-              <label>
-                E-Mail (optional)
-                <input
-                  type="email"
-                  placeholder="E-Mail"
-                  value={createEmail}
-                  onChange={(e) => setCreateEmail(e.target.value)}
-                  disabled={createSaving}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    borderRadius: 8,
-                    border: "1px solid #ddd",
-                    fontSize: 16,
-                  }}
-                />
-              </label>
-
-              <label>
-                Rolle
-                <select
-                  value={createRole}
-                  onChange={(e) =>
-                    setCreateRole(e.target.value as "participant" | "instructor" | "admin")
+            <div className="dialog-stack">
+              <input
+                type="text"
+                aria-label="Spitzname"
+                placeholder="Spitzname"
+                value={createNickname}
+                onChange={(e) => {
+                  const nextNickname = e.target.value;
+                  setCreateNickname(nextNickname);
+                  const localMatch = getKnownParticipantByNickname(nextNickname);
+                  setCreateReactivationUserId(
+                    localMatch && localMatch.status !== "active" ? localMatch.userId : null,
+                  );
+                  if (localMatch?.status === "active") {
+                    setCreateOverwriteEmailOnReactivate(false);
                   }
-                  disabled={createSaving}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    borderRadius: 8,
-                    border: "1px solid #ddd",
-                    fontSize: 16,
-                  }}
-                >
-                  <option value="participant">Teilnehmer</option>
-                  <option value="instructor">Kursleiter</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
+                  if (createEmail.trim()) return;
+                  const suggestedEmail = getKnownEmailByNickname(nextNickname);
+                  if (suggestedEmail) setCreateEmail(suggestedEmail);
+                  setCreateEmailAutoFilled(!!suggestedEmail);
+                }}
+                onBlur={() => {
+                  void prefillCreateEmailByNickname(createNickname);
+                }}
+                disabled={createSaving}
+                className="dialog-field"
+              />
+
+              <input
+                type="email"
+                aria-label="E-Mail"
+                placeholder="E-Mail"
+                value={createEmail}
+                onChange={(e) => {
+                  setCreateEmail(e.target.value);
+                  setCreateEmailAutoFilled(false);
+                }}
+                disabled={createSaving}
+                className="dialog-field"
+              />
+              {createEmailAutoFilled && (
+                <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                  E-Mail aus bestehendem Profil uebernommen.
+                </p>
+              )}
+              <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                Bei Reaktivierung bleibt die bestehende E-Mail standardmaessig unveraendert.
+              </p>
+              {createReactivationUserId && (
+                <>
+                  <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
+                    Reaktivierung erkannt fuer bestehenden Teilnehmer: {createReactivationUserId}
+                  </p>
+                  <p style={{ margin: "0.15rem 0 0", color: "#92400e", fontSize: 12 }}>
+                    Spitzname existiert bereits (case-insensitiv). Es wird kein neuer User angelegt.
+                  </p>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={createOverwriteEmailOnReactivate}
+                      onChange={(e) => setCreateOverwriteEmailOnReactivate(e.target.checked)}
+                      disabled={createSaving}
+                    />
+                    E-Mail bei Reaktivierung ueberschreiben
+                  </label>
+                </>
+              )}
+              {createActiveConflict && (
+                <div style={{ margin: "0.25rem 0 0", color: "#991b1b", fontSize: 12 }}>
+                  <p style={{ margin: 0 }}>
+                    Dieser Spitzname ist im aktuellen Tenant bereits aktiv.
+                  </p>
+                  {createSuggestedNickname && (
+                    <p style={{ margin: "0.15rem 0 0" }}>
+                      Vorschlag fuer neuen Nickname: <strong>{createSuggestedNickname}</strong>
+                      {" "}
+                      <button
+                        type="button"
+                        onClick={() => setCreateNickname(createSuggestedNickname)}
+                        disabled={createSaving}
+                        style={{ marginLeft: 6 }}
+                      >
+                        Uebernehmen
+                      </button>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <select
+                aria-label="Rolle"
+                value={createRole}
+                onChange={(e) =>
+                  setCreateRole(e.target.value as "participant" | "instructor" | "admin")
+                }
+                disabled={createSaving}
+                className="dialog-field"
+              >
+                <option value="participant">Teilnehmer</option>
+                <option value="instructor">Kursleiter</option>
+                <option value="admin">Admin</option>
+              </select>
 
               {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}
             </div>
 
-            <div className="modal-actions">
-              <button type="button" onClick={() => setCreateOpen(false)} disabled={createSaving}>
+            <div className="modal-actions dialog-actions">
+              <button
+                type="button"
+                className="modal-action-btn"
+                onClick={() => setCreateOpen(false)}
+                disabled={createSaving}
+              >
                 Abbrechen
               </button>
               <button
                 type="button"
-                className="btn-primary"
+                className="btn-primary modal-action-btn"
                 onClick={saveCreate}
-                disabled={createSaving}
+                disabled={createSaving || createActiveConflict}
               >
-                {createSaving ? "Lege an..." : "Anlegen"}
+                {createSaving
+                  ? createReactivationUserId
+                    ? "Reaktiviere..."
+                    : "Lege an..."
+                  : createReactivationUserId
+                    ? "Reaktivieren"
+                    : "Anlegen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer löschen">
+          <div className="modal modal-compact">
+            <h4>Teilnehmer löschen</h4>
+            <p style={{ marginTop: 0, color: "#4b5563" }}>
+              Teilnehmer <strong>{deleteTarget.userId}</strong> aus diesem Studio entfernen?
+            </p>
+            <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
+              Mit Login bleibt das globale Profil erhalten. Ohne Login kann zusätzlich das Profil
+              gelöscht werden, falls keine weitere Studio-Zuordnung existiert.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-action-btn"
+                onClick={() => setDeleteTarget(null)}
+                disabled={!!deleteRunningByUserId[deleteTarget.userId]}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-primary modal-action-btn"
+                onClick={confirmDeleteParticipant}
+                disabled={!!deleteRunningByUserId[deleteTarget.userId]}
+              >
+                {deleteRunningByUserId[deleteTarget.userId] ? "Lösche..." : "Löschen"}
               </button>
             </div>
           </div>

@@ -58,8 +58,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const [authCleared, setAuthCleared] = useState(false);
 
   
-  // Defensive normalization: if your pool is case-insensitive, sign in with lowercase
-  const usernameForSignIn = nicknameParam ? nicknameParam.toLowerCase() : "";
+  const usernameForSignIn = nicknameParam ? nicknameParam.trim() : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,7 +133,8 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
         const sub = payload.sub as string | undefined;
         if (typeof sub === "string" && sub.trim()) {
           try {
-            await updateParticipant(user.nickname, { authUserId: sub });
+            // Use invite-link nickname as canonical participant id for linking.
+            await updateParticipant(usernameForSignIn, { authUserId: sub });
           } catch (err) {
             console.error("Failed to link participant authUserId", err);
           }
@@ -170,30 +170,28 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       <p>Benutzername: <strong>{nicknameParam}</strong></p>
 
       <form onSubmit={handleSubmit} className="invite-form">
-        <label style={{ fontSize: 16 }}>
-          Temporäres Passwort (aus der E-Mail)
-          <input
-            type="text"
-            value={tempPassword}
-            onChange={(e) => setTempPassword(e.target.value.trim())}
-            disabled={loading}
-            style={{ width: "100%", padding: "0.5rem", marginTop: 6, marginBottom: 12, fontSize: 16 }}
-            placeholder="Temporäres Passwort hier eingeben"
-          />
-        </label>
+        <input
+          type="text"
+          aria-label="Temporäres Passwort"
+          value={tempPassword}
+          onChange={(e) => setTempPassword(e.target.value.trim())}
+          disabled={loading}
+          className="dialog-field"
+          style={{ marginBottom: 12 }}
+          placeholder="Temporäres Passwort"
+        />
 
-        <label style={{ fontSize: 16 }}>
-          Neues Passwort (min. 6 Zeichen)
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            disabled={loading}
-            style={{ width: "100%", padding: "0.5rem", marginTop: 6, marginBottom: 12, fontSize: 16 }}
-            placeholder="Neues Passwort"
-            minLength={6}
-          />
-        </label>
+        <input
+          type="password"
+          aria-label="Neues Passwort"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          disabled={loading}
+          className="dialog-field"
+          style={{ marginBottom: 12 }}
+          placeholder="Neues Passwort"
+          minLength={6}
+        />
 
         {error && <p style={{ color: "red" }}>{error}</p>}
 

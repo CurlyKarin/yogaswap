@@ -2,17 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import AdminPanel from "./AdminPanel";
-import { getParticipants, inviteUser, updateParticipant } from "../api/participants";
+import { deleteParticipant, getParticipants, inviteUser, updateParticipant } from "../api/participants";
 
 vi.mock("../api/participants", () => ({
   inviteUser: vi.fn(),
   getParticipants: vi.fn(),
   updateParticipant: vi.fn(),
+  deleteParticipant: vi.fn(),
 }));
 
 const mockedInviteUser = inviteUser as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
+const mockedDeleteParticipant = deleteParticipant as unknown as ReturnType<typeof vi.fn>;
 
 describe("AdminPanel", () => {
   beforeEach(() => {
@@ -20,162 +22,6 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValue([]);
   });
 
-  it("deaktiviert den Einladen-Button, wenn Email oder Nickname fehlen", () => {
-    const { container } = render(<AdminPanel />);
-    const panel = container.querySelector("div");
-    if (!panel) throw new Error("Panel not found");
-
-    const button = within(panel).getByRole("button", { name: /^Einladen$/i });
-    expect(button).toBeDisabled();
-
-    // Nur Nickname
-    fireEvent.change(within(panel).getByPlaceholderText("Spitzname"), {
-      target: { value: "alice" },
-    });
-    expect(button).toBeDisabled();
-
-    // Nur E-Mail
-    fireEvent.change(within(panel).getByPlaceholderText("Spitzname"), {
-      target: { value: "" },
-    });
-    fireEvent.change(within(panel).getByPlaceholderText("E-Mail"), {
-      target: { value: "alice@example.com" },
-    });
-    expect(button).toBeDisabled();
-  });
-
-  it("ermöglicht fremdverwaltete Teilnehmer ohne E-Mail (ohne Login) und ruft inviteUser ohne email auf", async () => {
-    mockedInviteUser.mockResolvedValue({
-      success: true,
-      emailSent: false,
-    });
-
-    const { container } = render(<AdminPanel />);
-    const panel = container.querySelector("div");
-    if (!panel) throw new Error("Panel not found");
-
-    fireEvent.click(
-      within(panel).getByRole("checkbox", {
-        name: /Teilnehmer ohne Login anlegen/i,
-      }),
-    );
-
-    fireEvent.change(within(panel).getByPlaceholderText("Spitzname"), {
-      target: { value: "alice" },
-    });
-
-    // E-Mail Feld ist ausgeblendet
-    expect(within(panel).queryByPlaceholderText("E-Mail")).toBeNull();
-
-    // Rolle ist deaktiviert (fix auf participant)
-    const roleSelect = within(panel).getByRole("combobox");
-    expect(roleSelect).toBeDisabled();
-
-    const button = within(panel).getByRole("button", { name: /Anlegen/i });
-    expect(button).not.toBeDisabled();
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(mockedInviteUser).toHaveBeenCalledWith({
-        nickname: "alice",
-        role: "participant",
-      });
-    });
-
-    await waitFor(() => {
-      expect(
-        within(panel).getByText(/wurde ohne Login angelegt/i),
-      ).toBeInTheDocument();
-    });
-  });
-
-  it("sendet Einladung erfolgreich und leert die Felder (E-Mail versendet)", async () => {
-    mockedInviteUser.mockResolvedValue({
-      success: true,
-      emailSent: true,
-    });
-
-    const { container } = render(<AdminPanel />);
-    const panel = container.querySelector("div");
-    if (!panel) throw new Error("Panel not found");
-
-    fireEvent.change(within(panel).getByPlaceholderText("Spitzname"), {
-      target: { value: "alice" },
-    });
-    fireEvent.change(within(panel).getByPlaceholderText("E-Mail"), {
-      target: { value: "alice@example.com" },
-    });
-
-    const button = within(panel).getByRole("button", { name: /^Einladen$/i });
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(mockedInviteUser).toHaveBeenCalledWith({
-        email: "alice@example.com",
-        nickname: "alice",
-        role: "participant",
-      });
-    });
-
-    await waitFor(() => {
-      expect(
-        within(panel).getByText(/Einladung per E-Mail gesendet an alice@example.com/i),
-      ).toBeInTheDocument();
-      // Felder werden geleert
-      expect(
-        (within(panel).getByPlaceholderText("Spitzname") as HTMLInputElement).value,
-      ).toBe("");
-      expect(
-        (within(panel).getByPlaceholderText("E-Mail") as HTMLInputElement).value,
-      ).toBe("");
-    });
-  });
-
-  it("zeigt eine spezifische Fehlermeldung, wenn der Nickname bereits existiert", async () => {
-    mockedInviteUser.mockResolvedValue({
-      error: "Nickname already exists",
-    });
-
-    const { container } = render(<AdminPanel />);
-    const panel = container.querySelector("div");
-    if (!panel) throw new Error("Panel not found");
-
-    fireEvent.change(within(panel).getByPlaceholderText("Spitzname"), {
-      target: { value: "alice" },
-    });
-    fireEvent.change(within(panel).getByPlaceholderText("E-Mail"), {
-      target: { value: "alice@example.com" },
-    });
-
-    fireEvent.click(within(panel).getByRole("button", { name: /^Einladen$/i }));
-
-    await waitFor(() => {
-      expect(
-        within(panel).getByText(/Dieser Spitzname ist bereits vergeben\./i),
-      ).toBeInTheDocument();
-    });
-  });
-
-  it("zeigt eine generische Fehlermeldung bei unerwartetem Fehler", async () => {
-    mockedInviteUser.mockRejectedValue(new Error("Network error"));
-
-    const { container } = render(<AdminPanel />);
-    const panel = container.querySelector("div");
-    if (!panel) throw new Error("Panel not found");
-
-    fireEvent.change(within(panel).getByPlaceholderText("Spitzname"), {
-      target: { value: "alice" },
-    });
-    fireEvent.change(within(panel).getByPlaceholderText("E-Mail"), {
-      target: { value: "alice@example.com" },
-    });
-
-    fireEvent.click(within(panel).getByRole("button", { name: /^Einladen$/i }));
-
-    await waitFor(() => {
-      expect(within(panel).getByText(/Fehler beim Senden/i)).toBeInTheDocument();
-    });
-  });
 
   it("lädt Teilnehmerliste für die Verwaltung", async () => {
     mockedGetParticipants.mockResolvedValueOnce([
@@ -199,7 +45,47 @@ describe("AdminPanel", () => {
       expect(within(panel).getByLabelText("Status: ohne Login")).toBeInTheDocument();
       expect(within(panel).getByLabelText("Einladen alice")).not.toBeDisabled();
       expect(within(panel).getByLabelText("Bearbeiten alice")).not.toBeDisabled();
-      expect(within(panel).getByLabelText("Löschen alice")).toBeDisabled();
+      expect(within(panel).getByLabelText("Löschen alice")).not.toBeDisabled();
+    });
+  });
+
+  it("löscht Teilnehmer aus der Teilnehmerliste", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "no_login",
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    mockedDeleteParticipant.mockResolvedValueOnce({
+      success: true,
+      membershipDeleted: true,
+      profileDeleted: true,
+      notificationEmail: "alice@example.com",
+      notificationEmailSent: true,
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Löschen alice"));
+    const deleteDialog = within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i });
+    fireEvent.click(within(deleteDialog).getByRole("button", { name: /^Löschen$/i }));
+
+    await waitFor(() => {
+      expect(mockedDeleteParticipant).toHaveBeenCalledWith("alice");
+      expect(within(panel).getByText(/Profil-Cleanup/i)).toBeInTheDocument();
+      expect(within(panel).getByText(/Info-Mail gesendet an alice@example.com/i)).toBeInTheDocument();
     });
   });
 
@@ -388,6 +274,119 @@ describe("AdminPanel", () => {
       expect(within(panel).getByText("alice")).toBeInTheDocument();
       expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
     });
+  });
+
+  it("ueberschreibt E-Mail bei Reaktivierung standardmaessig nicht", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([]);
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+      reactivated: true,
+      username: "alice",
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "alice" },
+    });
+    fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
+      target: { value: "alice.new@example.com" },
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Anlegen$/i }));
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({ nickname: "alice", role: "participant" });
+      expect(mockedUpdateParticipant).not.toHaveBeenCalled();
+      expect(
+        within(panel).getByText(/Reaktivierung: Info-Mail gesendet an alice\.new@example\.com\./i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("uebernimmt E-Mail in Create-Form anhand des Nicknames", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "invited",
+        },
+      ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "Alice" },
+    });
+    fireEvent.blur(within(dialog).getByPlaceholderText("Spitzname"));
+
+    await waitFor(() => {
+      expect((within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement).value).toBe(
+        "alice@example.com",
+      );
+      expect(mockedGetParticipants).toHaveBeenCalledWith({
+        search: "alice",
+        includeOrphaned: true,
+      });
+      expect(
+        within(dialog).getByText(/E-Mail aus bestehendem Profil uebernommen\./i),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(/Reaktivierung erkannt fuer bestehenden Teilnehmer: alice/i),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(/Spitzname existiert bereits \(case-insensitiv\)/i),
+      ).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: /^Reaktivieren$/i })).toBeInTheDocument();
+    });
+  });
+
+  it("blockt aktive Nicknames und bietet Vorschlag mit Suffix", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "Kai",
+        role: "participant",
+        email: "kai@example.com",
+        status: "active",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "kai" },
+    });
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByText(/bereits aktiv/i),
+      ).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: /Uebernehmen/i })).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: /^Anlegen$/i })).toBeDisabled();
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Uebernehmen/i }));
+    expect((within(dialog).getByPlaceholderText("Spitzname") as HTMLInputElement).value).toBe("kai1");
   });
 
   it("bearbeitet E-Mail eines Teilnehmers über den Stift", async () => {
