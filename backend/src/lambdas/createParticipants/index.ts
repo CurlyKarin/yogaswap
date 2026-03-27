@@ -110,6 +110,7 @@ export const handler = async (event: any) => {
   let canonicalUserId = nicknameRaw;
   let cognitoUsername = nicknameRaw;
   let existingAuthUserId: string | undefined;
+  let existingEmail: string | undefined;
   if (process.env.PARTICIPANTS_TABLE) {
     try {
       const existingExactLower = await dynamodb.send(
@@ -120,19 +121,25 @@ export const handler = async (event: any) => {
         }),
       );
       const lowerItem = existingExactLower.Item as
-        | { userId?: { S?: string }; authUserId?: { S?: string }; cognitoUsername?: { S?: string } }
+        | {
+            userId?: { S?: string };
+            authUserId?: { S?: string };
+            cognitoUsername?: { S?: string };
+            email?: { S?: string };
+          }
         | undefined;
       if (lowerItem?.userId?.S) {
         canonicalUserId = lowerItem.userId.S;
         cognitoUsername = lowerItem.cognitoUsername?.S || lowerItem.userId.S;
         existingAuthUserId = lowerItem.authUserId?.S;
+        existingEmail = lowerItem.email?.S;
       } else {
         const scanResp = await dynamodb.send(
           new ScanCommand({
             TableName: process.env.PARTICIPANTS_TABLE,
             FilterExpression: "tenantId = :tenantId",
             ExpressionAttributeValues: { ":tenantId": { S: tenantId } },
-            ProjectionExpression: "userId, authUserId, cognitoUsername",
+            ProjectionExpression: "userId, authUserId, cognitoUsername, email",
           }),
         );
         const matched = (scanResp.Items ?? []).find((item) => {
@@ -143,6 +150,7 @@ export const handler = async (event: any) => {
           canonicalUserId = matched.userId.S;
           cognitoUsername = matched.cognitoUsername?.S || matched.userId.S;
           existingAuthUserId = matched.authUserId?.S;
+          existingEmail = matched.email?.S;
         }
       }
     } catch (lookupErr) {
@@ -152,6 +160,8 @@ export const handler = async (event: any) => {
 
   // Email optional: if missing/empty, skip Cognito and SES and only write membership to DynamoDB.
   if (!hasEmail) {
+    const reactivated = !!existingAuthUserId;
+    let emailSent = false;
     try {
       if (process.env.MEMBERSHIPS_TABLE) {
         await dynamodb.send(
@@ -177,6 +187,35 @@ export const handler = async (event: any) => {
         tenantId,
         userId: canonicalUserId,
       });
+
+      // If an already registered user is reactivated without passing email in request,
+      // use the existing profile email to notify about reactivation.
+      if (reactivated && existingEmail?.trim()) {
+        const baseUrlEnv = process.env.BASE_URL || "";
+        const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+        const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+        const reactivatedHtml = `
+          <h2>Hi ${nicknameRaw}!</h2>
+          <p>Dein Zugang zu YogaSwap wurde fuer dieses Studio reaktiviert.</p>
+          <p>Du kannst dich mit deinem bestehenden Passwort wieder anmelden.</p>
+          <p><a href="${baseUrl}">Zur Anmeldung</a></p>
+        `;
+        try {
+          await ses.send(
+            new SendEmailCommand({
+              Source: sesSourceEmail,
+              Destination: { ToAddresses: [existingEmail.trim()] },
+              Message: {
+                Subject: { Data: "YogaSwap Reaktivierung" },
+                Body: { Html: { Data: reactivatedHtml } },
+              },
+            }),
+          );
+          emailSent = true;
+        } catch (mailErr: any) {
+          console.warn("SES reactivation email warning:", mailErr?.message || mailErr);
+        }
+      }
     } catch (err: any) {
       console.error("Failed to save membership in DynamoDB:", err);
       return {
@@ -190,7 +229,8 @@ export const handler = async (event: any) => {
       body: JSON.stringify({
         success: true,
         username: canonicalUserId,
-        emailSent: false,
+        emailSent,
+        reactivated,
         warning:
           "E-Mail fehlt – Cognito/SES übersprungen. Teilnehmer wurde nur in DynamoDB angelegt.",
       }),

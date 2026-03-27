@@ -318,6 +318,51 @@ describe('createParticipants Lambda', () => {
     expect(cognitoMockSend).toHaveBeenCalledTimes(2);
   });
 
+  test('sends reactivation email when existing active user is reactivated without request email', async () => {
+    dynamoMockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          userId: { S: 'Nova' },
+          authUserId: { S: 'sub-999' },
+          email: { S: 'nova@example.com' },
+          cognitoUsername: { S: 'Nova' },
+        },
+      }) // canonical lookup by nicknameNormalized
+      .mockResolvedValueOnce({}) // membership write
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          userId: { S: 'Nova' },
+          authUserId: { S: 'sub-999' },
+          email: { S: 'nova@example.com' },
+        },
+      }) // saveParticipantProfile existing lookup
+      .mockResolvedValueOnce({}); // participant profile write
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      nickname: 'nova',
+      role: 'participant',
+    });
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.username).toBe('Nova');
+    expect(body.reactivated).toBe(true);
+    expect(body.emailSent).toBe(true);
+
+    // no Cognito flow in no-email path
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Destination: { ToAddresses: ['nova@example.com'] },
+      }),
+    );
+  });
+
   test('returns 500 if password reset fails for existing user', async () => {
     const usernameExistsError = new Error('User already exists');
     (usernameExistsError as any).name = 'UsernameExistsException';

@@ -175,6 +175,42 @@ describe("getParticipants Lambda", () => {
     expect(body[0].userId).toBe("alice");
   });
 
+  test("includes orphaned profiles when includeOrphaned=true", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "admin" },
+        role: { S: "admin" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        name: { S: "Demo" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, email: { S: "alice@example.com" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "nova" }, email: { S: "nova@example.com" } },
+      ],
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [{ tenantId: { S: "default-tenant" }, userId: { S: "alice" }, role: { S: "participant" } }],
+    });
+
+    const result = await handler(
+      makeEvent({
+        queryStringParameters: { includeOrphaned: "true" },
+        requestContext: { authorizer: { principalId: "admin" } } as any,
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toHaveLength(2);
+    expect(body.map((p: { userId: string }) => p.userId)).toContain("nova");
+  });
+
   test("filters by status", async () => {
     mockSend.mockResolvedValueOnce({
       Item: { tenantId: { S: "default-tenant" }, userId: { S: "admin" }, role: { S: "admin" } },

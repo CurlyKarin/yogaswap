@@ -65,7 +65,7 @@ describe("Invite", () => {
     // Temporäres Passwort gesetzt, neues Passwort zu kurz
     fireEvent.change(
       within(panel).getByPlaceholderText(
-        /Temporäres Passwort hier eingeben/i,
+        /Temporäres Passwort/i,
       ),
       { target: { value: "temp-123" } },
     );
@@ -108,7 +108,7 @@ describe("Invite", () => {
 
     fireEvent.change(
       within(panel).getByPlaceholderText(
-        /Temporäres Passwort hier eingeben/i,
+        /Temporäres Passwort/i,
       ),
       { target: { value: "temp-123" } },
     );
@@ -147,7 +147,7 @@ describe("Invite", () => {
 
     fireEvent.change(
       within(panel).getByPlaceholderText(
-        /Temporäres Passwort hier eingeben/i,
+        /Temporäres Passwort/i,
       ),
       { target: { value: "falsches-temp" } },
     );

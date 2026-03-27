@@ -14,6 +14,16 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
 
 const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
 
+jest.mock("@aws-sdk/client-ses", () => {
+  const sesMockSend = jest.fn();
+  return {
+    SESClient: jest.fn(() => ({ send: sesMockSend })),
+    SendEmailCommand: jest.fn((input) => input),
+    sesMockSend,
+  };
+});
+const { sesMockSend } = jest.requireMock("@aws-sdk/client-ses");
+
 describe("deleteParticipant Lambda", () => {
   const OLD_ENV = process.env;
 
@@ -24,8 +34,10 @@ describe("deleteParticipant Lambda", () => {
       PARTICIPANTS_TABLE: "test-participants",
       MEMBERSHIPS_TABLE: "test-memberships",
       TENANTS_TABLE: "test-tenants",
+      SES_SOURCE_EMAIL: "yogaswap@example.com",
     };
     mockSend.mockReset();
+    sesMockSend.mockReset();
   });
 
   afterAll(() => {
@@ -65,6 +77,7 @@ describe("deleteParticipant Lambda", () => {
       .mockResolvedValueOnce({}) // membership delete
       .mockResolvedValueOnce({ Count: 0, Items: [] }) // no remaining memberships
       .mockResolvedValueOnce({}); // participant delete
+    sesMockSend.mockResolvedValueOnce({});
 
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
@@ -72,7 +85,10 @@ describe("deleteParticipant Lambda", () => {
       success: true,
       membershipDeleted: true,
       profileDeleted: true,
+      notificationEmail: "alice@example.com",
+      notificationEmailSent: true,
     });
+    expect(sesMockSend).toHaveBeenCalledTimes(1);
   });
 
   test("deletes only membership when participant has authUserId", async () => {
@@ -95,9 +111,11 @@ describe("deleteParticipant Lambda", () => {
           tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
           authUserId: { S: "sub-123" },
+          email: { S: "alice@example.com" },
         },
       })
       .mockResolvedValueOnce({});
+    sesMockSend.mockResolvedValueOnce({});
 
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
@@ -105,9 +123,12 @@ describe("deleteParticipant Lambda", () => {
       success: true,
       membershipDeleted: true,
       profileDeleted: false,
+      notificationEmail: "alice@example.com",
+      notificationEmailSent: true,
     });
     // No scan and no profile delete in this case.
     expect(mockSend).toHaveBeenCalledTimes(4);
+    expect(sesMockSend).toHaveBeenCalledTimes(1);
   });
 
   test("deletes only membership when user still has membership in another tenant", async () => {
@@ -140,6 +161,8 @@ describe("deleteParticipant Lambda", () => {
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).profileDeleted).toBe(false);
+    expect(JSON.parse(result.body).notificationEmail).toBeUndefined();
+    expect(JSON.parse(result.body).notificationEmailSent).toBe(false);
   });
 
   test("returns 403 when actor cannot manage participants", async () => {

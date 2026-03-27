@@ -43,6 +43,9 @@ export const handler = async (
 
   const { tenantId, userId } = getTenantContext(event);
   const search = (event.queryStringParameters?.search || "").trim().toLowerCase();
+  const includeOrphaned = (event.queryStringParameters?.includeOrphaned || "")
+    .trim()
+    .toLowerCase() === "true";
   const statusFilter = (event.queryStringParameters?.status || "").trim().toLowerCase();
   const hasEmailFilter = (event.queryStringParameters?.hasEmail || "").trim().toLowerCase();
   const sortByRaw = (event.queryStringParameters?.sortBy || "nickname").trim();
@@ -78,6 +81,7 @@ export const handler = async (
       tenantId,
       actorUserId: userId,
       search,
+      includeOrphaned,
       statusFilter,
       hasEmailFilter,
       sortBy,
@@ -133,7 +137,7 @@ export const handler = async (
     });
 
     const participants: ParticipantListItem[] = profiles
-      .filter((profile) => roleByUserId.has(profile.userId))
+      .filter((profile) => includeOrphaned || roleByUserId.has(profile.userId))
       .map((profile) => ({
         ...profile,
         status: deriveParticipantStatus(profile),

@@ -175,6 +175,16 @@ locals {
       }
       s3_actions   = []
       s3_resources = []
+      additional_policies = [
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail"]
+          Resource = "*"
+        }
+      ]
+      environment = {
+        SES_SOURCE_EMAIL = var.ses_source_email
+      }
     },
     "create_participants" = {
       name             = "create-participants"
@@ -205,7 +215,7 @@ locals {
       ]
       environment = {
         USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
-        BASE_URL         = module.cloudfront_spa.distribution_url
+        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
         SES_SOURCE_EMAIL = var.ses_source_email # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
       }
     },

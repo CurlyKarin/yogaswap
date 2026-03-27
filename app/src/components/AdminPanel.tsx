@@ -66,6 +66,7 @@ export default function AdminPanel() {
   const [bulkInviteSending, setBulkInviteSending] = useState(false);
   const [bulkInviteResult, setBulkInviteResult] = useState("");
   const [deleteRunningByUserId, setDeleteRunningByUserId] = useState<Record<string, boolean>>({});
+  const [deleteTarget, setDeleteTarget] = useState<ParticipantWithStatus | null>(null);
 
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
@@ -175,12 +176,14 @@ export default function AdminPanel() {
     }
 
     try {
-      const remoteList = await getParticipants({ search: normalized });
+      const remoteList = await getParticipants({ search: normalized, includeOrphaned: true });
       const remoteMatch = remoteList.find(
         (p) => (p.userId || "").trim().toLowerCase() === normalized,
       );
       setCreateReactivationUserId(
-        remoteMatch && remoteMatch.status !== "active" ? remoteMatch.userId : null,
+        remoteMatch && (!remoteMatch.role || remoteMatch.status !== "active")
+          ? remoteMatch.userId
+          : null,
       );
       if (remoteMatch?.email) {
         setCreateEmail((prev) => (prev.trim() ? prev : remoteMatch.email ?? ""));
@@ -318,6 +321,27 @@ export default function AdminPanel() {
         );
       }
 
+      const effectiveEmail = emailValue || createEmail;
+      if (result.reactivated) {
+        if (result.emailSent) {
+          setBulkInviteResult(
+            effectiveEmail
+              ? `Reaktivierung: Info-Mail gesendet an ${effectiveEmail}.`
+              : "Reaktivierung: Info-Mail wurde gesendet.",
+          );
+        } else {
+          setBulkInviteResult("Reaktivierung erfolgt, aber E-Mail konnte nicht versendet werden.");
+        }
+      } else if (result.emailSent) {
+        setBulkInviteResult(
+          effectiveEmail
+            ? `Einladung gesendet an ${effectiveEmail}.`
+            : "Einladung wurde gesendet.",
+        );
+      } else if (effectiveEmail) {
+        setBulkInviteResult("Einladung angestoßen, aber E-Mail konnte nicht versendet werden.");
+      }
+
       setCreateOpen(false);
       await refreshParticipants();
     } catch (err) {
@@ -424,14 +448,9 @@ export default function AdminPanel() {
     }
   };
 
-  const deleteParticipantFromTenant = async (p: ParticipantWithStatus) => {
-    const userId = p.userId;
-    const confirmed = window.confirm(
-      `Teilnehmer "${userId}" aus diesem Studio entfernen?\n\n` +
-        `Hinweis: Mit Login bleibt das globale Profil erhalten. Ohne Login kann zusätzlich das Profil gelöscht werden, falls keine weitere Studio-Zuordnung existiert.`,
-    );
-    if (!confirmed) return;
-
+  const confirmDeleteParticipant = async () => {
+    if (!deleteTarget) return;
+    const userId = deleteTarget.userId;
     setDeleteRunningByUserId((prev) => ({ ...prev, [userId]: true }));
     setBulkInviteResult("");
 
@@ -442,6 +461,16 @@ export default function AdminPanel() {
           ? `Teilnehmer "${userId}" entfernt (inkl. Profil-Cleanup).`
           : `Teilnehmer "${userId}" aus diesem Studio entfernt.`,
       );
+      if (result.notificationEmail) {
+        setBulkInviteResult((prev) =>
+          `${prev} ${
+            result.notificationEmailSent
+              ? `Info-Mail gesendet an ${result.notificationEmail}.`
+              : `Info-Mail an ${result.notificationEmail} konnte nicht versendet werden.`
+          }`,
+        );
+      }
+      setDeleteTarget(null);
       await refreshParticipants();
     } catch (err) {
       console.error("Failed to delete participant", err);
@@ -635,7 +664,7 @@ export default function AdminPanel() {
                         !!inviteSendingByUserId[p.userId] ||
                         !!deleteRunningByUserId[p.userId]
                       }
-                      onClick={() => deleteParticipantFromTenant(p)}
+                      onClick={() => setDeleteTarget(p)}
                     >
                       <Trash2 size={14} aria-hidden="true" />
                     </button>
@@ -655,34 +684,37 @@ export default function AdminPanel() {
 
       {editingUserId && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer E-Mail bearbeiten">
-          <div className="modal">
+          <div className="modal modal-compact">
             <h4>Teilnehmer bearbeiten</h4>
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               User: <strong>{editingUserId}</strong>
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <label>
-                E-Mail
-                <input
-                  type="email"
-                  placeholder="E-Mail"
-                  value={editingEmail}
-                  onChange={(e) => setEditingEmail(e.target.value)}
-                  disabled={editingSaving}
-                  style={{ width: "100%", padding: "0.5rem", borderRadius: 8, border: "1px solid #ddd", fontSize: 16 }}
-                />
-              </label>
+            <div className="dialog-stack">
+              <input
+                type="email"
+                aria-label="E-Mail"
+                placeholder="E-Mail"
+                value={editingEmail}
+                onChange={(e) => setEditingEmail(e.target.value)}
+                disabled={editingSaving}
+                className="dialog-field"
+              />
               {editingError && <p style={{ color: "crimson", margin: 0 }}>{editingError}</p>}
             </div>
 
-            <div className="modal-actions">
-              <button type="button" onClick={() => setEditingUserId(null)} disabled={editingSaving}>
+            <div className="modal-actions dialog-actions">
+              <button
+                type="button"
+                className="modal-action-btn"
+                onClick={() => setEditingUserId(null)}
+                disabled={editingSaving}
+              >
                 Abbrechen
               </button>
               <button
                 type="button"
-                className="btn-primary"
+                className="btn-primary modal-action-btn"
                 onClick={saveEditEmail}
                 disabled={editingSaving}
               >
@@ -695,73 +727,57 @@ export default function AdminPanel() {
 
       {createOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer anlegen">
-          <div className="modal">
+          <div className="modal modal-compact">
             <h4>Teilnehmer anlegen</h4>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <label>
-                Nickname
-                <input
-                  type="text"
-                  placeholder="Spitzname"
-                  value={createNickname}
-                  onChange={(e) => {
-                    const nextNickname = e.target.value;
-                    setCreateNickname(nextNickname);
-                    const localMatch = getKnownParticipantByNickname(nextNickname);
-                    setCreateReactivationUserId(
-                      localMatch && localMatch.status !== "active" ? localMatch.userId : null,
-                    );
-                    if (localMatch?.status === "active") {
-                      setCreateOverwriteEmailOnReactivate(false);
-                    }
-                    if (createEmail.trim()) return;
-                    const suggestedEmail = getKnownEmailByNickname(nextNickname);
-                    if (suggestedEmail) setCreateEmail(suggestedEmail);
-                    setCreateEmailAutoFilled(!!suggestedEmail);
-                  }}
-                  onBlur={() => {
-                    void prefillCreateEmailByNickname(createNickname);
-                  }}
-                  disabled={createSaving}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    borderRadius: 8,
-                    border: "1px solid #ddd",
-                    fontSize: 16,
-                  }}
-                />
-              </label>
+            <div className="dialog-stack">
+              <input
+                type="text"
+                aria-label="Spitzname"
+                placeholder="Spitzname"
+                value={createNickname}
+                onChange={(e) => {
+                  const nextNickname = e.target.value;
+                  setCreateNickname(nextNickname);
+                  const localMatch = getKnownParticipantByNickname(nextNickname);
+                  setCreateReactivationUserId(
+                    localMatch && localMatch.status !== "active" ? localMatch.userId : null,
+                  );
+                  if (localMatch?.status === "active") {
+                    setCreateOverwriteEmailOnReactivate(false);
+                  }
+                  if (createEmail.trim()) return;
+                  const suggestedEmail = getKnownEmailByNickname(nextNickname);
+                  if (suggestedEmail) setCreateEmail(suggestedEmail);
+                  setCreateEmailAutoFilled(!!suggestedEmail);
+                }}
+                onBlur={() => {
+                  void prefillCreateEmailByNickname(createNickname);
+                }}
+                disabled={createSaving}
+                className="dialog-field"
+              />
 
-              <label>
-                E-Mail (optional)
-                <input
-                  type="email"
-                  placeholder="E-Mail"
-                  value={createEmail}
-                  onChange={(e) => {
-                    setCreateEmail(e.target.value);
-                    setCreateEmailAutoFilled(false);
-                  }}
-                  disabled={createSaving}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    borderRadius: 8,
-                    border: "1px solid #ddd",
-                    fontSize: 16,
-                  }}
-                />
-                {createEmailAutoFilled && (
-                  <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                    E-Mail aus bestehendem Profil uebernommen.
-                  </p>
-                )}
+              <input
+                type="email"
+                aria-label="E-Mail"
+                placeholder="E-Mail"
+                value={createEmail}
+                onChange={(e) => {
+                  setCreateEmail(e.target.value);
+                  setCreateEmailAutoFilled(false);
+                }}
+                disabled={createSaving}
+                className="dialog-field"
+              />
+              {createEmailAutoFilled && (
                 <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                  Bei Reaktivierung bleibt die bestehende E-Mail standardmaessig unveraendert.
+                  E-Mail aus bestehendem Profil uebernommen.
                 </p>
-              </label>
+              )}
+              <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                Bei Reaktivierung bleibt die bestehende E-Mail standardmaessig unveraendert.
+              </p>
               {createReactivationUserId && (
                 <>
                   <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
@@ -803,62 +819,37 @@ export default function AdminPanel() {
                 </div>
               )}
 
-              <label>
-                Rolle
-                <select
-                  value={createRole}
-                  onChange={(e) =>
-                    setCreateRole(e.target.value as "participant" | "instructor" | "admin")
-                  }
-                  disabled={createSaving}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    borderRadius: 8,
-                    border: "1px solid #ddd",
-                    fontSize: 16,
-                  }}
-                >
-                  <option value="participant">Teilnehmer</option>
-                  <option value="instructor">Kursleiter</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
+              <select
+                aria-label="Rolle"
+                value={createRole}
+                onChange={(e) =>
+                  setCreateRole(e.target.value as "participant" | "instructor" | "admin")
+                }
+                disabled={createSaving}
+                className="dialog-field"
+              >
+                <option value="participant">Teilnehmer</option>
+                <option value="instructor">Kursleiter</option>
+                <option value="admin">Admin</option>
+              </select>
 
               {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}
             </div>
 
-            <div className="modal-actions">
+            <div className="modal-actions dialog-actions">
               <button
                 type="button"
+                className="modal-action-btn"
                 onClick={() => setCreateOpen(false)}
                 disabled={createSaving}
-                style={{
-                  minWidth: 120,
-                  height: 38,
-                  padding: "0 0.75rem",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxSizing: "border-box",
-                }}
               >
                 Abbrechen
               </button>
               <button
                 type="button"
-                className="btn-primary"
+                className="btn-primary modal-action-btn"
                 onClick={saveCreate}
                 disabled={createSaving || createActiveConflict}
-                style={{
-                  minWidth: 120,
-                  height: 38,
-                  padding: "0 0.75rem",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxSizing: "border-box",
-                }}
               >
                 {createSaving
                   ? createReactivationUserId
@@ -867,6 +858,39 @@ export default function AdminPanel() {
                   : createReactivationUserId
                     ? "Reaktivieren"
                     : "Anlegen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer löschen">
+          <div className="modal modal-compact">
+            <h4>Teilnehmer löschen</h4>
+            <p style={{ marginTop: 0, color: "#4b5563" }}>
+              Teilnehmer <strong>{deleteTarget.userId}</strong> aus diesem Studio entfernen?
+            </p>
+            <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
+              Mit Login bleibt das globale Profil erhalten. Ohne Login kann zusätzlich das Profil
+              gelöscht werden, falls keine weitere Studio-Zuordnung existiert.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-action-btn"
+                onClick={() => setDeleteTarget(null)}
+                disabled={!!deleteRunningByUserId[deleteTarget.userId]}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-primary modal-action-btn"
+                onClick={confirmDeleteParticipant}
+                disabled={!!deleteRunningByUserId[deleteTarget.userId]}
+              >
+                {deleteRunningByUserId[deleteTarget.userId] ? "Lösche..." : "Löschen"}
               </button>
             </div>
           </div>

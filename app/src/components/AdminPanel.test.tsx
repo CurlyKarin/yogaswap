@@ -20,7 +20,6 @@ describe("AdminPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedGetParticipants.mockResolvedValue([]);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
 
@@ -67,6 +66,8 @@ describe("AdminPanel", () => {
       success: true,
       membershipDeleted: true,
       profileDeleted: true,
+      notificationEmail: "alice@example.com",
+      notificationEmailSent: true,
     });
 
     const { container } = render(<AdminPanel />);
@@ -78,10 +79,13 @@ describe("AdminPanel", () => {
     });
 
     fireEvent.click(within(panel).getByLabelText("Löschen alice"));
+    const deleteDialog = within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i });
+    fireEvent.click(within(deleteDialog).getByRole("button", { name: /^Löschen$/i }));
 
     await waitFor(() => {
       expect(mockedDeleteParticipant).toHaveBeenCalledWith("alice");
       expect(within(panel).getByText(/Profil-Cleanup/i)).toBeInTheDocument();
+      expect(within(panel).getByText(/Info-Mail gesendet an alice@example.com/i)).toBeInTheDocument();
     });
   });
 
@@ -300,7 +304,7 @@ describe("AdminPanel", () => {
       expect(mockedInviteUser).toHaveBeenCalledWith({ nickname: "alice", role: "participant" });
       expect(mockedUpdateParticipant).not.toHaveBeenCalled();
       expect(
-        within(panel).getByText(/bestehende E-Mail blieb unverändert/i),
+        within(panel).getByText(/Reaktivierung: Info-Mail gesendet an alice\.new@example\.com\./i),
       ).toBeInTheDocument();
     });
   });
@@ -334,6 +338,10 @@ describe("AdminPanel", () => {
       expect((within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement).value).toBe(
         "alice@example.com",
       );
+      expect(mockedGetParticipants).toHaveBeenCalledWith({
+        search: "alice",
+        includeOrphaned: true,
+      });
       expect(
         within(dialog).getByText(/E-Mail aus bestehendem Profil uebernommen\./i),
       ).toBeInTheDocument();

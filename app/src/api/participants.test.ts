@@ -108,6 +108,7 @@ describe("participants API (getParticipants/updateParticipant)", () => {
 
     await getParticipants({
       search: "ali",
+      includeOrphaned: true,
       status: "invited",
       hasEmail: true,
       sortBy: "nickname",
@@ -117,6 +118,7 @@ describe("participants API (getParticipants/updateParticipant)", () => {
     expect(axios.get).toHaveBeenCalledWith("/participants", {
       params: {
         search: "ali",
+        includeOrphaned: "true",
         status: "invited",
         hasEmail: "true",
         sortBy: "nickname",
