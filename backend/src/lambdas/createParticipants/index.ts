@@ -195,7 +195,7 @@ export const handler = async (event: any) => {
         const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
         const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
         const reactivatedHtml = `
-          <h2>Hi ${nicknameRaw}!</h2>
+          <h2>Hallo ${nicknameRaw}!</h2>
           <p>Dein Zugang zu YogaSwap wurde fuer dieses Studio reaktiviert.</p>
           <p>Du kannst dich mit deinem bestehenden Passwort wieder anmelden.</p>
           <p><a href="${baseUrl}">Zur Anmeldung</a></p>
@@ -362,18 +362,21 @@ export const handler = async (event: any) => {
   // Send invitation email (temp password shown in email body)
   const emailHtml = reactivated
     ? `
-      <h2>Hi ${nicknameRaw}!</h2>
+      <h2>Hallo ${nicknameRaw}!</h2>
       <p>Dein Zugang zu YogaSwap wurde für dieses Studio reaktiviert.</p>
       <p>Du kannst dich mit deinem bestehenden Passwort wieder anmelden.</p>
       <p><a href="${baseUrl}">Zur Anmeldung</a></p>
     `
     : `
-      <h2>Hi ${nicknameRaw}!</h2>
+      <h2>Hallo ${nicknameRaw}!</h2>
       <p>Du wurdest zu YogaSwap eingeladen.</p>
       <p><a href="${link}">Klicke hier, um dein temporäres Passwort einzugeben und ein neues Passwort zu setzen</a></p>
-      <p><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong>
-        <br/><code style="background:#f0f0f0;padding:4px 8px;border-radius:4px;">${rawPassword}</code>
-      </p>
+      <div style="margin-top:12px;">
+        <p style="margin:0 0 6px 0;"><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong></p>
+        <div>
+          <code style="display:inline-block;background:#f0f0f0;padding:8px 10px;border-radius:4px;line-height:1.4;font-family:monospace;">${rawPassword}</code>
+        </div>
+      </div>
       <p>Tipp: Falls das Passwort beim Einfügen nicht funktioniert, achte auf keine Leerzeichen vor/nach dem Passwort.</p>
     `;
 

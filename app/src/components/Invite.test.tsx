@@ -30,7 +30,7 @@ function renderWithParams(search: string, onSuccess?: () => void) {
       </Routes>
     </MemoryRouter>,
   );
-  const panels = utils.container.querySelectorAll("div[style*='Passwort-Setup']");
+  const panels = utils.container.querySelectorAll("div[style*='max-width: 480px']");
   const panel = (panels[panels.length - 1] as HTMLElement) ?? utils.container;
   return { ...utils, panel };
 }
@@ -51,7 +51,7 @@ describe("Invite", () => {
     const { panel } = renderWithParams("?nickname=alice");
 
     fireEvent.click(
-      within(panel).getByRole("button", { name: /Passwort setzen/i }),
+      within(panel).getByRole("button", { name: /Zugang aktivieren/i }),
     );
 
     await waitFor(() => {
@@ -70,7 +70,7 @@ describe("Invite", () => {
       { target: { value: "temp-123" } },
     );
     fireEvent.click(
-      within(panel).getByRole("button", { name: /Passwort setzen/i }),
+      within(panel).getByRole("button", { name: /Zugang aktivieren/i }),
     );
 
     await waitFor(() => {
@@ -82,7 +82,7 @@ describe("Invite", () => {
     });
   });
 
-  it("führt den vollständigen Passwort-Setup-Flow aus und speichert den User", async () => {
+  it("führt den vollständigen Zugang-aktivieren-Flow aus und speichert den User", async () => {
     const onSuccess = vi.fn();
 
     mockedSignIn.mockResolvedValue({
@@ -117,7 +117,7 @@ describe("Invite", () => {
     });
 
     fireEvent.click(
-      within(panel).getByRole("button", { name: /Passwort setzen/i }),
+      within(panel).getByRole("button", { name: /Zugang aktivieren/i }),
     );
 
     await waitFor(() => {
@@ -156,7 +156,7 @@ describe("Invite", () => {
     });
 
     fireEvent.click(
-      within(panel).getByRole("button", { name: /Passwort setzen/i }),
+      within(panel).getByRole("button", { name: /Zugang aktivieren/i }),
     );
 
     await waitFor(() => {

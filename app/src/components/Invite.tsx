@@ -165,13 +165,42 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
 
   return (
     <div style={{ maxWidth: 480, margin: "2rem auto", padding: "1rem", border: "1px solid #eee", borderRadius: 8 }}>
-      <h2>Passwort-Setup</h2>
-      {emailDisplay && <p>Für: <strong>{emailDisplay}</strong></p>}
-      <p>Benutzername: <strong>{nicknameParam}</strong></p>
+      <h2>Willkommen bei YogaSwap</h2>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Hallo <strong>{nicknameParam}</strong>,
+      </p>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Aktiviere deinen Zugang mit dem temporaeren Passwort aus der Einladung.
+      </p>
+      {emailDisplay && (
+        <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
+          Einladung gesendet an {emailDisplay}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="invite-form">
+        {/* Password managers need an explicit username field. */}
         <input
           type="text"
+          name="username"
+          autoComplete="username"
+          value={usernameForSignIn}
+          readOnly
+          tabIndex={-1}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: "-10000px",
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        />
+        <input
+          type="password"
+          name="temporary-password"
+          autoComplete="current-password"
           aria-label="Temporäres Passwort"
           value={tempPassword}
           onChange={(e) => setTempPassword(e.target.value.trim())}
@@ -183,6 +212,8 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
 
         <input
           type="password"
+          name="new-password"
+          autoComplete="new-password"
           aria-label="Neues Passwort"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
@@ -200,7 +231,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
           disabled={loading || !authCleared}
           className="btn-primary btn-block"
         >
-          {loading ? "Verarbeite…" : "Passwort setzen"}
+          {loading ? "Verarbeite…" : "Zugang aktivieren"}
         </button>
       </form>
     </div>
