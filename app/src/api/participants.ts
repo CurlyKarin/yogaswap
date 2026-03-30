@@ -23,6 +23,7 @@ export type ParticipantWithStatus = ParticipantProfile & { status: ParticipantSt
 
 export interface UpdateParticipantRequest {
   email?: string | null;
+  role?: UserRole;
   settings?: ParticipantSettings;
   inviteSentAt?: string | null;
   authUserId?: string | null;

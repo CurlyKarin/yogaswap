@@ -7,6 +7,7 @@ import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import type {
   ParticipantProfile,
   ParticipantSettings,
+  UserRole,
 } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
@@ -20,6 +21,7 @@ type UpdateParticipantBody = {
   settings?: ParticipantSettings;
   inviteSentAt?: string | null;
   authUserId?: string | null;
+  role?: UserRole;
 };
 
 export const handler = async (
@@ -80,7 +82,8 @@ export const handler = async (
     const hasOtherMutationKeys =
       Object.prototype.hasOwnProperty.call(body, "email") ||
       Object.prototype.hasOwnProperty.call(body, "settings") ||
-      Object.prototype.hasOwnProperty.call(body, "inviteSentAt");
+      Object.prototype.hasOwnProperty.call(body, "inviteSentAt") ||
+      Object.prototype.hasOwnProperty.call(body, "role");
 
     // Allow a participant to self-link their own Cognito `sub` once after sign-up.
     // This is required for participants created via invitation to move from "invited" -> "active".
@@ -99,6 +102,23 @@ export const handler = async (
       });
       if (!canManage) {
         return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "role")) {
+      const actorMembershipResp = await client.send(
+        new GetItemCommand({
+          TableName: membershipsTable,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: actorUserId },
+          },
+          ConsistentRead: true,
+        }),
+      );
+      const actorMembershipRole = actorMembershipResp.Item?.role?.S;
+      if (actorMembershipRole !== "admin") {
+        return { statusCode: 403, body: JSON.stringify({ error: "Only admins can change roles" }) };
       }
     }
 
@@ -160,6 +180,26 @@ export const handler = async (
       } else {
         delete updated.authUserId;
       }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "role")) {
+      const nextRole = body.role;
+      if (!nextRole || !["admin", "instructor", "participant"].includes(nextRole)) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: "Invalid role value" }),
+        };
+      }
+      await client.send(
+        new PutItemCommand({
+          TableName: membershipsTable,
+          Item: marshall({
+            tenantId,
+            userId,
+            role: nextRole,
+          }),
+        }),
+      );
     }
 
     await client.send(
