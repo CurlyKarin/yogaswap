@@ -147,7 +147,7 @@ function MainApp() {
 
       {currentUser && canInvite && (
         <section className="main-section main-section-admin">
-          <AdminPanel />
+          <AdminPanel canEditRoles={(membership?.role ?? currentUser.role) === "admin"} />
         </section>
       )}
 

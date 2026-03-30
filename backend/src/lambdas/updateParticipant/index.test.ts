@@ -74,6 +74,88 @@ describe("updateParticipant Lambda", () => {
     expect(mockSend).toHaveBeenCalledTimes(4);
   });
 
+  test("updates participant role when actor is admin", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      }) // canManage membership lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }) // canManage tenant lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      }) // actor role check
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+        },
+      }) // target participant
+      .mockResolvedValueOnce({}) // memberships PutItem (role change)
+      .mockResolvedValueOnce({}); // participants PutItem
+
+    const result = await handler(
+      makeEvent({
+        body: JSON.stringify({ role: "instructor" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-memberships",
+        Item: expect.objectContaining({
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          role: { S: "instructor" },
+        }),
+      }),
+    );
+  });
+
+  test("returns 403 when non-admin tries to change role", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // canManage membership lookup
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      }) // canManage tenant lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }); // actor role check
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "instructor-1" } } as any,
+        body: JSON.stringify({ role: "participant" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toMatch(/Only admins can change roles/);
+  });
+
   test("returns 404 if participant does not exist", async () => {
     mockSend
       .mockResolvedValueOnce({

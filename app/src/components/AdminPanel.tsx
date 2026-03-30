@@ -14,6 +14,7 @@ const ROLE_LABELS_DE: Record<UserRole, string> = {
   instructor: "Kursleitung",
   participant: "Teilnehmerin",
 };
+const ROLE_OPTIONS: UserRole[] = ["participant", "instructor", "admin"];
 
 function getRoleLabel(role: UserRole | undefined): string {
   if (!role) return "-";
@@ -33,7 +34,11 @@ function getStatusPresentation(status: ParticipantWithStatus["status"]): {
   return { color: "#6b7280", label: "ohne Login" };
 }
 
-export default function AdminPanel() {
+type AdminPanelProps = {
+  canEditRoles?: boolean;
+};
+
+export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participantsError, setParticipantsError] = useState("");
@@ -41,6 +46,7 @@ export default function AdminPanel() {
 
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingEmail, setEditingEmail] = useState("");
+  const [editingRole, setEditingRole] = useState<UserRole>("participant");
   const [editingSaving, setEditingSaving] = useState(false);
   const [editingError, setEditingError] = useState("");
 
@@ -223,6 +229,7 @@ export default function AdminPanel() {
   const startEditEmail = (p: ParticipantWithStatus) => {
     setEditingUserId(p.userId);
     setEditingEmail(p.email ?? "");
+    setEditingRole(p.role ?? "participant");
     setEditingError("");
     setEditingSaving(false);
   };
@@ -241,7 +248,10 @@ export default function AdminPanel() {
       }
       const nextEmail = trimmed.length > 0 ? trimmed : null;
 
-      await updateParticipant(editingUserId, { email: nextEmail });
+      await updateParticipant(
+        editingUserId,
+        canEditRoles ? { email: nextEmail, role: editingRole } : { email: nextEmail },
+      );
 
       // Lokales Update reicht für diesen Zwischen-Use-Case.
       setParticipants((prev) =>
@@ -250,6 +260,7 @@ export default function AdminPanel() {
             ? {
                 ...p,
                 email: nextEmail ?? undefined,
+                role: canEditRoles ? editingRole : p.role,
               }
             : p,
         ),
@@ -700,6 +711,21 @@ export default function AdminPanel() {
                 disabled={editingSaving}
                 className="dialog-field"
               />
+              {canEditRoles && (
+                <select
+                  aria-label="Rolle bearbeiten"
+                  value={editingRole}
+                  onChange={(e) => setEditingRole(e.target.value as UserRole)}
+                  disabled={editingSaving}
+                  className="dialog-field"
+                >
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {ROLE_LABELS_DE[role]}
+                    </option>
+                  ))}
+                </select>
+              )}
               {editingError && <p style={{ color: "crimson", margin: 0 }}>{editingError}</p>}
             </div>
 
@@ -828,9 +854,11 @@ export default function AdminPanel() {
                 disabled={createSaving}
                 className="dialog-field"
               >
-                <option value="participant">Teilnehmer</option>
-                <option value="instructor">Kursleiter</option>
-                <option value="admin">Admin</option>
+                {ROLE_OPTIONS.map((role) => (
+                  <option key={role} value={role}>
+                    {ROLE_LABELS_DE[role]}
+                  </option>
+                ))}
               </select>
 
               {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}

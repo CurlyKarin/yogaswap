@@ -430,6 +430,50 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("zeigt Rollenfeld im Bearbeiten-Dialog nur fuer Admin und speichert Rolle mit", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+    ]);
+    mockedUpdateParticipant.mockResolvedValueOnce({
+      tenantId: "default-tenant",
+      userId: "alice",
+      role: "instructor",
+      email: "alice@example.com",
+      status: "no_login",
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    expect(within(dialog).getByLabelText("Rolle bearbeiten")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Rolle bearbeiten"), {
+      target: { value: "instructor" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", {
+        email: "alice@example.com",
+        role: "instructor",
+      });
+      expect(within(panel).getByText("Kursleitung")).toBeInTheDocument();
+    });
+  });
+
   it("validiert E-Mail Format beim Bearbeiten", async () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
