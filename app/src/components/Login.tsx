@@ -2,6 +2,7 @@
 import { User } from "shared/types";
 import { loadCurrentUser } from "shared/lib/storage";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
 
 type Props = {
@@ -50,6 +51,9 @@ export default function Login({ onLogin }: Props) {
           {isLoading ? "Lädt..." : "Login"}
         </button>
       </form>
+      <p style={{ marginTop: 8, fontSize: 14 }}>
+        <Link to="/forgot-password">Passwort vergessen?</Link>
+      </p>
 
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 

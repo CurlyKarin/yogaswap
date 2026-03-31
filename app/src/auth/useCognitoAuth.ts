@@ -23,10 +23,30 @@ export const useCognitoAuth = (): AuthReturn => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await signIn({
-        username: credentials.username,
-        password: credentials.password,
-      });
+      let result;
+      try {
+        result = await signIn({
+          username: credentials.username,
+          password: credentials.password,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("UserAlreadyAuthenticatedException")) {
+          try {
+            await signOut({ global: true });
+          } catch {
+            // continue with local cleanup and retry
+          }
+          clearCurrentUser();
+          setUser(null);
+          result = await signIn({
+            username: credentials.username,
+            password: credentials.password,
+          });
+        } else {
+          throw err;
+        }
+      }
 
       if (result.nextStep?.signInStep?.includes('NEW_PASSWORD_REQUIRED')) {
         navigate('/change-password', {

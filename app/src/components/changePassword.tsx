@@ -1,21 +1,20 @@
-// app/src/components/ChangePassword.tsx
-import { useState } from 'react';
-import { confirmSignIn, fetchAuthSession } from 'aws-amplify/auth';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { saveCurrentUser } from 'shared/lib/storage';
-import { User, UserRole } from 'shared/types';
+import { useState } from "react";
+import { confirmSignIn, fetchAuthSession } from "aws-amplify/auth";
+import { useLocation, useNavigate } from "react-router-dom";
+import { saveCurrentUser } from "shared/lib/storage";
+import { User, UserRole } from "shared/types";
 
 export default function ChangePassword() {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { state } = useLocation();
   const navigate = useNavigate();
 
-  const { username } = state as { username: string } || {};
+  const { username } = (state as { username: string }) || {};
 
   if (!username) {
-    navigate('/login');
+    navigate("/login");
     return null;
   }
 
@@ -24,24 +23,17 @@ export default function ChangePassword() {
     setLoading(true);
     try {
       await confirmSignIn({ challengeResponse: password });
-
-      // Nach erfolgreichem Passwort-Setzen: User-Information aus Cognito holen
       const session = await fetchAuthSession();
       if (session.tokens?.idToken) {
         const payload = session.tokens.idToken.payload;
         const user: User = {
           nickname: payload.nickname as string,
           email: payload.email as string,
-          role: (payload['custom:role'] as UserRole) || 'participant',
+          role: (payload["custom:role"] as UserRole) || "participant",
         };
         saveCurrentUser(user);
-        console.log('User nach Passwort-Änderung gespeichert:', user);
-      } else {
-        // Fallback falls Session noch nicht verfügbar
-        console.warn('Keine Session verfügbar nach confirmSignIn, verwende Fallback');
       }
-
-      navigate('/');
+      navigate("/");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Fehler");
     } finally {
@@ -50,9 +42,11 @@ export default function ChangePassword() {
   };
 
   return (
-    <div className="auth-form" style={{ padding: '2rem', maxWidth: 400, margin: 'auto' }}>
+    <div className="auth-form" style={{ padding: "2rem", maxWidth: 400, margin: "auto" }}>
       <h2>Neues Passwort</h2>
-      <p>Willkommen <strong>{username}</strong>!</p>
+      <p>
+        Willkommen <strong>{username}</strong>!
+      </p>
       <form onSubmit={handleSubmit}>
         <input
           type="password"
@@ -62,7 +56,7 @@ export default function ChangePassword() {
           style={{ fontSize: 16 }}
           required
         />
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
+        {error && <p style={{ color: "crimson" }}>{error}</p>}
         <button type="submit" disabled={loading} className="btn-primary btn-block">
           Speichern
         </button>
