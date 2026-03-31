@@ -2,16 +2,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import AdminPanel from "./AdminPanel";
-import { deleteParticipant, getParticipants, inviteUser, updateParticipant } from "../api/participants";
+import {
+  deleteParticipant,
+  getParticipants,
+  inviteUser,
+  resetParticipantPassword,
+  updateParticipant,
+} from "../api/participants";
 
 vi.mock("../api/participants", () => ({
   inviteUser: vi.fn(),
+  resetParticipantPassword: vi.fn(),
   getParticipants: vi.fn(),
   updateParticipant: vi.fn(),
   deleteParticipant: vi.fn(),
 }));
 
 const mockedInviteUser = inviteUser as unknown as ReturnType<typeof vi.fn>;
+const mockedResetParticipantPassword = resetParticipantPassword as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
 const mockedDeleteParticipant = deleteParticipant as unknown as ReturnType<typeof vi.fn>;
@@ -70,7 +78,7 @@ describe("AdminPanel", () => {
       notificationEmailSent: true,
     });
 
-    const { container } = render(<AdminPanel />);
+    const { container } = render(<AdminPanel canEditRoles />);
     const panel = container.querySelector("div");
     if (!panel) throw new Error("Panel not found");
 
@@ -115,7 +123,7 @@ describe("AdminPanel", () => {
       emailSent: true,
     });
 
-    const { container } = render(<AdminPanel />);
+    const { container } = render(<AdminPanel canEditRoles />);
     const panel = container.querySelector("div");
     if (!panel) throw new Error("Panel not found");
 
@@ -133,6 +141,74 @@ describe("AdminPanel", () => {
       });
       expect(within(panel).getByText(/Einladung gesendet an alice@example.com/i)).toBeInTheDocument();
     });
+  });
+
+  it("setzt Passwort für registrierten Teilnehmer aus der Verwaltung zurück", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "active",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "active",
+        },
+      ]);
+
+    mockedResetParticipantPassword.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByLabelText("Passwort zurücksetzen alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Passwort zurücksetzen alice"));
+
+    await waitFor(() => {
+      expect(mockedResetParticipantPassword).toHaveBeenCalledWith("alice");
+      expect(within(panel).getByText(/Passwort-Reset-Mail gesendet an alice@example.com/i)).toBeInTheDocument();
+    });
+  });
+
+  it("zeigt Passwort-Reset-Button nicht für Trainer/ohne Admin-Rechte", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "active",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+    expect(within(panel).queryByLabelText("Passwort zurücksetzen alice")).not.toBeInTheDocument();
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    expect(
+      within(dialog).queryByLabelText(/Bei E-Mail-Wechsel Passwort-Reset erzwingen/i),
+    ).not.toBeInTheDocument();
   });
 
   it("sendet Einladungen gesammelt für ausgewählte Teilnehmer", async () => {
@@ -189,7 +265,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce({ success: true, emailSent: true })
       .mockResolvedValueOnce({ success: true, emailSent: true });
 
-    const { container } = render(<AdminPanel />);
+    const { container } = render(<AdminPanel canEditRoles />);
     const panel = container.querySelector("div");
     if (!panel) throw new Error("Panel not found");
 
@@ -427,6 +503,56 @@ describe("AdminPanel", () => {
     await waitFor(() => {
       expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", { email: "alice.new@example.com" });
       expect(within(panel).getByText("alice.new@example.com")).toBeInTheDocument();
+    });
+  });
+
+  it("erzwingt optional Passwort-Reset beim E-Mail-Wechsel", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "active",
+      },
+    ]);
+
+    mockedUpdateParticipant.mockResolvedValueOnce({
+      tenantId: "default-tenant",
+      userId: "alice",
+      role: "participant",
+      email: "alice.new@example.com",
+      status: "invited",
+      passwordResetEmailSent: true,
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
+      target: { value: "alice.new@example.com" },
+    });
+    fireEvent.click(
+      within(dialog).getByLabelText(/Bei E-Mail-Wechsel Passwort-Reset erzwingen/i),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", {
+        email: "alice.new@example.com",
+        forcePasswordResetOnEmailChange: true,
+        role: "participant",
+      });
+      expect(
+        within(panel).getByText(/Passwort-Reset-Mail gesendet an alice.new@example.com/i),
+      ).toBeInTheDocument();
     });
   });
 

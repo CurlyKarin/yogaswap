@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 import Login from "./Login";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
 import { loadCurrentUser } from "shared/lib/storage";
@@ -36,7 +37,11 @@ describe("Login", () => {
       role: "participant",
     });
 
-    render(<Login onLogin={onLogin} />);
+    render(
+      <MemoryRouter>
+        <Login onLogin={onLogin} />
+      </MemoryRouter>,
+    );
 
     // Demo-Werte sind vorausgefüllt
     expect(screen.getByPlaceholderText("Spitzname")).toHaveValue("Luna");
@@ -51,6 +56,10 @@ describe("Login", () => {
         role: "participant",
       });
     });
+    expect(screen.getByRole("link", { name: /Passwort vergessen\?/i })).toHaveAttribute(
+      "href",
+      "/forgot-password",
+    );
   });
 
   it("zeigt eine Fehlermeldung aus useCognitoAuth an", () => {
@@ -62,7 +71,11 @@ describe("Login", () => {
       error: "Login fehlgeschlagen",
     });
 
-    render(<Login onLogin={onLogin} />);
+    render(
+      <MemoryRouter>
+        <Login onLogin={onLogin} />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText(/Login fehlgeschlagen/i)).toBeInTheDocument();
   });

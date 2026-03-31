@@ -3,6 +3,13 @@ import {
   GetItemCommand,
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
+import {
+  AdminSetUserPasswordCommand,
+  AdminUpdateUserAttributesCommand,
+  AdminUserGlobalSignOutCommand,
+  CognitoIdentityProviderClient,
+} from "@aws-sdk/client-cognito-identity-provider";
+import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import type {
   ParticipantProfile,
@@ -15,6 +22,17 @@ import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
+const cognito = new CognitoIdentityProviderClient({});
+const ses = new SESClient({});
+
+function generateSafeTempPassword(length = 10) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*";
+  let pw = "";
+  for (let i = 0; i < length; i++) {
+    pw += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pw;
+}
 
 type UpdateParticipantBody = {
   email?: string | null;
@@ -22,6 +40,7 @@ type UpdateParticipantBody = {
   inviteSentAt?: string | null;
   authUserId?: string | null;
   role?: UserRole;
+  forcePasswordResetOnEmailChange?: boolean;
 };
 
 export const handler = async (
@@ -105,7 +124,12 @@ export const handler = async (
       }
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, "role")) {
+    const requestsRoleChange = Object.prototype.hasOwnProperty.call(body, "role");
+    const requestsForcedPasswordReset =
+      body.forcePasswordResetOnEmailChange === true;
+
+    let actorMembershipRole: string | undefined;
+    if (requestsRoleChange || requestsForcedPasswordReset) {
       const actorMembershipResp = await client.send(
         new GetItemCommand({
           TableName: membershipsTable,
@@ -116,9 +140,20 @@ export const handler = async (
           ConsistentRead: true,
         }),
       );
-      const actorMembershipRole = actorMembershipResp.Item?.role?.S;
+      actorMembershipRole = actorMembershipResp.Item?.role?.S;
+    }
+
+    if (requestsRoleChange) {
       if (actorMembershipRole !== "admin") {
         return { statusCode: 403, body: JSON.stringify({ error: "Only admins can change roles" }) };
+      }
+    }
+    if (requestsForcedPasswordReset) {
+      if (actorMembershipRole !== "admin") {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({ error: "Only admins can force password reset on email change" }),
+        };
       }
     }
 
@@ -141,6 +176,9 @@ export const handler = async (
     }
 
     const existing = unmarshall(existingResp.Item) as ParticipantProfile;
+    const existingCognitoUsername = existingResp.Item.cognitoUsername?.S;
+    let passwordResetTriggered = false;
+    let passwordResetEmailSent = false;
     const updated: ParticipantProfile = {
       ...existing,
       tenantId,
@@ -149,7 +187,98 @@ export const handler = async (
 
     if (Object.prototype.hasOwnProperty.call(body, "email")) {
       const email = typeof body.email === "string" ? body.email.trim() : body.email;
-      if (email) updated.email = email;
+      if (email) {
+        const shouldSyncCognitoEmail =
+          !!existing.authUserId || !!existing.inviteSentAt || !!existingCognitoUsername;
+        const currentEmail = (existing.email ?? "").trim().toLowerCase();
+        const nextEmail = email.trim().toLowerCase();
+        const emailChanged = currentEmail !== nextEmail;
+        if (shouldSyncCognitoEmail) {
+          const userPoolId = process.env.USER_POOL_ID;
+          if (!userPoolId) {
+            return {
+              statusCode: 500,
+              body: JSON.stringify({ error: "USER_POOL_ID env var is not set" }),
+            };
+          }
+          try {
+            const cognitoUsername = existingCognitoUsername || userId;
+            await cognito.send(
+              new AdminUpdateUserAttributesCommand({
+                UserPoolId: userPoolId,
+                Username: cognitoUsername,
+                UserAttributes: [
+                  { Name: "email", Value: email },
+                  { Name: "email_verified", Value: "true" },
+                ],
+              }),
+            );
+            if (emailChanged) {
+              await cognito.send(
+                new AdminUserGlobalSignOutCommand({
+                  UserPoolId: userPoolId,
+                  Username: cognitoUsername,
+                }),
+              );
+            }
+
+            if (emailChanged && body.forcePasswordResetOnEmailChange) {
+              const rawPassword = `${generateSafeTempPassword(10)}A1`;
+              await cognito.send(
+                new AdminSetUserPasswordCommand({
+                  UserPoolId: userPoolId,
+                  Username: cognitoUsername,
+                  Password: rawPassword,
+                  Permanent: false,
+                }),
+              );
+              passwordResetTriggered = true;
+
+              const baseUrlEnv = process.env.BASE_URL || "";
+              const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+              const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+              const link = `${baseUrl}/invite?nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
+              try {
+                await ses.send(
+                  new SendEmailCommand({
+                    Source: sesSourceEmail,
+                    Destination: { ToAddresses: [email] },
+                    Message: {
+                      Subject: { Data: "YogaSwap Passwort zuruecksetzen" },
+                      Body: {
+                        Html: {
+                          Data: `
+                            <h2>Hallo ${userId}!</h2>
+                            <p>Deine E-Mail-Adresse wurde aktualisiert. Bitte setze jetzt ein neues Passwort.</p>
+                            <p><a href="${link}">Klicke hier, um ein neues Passwort zu setzen</a></p>
+                            <div style="margin-top:12px;">
+                              <p style="margin:0 0 6px 0;"><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong></p>
+                              <div>
+                                <code style="display:inline-block;background:#f0f0f0;padding:8px 10px;border-radius:4px;line-height:1.4;font-family:monospace;">${rawPassword}</code>
+                              </div>
+                            </div>
+                          `,
+                        },
+                      },
+                    },
+                  }),
+                );
+                passwordResetEmailSent = true;
+                updated.inviteSentAt = new Date().toISOString();
+              } catch (mailErr) {
+                console.warn("Failed to send password-reset email after email change:", mailErr);
+              }
+            }
+          } catch (syncErr) {
+            console.error("Failed to sync email to Cognito:", syncErr);
+            return {
+              statusCode: 502,
+              body: JSON.stringify({ error: "Failed to sync email to auth profile" }),
+            };
+          }
+        }
+        updated.email = email;
+      }
       else delete updated.email;
     }
 
@@ -214,6 +343,8 @@ export const handler = async (
       body: JSON.stringify({
         ...updated,
         status: deriveParticipantStatus(updated),
+        passwordResetTriggered,
+        passwordResetEmailSent,
       }),
     };
   } catch (error) {

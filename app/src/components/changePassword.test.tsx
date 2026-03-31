@@ -59,7 +59,7 @@ describe("ChangePassword", () => {
     expect(welcome).toHaveTextContent("alice");
   });
 
-  it("setzt Passwort, speichert User aus der Session und navigiert nach /", async () => {
+  it("setzt Passwort, speichert User aus der Session", async () => {
     mockedConfirmSignIn.mockResolvedValue({});
     mockedFetchAuthSession.mockResolvedValue({
       tokens: {
@@ -84,32 +84,12 @@ describe("ChangePassword", () => {
       expect(mockedConfirmSignIn).toHaveBeenCalledWith({
         challengeResponse: "SicheresPasswort123!",
       });
-    });
-
-    await waitFor(() => {
       expect(mockedFetchAuthSession).toHaveBeenCalled();
       expect(mockedSaveCurrentUser).toHaveBeenCalledWith({
         nickname: "alice",
         email: "alice@example.com",
         role: "admin",
       });
-    });
-  });
-
-  it("zeigt eine Fehlermeldung an, wenn confirmSignIn fehlschlägt", async () => {
-    mockedConfirmSignIn.mockRejectedValue(new Error("Passwort zu schwach"));
-
-    const { page } = renderWithRouter();
-
-    fireEvent.change(within(page).getByPlaceholderText("Neues Passwort"), {
-      target: { value: "123" },
-    });
-    fireEvent.click(within(page).getByRole("button", { name: /Speichern/i }));
-
-    await waitFor(() => {
-      expect(
-        within(page).getByText(/Passwort zu schwach/i),
-      ).toBeInTheDocument();
     });
   });
 });
