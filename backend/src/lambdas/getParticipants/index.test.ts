@@ -341,6 +341,37 @@ describe("getParticipants Lambda", () => {
     expect(result.statusCode).toBe(403);
   });
 
+  test("allows admin with mixed-case userId from token context", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "Karin" },
+        role: { S: "admin" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        name: { S: "Demo" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [{ tenantId: { S: "default-tenant" }, userId: { S: "alice" } }],
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [{ tenantId: { S: "default-tenant" }, userId: { S: "alice" }, role: { S: "participant" } }],
+    });
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "Karin" } } as any,
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(Array.isArray(body)).toBe(true);
+  });
+
   test("returns 403 for participant role", async () => {
     mockSend.mockResolvedValueOnce({
       Item: {

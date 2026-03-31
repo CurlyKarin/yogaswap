@@ -20,7 +20,7 @@ export function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
     null;
   const userId =
     typeof userIdRaw === "string" && userIdRaw.trim()
-      ? userIdRaw.trim().toLowerCase()
+      ? userIdRaw.trim()
       : null;
 
   const headers = event.headers || {};
