@@ -162,6 +162,27 @@ locals {
       }
       s3_actions   = []
       s3_resources = []
+      additional_policies = [
+        {
+          Effect = "Allow"
+          Action = [
+            "cognito-idp:AdminUpdateUserAttributes",
+            "cognito-idp:AdminUserGlobalSignOut",
+            "cognito-idp:AdminSetUserPassword"
+          ]
+          Resource = aws_cognito_user_pool.yogaswap.arn
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail"]
+          Resource = "*"
+        }
+      ]
+      environment = {
+        USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
+        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = var.ses_source_email
+      }
     },
     "delete_participant" = {
       name             = "delete-participant"
@@ -219,6 +240,37 @@ locals {
         SES_SOURCE_EMAIL = var.ses_source_email # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
       }
     },
+    "reset_participant_password" = {
+      name             = "reset-participant-password"
+      file_name        = "resetParticipantPassword.zip"
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
+      tables = {
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+      additional_policies = [
+        {
+          Effect = "Allow"
+          Action = [
+            "cognito-idp:AdminSetUserPassword"
+          ]
+          Resource = aws_cognito_user_pool.yogaswap.arn
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail"]
+          Resource = "*"
+        }
+      ]
+      environment = {
+        USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
+        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = var.ses_source_email
+      }
+    },
     "get_tenant_context" = {
       name      = "get-tenant-context"
       file_name = "getTenantContext.zip"
@@ -255,6 +307,7 @@ locals {
     "GET /courses"                               = "get_courses"
     "GET /participants"                          = "get_participants"
     "POST /participants"                         = "create_participants"
+    "POST /participants/{userId}/password-reset" = "reset_participant_password"
     "PUT /participants/{userId}"                 = "update_participant"
     "DELETE /participants/{userId}"              = "delete_participant"
     "GET /tenant-context"                        = "get_tenant_context"
@@ -279,6 +332,7 @@ module "yogaswap_api" {
     "PUT /participants/{userId}",
     "DELETE /participants/{userId}",
     "POST /participants",
+    "POST /participants/{userId}/password-reset",
     "GET /tenant-context",
   ]
 }

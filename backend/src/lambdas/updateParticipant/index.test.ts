@@ -11,7 +11,29 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
   };
 });
 
+jest.mock("@aws-sdk/client-cognito-identity-provider", () => {
+  const mockSend = jest.fn();
+  return {
+    CognitoIdentityProviderClient: jest.fn(() => ({ send: mockSend })),
+    AdminUpdateUserAttributesCommand: jest.fn((input) => input),
+    AdminUserGlobalSignOutCommand: jest.fn((input) => input),
+    AdminSetUserPasswordCommand: jest.fn((input) => input),
+    mockSend,
+  };
+});
+
+jest.mock("@aws-sdk/client-ses", () => {
+  const mockSend = jest.fn();
+  return {
+    SESClient: jest.fn(() => ({ send: mockSend })),
+    SendEmailCommand: jest.fn((input) => input),
+    mockSend,
+  };
+});
+
 const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
+const { mockSend: cognitoMockSend } = jest.requireMock("@aws-sdk/client-cognito-identity-provider");
+const { mockSend: sesMockSend } = jest.requireMock("@aws-sdk/client-ses");
 
 describe("updateParticipant Lambda", () => {
   const OLD_ENV = process.env;
@@ -23,8 +45,13 @@ describe("updateParticipant Lambda", () => {
       PARTICIPANTS_TABLE: "test-participants",
       MEMBERSHIPS_TABLE: "test-memberships",
       TENANTS_TABLE: "test-tenants",
+      USER_POOL_ID: "test-user-pool-id",
+      BASE_URL: "https://yogaswap.example.com",
+      SES_SOURCE_EMAIL: "support@yogaswap.de",
     };
     mockSend.mockReset();
+    cognitoMockSend.mockReset();
+    sesMockSend.mockReset();
   });
 
   afterAll(() => {
@@ -53,6 +80,27 @@ describe("updateParticipant Lambda", () => {
         Item: {
           tenantId: { S: "default-tenant" },
           name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
         },
       })
       .mockResolvedValueOnce({
@@ -189,6 +237,13 @@ describe("updateParticipant Lambda", () => {
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      }) // actor role check for forced reset
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
         },
       });
@@ -319,6 +374,179 @@ describe("updateParticipant Lambda", () => {
     expect(JSON.parse(result.body).status).toBe("active");
     // Only: 1) existing participant lookup + 2) PutItem
     expect(mockSend).toHaveBeenCalledTimes(2);
+  });
+
+  test("syncs email to Cognito for users with login profile", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          authUserId: { S: "sub-123" },
+          cognitoUsername: { S: "Alice" },
+        },
+      })
+      .mockResolvedValueOnce({});
+    cognitoMockSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        body: JSON.stringify({ email: "alice.new@example.com" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(cognitoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        UserPoolId: "test-user-pool-id",
+        Username: "Alice",
+        UserAttributes: expect.arrayContaining([
+          { Name: "email", Value: "alice.new@example.com" },
+          { Name: "email_verified", Value: "true" },
+        ]),
+      }),
+    );
+    expect(cognitoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        UserPoolId: "test-user-pool-id",
+        Username: "Alice",
+      }),
+    );
+  });
+
+  test("returns 502 when Cognito email sync fails", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          authUserId: { S: "sub-123" },
+        },
+      });
+    cognitoMockSend.mockRejectedValueOnce(new Error("cognito down"));
+
+    const result = await handler(
+      makeEvent({
+        body: JSON.stringify({ email: "alice.new@example.com" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(502);
+    expect(JSON.parse(result.body).error).toMatch(/sync email/i);
+  });
+
+  test("forces password reset on email change when requested", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      }) // canManage membership lookup
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      }) // canManage tenant lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      }) // actor role check for forced reset
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          authUserId: { S: "sub-123" },
+          cognitoUsername: { S: "Alice" },
+        },
+      }) // existing participant
+      .mockResolvedValueOnce({}); // participants PutItem
+    cognitoMockSend.mockResolvedValue({});
+    sesMockSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        body: JSON.stringify({
+          email: "alice.new@example.com",
+          forcePasswordResetOnEmailChange: true,
+        }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.passwordResetTriggered).toBe(true);
+    expect(body.passwordResetEmailSent).toBe(true);
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Destination: { ToAddresses: ["alice.new@example.com"] },
+      }),
+    );
+  });
+
+  test("returns 403 when non-admin requests forced password reset on email change", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // canManage membership lookup
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      }) // canManage tenant lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }); // actor role check for forced reset
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "instructor-1" } } as any,
+        body: JSON.stringify({
+          email: "alice.new@example.com",
+          forcePasswordResetOnEmailChange: true,
+        }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toMatch(/Only admins can force password reset/i);
   });
 
   test("rejects self-linking when other fields are present", async () => {

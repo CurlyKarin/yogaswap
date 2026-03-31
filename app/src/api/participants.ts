@@ -24,6 +24,7 @@ export type ParticipantWithStatus = ParticipantProfile & { status: ParticipantSt
 export interface UpdateParticipantRequest {
   email?: string | null;
   role?: UserRole;
+  forcePasswordResetOnEmailChange?: boolean;
   settings?: ParticipantSettings;
   inviteSentAt?: string | null;
   authUserId?: string | null;
@@ -103,6 +104,22 @@ export interface DeleteParticipantResponse {
 export async function deleteParticipant(userId: string): Promise<DeleteParticipantResponse> {
   const response = await axios.delete<DeleteParticipantResponse>(
     `/participants/${encodeURIComponent(userId)}`,
+  );
+  return response.data;
+}
+
+export interface ResetParticipantPasswordResponse {
+  success: boolean;
+  emailSent: boolean;
+  userId: string;
+  email?: string;
+}
+
+export async function resetParticipantPassword(
+  userId: string,
+): Promise<ResetParticipantPasswordResponse> {
+  const response = await axios.post<ResetParticipantPasswordResponse>(
+    `/participants/${encodeURIComponent(userId)}/password-reset`,
   );
   return response.data;
 }

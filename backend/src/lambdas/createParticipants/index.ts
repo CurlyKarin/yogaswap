@@ -390,7 +390,7 @@ export const handler = async (event: any) => {
       Source: sesSourceEmail,
       Destination: { ToAddresses: [emailNormalized] },
       Message: {
-        Subject: { Data: "YogaSwap Einladung" },
+        Subject: { Data: reactivated ? "YogaSwap Reaktivierung" : "YogaSwap Einladung" },
         Body: { Html: { Data: emailHtml } }
       }
     }));

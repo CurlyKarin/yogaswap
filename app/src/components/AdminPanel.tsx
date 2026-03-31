@@ -4,6 +4,7 @@ import {
   deleteParticipant,
   getParticipants,
   inviteUser,
+  resetParticipantPassword,
   updateParticipant,
   type ParticipantWithStatus,
 } from "../api/participants";
@@ -47,6 +48,8 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingEmail, setEditingEmail] = useState("");
   const [editingRole, setEditingRole] = useState<UserRole>("participant");
+  const [editingForcePasswordResetOnEmailChange, setEditingForcePasswordResetOnEmailChange] =
+    useState(false);
   const [editingSaving, setEditingSaving] = useState(false);
   const [editingError, setEditingError] = useState("");
 
@@ -230,6 +233,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setEditingUserId(p.userId);
     setEditingEmail(p.email ?? "");
     setEditingRole(p.role ?? "participant");
+    setEditingForcePasswordResetOnEmailChange(false);
     setEditingError("");
     setEditingSaving(false);
   };
@@ -247,10 +251,28 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         return;
       }
       const nextEmail = trimmed.length > 0 ? trimmed : null;
+      const original = safeParticipants.find((p) => p.userId === editingUserId);
+      const originalEmail = (original?.email ?? "").trim();
+      const nextEmailText = (nextEmail ?? "").trim();
+      const emailChanged = originalEmail.toLowerCase() !== nextEmailText.toLowerCase();
+      const shouldForcePasswordReset =
+        emailChanged &&
+        original?.status === "active" &&
+        editingForcePasswordResetOnEmailChange &&
+        nextEmailText.length > 0;
 
-      await updateParticipant(
+      const updated = await updateParticipant(
         editingUserId,
-        canEditRoles ? { email: nextEmail, role: editingRole } : { email: nextEmail },
+        canEditRoles
+          ? {
+              email: nextEmail,
+              role: editingRole,
+              ...(shouldForcePasswordReset ? { forcePasswordResetOnEmailChange: true } : {}),
+            }
+          : {
+              email: nextEmail,
+              ...(shouldForcePasswordReset ? { forcePasswordResetOnEmailChange: true } : {}),
+            },
       );
 
       // Lokales Update reicht für diesen Zwischen-Use-Case.
@@ -267,6 +289,18 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       );
 
       setEditingUserId(null);
+      if (shouldForcePasswordReset) {
+        const resetEmailSent = (updated as { passwordResetEmailSent?: boolean }).passwordResetEmailSent;
+        setBulkInviteResult(
+          resetEmailSent
+            ? `E-Mail aktualisiert. Passwort-Reset-Mail gesendet an ${nextEmailText}.`
+            : "E-Mail aktualisiert. Passwort-Reset wurde erzwungen, aber die E-Mail konnte nicht versendet werden.",
+        );
+      } else if (emailChanged && original?.status === "active") {
+        setBulkInviteResult(
+          "E-Mail aktualisiert. Aktive Sessions wurden aus Sicherheitsgründen beendet.",
+        );
+      }
     } catch (err) {
       console.error("Failed to update participant email", err);
       setEditingError("E-Mail konnte nicht gespeichert werden.");
@@ -410,6 +444,35 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       console.error("Failed to send invite", err);
       setInviteResultByUserId((prev) => ({ ...prev, [userId]: "Fehler beim Einladen." }));
       return { ok: false as const };
+    } finally {
+      setInviteSendingByUserId((prev) => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  const sendPasswordResetForParticipant = async (p: ParticipantWithStatus) => {
+    if (!p.email) return;
+    if (p.status !== "active") return;
+
+    const userId = p.userId;
+    setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
+    setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
+    try {
+      const result = await resetParticipantPassword(userId);
+      if (result.emailSent) {
+        setInviteResultByUserId((prev) => ({
+          ...prev,
+          [userId]: `Passwort-Reset-Mail gesendet an ${p.email}.`,
+        }));
+      } else {
+        setInviteResultByUserId((prev) => ({
+          ...prev,
+          [userId]: "Passwort-Reset angestoßen, aber E-Mail konnte nicht versendet werden.",
+        }));
+      }
+      await refreshParticipants();
+    } catch (err) {
+      console.error("Failed to reset password", err);
+      setInviteResultByUserId((prev) => ({ ...prev, [userId]: "Fehler beim Passwort-Reset." }));
     } finally {
       setInviteSendingByUserId((prev) => ({ ...prev, [userId]: false }));
     }
@@ -654,6 +717,24 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                           ? "Erneut"
                           : "Einladen"}
                     </button>
+                    {canEditRoles && (
+                      <button
+                        type="button"
+                        title={!p.email ? "E-Mail fehlt" : p.status !== "active" ? "Nur für registrierte Nutzer" : "Passwort zurücksetzen"}
+                        aria-label={`Passwort zurücksetzen ${p.userId}`}
+                        disabled={
+                          !p.email ||
+                          p.status !== "active" ||
+                          !!inviteSendingByUserId[p.userId] ||
+                          participantsLoading ||
+                          editingSaving ||
+                          createSaving
+                        }
+                        onClick={() => sendPasswordResetForParticipant(p)}
+                      >
+                        PW Reset
+                      </button>
+                    )}
                     <button
                       type="button"
                       title={`Bearbeiten ${p.userId}`}
@@ -725,6 +806,17 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                     </option>
                   ))}
                 </select>
+              )}
+              {canEditRoles && (
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={editingForcePasswordResetOnEmailChange}
+                    onChange={(e) => setEditingForcePasswordResetOnEmailChange(e.target.checked)}
+                    disabled={editingSaving}
+                  />
+                  Bei E-Mail-Wechsel Passwort-Reset erzwingen (nur bei registrierten Nutzern)
+                </label>
               )}
               {editingError && <p style={{ color: "crimson", margin: 0 }}>{editingError}</p>}
             </div>
