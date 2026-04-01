@@ -70,6 +70,13 @@ describe("deleteParticipant Lambda", () => {
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      }) // actor role check
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
           email: { S: "alice@example.com" },
         },
@@ -109,6 +116,13 @@ describe("deleteParticipant Lambda", () => {
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
           authUserId: { S: "sub-123" },
           email: { S: "alice@example.com" },
@@ -127,7 +141,7 @@ describe("deleteParticipant Lambda", () => {
       notificationEmailSent: true,
     });
     // No scan and no profile delete in this case.
-    expect(mockSend).toHaveBeenCalledTimes(4);
+    expect(mockSend).toHaveBeenCalledTimes(5);
     expect(sesMockSend).toHaveBeenCalledTimes(1);
   });
 
@@ -144,6 +158,13 @@ describe("deleteParticipant Lambda", () => {
         Item: {
           tenantId: { S: "default-tenant" },
           name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
         },
       })
       .mockResolvedValueOnce({
@@ -170,6 +191,36 @@ describe("deleteParticipant Lambda", () => {
 
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(403);
+  });
+
+  test("returns 403 when actor is instructor (not admin)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // canManage membership lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }) // canManage tenant lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }); // explicit role check
+
+    const result = await handler(
+      makeEvent({ requestContext: { authorizer: { principalId: "instructor-1" } } as any }),
+    );
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toMatch(/Only admins can delete participants/);
   });
 });
 

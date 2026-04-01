@@ -54,6 +54,20 @@ export const handler = async (
     if (!canManage) {
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
+    const actorMembershipResp = await client.send(
+      new GetItemCommand({
+        TableName: membershipsTable,
+        Key: {
+          tenantId: { S: tenantId },
+          userId: { S: actorUserId },
+        },
+        ConsistentRead: true,
+      }),
+    );
+    const actorRole = actorMembershipResp.Item?.role?.S;
+    if (actorRole !== "admin") {
+      return { statusCode: 403, body: JSON.stringify({ error: "Only admins can delete participants" }) };
+    }
 
     const existingResp = await client.send(
       new GetItemCommand({
