@@ -14,6 +14,22 @@ YogaSwap ermöglicht Yogastudios in einer Multi-Tenant-Architektur die Verwaltun
 
 ---
 
+## 🧠 Hintergrund
+
+Die Idee zu YogaSwap entstand aus einem konkreten Problem aus der Praxis: Eine Freundin, die als Yogatrainerin arbeitet, hat sich darüber beschwert, wie zeitaufwendig es ist, Absagen zu koordinieren und passende Ersatztermine zu finden – oft verbunden mit vielen Abstimmungen über WhatsApp.
+
+Viele Teilnehmende fragen nach Nachholterminen, aber die verfügbaren Alternativen passen nicht immer. Dadurch bleiben Plätze ungenutzt, obwohl gleichzeitig Nachfrage besteht. Der Wunsch nach einer Lösung war zuerst nur eine Notiz im Hinterkopf und wurde später zur Grundlage dieses Projekts.
+
+Gestartet ist YogaSwap als einfache React-Anwendung, statisch ausgeliefert über S3. Die Zielarchitektur mit AWS Lambda, API Gateway, DynamoDB sowie S3 und CloudFront für das Frontend war dabei von Anfang an angelegt.
+
+Im weiteren Verlauf wurde die Anwendung Schritt für Schritt ausgebaut: Logik in AWS Lambda ausgelagert, Datenmodelle konsequent in DynamoDB überführt und später um AWS Cognito (Authentifizierung) sowie AWS SES (E-Mail-Benachrichtigungen) ergänzt.
+
+Durch diese Entwicklung hat sich gezeigt, dass YogaSwap nicht nur als Einzel-Lösung funktioniert, sondern als Multi-Tenant-fähige SaaS-Plattform weitergedacht werden kann – ein Architektur- und Produktmodell, mit dem ich zu Beginn noch keine praktische Erfahrung hatte.
+
+Bei der Ausarbeitung habe ich AI bewusst als Sparringspartner genutzt, um Entscheidungen zu reflektieren, Ansätze zu vergleichen und die Architektur iterativ weiterzuentwickeln.
+
+---
+
 ## ✨ Features
 
 - **Kursplatz-Tausch** – Teilnehmende können Kursplätze untereinander tauschen
