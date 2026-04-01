@@ -53,7 +53,7 @@ describe("AdminPanel", () => {
       expect(within(panel).getByLabelText("Status: ohne Login")).toBeInTheDocument();
       expect(within(panel).getByLabelText("Einladen alice")).not.toBeDisabled();
       expect(within(panel).getByLabelText("Bearbeiten alice")).not.toBeDisabled();
-      expect(within(panel).getByLabelText("Löschen alice")).not.toBeDisabled();
+      expect(within(panel).queryByLabelText("Löschen alice")).not.toBeInTheDocument();
     });
   });
 
@@ -204,11 +204,7 @@ describe("AdminPanel", () => {
       expect(within(panel).getByText("alice")).toBeInTheDocument();
     });
     expect(within(panel).queryByLabelText("Passwort zurücksetzen alice")).not.toBeInTheDocument();
-    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
-    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
-    expect(
-      within(dialog).queryByLabelText(/Bei E-Mail-Wechsel Passwort-Reset erzwingen/i),
-    ).not.toBeInTheDocument();
+    expect(within(panel).getByLabelText("Bearbeiten alice")).toBeDisabled();
   });
 
   it("sendet Einladungen gesammelt für ausgewählte Teilnehmer", async () => {
@@ -503,6 +499,44 @@ describe("AdminPanel", () => {
     await waitFor(() => {
       expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", { email: "alice.new@example.com" });
       expect(within(panel).getByText("alice.new@example.com")).toBeInTheDocument();
+    });
+  });
+
+  it("Trainer darf E-Mail für eingeladenen Teilnehmer korrigieren", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "wrong@example.com",
+        status: "invited",
+      },
+    ]);
+    mockedUpdateParticipant.mockResolvedValueOnce({
+      tenantId: "default-tenant",
+      userId: "alice",
+      role: "participant",
+      email: "alice@example.com",
+      status: "invited",
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByLabelText("Bearbeiten alice")).not.toBeDisabled();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
+      target: { value: "alice@example.com" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", { email: "alice@example.com" });
     });
   });
 

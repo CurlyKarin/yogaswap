@@ -119,7 +119,7 @@ describe("updateParticipant Lambda", () => {
     expect(body.email).toBe("alice+new@example.com");
     expect(body.userId).toBe("alice");
     expect(body.status).toBe("no_login");
-    expect(mockSend).toHaveBeenCalledTimes(4);
+    expect(mockSend).toHaveBeenCalledTimes(5);
   });
 
   test("updates participant role when actor is admin", async () => {
@@ -215,6 +215,13 @@ describe("updateParticipant Lambda", () => {
       })
       .mockResolvedValueOnce({
         Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
       })
       .mockResolvedValueOnce({ Item: undefined });
     const result = await handler(makeEvent());
@@ -394,6 +401,13 @@ describe("updateParticipant Lambda", () => {
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
           email: { S: "alice@example.com" },
           authUserId: { S: "sub-123" },
@@ -441,6 +455,13 @@ describe("updateParticipant Lambda", () => {
         Item: {
           tenantId: { S: "default-tenant" },
           name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
         },
       })
       .mockResolvedValueOnce({
@@ -547,6 +568,85 @@ describe("updateParticipant Lambda", () => {
 
     expect(result.statusCode).toBe(403);
     expect(JSON.parse(result.body).error).toMatch(/Only admins can force password reset/i);
+  });
+
+  test("allows instructor to update email for invited participant", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // canManage membership lookup
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      }) // canManage tenant lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // actor role check (email change)
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "old@example.com" },
+          inviteSentAt: { S: "2026-01-01T12:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({});
+    cognitoMockSend.mockResolvedValue({});
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "instructor-1" } } as any,
+        body: JSON.stringify({ email: "new@example.com" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+  });
+
+  test("returns 403 when instructor tries to change email of active participant", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // canManage membership lookup
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      }) // canManage tenant lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // actor role check (email change)
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "old@example.com" },
+          authUserId: { S: "sub-123" },
+        },
+      });
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "instructor-1" } } as any,
+        body: JSON.stringify({ email: "new@example.com" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toMatch(/Only admins can change email of registered participants/i);
   });
 
   test("rejects self-linking when other fields are present", async () => {
