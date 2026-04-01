@@ -129,7 +129,8 @@ export const handler = async (
       body.forcePasswordResetOnEmailChange === true;
 
     let actorMembershipRole: string | undefined;
-    if (requestsRoleChange || requestsForcedPasswordReset) {
+    const requestsEmailChange = Object.prototype.hasOwnProperty.call(body, "email");
+    if (requestsRoleChange || requestsForcedPasswordReset || requestsEmailChange) {
       const actorMembershipResp = await client.send(
         new GetItemCommand({
           TableName: membershipsTable,
@@ -177,6 +178,20 @@ export const handler = async (
 
     const existing = unmarshall(existingResp.Item) as ParticipantProfile;
     const existingCognitoUsername = existingResp.Item.cognitoUsername?.S;
+    const existingStatus = deriveParticipantStatus(existing);
+    if (requestsEmailChange) {
+      const requestedEmail = typeof body.email === "string" ? body.email.trim() : body.email;
+      const currentEmail = (existing.email ?? "").trim().toLowerCase();
+      const nextEmail = (requestedEmail ?? "").trim().toLowerCase();
+      const emailChanged = currentEmail !== nextEmail;
+      const hasAuthLink = !!existing.authUserId;
+      if (emailChanged && actorMembershipRole !== "admin" && (existingStatus === "active" || hasAuthLink)) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({ error: "Only admins can change email of registered participants" }),
+        };
+      }
+    }
     let passwordResetTriggered = false;
     let passwordResetEmailSent = false;
     const updated: ParticipantProfile = {

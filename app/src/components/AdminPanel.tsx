@@ -237,6 +237,8 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setEditingError("");
     setEditingSaving(false);
   };
+  const canEditEmailForParticipant = (p: ParticipantWithStatus): boolean =>
+    canEditRoles || (p.status !== "active" && !p.authUserId);
 
   const saveEditEmail = async () => {
     if (!editingUserId) return;
@@ -255,6 +257,10 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       const originalEmail = (original?.email ?? "").trim();
       const nextEmailText = (nextEmail ?? "").trim();
       const emailChanged = originalEmail.toLowerCase() !== nextEmailText.toLowerCase();
+      if (!canEditRoles && original?.status === "active" && emailChanged) {
+        setEditingError("E-Mail von registrierten Teilnehmern kann nur von Admins geändert werden.");
+        return;
+      }
       const shouldForcePasswordReset =
         emailChanged &&
         original?.status === "active" &&
@@ -737,29 +743,40 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                     )}
                     <button
                       type="button"
-                      title={`Bearbeiten ${p.userId}`}
+                      title={
+                        !canEditEmailForParticipant(p)
+                          ? "E-Mail von registrierten Teilnehmern nur für Admin"
+                          : `Bearbeiten ${p.userId}`
+                      }
                       aria-label={`Bearbeiten ${p.userId}`}
-                      disabled={participantsLoading || editingSaving || !!deleteRunningByUserId[p.userId]}
+                      disabled={
+                        participantsLoading ||
+                        editingSaving ||
+                        !!deleteRunningByUserId[p.userId] ||
+                        !canEditEmailForParticipant(p)
+                      }
                       onClick={() => startEditEmail(p)}
                     >
                       <Pencil size={14} aria-hidden="true" />
                     </button>
-                    <button
-                      type="button"
-                      title={`Löschen ${p.userId}`}
-                      aria-label={`Löschen ${p.userId}`}
-                      disabled={
-                        participantsLoading ||
-                        editingSaving ||
-                        createSaving ||
-                        bulkInviteSending ||
-                        !!inviteSendingByUserId[p.userId] ||
-                        !!deleteRunningByUserId[p.userId]
-                      }
-                      onClick={() => setDeleteTarget(p)}
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                    </button>
+                    {canEditRoles && (
+                      <button
+                        type="button"
+                        title={`Löschen ${p.userId}`}
+                        aria-label={`Löschen ${p.userId}`}
+                        disabled={
+                          participantsLoading ||
+                          editingSaving ||
+                          createSaving ||
+                          bulkInviteSending ||
+                          !!inviteSendingByUserId[p.userId] ||
+                          !!deleteRunningByUserId[p.userId]
+                        }
+                        onClick={() => setDeleteTarget(p)}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    )}
                   </div>
                   {inviteResultByUserId[p.userId] && (
                     <div style={{ gridColumn: "1 / -1", color: "#374151", fontSize: 12 }}>
