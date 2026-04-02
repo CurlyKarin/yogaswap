@@ -27,6 +27,7 @@ export interface UpdateParticipantRequest {
   forcePasswordResetOnEmailChange?: boolean;
   settings?: ParticipantSettings;
   inviteSentAt?: string | null;
+  inviteCompletedAt?: string | null;
   authUserId?: string | null;
 }
 

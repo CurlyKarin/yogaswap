@@ -164,6 +164,31 @@ resource "aws_cloudfront_distribution" "spa" {
     compress = true
   }
 
+  # Public Auth Endpoint (token -> Cognito code)
+  ordered_cache_behavior {
+    path_pattern     = "/auth/password-reset/from-token*"
+    target_origin_id = "api-gateway-backend"
+    # CloudFront erlaubt hier nur vordefinierte Sets:
+    # - [HEAD, GET] oder [HEAD, GET, OPTIONS] oder das "Full"-Set inkl. POST/PUT/PATCH/DELETE.
+    allowed_methods  = ["HEAD", "DELETE", "POST", "GET", "OPTIONS", "PUT", "PATCH"]
+    cached_methods   = ["GET", "HEAD"]
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = true
+      cookies {
+        forward = "none"
+      }
+      headers = [
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+      ]
+    }
+
+    compress = true
+  }
+
   default_cache_behavior {
     allowed_methods  = ["GET", "HEAD"]
     cached_methods   = ["GET", "HEAD"]

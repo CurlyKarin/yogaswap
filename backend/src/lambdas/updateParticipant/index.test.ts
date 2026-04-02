@@ -317,12 +317,45 @@ describe("updateParticipant Lambda", () => {
 
     const resultActive = await handler(
       makeEvent({
-        body: JSON.stringify({ authUserId: "cognito-sub-123" }),
+        body: JSON.stringify({
+          authUserId: "cognito-sub-123",
+          inviteCompletedAt: "2026-01-02T12:00:00.000Z",
+        }),
       }),
     );
 
     expect(resultActive.statusCode).toBe(200);
     expect(JSON.parse(resultActive.body).status).toBe("active");
+
+    mockSend.mockReset();
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          inviteSentAt: { S: "2026-01-01T12:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const resultStuckSub = await handler(
+      makeEvent({
+        body: JSON.stringify({ authUserId: "cognito-sub-only" }),
+      }),
+    );
+
+    expect(resultStuckSub.statusCode).toBe(200);
+    expect(JSON.parse(resultStuckSub.body).status).toBe("invited");
   });
 
   test("returns 403 when membership is missing", async () => {

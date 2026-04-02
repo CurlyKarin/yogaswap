@@ -95,6 +95,19 @@ module "participants_table" {
   ]
 }
 
+# Auth Tokens (Invite/Recovery): PK = tenantId, SK = token
+# Speichert One-Time-Token inkl. Ablauf und usedAt (ohne TTL: wird serverseitig validiert).
+module "auth_tokens_table" {
+  source    = "../modules/dynamodb"
+  name      = "${var.project}-auth-tokens-table"
+  hash_key  = "tenantId"
+  range_key = "token"
+  attributes = [
+    { name = "tenantId", type = "S" },
+    { name = "token", type = "S" }
+  ]
+}
+
 output "table_names" {
   value = [
     module.swaps_table.table_name,
@@ -102,6 +115,7 @@ output "table_names" {
     module.courses_table.table_name,
     module.tenants_table.table_name,
     module.memberships_table.table_name,
-    module.participants_table.table_name
+    module.participants_table.table_name,
+    module.auth_tokens_table.table_name
   ]
 }

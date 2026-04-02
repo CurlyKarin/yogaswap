@@ -1,6 +1,14 @@
-import { AdminCreateUserCommand, AdminAddUserToGroupCommand, CognitoIdentityProviderClient, AdminSetUserPasswordCommand} from "@aws-sdk/client-cognito-identity-provider";
+import {
+  AdminCreateUserCommand,
+  AdminAddUserToGroupCommand,
+  CognitoIdentityProviderClient,
+  AdminSetUserPasswordCommand,
+  AdminUpdateUserAttributesCommand,
+  AdminGetUserCommand,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand, ScanCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
+import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 
 const cognito = new CognitoIdentityProviderClient({});
@@ -24,12 +32,18 @@ function generateSafeTempPassword(length = 10) {
   return pw;
 }
 
+function generateOneTimeToken(bytes = 32) {
+  // base64url => keine "/" oder "+" im Token (besser für URL-Parameter).
+  return crypto.randomBytes(bytes).toString("base64url");
+}
+
 async function saveParticipantProfile(params: {
   tenantId: string;
   userId: string;
   email?: string;
   inviteSentAt?: string;
   cognitoUsername?: string;
+  authUserId?: string;
 }) {
   if (!process.env.PARTICIPANTS_TABLE) {
     console.warn("PARTICIPANTS_TABLE environment variable not set, skipping participant profile write.");
@@ -72,6 +86,9 @@ async function saveParticipantProfile(params: {
   if (params.cognitoUsername && params.cognitoUsername.trim()) {
     item.cognitoUsername = { S: params.cognitoUsername.trim() };
   }
+  if (params.authUserId && params.authUserId.trim()) {
+    item.authUserId = { S: params.authUserId.trim() };
+  }
 
   await dynamodb.send(
     new PutItemCommand({
@@ -79,6 +96,34 @@ async function saveParticipantProfile(params: {
       Item: item,
     }),
   );
+}
+
+/** Cognito liefert den kanonischen Username + sub; beides kann von Dynamo (z. B. nach Altlasten) abweichen. */
+async function resolveCognitoUsernameAndSub(
+  userPoolId: string,
+  primaryUsername: string,
+  fallbackUsername: string,
+): Promise<{ username: string; sub?: string } | null> {
+  const candidates = [primaryUsername, fallbackUsername].filter(
+    (v, i, a) => v.trim() && a.indexOf(v) === i,
+  );
+  for (const candidate of candidates) {
+    try {
+      const resp = await cognito.send(
+        new AdminGetUserCommand({
+          UserPoolId: userPoolId,
+          Username: candidate,
+        }),
+      );
+      const canonical = resp.Username?.trim();
+      if (!canonical) continue;
+      const sub = resp.UserAttributes?.find((a) => a.Name === "sub")?.Value?.trim();
+      return { username: canonical, sub: sub || undefined };
+    } catch {
+      // nächster Kandidat (Groß-/Kleinschreibung, veralteter cognitoUsername in Dynamo)
+    }
+  }
+  return null;
 }
 
 export const handler = async (event: any) => {
@@ -96,6 +141,8 @@ export const handler = async (event: any) => {
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
   const { email, nickname, role } = body ?? {};
   const tenantId = getTenantId(event);
+  const tokensTable = process.env.AUTH_TOKENS_TABLE;
+  const tokenInviteEnabled = !!tokensTable;
 
   const emailNormalized = typeof email === "string" ? email.trim() : "";
   const hasEmail = emailNormalized.length > 0;
@@ -237,9 +284,10 @@ export const handler = async (event: any) => {
     };
   }
 
-  // raw temporary password (safe characters)
+  // Bootstrap password for Cognito admin operations.
+  // In token-based flow we keep it internal and then trigger the code flow from /invite.
   const rawPassword = generateSafeTempPassword(10) + "A1"; // ensure mix / length
-  // Do NOT put the password in the URL; include in the email body only.
+  // Do NOT put passwords in URLs.
 
   const userId = canonicalUserId;
 
@@ -258,6 +306,19 @@ export const handler = async (event: any) => {
       ],
       MessageAction: "SUPPRESS", // Keine automatische E-Mail
     }));
+
+    // Token-based invite flow relies on reset code endpoint (AdminResetUserPassword).
+    // For reliability, move newly created users to CONFIRMED with an internal password.
+    if (tokenInviteEnabled) {
+      await cognito.send(
+        new AdminSetUserPasswordCommand({
+          UserPoolId: process.env.USER_POOL_ID!,
+          Username: cognitoUsername,
+          Password: rawPassword,
+          Permanent: true,
+        }),
+      );
+    }
   } catch (err: any) {
     // If user exists, set a new temporary password (so admin can re-invite)
     if (err?.name === "UsernameExistsException") {
@@ -300,8 +361,31 @@ export const handler = async (event: any) => {
       }
 
       if (hasLoginProfile) {
-        reactivated = true;
-        console.log("Username exists with authUserId; reactivating without password reset.");
+        if (tokenInviteEnabled) {
+          // Bereits registriert: gleicher Token-/Invite-Link wie Neulinge (AdminResetUserPassword erst nach Klick).
+          // Ohne diesen Pfad: reactivated + kein Token → keine E-Mail mit Link, UI-Status oft „active“ → Einladen-Button aus.
+          reactivated = false;
+          console.log("Username exists with login; resending token-based invite (recovery).");
+          try {
+            await cognito.send(
+              new AdminUpdateUserAttributesCommand({
+                UserPoolId: process.env.USER_POOL_ID!,
+                Username: cognitoUsername,
+                UserAttributes: [
+                  { Name: "email", Value: emailNormalized },
+                  { Name: "email_verified", Value: "true" },
+                  { Name: "nickname", Value: nicknameRaw },
+                ],
+              }),
+            );
+          } catch (err2: any) {
+            console.error("AdminUpdateUserAttributes failed (registered user resend):", err2);
+            return { statusCode: 500, body: JSON.stringify({ error: "Failed to prepare existing user" }) };
+          }
+        } else {
+          reactivated = true;
+          console.log("Username exists with authUserId; reactivating without password reset.");
+        }
       } else {
         console.log("Username exists; setting a new temporary password via AdminSetUserPassword");
         try {
@@ -309,11 +393,24 @@ export const handler = async (event: any) => {
             UserPoolId: process.env.USER_POOL_ID!,
             Username: cognitoUsername,
             Password: rawPassword,
-            Permanent: false // user must change on next sign-in
+            // In token mode we need a CONFIRMED user so reset code can be issued reliably.
+            Permanent: tokenInviteEnabled,
           }));
+          // Ensure reset code can be delivered to the currently entered invite email.
+          await cognito.send(
+            new AdminUpdateUserAttributesCommand({
+              UserPoolId: process.env.USER_POOL_ID!,
+              Username: cognitoUsername,
+              UserAttributes: [
+                { Name: "email", Value: emailNormalized },
+                { Name: "email_verified", Value: "true" },
+                { Name: "nickname", Value: nicknameRaw },
+              ],
+            }),
+          );
         } catch (err2: any) {
-          console.error("AdminSetUserPassword failed:", err2);
-          return { statusCode: 500, body: JSON.stringify({ error: "Failed to reset password" }) };
+          console.error("AdminSetUserPassword/AdminUpdateUserAttributes failed:", err2);
+          return { statusCode: 500, body: JSON.stringify({ error: "Failed to prepare existing user" }) };
         }
       }
     } else {
@@ -354,12 +451,70 @@ export const handler = async (event: any) => {
     // aber wir loggen es deutlich.
   }
 
+  // Cognito-Username mit Dynamo abgleichen (kanonischer Username). authUserId nur nach abgeschlossener
+  // Einladung im Client (updateParticipant), nicht hier – sonst „registriert“ ohne echtes Onboarding.
+  const poolId = process.env.USER_POOL_ID;
+  if (poolId) {
+    const resolved = await resolveCognitoUsernameAndSub(poolId, cognitoUsername, userId);
+    if (resolved) {
+      cognitoUsername = resolved.username;
+      try {
+        await saveParticipantProfile({
+          tenantId,
+          userId,
+          email: emailNormalized,
+          cognitoUsername: resolved.username,
+        });
+      } catch (syncErr) {
+        console.warn("Could not persist Cognito sync to participant profile:", syncErr);
+      }
+    } else {
+      console.warn(
+        `AdminGetUser failed for invite user: tried cognitoUsername=${cognitoUsername}, userId=${userId}`,
+      );
+    }
+  }
+
   // Build link (only nickname in the URL)
   const baseUrlEnv = process.env.BASE_URL || "";
   const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
-  const link = `${baseUrl}/invite?nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
+  const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
+  const nowSeconds = Math.floor(Date.now() / 1000);
 
-  // Send invitation email (temp password shown in email body)
+  let oneTimeToken: string | undefined;
+  let link = `${baseUrl}/invite?nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
+
+  // Token nur für "echte Einladung" (nicht für Reaktivierung ohne Passwortreset).
+  if (!reactivated && tokensTable) {
+    oneTimeToken = generateOneTimeToken();
+    try {
+      await dynamodb.send(
+        new PutItemCommand({
+          TableName: tokensTable,
+          Item: {
+            tenantId: { S: tenantId },
+            token: { S: oneTimeToken },
+            cognitoUsername: { S: cognitoUsername },
+            userId: { S: userId },
+            purpose: { S: "invite-activation" },
+            createdAt: { N: String(nowSeconds) },
+            expiresAt: { N: String(nowSeconds + tokenTtlSeconds) },
+          },
+        }),
+      );
+    } catch (tokenErr) {
+      console.warn("Failed to store one-time token:", tokenErr);
+      oneTimeToken = undefined;
+    }
+
+    if (oneTimeToken) {
+      link = `${baseUrl}/invite?tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(
+        oneTimeToken,
+      )}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
+    }
+  }
+
+  // Send invitation email (Token-Link, kein temporäres Passwort im E-Mail-Body)
   const emailHtml = reactivated
     ? `
       <h2>Hallo ${nicknameRaw}!</h2>
@@ -367,18 +522,25 @@ export const handler = async (event: any) => {
       <p>Du kannst dich mit deinem bestehenden Passwort wieder anmelden.</p>
       <p><a href="${baseUrl}">Zur Anmeldung</a></p>
     `
-    : `
-      <h2>Hallo ${nicknameRaw}!</h2>
-      <p>Du wurdest zu YogaSwap eingeladen.</p>
-      <p><a href="${link}">Klicke hier, um dein temporäres Passwort einzugeben und ein neues Passwort zu setzen</a></p>
-      <div style="margin-top:12px;">
-        <p style="margin:0 0 6px 0;"><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong></p>
-        <div>
-          <code style="display:inline-block;background:#f0f0f0;padding:8px 10px;border-radius:4px;line-height:1.4;font-family:monospace;">${rawPassword}</code>
+    : tokensTable && oneTimeToken
+      ? `
+        <h2>Hallo ${nicknameRaw}!</h2>
+        <p>Du wurdest zu YogaSwap eingeladen.</p>
+        <p><a href="${link}">Klicke hier, um ein neues Passwort festzulegen</a></p>
+        <p>Danach erhältst du eine E-Mail mit einem Code zur Bestätigung.</p>
+      `
+      : `
+        <h2>Hallo ${nicknameRaw}!</h2>
+        <p>Du wurdest zu YogaSwap eingeladen.</p>
+        <p><a href="${link}">Klicke hier, um dein temporäres Passwort einzugeben und ein neues Passwort zu setzen</a></p>
+        <div style="margin-top:12px;">
+          <p style="margin:0 0 6px 0;"><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong></p>
+          <div>
+            <code style="display:inline-block;background:#f0f0f0;padding:8px 10px;border-radius:4px;line-height:1.4;font-family:monospace;">${rawPassword}</code>
+          </div>
         </div>
-      </div>
-      <p>Tipp: Falls das Passwort beim Einfügen nicht funktioniert, achte auf keine Leerzeichen vor/nach dem Passwort.</p>
-    `;
+        <p>Tipp: Falls das Passwort beim Einfügen nicht funktioniert, achte auf keine Leerzeichen vor/nach dem Passwort.</p>
+      `;
 
   let emailSent = false;
   try {
@@ -399,14 +561,13 @@ export const handler = async (event: any) => {
   } catch (err: any) {
     console.warn("SES send warning:", err?.message || err);
     // do not fail user creation if SES can't send (depending on your policy)
-    // Falls E-Mail nicht versendet werden kann, logge das temporäre Passwort für den Admin
-    console.warn(`⚠️ E-Mail konnte nicht versendet werden. Temporäres Passwort für User '${userId}': ${rawPassword}`);
+    // In token-basierten Flows wird kein temporäres Passwort per E-Mail verschickt.
   }
 
   console.log("createParticipants: created/updated username=", userId);
   // Do NOT log passwords in production normally, but log if email failed
   if (!emailSent) {
-    console.warn(`⚠️ WICHTIG: E-Mail nicht versendet. User '${userId}' benötigt temporäres Passwort: ${rawPassword}`);
+    console.warn(`⚠️ WICHTIG: E-Mail nicht versendet. User '${userId}' benötigt den Einladungslink.`);
   }
 
   const inviteSentAt = new Date().toISOString();
@@ -430,10 +591,12 @@ export const handler = async (event: any) => {
       link,
       emailSent,
       reactivated,
-      // Nur wenn E-Mail nicht versendet wurde, Passwort zurückgeben (für Admin)
       ...(emailSent || reactivated
         ? {}
-        : { tempPassword: rawPassword, warning: "E-Mail konnte nicht versendet werden. Bitte Passwort manuell übermitteln." })
+        : { 
+            inviteToken: oneTimeToken,
+            warning: "E-Mail konnte nicht versendet werden. Bitte Einladungslink (oder Token) manuell übermitteln."
+          })
     }) 
   };
 };

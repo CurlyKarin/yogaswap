@@ -140,6 +140,12 @@ export interface ParticipantProfile {
   /** Optional: Zeitpunkt der letzten Einladung (ISO timestamp). */
   inviteSentAt?: string;
 
+  /**
+   * Gesetzt, wenn die Einladung im Client abgeschlossen ist (z. B. nach Sign-In auf /invite).
+   * Ohne dieses Feld gilt ein nur serverseitig bekannter Cognito-Sub nicht als „registriert“.
+   */
+  inviteCompletedAt?: string;
+
   /** Optional: flexible, tenant-spezifische Teilnehmer-Einstellungen. */
   settings?: ParticipantSettings;
 }
@@ -176,9 +182,16 @@ export type ParticipantSettings = {
  * Ableitung des Teilnehmer-Status aus Profilfeldern (ohne eigenes Status-Feld).
  */
 export function getParticipantStatus(
-  profile: Pick<ParticipantProfile, "authUserId" | "inviteSentAt">,
+  profile: Pick<ParticipantProfile, "authUserId" | "inviteSentAt" | "inviteCompletedAt">,
 ): ParticipantStatus {
-  if (profile.authUserId) return "active";
-  if (profile.inviteSentAt) return "invited";
+  const auth = profile.authUserId?.trim();
+  const invitedFlag = profile.inviteSentAt?.trim();
+  const done = profile.inviteCompletedAt?.trim();
+  if (auth) {
+    if (done) return "active";
+    if (!invitedFlag) return "active";
+    return "invited";
+  }
+  if (invitedFlag) return "invited";
   return "no_login";
 }

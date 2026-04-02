@@ -38,6 +38,7 @@ type UpdateParticipantBody = {
   email?: string | null;
   settings?: ParticipantSettings;
   inviteSentAt?: string | null;
+  inviteCompletedAt?: string | null;
   authUserId?: string | null;
   role?: UserRole;
   forcePasswordResetOnEmailChange?: boolean;
@@ -102,6 +103,7 @@ export const handler = async (
       Object.prototype.hasOwnProperty.call(body, "email") ||
       Object.prototype.hasOwnProperty.call(body, "settings") ||
       Object.prototype.hasOwnProperty.call(body, "inviteSentAt") ||
+      Object.prototype.hasOwnProperty.call(body, "inviteCompletedAt") ||
       Object.prototype.hasOwnProperty.call(body, "role");
 
     // Allow a participant to self-link their own Cognito `sub` once after sign-up.
@@ -318,12 +320,24 @@ export const handler = async (
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "inviteCompletedAt")) {
+      if (typeof body.inviteCompletedAt === "string" && body.inviteCompletedAt.trim()) {
+        updated.inviteCompletedAt = body.inviteCompletedAt;
+      } else {
+        delete updated.inviteCompletedAt;
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(body, "authUserId")) {
       if (typeof body.authUserId === "string" && body.authUserId.trim()) {
         updated.authUserId = body.authUserId;
       } else {
         delete updated.authUserId;
       }
+    }
+
+    if (isSelfAuthLink && hasAuthUserId) {
+      updated.inviteCompletedAt = new Date().toISOString();
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "role")) {

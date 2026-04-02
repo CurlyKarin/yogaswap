@@ -408,7 +408,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     options?: { refreshAfter?: boolean },
   ) => {
     if (!p.email) return;
-    if (p.status === "active") return;
+    if (p.status === "active" && !canEditRoles) return;
 
     const refreshAfter = options?.refreshAfter ?? true;
     const userId = p.userId;
@@ -431,9 +431,12 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       if (result.emailSent) {
         setInviteResultByUserId((prev) => ({
           ...prev,
-          [userId]: result.reactivated
-            ? `Zugang reaktiviert. Info-Mail gesendet an ${p.email}.`
-            : `Einladung gesendet an ${p.email}.`,
+          [userId]:
+            result.reactivated
+              ? `Zugang reaktiviert. Info-Mail gesendet an ${p.email}.`
+              : p.status === "active"
+                ? `Einladungslink zur Passwort-Recovery gesendet an ${p.email}.`
+                : `Einladung gesendet an ${p.email}.`,
         }));
       } else {
         setInviteResultByUserId((prev) => ({
@@ -671,7 +674,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                         !p.email
                           ? "E-Mail fehlt"
                           : p.status === "active"
-                            ? "Bereits registriert"
+                            ? "Bereits registriert (kein Sammelversand)"
                             : "Auswählen"
                       }
                       onChange={(e) => toggleSelectedInviteUserId(p.userId, e.target.checked)}
@@ -700,16 +703,24 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       title={
                         !p.email
                           ? "E-Mail fehlt"
-                          : p.status === "active"
+                          : p.status === "active" && !canEditRoles
                             ? "Bereits registriert"
-                            : p.status === "invited"
-                              ? "Einladung erneut senden"
-                              : "Einladung senden"
+                            : p.status === "active" && canEditRoles
+                              ? "Einladungslink (Recovery) erneut an registrierte Nutzerin senden"
+                              : p.status === "invited"
+                                ? "Einladung erneut senden"
+                                : "Einladung senden"
                       }
-                      aria-label={`${p.status === "invited" ? "Erneut einladen" : "Einladen"} ${p.userId}`}
+                      aria-label={
+                        p.status === "active" && canEditRoles
+                          ? `Einladungslink senden ${p.userId}`
+                          : p.status === "invited"
+                            ? `Erneut einladen ${p.userId}`
+                            : `Einladen ${p.userId}`
+                      }
                       disabled={
                         !p.email ||
-                        p.status === "active" ||
+                        (p.status === "active" && !canEditRoles) ||
                         !!inviteSendingByUserId[p.userId] ||
                         participantsLoading ||
                         editingSaving ||
@@ -719,9 +730,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                     >
                       {inviteSendingByUserId[p.userId]
                         ? "..."
-                        : p.status === "invited"
-                          ? "Erneut"
-                          : "Einladen"}
+                        : p.status === "active" && canEditRoles
+                          ? "Link"
+                          : p.status === "invited"
+                            ? "Erneut"
+                            : "Einladen"}
                     </button>
                     {canEditRoles && (
                       <button

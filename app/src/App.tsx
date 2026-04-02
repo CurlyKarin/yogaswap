@@ -30,15 +30,7 @@ function MainApp() {
   // App.tsx
   useEffect(() => {
     const initAuth = async () => {
-      // 1. Versuche, User aus localStorage zu laden
-      const stored = loadCurrentUser();
-      if (stored) {
-        console.log('User aus localStorage geladen:', stored);
-        setCurrentUser(stored);
-        return;  // Checkmark Fertig!
-      }
-
-      // 2. Falls kein localStorage: Prüfe Cognito-Session
+      // Always verify Cognito session first. localStorage is only a fallback cache.
       try {
         const session = await fetchAuthSession();
         if (session.tokens?.idToken) {
@@ -53,11 +45,18 @@ function MainApp() {
           saveCurrentUser(user);  // Checkmark Speichern für später!
           setCurrentUser(user);
           console.log('User aus Cognito-Session geladen:', user);
+          return;
         }
       } catch (err) {
         console.log('Keine aktive Session:', err);
-        // Kein User → Login-Seite
       }
+
+      // No valid session: clear stale storage and logged-in state.
+      const stored = loadCurrentUser();
+      if (stored) {
+        clearCurrentUser();
+      }
+      setCurrentUser(null);
     };
 
     initAuth();
@@ -106,7 +105,7 @@ function MainApp() {
 
   // Logout-Handler
   const handleLogout = async () => {
-    logout();
+    await logout();
     clearCurrentUser();
     setCurrentUser(null);
   };
