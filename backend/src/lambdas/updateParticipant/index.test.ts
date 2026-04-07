@@ -7,6 +7,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     GetItemCommand: jest.fn((input) => input),
     PutItemCommand: jest.fn((input) => input),
+    ScanCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -223,7 +224,8 @@ describe("updateParticipant Lambda", () => {
           role: { S: "admin" },
         },
       })
-      .mockResolvedValueOnce({ Item: undefined });
+      .mockResolvedValueOnce({ Item: undefined })
+      .mockResolvedValueOnce({ Items: [] });
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(404);
     expect(JSON.parse(result.body).error).toBe("Participant not found");

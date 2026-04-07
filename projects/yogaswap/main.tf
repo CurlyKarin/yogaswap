@@ -154,7 +154,7 @@ locals {
       name             = "update-participant"
       file_name        = "updateParticipant.zip"
       table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Scan"]
       tables = {
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name

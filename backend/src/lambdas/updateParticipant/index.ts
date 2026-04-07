@@ -2,6 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import {
   GetItemCommand,
   PutItemCommand,
+  ScanCommand,
 } from "@aws-sdk/client-dynamodb";
 import {
   AdminSetUserPasswordCommand,
@@ -63,8 +64,8 @@ export const handler = async (
     };
   }
 
-  const userId = event.pathParameters?.userId?.trim();
-  if (!userId) {
+  const requestedUserId = event.pathParameters?.userId?.trim();
+  if (!requestedUserId) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "Missing userId in path" }),
@@ -109,7 +110,7 @@ export const handler = async (
     // Allow a participant to self-link their own Cognito `sub` once after sign-up.
     // This is required for participants created via invitation to move from "invited" -> "active".
     const isSelfAuthLink =
-      actorUserId?.toLowerCase() === userId.toLowerCase() &&
+      actorUserId?.toLowerCase() === requestedUserId.toLowerCase() &&
       hasAuthUserId &&
       !hasOtherMutationKeys;
 
@@ -160,26 +161,46 @@ export const handler = async (
       }
     }
 
+    let targetUserId = requestedUserId;
     const existingResp = await client.send(
       new GetItemCommand({
         TableName: tableName,
         Key: {
           tenantId: { S: tenantId },
-          userId: { S: userId },
+          userId: { S: targetUserId },
         },
         ConsistentRead: true,
       }),
     );
 
-    if (!existingResp.Item) {
+    let existingItem = existingResp.Item;
+    if (!existingItem) {
+      const scanResp = await client.send(
+        new ScanCommand({
+          TableName: tableName,
+          FilterExpression: "tenantId = :tenantId",
+          ExpressionAttributeValues: { ":tenantId": { S: tenantId } },
+        }),
+      );
+      const matched = (scanResp.Items ?? []).find((item) => {
+        const id = item.userId?.S ?? "";
+        return id.toLowerCase() === requestedUserId.toLowerCase();
+      });
+      if (matched?.userId?.S) {
+        targetUserId = matched.userId.S;
+        existingItem = matched;
+      }
+    }
+
+    if (!existingItem) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: "Participant not found" }),
       };
     }
 
-    const existing = unmarshall(existingResp.Item) as ParticipantProfile;
-    const existingCognitoUsername = existingResp.Item.cognitoUsername?.S;
+    const existing = unmarshall(existingItem) as ParticipantProfile;
+    const existingCognitoUsername = existingItem.cognitoUsername?.S;
     const existingStatus = deriveParticipantStatus(existing);
     if (requestsEmailChange) {
       const requestedEmail = typeof body.email === "string" ? body.email.trim() : body.email;
@@ -199,7 +220,7 @@ export const handler = async (
     const updated: ParticipantProfile = {
       ...existing,
       tenantId,
-      userId,
+      userId: targetUserId,
     };
 
     if (Object.prototype.hasOwnProperty.call(body, "email")) {
@@ -219,7 +240,7 @@ export const handler = async (
             };
           }
           try {
-            const cognitoUsername = existingCognitoUsername || userId;
+            const cognitoUsername = existingCognitoUsername || targetUserId;
             await cognito.send(
               new AdminUpdateUserAttributesCommand({
                 UserPoolId: userPoolId,
@@ -265,7 +286,7 @@ export const handler = async (
                       Body: {
                         Html: {
                           Data: `
-                            <h2>Hallo ${userId}!</h2>
+                            <h2>Hallo ${targetUserId}!</h2>
                             <p>Deine E-Mail-Adresse wurde aktualisiert. Bitte setze jetzt ein neues Passwort.</p>
                             <p><a href="${link}">Klicke hier, um ein neues Passwort zu setzen</a></p>
                             <div style="margin-top:12px;">
@@ -353,7 +374,7 @@ export const handler = async (
           TableName: membershipsTable,
           Item: marshall({
             tenantId,
-            userId,
+            userId: targetUserId,
             role: nextRole,
           }),
         }),
