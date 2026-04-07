@@ -209,6 +209,17 @@ export const handler = async (event: any) => {
     }
   }
 
+  // Security hardening (#94): For new/invite flows with email we require token-table mode.
+  // Existing login reactivation without token table remains allowed (no temp password mail).
+  if (hasEmail && !tokensTable && !existingAuthUserId) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        error: "AUTH_TOKENS_TABLE is required for secure invite flow",
+      }),
+    };
+  }
+
   // Email optional: if missing/empty, skip Cognito and SES and only write membership to DynamoDB.
   if (!hasEmail) {
     const reactivated = !!existingAuthUserId;
@@ -528,6 +539,15 @@ export const handler = async (event: any) => {
     }
   }
 
+  if (!reactivated && tokenInviteEnabled && !oneTimeToken) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        error: "Failed to create secure invite token",
+      }),
+    };
+  }
+
   // Send invitation email (Token-Link, kein temporäres Passwort im E-Mail-Body)
   const emailHtml = reactivated
     ? `
@@ -545,15 +565,8 @@ export const handler = async (event: any) => {
       `
       : `
         <h2>Hallo ${nicknameRaw}!</h2>
-        <p>Du wurdest zu YogaSwap eingeladen.</p>
-        <p><a href="${link}">Klicke hier, um dein temporäres Passwort einzugeben und ein neues Passwort zu setzen</a></p>
-        <div style="margin-top:12px;">
-          <p style="margin:0 0 6px 0;"><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong></p>
-          <div>
-            <code style="display:inline-block;background:#f0f0f0;padding:8px 10px;border-radius:4px;line-height:1.4;font-family:monospace;">${rawPassword}</code>
-          </div>
-        </div>
-        <p>Tipp: Falls das Passwort beim Einfügen nicht funktioniert, achte auf keine Leerzeichen vor/nach dem Passwort.</p>
+        <p>Dein Zugang wird vorbereitet.</p>
+        <p>Bitte kontaktiere dein Studio, falls du keinen gueltigen Einladungslink erhalten hast.</p>
       `;
 
   let emailSent = false;
