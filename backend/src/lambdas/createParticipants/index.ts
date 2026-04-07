@@ -507,7 +507,7 @@ export const handler = async (event: any) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
 
   let oneTimeToken: string | undefined;
-  let link = `${baseUrl}/invite?nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
+  let link = `${baseUrl}/invite?mode=invite_activation&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
 
   // Token nur für "echte Einladung" (nicht für Reaktivierung ohne Passwortreset).
   if (!reactivated && tokensTable) {
@@ -533,7 +533,7 @@ export const handler = async (event: any) => {
     }
 
     if (oneTimeToken) {
-      link = `${baseUrl}/invite?tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(
+      link = `${baseUrl}/invite?mode=invite_activation&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(
         oneTimeToken,
       )}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
     }

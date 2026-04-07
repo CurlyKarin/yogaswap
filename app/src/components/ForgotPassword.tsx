@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { confirmResetPassword, fetchAuthSession, resetPassword } from "aws-amplify/auth";
+import { confirmResetPassword, resetPassword, signOut } from "aws-amplify/auth";
 import { useNavigate } from "react-router-dom";
-import { saveCurrentUser } from "shared/lib/storage";
-import { User, UserRole } from "shared/types";
+import { clearCurrentUser } from "shared/lib/storage";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -64,23 +63,21 @@ export default function ForgotPassword() {
         confirmationCode: code.trim(),
         newPassword,
       });
+      // Password reset should never "auto-login" from this view.
+      // We force a clean auth state and redirect to login.
       try {
-        const session = await fetchAuthSession();
-        if (session.tokens?.idToken) {
-          const payload = session.tokens.idToken.payload;
-          const signedInUser: User = {
-            nickname: payload.nickname as string,
-            email: payload.email as string,
-            role: (payload["custom:role"] as UserRole) || "participant",
-          };
-          saveCurrentUser(signedInUser);
-          navigate("/", { replace: true });
-          return;
-        }
+        await signOut({ global: true });
       } catch {
-        // If no session exists, continue to login route.
+        // ignore when no active session exists
       }
-      navigate("/login", { replace: true });
+      clearCurrentUser();
+      navigate("/login", {
+        replace: true,
+        state: {
+          info:
+            "Passwort wurde zurueckgesetzt. Bitte melde dich mit deinem neuen Passwort an.",
+        },
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg || "Passwort konnte nicht zurückgesetzt werden.");
@@ -135,7 +132,7 @@ export default function ForgotPassword() {
           {loading
             ? "Verarbeite..."
             : codeSent
-              ? "Neues Passwort speichern"
+              ? "Neues Passwort setzen"
               : "Code anfordern"}
         </button>
       </form>

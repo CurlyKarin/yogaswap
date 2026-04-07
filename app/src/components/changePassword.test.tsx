@@ -78,7 +78,7 @@ describe("ChangePassword", () => {
     fireEvent.change(within(page).getByPlaceholderText("Neues Passwort"), {
       target: { value: "SicheresPasswort123!" },
     });
-    fireEvent.click(within(page).getByRole("button", { name: /Speichern/i }));
+    fireEvent.click(within(page).getByRole("button", { name: /Passwort festlegen/i }));
 
     await waitFor(() => {
       expect(mockedConfirmSignIn).toHaveBeenCalledWith({

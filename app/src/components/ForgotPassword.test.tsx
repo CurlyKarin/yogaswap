@@ -3,22 +3,22 @@ import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ForgotPassword from "./ForgotPassword";
-import { confirmResetPassword, fetchAuthSession, resetPassword } from "aws-amplify/auth";
-import { saveCurrentUser } from "shared/lib/storage";
+import { confirmResetPassword, resetPassword, signOut } from "aws-amplify/auth";
+import { clearCurrentUser } from "shared/lib/storage";
 
 vi.mock("aws-amplify/auth", () => ({
   resetPassword: vi.fn(),
   confirmResetPassword: vi.fn(),
-  fetchAuthSession: vi.fn(),
+  signOut: vi.fn(),
 }));
 vi.mock("shared/lib/storage", () => ({
-  saveCurrentUser: vi.fn(),
+  clearCurrentUser: vi.fn(),
 }));
 
 const mockedResetPassword = resetPassword as unknown as ReturnType<typeof vi.fn>;
 const mockedConfirmResetPassword = confirmResetPassword as unknown as ReturnType<typeof vi.fn>;
-const mockedFetchAuthSession = fetchAuthSession as unknown as ReturnType<typeof vi.fn>;
-const mockedSaveCurrentUser = saveCurrentUser as unknown as ReturnType<typeof vi.fn>;
+const mockedSignOut = signOut as unknown as ReturnType<typeof vi.fn>;
+const mockedClearCurrentUser = clearCurrentUser as unknown as ReturnType<typeof vi.fn>;
 
 function renderWithRouter(initialEntries: string[] = ["/forgot-password"]) {
   const utils = render(
@@ -39,6 +39,7 @@ function renderWithRouter(initialEntries: string[] = ["/forgot-password"]) {
 describe("ForgotPassword", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedSignOut.mockResolvedValue(undefined);
   });
 
   it("fordert einen Reset-Code an", async () => {
@@ -65,17 +66,6 @@ describe("ForgotPassword", () => {
   it("setzt ein neues Passwort mit Code", async () => {
     mockedResetPassword.mockResolvedValue({});
     mockedConfirmResetPassword.mockResolvedValue({});
-    mockedFetchAuthSession.mockResolvedValue({
-      tokens: {
-        idToken: {
-          payload: {
-            nickname: "alice",
-            email: "alice@example.com",
-            "custom:role": "participant",
-          },
-        },
-      },
-    });
 
     const { page } = renderWithRouter();
 
@@ -94,7 +84,7 @@ describe("ForgotPassword", () => {
     fireEvent.change(within(page).getByPlaceholderText("Neues Passwort"), {
       target: { value: "SicheresPasswort123!" },
     });
-    fireEvent.click(within(page).getByRole("button", { name: /Neues Passwort speichern/i }));
+    fireEvent.click(within(page).getByRole("button", { name: /Neues Passwort setzen/i }));
 
     await waitFor(() => {
       expect(mockedConfirmResetPassword).toHaveBeenCalledWith({
@@ -102,12 +92,8 @@ describe("ForgotPassword", () => {
         confirmationCode: "123456",
         newPassword: "SicheresPasswort123!",
       });
-      expect(mockedFetchAuthSession).toHaveBeenCalled();
-      expect(mockedSaveCurrentUser).toHaveBeenCalledWith({
-        nickname: "alice",
-        email: "alice@example.com",
-        role: "participant",
-      });
+      expect(mockedSignOut).toHaveBeenCalled();
+      expect(mockedClearCurrentUser).toHaveBeenCalled();
     });
   });
 });

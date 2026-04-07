@@ -7,6 +7,19 @@ import { User, UserRole } from "shared/types";
 import { updateParticipant } from "../api/participants";
 import { startPasswordResetFromToken } from "../api/auth";
 
+type AuthViewMode = "invite_activation" | "password_recovery" | "admin_reset";
+
+function parseMode(modeRaw: string | null): AuthViewMode | null {
+  const v = (modeRaw || "").trim().toLowerCase();
+  if (!v) return null;
+  if (v === "invite_activation" || v === "password_recovery" || v === "admin_reset") return v;
+  // Backward compatibility for older links
+  if (v === "invite-activation") return "invite_activation";
+  if (v === "password-recovery") return "password_recovery";
+  if (v === "admin-reset") return "admin_reset";
+  return null;
+}
+
 export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -16,7 +29,31 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const emailDisplay = searchParams.get("email") || "";
   const tokenParam = searchParams.get("token");
   const tenantIdParam = searchParams.get("tenantId");
+  const modeParam = parseMode(searchParams.get("mode"));
   const tokenMode = !!tokenParam && !!tenantIdParam;
+  const authMode: AuthViewMode = tokenMode
+    ? modeParam ?? "password_recovery"
+    : "invite_activation";
+
+  const modeCopy: Record<AuthViewMode, { subtitle: string; submitLabel: string }> = {
+    invite_activation: {
+      subtitle: "Aktiviere deinen Zugang, indem du den Code aus der E-Mail eingibst.",
+      submitLabel: "Zugang aktivieren",
+    },
+    password_recovery: {
+      subtitle: "Setze dein Passwort zurueck. Gib dazu den Code aus der E-Mail ein.",
+      submitLabel: "Passwort zuruecksetzen",
+    },
+    admin_reset: {
+      subtitle: "Dein Passwort wurde durch das Studio zurueckgesetzt. Gib den Code aus der E-Mail ein.",
+      submitLabel: "Passwort setzen",
+    },
+  };
+
+  const subtitleText =
+    tokenMode
+      ? modeCopy[authMode].subtitle
+      : "Aktiviere deinen Zugang mit dem temporaeren Passwort aus der Einladung.";
 
   // Beim Aufruf der Invite-Seite: localStorage leeren, falls anderer User
   useEffect(() => {
@@ -295,9 +332,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       </p>
       {tokenMode ? (
         <>
-          <p className="muted" style={{ marginTop: 0 }}>
-            Aktiviere deinen Zugang, indem du den Code aus der E-Mail eingibst.
-          </p>
+          <p className="muted" style={{ marginTop: 0 }}>{subtitleText}</p>
           {emailDisplay && (
             <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
               Code wird an {emailDisplay} gesendet
@@ -334,15 +369,13 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
             {error && <p style={{ color: "red" }}>{error}</p>}
 
             <button type="submit" disabled={loading || !authCleared || !codeSent} className="btn-primary btn-block">
-              {loading ? "Verarbeite…" : "Neues Passwort speichern"}
+              {loading ? "Verarbeite…" : modeCopy[authMode].submitLabel}
             </button>
           </form>
         </>
       ) : (
         <>
-          <p className="muted" style={{ marginTop: 0 }}>
-            Aktiviere deinen Zugang mit dem temporaeren Passwort aus der Einladung.
-          </p>
+          <p className="muted" style={{ marginTop: 0 }}>{subtitleText}</p>
           {emailDisplay && (
             <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
               Einladung gesendet an {emailDisplay}
@@ -398,7 +431,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
             {error && <p style={{ color: "red" }}>{error}</p>}
 
             <button type="submit" disabled={loading} className="btn-primary btn-block">
-              {loading ? "Verarbeite…" : "Zugang aktivieren"}
+              {loading ? "Verarbeite…" : modeCopy[authMode].submitLabel}
             </button>
           </form>
         </>

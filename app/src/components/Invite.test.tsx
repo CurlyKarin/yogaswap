@@ -220,7 +220,7 @@ describe("Invite", () => {
     });
 
     fireEvent.click(
-      within(panel).getByRole("button", { name: /Neues Passwort speichern/i }),
+      within(panel).getByRole("button", { name: /Passwort zuruecksetzen/i }),
     );
 
     await waitFor(() => {
