@@ -121,6 +121,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }),
       };
     }
+    if (name === "NotAuthorizedException") {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error:
+            "Password reset is currently not allowed for this account state. Please ask admin to re-invite again.",
+        }),
+      };
+    }
     console.error("Failed to start password reset from token", err);
     return {
       statusCode: 500,

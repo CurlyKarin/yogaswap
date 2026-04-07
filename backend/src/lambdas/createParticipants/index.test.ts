@@ -334,6 +334,7 @@ describe('createParticipants Lambda', () => {
     cognitoMockSend
       .mockRejectedValueOnce(usernameExistsError) // AdminCreateUserCommand fails
       .mockResolvedValueOnce({}) // AdminUpdateUserAttributesCommand (sync email for reset code)
+      .mockResolvedValueOnce({}) // AdminSetUserPasswordCommand (normalize state for reset flow)
       .mockResolvedValueOnce({}) // AdminAddUserToGroupCommand
       .mockResolvedValueOnce(adminGetUserResponse('existinguser', 'sub-123')); // AdminGetUserCommand
     sesMockSend.mockResolvedValueOnce({});
@@ -363,7 +364,7 @@ describe('createParticipants Lambda', () => {
     expect(body.link).toMatch(/token=/);
     expect(body.tempPassword).toBeUndefined();
 
-    expect(cognitoMockSend).toHaveBeenCalledTimes(4);
+    expect(cognitoMockSend).toHaveBeenCalledTimes(5);
     expect(cognitoMockSend).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({

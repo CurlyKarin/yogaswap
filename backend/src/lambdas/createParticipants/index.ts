@@ -382,8 +382,18 @@ export const handler = async (event: any) => {
                 ],
               }),
             );
+            // Einige Cognito-Zustände (z. B. nach Altflows) erlauben kein AdminResetUserPassword.
+            // Durch ein permanentes Passwort wird der User wieder in einen reset-fähigen Zustand gebracht.
+            await cognito.send(
+              new AdminSetUserPasswordCommand({
+                UserPoolId: process.env.USER_POOL_ID!,
+                Username: cognitoUsername,
+                Password: rawPassword,
+                Permanent: true,
+              }),
+            );
           } catch (err2: any) {
-            console.error("AdminUpdateUserAttributes failed (registered user resend):", err2);
+            console.error("AdminUpdateUserAttributes/AdminSetUserPassword failed (registered user resend):", err2);
             return { statusCode: 500, body: JSON.stringify({ error: "Failed to prepare existing user" }) };
           }
         } else {

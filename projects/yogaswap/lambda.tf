@@ -62,6 +62,7 @@ resource "aws_lambda_function" "lambda" {
   function_name = "${var.project}-${each.value.name}"
   handler       = "index.handler"
   runtime       = "nodejs18.x"
+  timeout       = try(each.value.timeout, 3)
   role          = aws_iam_role.lambda_role[each.key].arn
   filename      = "${path.module}/../../backend/zips/${each.value.file_name}"
   # Kombiniere Source Code Hash mit Environment Variables Hash, damit Lambda bei Environment-Änderungen neu deployed wird

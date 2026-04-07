@@ -163,5 +163,28 @@ describe("startPasswordResetFromToken Lambda", () => {
     expect(result.statusCode).toBe(400);
     expect(JSON.parse(result.body).error).toMatch(/cannot be delivered/i);
   });
+
+  test("returns 400 for NotAuthorizedException from Cognito", async () => {
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: "Alice" },
+      },
+    }); // GetItem
+    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
+
+    const notAuthorized = new Error("User password cannot be reset in the current state.");
+    (notAuthorized as any).name = "NotAuthorizedException";
+    cognitoMockSend.mockRejectedValueOnce(notAuthorized);
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/not allowed for this account state/i);
+  });
 });
 

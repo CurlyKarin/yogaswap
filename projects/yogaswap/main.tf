@@ -210,6 +210,7 @@ locals {
     "create_participants" = {
       name             = "create-participants"
       file_name        = "createParticipants.zip"
+      timeout          = 15
       table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn]
       dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"]
       tables = {
