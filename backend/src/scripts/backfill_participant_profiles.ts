@@ -22,6 +22,7 @@ async function run(): Promise<void> {
   let scanned = 0;
   let created = 0;
   let normalizedUpdated = 0;
+  let inviteCompletedUpdated = 0;
 
   do {
     const scanResp = await client.send(
@@ -90,7 +91,26 @@ async function run(): Promise<void> {
       if (!tenantId || !userId) continue;
       const normalized = userId.toLowerCase();
       const currentNormalized = item.userIdNormalized?.S;
-      if (currentNormalized === normalized) continue;
+      const authUserId = item.authUserId?.S?.trim();
+      const inviteCompletedAt = item.inviteCompletedAt?.S?.trim();
+      const inviteSentAt = item.inviteSentAt?.S?.trim();
+
+      const needsNormalized = currentNormalized !== normalized;
+      const needsInviteCompleted = !!authUserId && !inviteCompletedAt;
+
+      if (!needsNormalized && !needsInviteCompleted) continue;
+
+      const expressionParts: string[] = [];
+      const values: Record<string, AttributeValue> = {};
+      if (needsNormalized) {
+        expressionParts.push("userIdNormalized = :normalized");
+        values[":normalized"] = { S: normalized };
+      }
+      if (needsInviteCompleted) {
+        expressionParts.push("inviteCompletedAt = :inviteCompletedAt");
+        values[":inviteCompletedAt"] = { S: inviteSentAt || new Date().toISOString() };
+      }
+
       await client.send(
         new UpdateItemCommand({
           TableName: PARTICIPANTS_TABLE,
@@ -98,19 +118,19 @@ async function run(): Promise<void> {
             tenantId: { S: tenantId },
             userId: { S: userId },
           },
-          UpdateExpression: "SET userIdNormalized = :normalized",
-          ExpressionAttributeValues: {
-            ":normalized": { S: normalized },
-          },
+          UpdateExpression: `SET ${expressionParts.join(", ")}`,
+          ExpressionAttributeValues: values,
         }),
       );
-      normalizedUpdated += 1;
+
+      if (needsNormalized) normalizedUpdated += 1;
+      if (needsInviteCompleted) inviteCompletedUpdated += 1;
     }
     participantLastEvaluatedKey = participantScanResp.LastEvaluatedKey;
   } while (participantLastEvaluatedKey);
 
   console.log(
-    `Backfill done: scanned=${scanned}, attemptedCreates=${created}, normalizedUpdated=${normalizedUpdated}`,
+    `Backfill done: scanned=${scanned}, attemptedCreates=${created}, normalizedUpdated=${normalizedUpdated}, inviteCompletedUpdated=${inviteCompletedUpdated}`,
   );
 }
 
