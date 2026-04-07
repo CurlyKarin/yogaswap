@@ -29,7 +29,10 @@ resource "aws_iam_role_policy" "lambda_policy" {
       length(each.value.dynamodb_actions) > 0 ? [{
         Effect   = "Allow",
         Action   = each.value.dynamodb_actions,
-        Resource = each.value.table_arns
+        Resource = concat(
+          each.value.table_arns,
+          [for arn in each.value.table_arns : "${arn}/index/*"],
+        )
       }] : [],
       # S3-Berechtigungen, falls s3_actions nicht leer
       length(each.value.s3_actions) > 0 ? [{

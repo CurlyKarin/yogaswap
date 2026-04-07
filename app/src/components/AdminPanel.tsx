@@ -424,7 +424,10 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       });
 
       if (result.error) {
-        setInviteResultByUserId((prev) => ({ ...prev, [userId]: "Fehler beim Einladen." }));
+        setInviteResultByUserId((prev) => ({
+          ...prev,
+          [userId]: `Fehler beim Einladen: ${result.error}`,
+        }));
         return { ok: false as const };
       }
 
@@ -446,7 +449,17 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       }
 
       if (refreshAfter) {
-        await refreshParticipants();
+        try {
+          await refreshParticipants();
+        } catch (refreshErr) {
+          console.warn("Invite succeeded but participant refresh failed", refreshErr);
+          setInviteResultByUserId((prev) => ({
+            ...prev,
+            [userId]:
+              "Einladung gesendet, aber die Liste konnte nicht aktualisiert werden. Bitte Seite neu laden.",
+          }));
+          return { ok: true as const };
+        }
       }
       return { ok: true as const };
     } catch (err) {

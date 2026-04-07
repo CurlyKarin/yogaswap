@@ -1,6 +1,7 @@
 import {
   ScanCommand,
   PutItemCommand,
+  UpdateItemCommand,
   type AttributeValue,
 } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../lambdas/shared/dynamoClient";
@@ -20,6 +21,7 @@ async function run(): Promise<void> {
   let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
   let scanned = 0;
   let created = 0;
+  let normalizedUpdated = 0;
 
   do {
     const scanResp = await client.send(
@@ -45,6 +47,7 @@ async function run(): Promise<void> {
             Item: {
               tenantId: { S: tenantId },
               userId: { S: userId },
+              userIdNormalized: { S: userId.toLowerCase() },
             },
             // Create only if missing; keeps existing profile fields untouched.
             ConditionExpression:
@@ -71,7 +74,44 @@ async function run(): Promise<void> {
     lastEvaluatedKey = scanResp.LastEvaluatedKey;
   } while (lastEvaluatedKey);
 
-  console.log(`Backfill done: scanned=${scanned}, attemptedCreates=${created}`);
+  // Existing participant profiles: ensure userIdNormalized is populated.
+  let participantLastEvaluatedKey: Record<string, AttributeValue> | undefined;
+  do {
+    const participantScanResp = await client.send(
+      new ScanCommand({
+        TableName: PARTICIPANTS_TABLE,
+        ExclusiveStartKey: participantLastEvaluatedKey,
+      }),
+    );
+    const items = participantScanResp.Items || [];
+    for (const item of items) {
+      const tenantId = item.tenantId?.S;
+      const userId = item.userId?.S;
+      if (!tenantId || !userId) continue;
+      const normalized = userId.toLowerCase();
+      const currentNormalized = item.userIdNormalized?.S;
+      if (currentNormalized === normalized) continue;
+      await client.send(
+        new UpdateItemCommand({
+          TableName: PARTICIPANTS_TABLE,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: userId },
+          },
+          UpdateExpression: "SET userIdNormalized = :normalized",
+          ExpressionAttributeValues: {
+            ":normalized": { S: normalized },
+          },
+        }),
+      );
+      normalizedUpdated += 1;
+    }
+    participantLastEvaluatedKey = participantScanResp.LastEvaluatedKey;
+  } while (participantLastEvaluatedKey);
+
+  console.log(
+    `Backfill done: scanned=${scanned}, attemptedCreates=${created}, normalizedUpdated=${normalizedUpdated}`,
+  );
 }
 
 run().catch((error) => {

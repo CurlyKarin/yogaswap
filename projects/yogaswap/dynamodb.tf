@@ -91,7 +91,16 @@ module "participants_table" {
   range_key = "userId"
   attributes = [
     { name = "tenantId", type = "S" },
-    { name = "userId", type = "S" }
+    { name = "userId", type = "S" },
+    { name = "userIdNormalized", type = "S" }
+  ]
+  global_secondary_index = [
+    {
+      name            = "GSI_UserIdNormalized"
+      hash_key        = "tenantId"
+      range_key       = "userIdNormalized"
+      projection_type = "ALL"
+    }
   ]
 }
 

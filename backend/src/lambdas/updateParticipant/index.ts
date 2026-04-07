@@ -2,7 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import {
   GetItemCommand,
   PutItemCommand,
-  ScanCommand,
+  QueryCommand,
 } from "@aws-sdk/client-dynamodb";
 import {
   AdminSetUserPasswordCommand,
@@ -25,6 +25,7 @@ import { getTenantContext } from "../shared/tenantContext";
 const client = dynamoClient;
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
+const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 
 function generateSafeTempPassword(length = 10) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*";
@@ -175,20 +176,22 @@ export const handler = async (
 
     let existingItem = existingResp.Item;
     if (!existingItem) {
-      const scanResp = await client.send(
-        new ScanCommand({
+      const queryResp = await client.send(
+        new QueryCommand({
           TableName: tableName,
-          FilterExpression: "tenantId = :tenantId",
-          ExpressionAttributeValues: { ":tenantId": { S: tenantId } },
+          IndexName: PARTICIPANTS_NORMALIZED_INDEX,
+          KeyConditionExpression: "tenantId = :tenantId AND userIdNormalized = :userIdNormalized",
+          ExpressionAttributeValues: {
+            ":tenantId": { S: tenantId },
+            ":userIdNormalized": { S: requestedUserId.toLowerCase() },
+          },
+          Limit: 1,
         }),
       );
-      const matched = (scanResp.Items ?? []).find((item) => {
-        const id = item.userId?.S ?? "";
-        return id.toLowerCase() === requestedUserId.toLowerCase();
-      });
-      if (matched?.userId?.S) {
-        targetUserId = matched.userId.S;
-        existingItem = matched;
+      const queryMatched = queryResp.Items?.[0];
+      if (queryMatched?.userId?.S) {
+        targetUserId = queryMatched.userId.S;
+        existingItem = queryMatched;
       }
     }
 
@@ -221,6 +224,7 @@ export const handler = async (
       ...existing,
       tenantId,
       userId: targetUserId,
+      userIdNormalized: targetUserId.toLowerCase(),
     };
 
     if (Object.prototype.hasOwnProperty.call(body, "email")) {

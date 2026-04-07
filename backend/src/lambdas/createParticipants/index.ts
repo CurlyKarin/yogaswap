@@ -7,7 +7,7 @@ import {
   AdminGetUserCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
-import { GetItemCommand, PutItemCommand, ScanCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
+import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 
@@ -16,6 +16,7 @@ const ses = new SESClient({});
 const dynamodb = dynamoClient;
 
 const DEFAULT_TENANT_ID = "default-tenant";
+const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 
 function getTenantId(event: any): string {
   // Behandle baseEvent-Mock (event.headers ist in tests teils undefined, daher Fallback prüfen)
@@ -53,6 +54,7 @@ async function saveParticipantProfile(params: {
   let item: Record<string, AttributeValue> = {
     tenantId: { S: params.tenantId },
     userId: { S: params.userId },
+    userIdNormalized: { S: params.userId.toLowerCase() },
   };
 
   try {
@@ -71,6 +73,7 @@ async function saveParticipantProfile(params: {
         ...existing.Item,
         tenantId: { S: params.tenantId },
         userId: { S: params.userId },
+        userIdNormalized: { S: params.userId.toLowerCase() },
       };
     }
   } catch (err) {
@@ -181,18 +184,19 @@ export const handler = async (event: any) => {
         existingAuthUserId = lowerItem.authUserId?.S;
         existingEmail = lowerItem.email?.S;
       } else {
-        const scanResp = await dynamodb.send(
-          new ScanCommand({
+        const queryResp = await dynamodb.send(
+          new QueryCommand({
             TableName: process.env.PARTICIPANTS_TABLE,
-            FilterExpression: "tenantId = :tenantId",
-            ExpressionAttributeValues: { ":tenantId": { S: tenantId } },
-            ProjectionExpression: "userId, authUserId, cognitoUsername, email",
+            IndexName: PARTICIPANTS_NORMALIZED_INDEX,
+            KeyConditionExpression: "tenantId = :tenantId AND userIdNormalized = :userIdNormalized",
+            ExpressionAttributeValues: {
+              ":tenantId": { S: tenantId },
+              ":userIdNormalized": { S: nicknameNormalized },
+            },
+            Limit: 1,
           }),
         );
-        const matched = (scanResp.Items ?? []).find((item) => {
-          const id = item.userId?.S ?? "";
-          return id.toLowerCase() === nicknameNormalized;
-        });
+        const matched = queryResp.Items?.[0];
         if (matched?.userId?.S) {
           canonicalUserId = matched.userId.S;
           cognitoUsername = matched.cognitoUsername?.S || matched.userId.S;

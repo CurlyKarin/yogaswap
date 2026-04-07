@@ -7,6 +7,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     GetItemCommand: jest.fn((input) => input),
     PutItemCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
     ScanCommand: jest.fn((input) => input),
     mockSend,
   };
@@ -225,6 +226,7 @@ describe("updateParticipant Lambda", () => {
         },
       })
       .mockResolvedValueOnce({ Item: undefined })
+      .mockResolvedValueOnce({ Items: [] })
       .mockResolvedValueOnce({ Items: [] });
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(404);

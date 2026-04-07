@@ -49,11 +49,28 @@ export async function inviteUser(data: InviteUserRequest): Promise<InviteUserRes
     return response.data; // { success: true } oder { error: "Nickname already exists" }
   } catch (error) {
     if (axios.isAxiosError(error)) {
+      const backendError =
+        typeof error.response?.data?.error === "string"
+          ? error.response.data.error
+          : undefined;
+      const statusText =
+        typeof error.response?.status === "number"
+          ? `HTTP ${error.response.status}`
+          : undefined;
+      const message = backendError || statusText || error.message || "Request failed";
       console.error('Einladung fehlgeschlagen:', error.response?.data || error.message);
+      return { error: message };
     } else {
+      const genericBackendError =
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { error?: unknown } } }).response?.data?.error === "string"
+          ? (error as { response?: { data?: { error?: string } } }).response?.data?.error
+          : undefined;
       console.error('Einladung fehlgeschlagen:', error);
+      return { error: genericBackendError || "Request failed" };
     }
-    return { error: "Request failed" };
   }
 }
 

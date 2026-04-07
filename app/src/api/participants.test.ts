@@ -33,7 +33,7 @@ describe("inviteUser", () => {
     expect(result).toEqual({ success: true, emailSent: true });
   });
 
-  it("gibt { error: 'Request failed' } bei Serverfehler (z. B. Nickname exists)", async () => {
+  it("gibt Backend-Fehlertext bei Serverfehler zurück", async () => {
     vi.mocked(axios.post).mockRejectedValueOnce({
       response: { data: { error: "Nickname already exists" } },
     });
@@ -44,7 +44,7 @@ describe("inviteUser", () => {
       role: "participant",
     });
 
-    expect(result).toEqual({ error: "Request failed" });
+    expect(result).toEqual({ error: "Nickname already exists" });
   });
 
   it("gibt { error: 'Request failed' } bei Netzwerkfehler ohne response", async () => {

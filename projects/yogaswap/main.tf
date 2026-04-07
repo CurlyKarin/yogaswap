@@ -154,7 +154,7 @@ locals {
       name             = "update-participant"
       file_name        = "updateParticipant.zip"
       table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Scan"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
       tables = {
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
@@ -211,7 +211,7 @@ locals {
       name             = "create-participants"
       file_name        = "createParticipants.zip"
       table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn]
-      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Scan"]
+      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name

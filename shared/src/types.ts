@@ -130,6 +130,8 @@ export interface ParticipantProfile {
   tenantId: string;
   /** Aktuell: Nickname. Kann später auf eine stabile ID migriert werden. */
   userId: string;
+  /** Kanonische Lookup-ID für case-insensitive Suchen. */
+  userIdNormalized?: string;
 
   /** Optional: Kontakt-E-Mail (kann nachgetragen/aktualisiert werden). */
   email?: string;
