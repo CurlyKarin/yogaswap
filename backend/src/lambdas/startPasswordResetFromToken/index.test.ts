@@ -193,6 +193,54 @@ describe("startPasswordResetFromToken Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/not allowed for this account state/i);
   });
 
+  test("returns 400 for CodeDeliveryFailureException from Cognito", async () => {
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        purpose: { S: "invite-activation" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: "Alice" },
+      },
+    }); // GetItem
+    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
+
+    const deliveryError = new Error("Code delivery failed");
+    (deliveryError as any).name = "CodeDeliveryFailureException";
+    cognitoMockSend.mockRejectedValueOnce(deliveryError);
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/could not be delivered/i);
+  });
+
+  test("returns 429 for TooManyRequestsException from Cognito", async () => {
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        purpose: { S: "invite-activation" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: "Alice" },
+      },
+    }); // GetItem
+    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
+
+    const throttled = new Error("Too many requests");
+    (throttled as any).name = "TooManyRequestsException";
+    cognitoMockSend.mockRejectedValueOnce(throttled);
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(429);
+    expect(JSON.parse(result.body).error).toMatch(/too many reset attempts/i);
+  });
+
   test("returns 400 for token with unsupported purpose", async () => {
     const nowMs = Date.now();
     jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);

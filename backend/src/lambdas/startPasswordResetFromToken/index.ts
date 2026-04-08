@@ -8,6 +8,7 @@ import { dynamoClient } from "../shared/dynamoClient";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ALLOWED_PURPOSES = new Set(["invite-activation", "admin-password-reset"]);
+const AUDIT_EVENT = "auth_token_password_reset";
 
 // Note: We deliberately re-use the lightweight shared dynamoClient pattern in other lambdas,
 // but for isolation (and easier test mocking) we instantiate here.
@@ -38,6 +39,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const nowSeconds = Math.floor(Date.now() / 1000);
 
   try {
+    console.info("AUDIT", {
+      event: AUDIT_EVENT,
+      stage: "trigger",
+      tenantId,
+      tokenProvided: true,
+    });
+
     const getResp = await dynamo.send(
       new GetItemCommand({
         TableName: tokensTable,
@@ -51,11 +59,24 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const item = getResp.Item;
     if (!item) {
+      console.warn("AUDIT", {
+        event: AUDIT_EVENT,
+        stage: "reject",
+        tenantId,
+        reason: "token_not_found",
+      });
       return { statusCode: 404, body: JSON.stringify({ error: "Token not found" }) };
     }
 
     const purpose = item.purpose?.S?.trim();
     if (!purpose || !ALLOWED_PURPOSES.has(purpose)) {
+      console.warn("AUDIT", {
+        event: AUDIT_EVENT,
+        stage: "reject",
+        tenantId,
+        reason: "invalid_purpose",
+        purpose: purpose ?? null,
+      });
       return {
         statusCode: 400,
         body: JSON.stringify({ error: "Token purpose is invalid" }),
@@ -64,19 +85,42 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const expiresAt = Number(item.expiresAt?.N ?? "0");
     if (!expiresAt || expiresAt <= nowSeconds) {
+      console.warn("AUDIT", {
+        event: AUDIT_EVENT,
+        stage: "reject",
+        tenantId,
+        reason: "token_expired",
+        purpose,
+      });
       return { statusCode: 400, body: JSON.stringify({ error: "Token expired" }) };
     }
 
     if (item.usedAt?.N) {
+      console.warn("AUDIT", {
+        event: AUDIT_EVENT,
+        stage: "reject",
+        tenantId,
+        reason: "token_already_used",
+        purpose,
+      });
       return { statusCode: 400, body: JSON.stringify({ error: "Token already used" }) };
     }
 
     const cognitoUsername = item.cognitoUsername?.S;
     if (!cognitoUsername) {
+      console.warn("AUDIT", {
+        event: AUDIT_EVENT,
+        stage: "reject",
+        tenantId,
+        reason: "missing_cognito_username",
+        purpose,
+      });
       return { statusCode: 400, body: JSON.stringify({ error: "Token is missing cognitoUsername" }) };
     }
 
-    // Consume token atomically so it can't be reused.
+    // Consume-before-trigger strategy:
+    // We intentionally mark usedAt BEFORE calling Cognito to prevent replay/race re-use.
+    // If Cognito fails afterwards, admin can issue a new token via re-invite/reset action.
     try {
       await dynamo.send(
         new UpdateItemCommand({
@@ -95,6 +139,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     } catch (e: unknown) {
       const name = (e as any)?.name as string | undefined;
       if (name === "ConditionalCheckFailedException") {
+        console.warn("AUDIT", {
+          event: AUDIT_EVENT,
+          stage: "reject",
+          tenantId,
+          reason: "token_used_or_expired_on_consume",
+          purpose,
+        });
         return {
           statusCode: 400,
           body: JSON.stringify({ error: "Token already used or expired" }),
@@ -102,6 +153,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
       throw e;
     }
+
+    console.info("AUDIT", {
+      event: AUDIT_EVENT,
+      stage: "consume",
+      tenantId,
+      purpose,
+      cognitoUsername,
+      consumedAt: nowSeconds,
+    });
 
     await cognito.send(
       new AdminResetUserPasswordCommand({
@@ -119,6 +179,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   } catch (err: unknown) {
     const name = (err as any)?.name as string | undefined;
+    console.warn("AUDIT", {
+      event: AUDIT_EVENT,
+      stage: "cognito_error",
+      tenantId,
+      reason: name || "unknown_error",
+    });
     if (name === "UserNotFoundException") {
       return { statusCode: 404, body: JSON.stringify({ error: "User not found" }) };
     }
@@ -136,6 +202,23 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         body: JSON.stringify({
           error:
             "Password reset is currently not allowed for this account state. Please ask admin to re-invite again.",
+        }),
+      };
+    }
+    if (name === "CodeDeliveryFailureException") {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error:
+            "Reset code could not be delivered. Please ask admin to verify participant email and re-invite.",
+        }),
+      };
+    }
+    if (name === "TooManyRequestsException" || name === "LimitExceededException") {
+      return {
+        statusCode: 429,
+        body: JSON.stringify({
+          error: "Too many reset attempts. Please wait a moment and try again.",
         }),
       };
     }
