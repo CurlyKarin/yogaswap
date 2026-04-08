@@ -427,6 +427,8 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     const userId = p.userId;
     const effectiveRole: UserRole = p.role ?? "participant";
 
+    // Avoid stale global status text from previous create/bulk actions.
+    setBulkInviteResult("");
     setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
     setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
     try {
@@ -489,6 +491,8 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     if (p.status !== "active") return;
 
     const userId = p.userId;
+    // Avoid stale global status text from previous create/bulk actions.
+    setBulkInviteResult("");
     setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
     setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
     try {
