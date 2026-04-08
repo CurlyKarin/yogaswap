@@ -91,7 +91,29 @@ module "participants_table" {
   range_key = "userId"
   attributes = [
     { name = "tenantId", type = "S" },
-    { name = "userId", type = "S" }
+    { name = "userId", type = "S" },
+    { name = "userIdNormalized", type = "S" }
+  ]
+  global_secondary_index = [
+    {
+      name            = "GSI_UserIdNormalized"
+      hash_key        = "tenantId"
+      range_key       = "userIdNormalized"
+      projection_type = "ALL"
+    }
+  ]
+}
+
+# Auth Tokens (Invite/Recovery): PK = tenantId, SK = token
+# Speichert One-Time-Token inkl. Ablauf und usedAt (ohne TTL: wird serverseitig validiert).
+module "auth_tokens_table" {
+  source    = "../modules/dynamodb"
+  name      = "${var.project}-auth-tokens-table"
+  hash_key  = "tenantId"
+  range_key = "token"
+  attributes = [
+    { name = "tenantId", type = "S" },
+    { name = "token", type = "S" }
   ]
 }
 
@@ -102,6 +124,7 @@ output "table_names" {
     module.courses_table.table_name,
     module.tenants_table.table_name,
     module.memberships_table.table_name,
-    module.participants_table.table_name
+    module.participants_table.table_name,
+    module.auth_tokens_table.table_name
   ]
 }

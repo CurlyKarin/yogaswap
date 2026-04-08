@@ -376,6 +376,74 @@ describe("AdminPanel", () => {
       expect(mockedInviteUser).toHaveBeenCalledWith({ nickname: "alice", role: "participant" });
       expect(mockedUpdateParticipant).not.toHaveBeenCalled();
       expect(
+        within(panel).getByText(/Reaktivierung: Info-Mail gesendet an bestehende Profil-E-Mail\./i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("sendet bei Reaktivierung mit E-Mail-Ueberschreiben die neue E-Mail direkt beim Invite", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "invited",
+      },
+    ]);
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+      reactivated: true,
+      username: "alice",
+    });
+    mockedUpdateParticipant.mockResolvedValueOnce({
+      tenantId: "default-tenant",
+      userId: "alice",
+      role: "participant",
+      email: "alice.new@example.com",
+      status: "invited",
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "alice" },
+    });
+    fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
+      target: { value: "alice.new@example.com" },
+    });
+    await waitFor(() => {
+      expect(
+        within(dialog).getByText(/Reaktivierung erkannt fuer bestehenden Teilnehmer: alice/i),
+      ).toBeInTheDocument();
+    });
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", {
+        name: /Eingegebene E-Mail fuer Reaktivierung uebernehmen/i,
+      }),
+    );
+    expect(within(dialog).getByText(/Mail geht an: alice\.new@example\.com/i)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^(Reaktivieren|Anlegen)$/i }));
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        nickname: "alice",
+        role: "participant",
+      });
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", {
+        email: "alice.new@example.com",
+      });
+      expect(
         within(panel).getByText(/Reaktivierung: Info-Mail gesendet an alice\.new@example\.com\./i),
       ).toBeInTheDocument();
     });
@@ -584,9 +652,6 @@ describe("AdminPanel", () => {
         forcePasswordResetOnEmailChange: true,
         role: "participant",
       });
-      expect(
-        within(panel).getByText(/Passwort-Reset-Mail gesendet an alice.new@example.com/i),
-      ).toBeInTheDocument();
     });
   });
 

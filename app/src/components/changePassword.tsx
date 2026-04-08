@@ -58,7 +58,7 @@ export default function ChangePassword() {
         />
         {error && <p style={{ color: "crimson" }}>{error}</p>}
         <button type="submit" disabled={loading} className="btn-primary btn-block">
-          Speichern
+          Passwort festlegen
         </button>
       </form>
     </div>

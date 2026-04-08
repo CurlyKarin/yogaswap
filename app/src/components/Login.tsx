@@ -2,7 +2,7 @@
 import { User } from "shared/types";
 import { loadCurrentUser } from "shared/lib/storage";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
 
 type Props = {
@@ -14,16 +14,24 @@ const DEMO_USERNAME = "Luna";
 const DEMO_PASSWORD = "Hallo123!";
 
 export default function Login({ onLogin }: Props) {
+  const { state } = useLocation();
+  const navigate = useNavigate();
   const [username, setUsername] = useState(DEMO_USERNAME);
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const { login, isLoading, error } = useCognitoAuth();
+  const infoMessage = typeof (state as { info?: unknown } | null)?.info === "string"
+    ? (state as { info: string }).info
+    : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const success = await login({ username, password });
     if (success) {
       const user = loadCurrentUser();
-      onLogin(user!);
+      if (user) {
+        onLogin(user);
+      }
+      navigate("/", { replace: true });
     }
   };
 
@@ -55,6 +63,7 @@ export default function Login({ onLogin }: Props) {
         <Link to="/forgot-password">Passwort vergessen?</Link>
       </p>
 
+      {infoMessage && <p style={{ color: "#374151" }}>{infoMessage}</p>}
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
       <p style={{ fontSize: 12, opacity: 0.8 }}>

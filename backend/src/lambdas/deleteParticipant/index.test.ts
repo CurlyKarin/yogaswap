@@ -96,6 +96,18 @@ describe("deleteParticipant Lambda", () => {
       notificationEmailSent: true,
     });
     expect(sesMockSend).toHaveBeenCalledTimes(1);
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Message: expect.objectContaining({
+          Subject: { Data: "YogaSwap: Zugang im Studio entfernt" },
+          Body: expect.objectContaining({
+            Html: expect.objectContaining({
+              Data: expect.stringContaining("Accountname (Spitzname): alice"),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 
   test("deletes only membership when participant has authUserId", async () => {

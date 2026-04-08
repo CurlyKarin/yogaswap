@@ -154,7 +154,7 @@ locals {
       name             = "update-participant"
       file_name        = "updateParticipant.zip"
       table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
       tables = {
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
@@ -210,11 +210,13 @@ locals {
     "create_participants" = {
       name             = "create-participants"
       file_name        = "createParticipants.zip"
-      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn]
-      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Scan"]
+      timeout          = 15
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn]
+      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
+        "AUTH_TOKENS_TABLE"   = module.auth_tokens_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -224,7 +226,9 @@ locals {
           Action = [
             "cognito-idp:AdminCreateUser",
             "cognito-idp:AdminAddUserToGroup",
-            "cognito-idp:AdminSetUserPassword"
+            "cognito-idp:AdminSetUserPassword",
+            "cognito-idp:AdminUpdateUserAttributes",
+            "cognito-idp:AdminGetUser"
           ]
           Resource = aws_cognito_user_pool.yogaswap.arn
         },
@@ -238,16 +242,18 @@ locals {
         USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
         BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
         SES_SOURCE_EMAIL = var.ses_source_email # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
+        AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },
     "reset_participant_password" = {
       name             = "reset-participant-password"
       file_name        = "resetParticipantPassword.zip"
-      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn]
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
+        "AUTH_TOKENS_TABLE"   = module.auth_tokens_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -269,6 +275,7 @@ locals {
         USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
         BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
         SES_SOURCE_EMAIL = var.ses_source_email
+        AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },
     "get_tenant_context" = {
@@ -287,6 +294,28 @@ locals {
       }
       s3_actions   = []
       s3_resources = []
+    }
+    "start_password_reset_from_token" = {
+      name             = "start-password-reset-from-token"
+      file_name        = "startPasswordResetFromToken.zip"
+      table_arns       = [module.auth_tokens_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:UpdateItem"]
+      tables = {
+        "AUTH_TOKENS_TABLE" = module.auth_tokens_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+      additional_policies = [
+        {
+          Effect = "Allow"
+          Action = ["cognito-idp:AdminResetUserPassword"]
+          Resource = aws_cognito_user_pool.yogaswap.arn
+        }
+      ]
+      environment = {
+        USER_POOL_ID      = aws_cognito_user_pool.yogaswap.id
+        AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
+      }
     }
   }
   # Map für Lambda-ARNs
@@ -308,6 +337,7 @@ locals {
     "GET /participants"                          = "get_participants"
     "POST /participants"                         = "create_participants"
     "POST /participants/{userId}/password-reset" = "reset_participant_password"
+    "POST /auth/password-reset/from-token"     = "start_password_reset_from_token"
     "PUT /participants/{userId}"                 = "update_participant"
     "DELETE /participants/{userId}"              = "delete_participant"
     "GET /tenant-context"                        = "get_tenant_context"

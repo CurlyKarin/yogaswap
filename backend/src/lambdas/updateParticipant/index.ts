@@ -2,15 +2,16 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import {
   GetItemCommand,
   PutItemCommand,
+  QueryCommand,
 } from "@aws-sdk/client-dynamodb";
 import {
-  AdminSetUserPasswordCommand,
   AdminUpdateUserAttributesCommand,
   AdminUserGlobalSignOutCommand,
   CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+import crypto from "crypto";
 import type {
   ParticipantProfile,
   ParticipantSettings,
@@ -20,24 +21,22 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
+import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
 
 const client = dynamoClient;
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
+const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 
-function generateSafeTempPassword(length = 10) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*";
-  let pw = "";
-  for (let i = 0; i < length; i++) {
-    pw += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return pw;
+function generateOneTimeToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString("base64url");
 }
 
 type UpdateParticipantBody = {
   email?: string | null;
   settings?: ParticipantSettings;
   inviteSentAt?: string | null;
+  inviteCompletedAt?: string | null;
   authUserId?: string | null;
   role?: UserRole;
   forcePasswordResetOnEmailChange?: boolean;
@@ -62,8 +61,8 @@ export const handler = async (
     };
   }
 
-  const userId = event.pathParameters?.userId?.trim();
-  if (!userId) {
+  const requestedUserId = event.pathParameters?.userId?.trim();
+  if (!requestedUserId) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "Missing userId in path" }),
@@ -102,12 +101,13 @@ export const handler = async (
       Object.prototype.hasOwnProperty.call(body, "email") ||
       Object.prototype.hasOwnProperty.call(body, "settings") ||
       Object.prototype.hasOwnProperty.call(body, "inviteSentAt") ||
+      Object.prototype.hasOwnProperty.call(body, "inviteCompletedAt") ||
       Object.prototype.hasOwnProperty.call(body, "role");
 
     // Allow a participant to self-link their own Cognito `sub` once after sign-up.
     // This is required for participants created via invitation to move from "invited" -> "active".
     const isSelfAuthLink =
-      actorUserId?.toLowerCase() === userId.toLowerCase() &&
+      actorUserId?.toLowerCase() === requestedUserId.toLowerCase() &&
       hasAuthUserId &&
       !hasOtherMutationKeys;
 
@@ -158,26 +158,48 @@ export const handler = async (
       }
     }
 
+    let targetUserId = requestedUserId;
     const existingResp = await client.send(
       new GetItemCommand({
         TableName: tableName,
         Key: {
           tenantId: { S: tenantId },
-          userId: { S: userId },
+          userId: { S: targetUserId },
         },
         ConsistentRead: true,
       }),
     );
 
-    if (!existingResp.Item) {
+    let existingItem = existingResp.Item;
+    if (!existingItem) {
+      const queryResp = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          IndexName: PARTICIPANTS_NORMALIZED_INDEX,
+          KeyConditionExpression: "tenantId = :tenantId AND userIdNormalized = :userIdNormalized",
+          ExpressionAttributeValues: {
+            ":tenantId": { S: tenantId },
+            ":userIdNormalized": { S: requestedUserId.toLowerCase() },
+          },
+          Limit: 1,
+        }),
+      );
+      const queryMatched = queryResp.Items?.[0];
+      if (queryMatched?.userId?.S) {
+        targetUserId = queryMatched.userId.S;
+        existingItem = queryMatched;
+      }
+    }
+
+    if (!existingItem) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: "Participant not found" }),
       };
     }
 
-    const existing = unmarshall(existingResp.Item) as ParticipantProfile;
-    const existingCognitoUsername = existingResp.Item.cognitoUsername?.S;
+    const existing = unmarshall(existingItem) as ParticipantProfile;
+    const existingCognitoUsername = existingItem.cognitoUsername?.S;
     const existingStatus = deriveParticipantStatus(existing);
     if (requestsEmailChange) {
       const requestedEmail = typeof body.email === "string" ? body.email.trim() : body.email;
@@ -197,7 +219,8 @@ export const handler = async (
     const updated: ParticipantProfile = {
       ...existing,
       tenantId,
-      userId,
+      userId: targetUserId,
+      userIdNormalized: targetUserId.toLowerCase(),
     };
 
     if (Object.prototype.hasOwnProperty.call(body, "email")) {
@@ -217,7 +240,7 @@ export const handler = async (
             };
           }
           try {
-            const cognitoUsername = existingCognitoUsername || userId;
+            const cognitoUsername = existingCognitoUsername || targetUserId;
             await cognito.send(
               new AdminUpdateUserAttributesCommand({
                 UserPoolId: userPoolId,
@@ -238,13 +261,29 @@ export const handler = async (
             }
 
             if (emailChanged && body.forcePasswordResetOnEmailChange) {
-              const rawPassword = `${generateSafeTempPassword(10)}A1`;
-              await cognito.send(
-                new AdminSetUserPasswordCommand({
-                  UserPoolId: userPoolId,
-                  Username: cognitoUsername,
-                  Password: rawPassword,
-                  Permanent: false,
+              const authTokensTable = process.env.AUTH_TOKENS_TABLE;
+              if (!authTokensTable) {
+                return {
+                  statusCode: 500,
+                  body: JSON.stringify({ error: "AUTH_TOKENS_TABLE env var is not set" }),
+                };
+              }
+
+              const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
+              const nowSeconds = Math.floor(Date.now() / 1000);
+              const oneTimeToken = generateOneTimeToken();
+              await client.send(
+                new PutItemCommand({
+                  TableName: authTokensTable,
+                  Item: {
+                    tenantId: { S: tenantId },
+                    token: { S: oneTimeToken },
+                    cognitoUsername: { S: cognitoUsername },
+                    userId: { S: targetUserId },
+                    purpose: { S: "admin-password-reset" },
+                    createdAt: { N: String(nowSeconds) },
+                    expiresAt: { N: String(nowSeconds + tokenTtlSeconds) },
+                  },
                 }),
               );
               passwordResetTriggered = true;
@@ -252,27 +291,23 @@ export const handler = async (
               const baseUrlEnv = process.env.BASE_URL || "";
               const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
               const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
-              const link = `${baseUrl}/invite?nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
+              const mailLocale = process.env.MAIL_LOCALE || "de";
+              const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
+              const recoveryMail = buildRecoveryMail({
+                locale: mailLocale,
+                nickname: targetUserId,
+                link,
+              });
               try {
                 await ses.send(
                   new SendEmailCommand({
                     Source: sesSourceEmail,
                     Destination: { ToAddresses: [email] },
                     Message: {
-                      Subject: { Data: "YogaSwap Passwort zuruecksetzen" },
+                      Subject: { Data: recoveryMail.subject },
                       Body: {
                         Html: {
-                          Data: `
-                            <h2>Hallo ${userId}!</h2>
-                            <p>Deine E-Mail-Adresse wurde aktualisiert. Bitte setze jetzt ein neues Passwort.</p>
-                            <p><a href="${link}">Klicke hier, um ein neues Passwort zu setzen</a></p>
-                            <div style="margin-top:12px;">
-                              <p style="margin:0 0 6px 0;"><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong></p>
-                              <div>
-                                <code style="display:inline-block;background:#f0f0f0;padding:8px 10px;border-radius:4px;line-height:1.4;font-family:monospace;">${rawPassword}</code>
-                              </div>
-                            </div>
-                          `,
+                          Data: recoveryMail.html,
                         },
                       },
                     },
@@ -318,12 +353,24 @@ export const handler = async (
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "inviteCompletedAt")) {
+      if (typeof body.inviteCompletedAt === "string" && body.inviteCompletedAt.trim()) {
+        updated.inviteCompletedAt = body.inviteCompletedAt;
+      } else {
+        delete updated.inviteCompletedAt;
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(body, "authUserId")) {
       if (typeof body.authUserId === "string" && body.authUserId.trim()) {
         updated.authUserId = body.authUserId;
       } else {
         delete updated.authUserId;
       }
+    }
+
+    if (isSelfAuthLink && hasAuthUserId) {
+      updated.inviteCompletedAt = new Date().toISOString();
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "role")) {
@@ -339,7 +386,7 @@ export const handler = async (
           TableName: membershipsTable,
           Item: marshall({
             tenantId,
-            userId,
+            userId: targetUserId,
             role: nextRole,
           }),
         }),

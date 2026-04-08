@@ -29,7 +29,10 @@ resource "aws_iam_role_policy" "lambda_policy" {
       length(each.value.dynamodb_actions) > 0 ? [{
         Effect   = "Allow",
         Action   = each.value.dynamodb_actions,
-        Resource = each.value.table_arns
+        Resource = concat(
+          each.value.table_arns,
+          [for arn in each.value.table_arns : "${arn}/index/*"],
+        )
       }] : [],
       # S3-Berechtigungen, falls s3_actions nicht leer
       length(each.value.s3_actions) > 0 ? [{
@@ -59,6 +62,7 @@ resource "aws_lambda_function" "lambda" {
   function_name = "${var.project}-${each.value.name}"
   handler       = "index.handler"
   runtime       = "nodejs18.x"
+  timeout       = try(each.value.timeout, 3)
   role          = aws_iam_role.lambda_role[each.key].arn
   filename      = "${path.module}/../../backend/zips/${each.value.file_name}"
   # Kombiniere Source Code Hash mit Environment Variables Hash, damit Lambda bei Environment-Änderungen neu deployed wird

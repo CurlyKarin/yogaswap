@@ -352,6 +352,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setCreateSaving(true);
     setCreateError("");
     try {
+      const shouldPreUpdateEmailForReactivation =
+        !!createReactivationUserId && createOverwriteEmailOnReactivate && emailValue.length > 0;
+
+      if (shouldPreUpdateEmailForReactivation) {
+        await updateParticipant(createReactivationUserId, { email: emailValue });
+      }
+
       // #67: Teilnehmer anlegen ohne Einladung (kein Cognito/SES).
       // Wir legen zunächst ohne E-Mail an, speichern E-Mail (falls vorhanden) danach separat im Profil.
       const result = await inviteUser({ nickname: nicknameValue, role: createRole });
@@ -364,7 +371,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         return;
       }
 
-      if (emailValue.length > 0 && (!result.reactivated || createOverwriteEmailOnReactivate)) {
+      if (
+        emailValue.length > 0 &&
+        (!result.reactivated || createOverwriteEmailOnReactivate) &&
+        !shouldPreUpdateEmailForReactivation
+      ) {
         await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
       } else if (emailValue.length > 0 && result.reactivated && !createOverwriteEmailOnReactivate) {
         setBulkInviteResult(
@@ -374,11 +385,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
 
       const effectiveEmail = emailValue || createEmail;
       if (result.reactivated) {
+        const reactivationNotificationTarget =
+          createOverwriteEmailOnReactivate && emailValue
+            ? emailValue
+            : "bestehende Profil-E-Mail";
         if (result.emailSent) {
           setBulkInviteResult(
-            effectiveEmail
-              ? `Reaktivierung: Info-Mail gesendet an ${effectiveEmail}.`
-              : "Reaktivierung: Info-Mail wurde gesendet.",
+            `Reaktivierung: Info-Mail gesendet an ${reactivationNotificationTarget}.`,
           );
         } else {
           setBulkInviteResult("Reaktivierung erfolgt, aber E-Mail konnte nicht versendet werden.");
@@ -408,12 +421,14 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     options?: { refreshAfter?: boolean },
   ) => {
     if (!p.email) return;
-    if (p.status === "active") return;
+    if (p.status === "active" && !canEditRoles) return;
 
     const refreshAfter = options?.refreshAfter ?? true;
     const userId = p.userId;
     const effectiveRole: UserRole = p.role ?? "participant";
 
+    // Avoid stale global status text from previous create/bulk actions.
+    setBulkInviteResult("");
     setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
     setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
     try {
@@ -424,16 +439,22 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       });
 
       if (result.error) {
-        setInviteResultByUserId((prev) => ({ ...prev, [userId]: "Fehler beim Einladen." }));
+        setInviteResultByUserId((prev) => ({
+          ...prev,
+          [userId]: `Fehler beim Einladen: ${result.error}`,
+        }));
         return { ok: false as const };
       }
 
       if (result.emailSent) {
         setInviteResultByUserId((prev) => ({
           ...prev,
-          [userId]: result.reactivated
-            ? `Zugang reaktiviert. Info-Mail gesendet an ${p.email}.`
-            : `Einladung gesendet an ${p.email}.`,
+          [userId]:
+            result.reactivated
+              ? `Zugang reaktiviert. Info-Mail gesendet an ${p.email}.`
+              : p.status === "active"
+                ? `Einladungslink zur Passwort-Recovery gesendet an ${p.email}.`
+                : `Einladung gesendet an ${p.email}.`,
         }));
       } else {
         setInviteResultByUserId((prev) => ({
@@ -443,7 +464,17 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       }
 
       if (refreshAfter) {
-        await refreshParticipants();
+        try {
+          await refreshParticipants();
+        } catch (refreshErr) {
+          console.warn("Invite succeeded but participant refresh failed", refreshErr);
+          setInviteResultByUserId((prev) => ({
+            ...prev,
+            [userId]:
+              "Einladung gesendet, aber die Liste konnte nicht aktualisiert werden. Bitte Seite neu laden.",
+          }));
+          return { ok: true as const };
+        }
       }
       return { ok: true as const };
     } catch (err) {
@@ -460,6 +491,8 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     if (p.status !== "active") return;
 
     const userId = p.userId;
+    // Avoid stale global status text from previous create/bulk actions.
+    setBulkInviteResult("");
     setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
     setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
     try {
@@ -671,7 +704,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                         !p.email
                           ? "E-Mail fehlt"
                           : p.status === "active"
-                            ? "Bereits registriert"
+                            ? "Bereits registriert (kein Sammelversand)"
                             : "Auswählen"
                       }
                       onChange={(e) => toggleSelectedInviteUserId(p.userId, e.target.checked)}
@@ -700,16 +733,24 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       title={
                         !p.email
                           ? "E-Mail fehlt"
-                          : p.status === "active"
+                          : p.status === "active" && !canEditRoles
                             ? "Bereits registriert"
-                            : p.status === "invited"
-                              ? "Einladung erneut senden"
-                              : "Einladung senden"
+                            : p.status === "active" && canEditRoles
+                              ? "Einladungslink (Recovery) erneut an registrierte Nutzerin senden"
+                              : p.status === "invited"
+                                ? "Einladung erneut senden"
+                                : "Einladung senden"
                       }
-                      aria-label={`${p.status === "invited" ? "Erneut einladen" : "Einladen"} ${p.userId}`}
+                      aria-label={
+                        p.status === "active" && canEditRoles
+                          ? `Einladungslink senden ${p.userId}`
+                          : p.status === "invited"
+                            ? `Erneut einladen ${p.userId}`
+                            : `Einladen ${p.userId}`
+                      }
                       disabled={
                         !p.email ||
-                        p.status === "active" ||
+                        (p.status === "active" && !canEditRoles) ||
                         !!inviteSendingByUserId[p.userId] ||
                         participantsLoading ||
                         editingSaving ||
@@ -719,9 +760,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                     >
                       {inviteSendingByUserId[p.userId]
                         ? "..."
-                        : p.status === "invited"
-                          ? "Erneut"
-                          : "Einladen"}
+                        : p.status === "active" && canEditRoles
+                          ? "Link"
+                          : p.status === "invited"
+                            ? "Erneut"
+                            : "Einladen"}
                     </button>
                     {canEditRoles && (
                       <button
@@ -928,8 +971,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       onChange={(e) => setCreateOverwriteEmailOnReactivate(e.target.checked)}
                       disabled={createSaving}
                     />
-                    E-Mail bei Reaktivierung ueberschreiben
+                    Eingegebene E-Mail fuer Reaktivierung uebernehmen
                   </label>
+                  <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                    {createOverwriteEmailOnReactivate && createEmail.trim()
+                      ? `Mail geht an: ${createEmail.trim()}`
+                      : "Mail geht an: bestehende Profil-E-Mail"}
+                  </p>
                 </>
               )}
               {createActiveConflict && (

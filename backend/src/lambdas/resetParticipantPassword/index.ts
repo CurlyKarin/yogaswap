@@ -1,32 +1,27 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { AdminSetUserPasswordCommand, CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
+import crypto from "crypto";
+import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
 
-const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
 const dynamodb = dynamoClient;
-
-function generateSafeTempPassword(length = 10) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*";
-  let pw = "";
-  for (let i = 0; i < length; i++) {
-    pw += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return pw;
+function generateOneTimeToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString("base64url");
 }
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const participantsTable = process.env.PARTICIPANTS_TABLE;
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
-  const userPoolId = process.env.USER_POOL_ID;
+  const authTokensTable = process.env.AUTH_TOKENS_TABLE;
   const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+  const mailLocale = process.env.MAIL_LOCALE || "de";
   const baseUrlEnv = process.env.BASE_URL || "";
   const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
 
-  if (!participantsTable || !membershipsTable || !userPoolId) {
+  if (!participantsTable || !membershipsTable || !authTokensTable) {
     return {
       statusCode: 500,
       body: JSON.stringify({ error: "Missing required environment variables" }),
@@ -80,53 +75,47 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const cognitoUsername = participant.cognitoUsername?.S || participant.userId?.S || targetUserId;
-    const rawPassword = `${generateSafeTempPassword(10)}A1`;
 
-    await cognito.send(
-      new AdminSetUserPasswordCommand({
-        UserPoolId: userPoolId,
-        Username: cognitoUsername,
-        Password: rawPassword,
-        Permanent: false,
-      }),
-    );
+    // One-Time Token: Token-Link startet dann den Cognito-Code-Flow (ohne temporäres Passwort per E-Mail).
+    const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const oneTimeToken = generateOneTimeToken();
 
-    const inviteSentAt = new Date().toISOString();
     await dynamodb.send(
       new PutItemCommand({
-        TableName: participantsTable,
+        TableName: authTokensTable,
         Item: {
-          ...participant,
           tenantId: { S: tenantId },
+          token: { S: oneTimeToken },
+          cognitoUsername: { S: cognitoUsername },
           userId: { S: targetUserId },
-          inviteSentAt: { S: inviteSentAt },
+          purpose: { S: "admin-password-reset" },
+          createdAt: { N: String(nowSeconds) },
+          expiresAt: { N: String(nowSeconds + tokenTtlSeconds) },
         },
       }),
     );
 
-    const link = `${baseUrl}/invite?nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
+    const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(
+      cognitoUsername,
+    )}&email=${encodeURIComponent(email)}`;
+
     let emailSent = false;
     try {
+      const recoveryMail = buildRecoveryMail({
+        locale: mailLocale,
+        nickname: targetUserId,
+        link,
+      });
       await ses.send(
         new SendEmailCommand({
           Source: sesSourceEmail,
           Destination: { ToAddresses: [email] },
           Message: {
-            Subject: { Data: "YogaSwap Passwort zuruecksetzen" },
+            Subject: { Data: recoveryMail.subject },
             Body: {
               Html: {
-                Data: `
-                <h2>Hallo ${targetUserId}!</h2>
-                <p>Dein Passwort fuer YogaSwap wurde zurueckgesetzt.</p>
-                <p><a href="${link}">Klicke hier, um ein neues Passwort zu setzen</a></p>
-                <div style="margin-top:12px;">
-                  <p style="margin:0 0 6px 0;"><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong></p>
-                  <div>
-                    <code style="display:inline-block;background:#f0f0f0;padding:8px 10px;border-radius:4px;line-height:1.4;font-family:monospace;">${rawPassword}</code>
-                  </div>
-                </div>
-                <p>Tipp: Falls das Passwort beim Einfügen nicht funktioniert, achte auf keine Leerzeichen vor/nach dem Passwort.</p>
-              `,
+                Data: recoveryMail.html,
               },
             },
           },

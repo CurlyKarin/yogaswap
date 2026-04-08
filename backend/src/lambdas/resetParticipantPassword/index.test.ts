@@ -12,12 +12,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
 });
 
 jest.mock("@aws-sdk/client-cognito-identity-provider", () => {
-  const mockSend = jest.fn();
-  return {
-    CognitoIdentityProviderClient: jest.fn(() => ({ send: mockSend })),
-    AdminSetUserPasswordCommand: jest.fn((input) => input),
-    mockSend,
-  };
+  return {};
 });
 
 jest.mock("@aws-sdk/client-ses", () => {
@@ -30,7 +25,6 @@ jest.mock("@aws-sdk/client-ses", () => {
 });
 
 const { mockSend: dynamoMockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
-const { mockSend: cognitoMockSend } = jest.requireMock("@aws-sdk/client-cognito-identity-provider");
 const { mockSend: sesMockSend } = jest.requireMock("@aws-sdk/client-ses");
 
 describe("resetParticipantPassword Lambda", () => {
@@ -45,9 +39,9 @@ describe("resetParticipantPassword Lambda", () => {
       USER_POOL_ID: "test-user-pool-id",
       BASE_URL: "https://yogaswap.example.com",
       SES_SOURCE_EMAIL: "support@yogaswap.de",
+      AUTH_TOKENS_TABLE: "test-auth-tokens",
     };
     dynamoMockSend.mockReset();
-    cognitoMockSend.mockReset();
     sesMockSend.mockReset();
   });
 
@@ -113,8 +107,6 @@ describe("resetParticipantPassword Lambda", () => {
           cognitoUsername: { S: "Alice" },
         },
       })
-      .mockResolvedValueOnce({});
-    cognitoMockSend.mockResolvedValueOnce({});
     sesMockSend.mockResolvedValueOnce({});
 
     const result = await handler(makeEvent());
@@ -123,14 +115,6 @@ describe("resetParticipantPassword Lambda", () => {
     expect(body.success).toBe(true);
     expect(body.emailSent).toBe(true);
     expect(body.userId).toBe("alice");
-
-    expect(cognitoMockSend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        UserPoolId: "test-user-pool-id",
-        Username: "Alice",
-        Permanent: false,
-      }),
-    );
     expect(sesMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         Destination: { ToAddresses: ["alice@example.com"] },

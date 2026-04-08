@@ -1,6 +1,7 @@
 import {
   ScanCommand,
   PutItemCommand,
+  UpdateItemCommand,
   type AttributeValue,
 } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../lambdas/shared/dynamoClient";
@@ -20,6 +21,8 @@ async function run(): Promise<void> {
   let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
   let scanned = 0;
   let created = 0;
+  let normalizedUpdated = 0;
+  let inviteCompletedUpdated = 0;
 
   do {
     const scanResp = await client.send(
@@ -45,6 +48,7 @@ async function run(): Promise<void> {
             Item: {
               tenantId: { S: tenantId },
               userId: { S: userId },
+              userIdNormalized: { S: userId.toLowerCase() },
             },
             // Create only if missing; keeps existing profile fields untouched.
             ConditionExpression:
@@ -71,7 +75,63 @@ async function run(): Promise<void> {
     lastEvaluatedKey = scanResp.LastEvaluatedKey;
   } while (lastEvaluatedKey);
 
-  console.log(`Backfill done: scanned=${scanned}, attemptedCreates=${created}`);
+  // Existing participant profiles: ensure userIdNormalized is populated.
+  let participantLastEvaluatedKey: Record<string, AttributeValue> | undefined;
+  do {
+    const participantScanResp = await client.send(
+      new ScanCommand({
+        TableName: PARTICIPANTS_TABLE,
+        ExclusiveStartKey: participantLastEvaluatedKey,
+      }),
+    );
+    const items = participantScanResp.Items || [];
+    for (const item of items) {
+      const tenantId = item.tenantId?.S;
+      const userId = item.userId?.S;
+      if (!tenantId || !userId) continue;
+      const normalized = userId.toLowerCase();
+      const currentNormalized = item.userIdNormalized?.S;
+      const authUserId = item.authUserId?.S?.trim();
+      const inviteCompletedAt = item.inviteCompletedAt?.S?.trim();
+      const inviteSentAt = item.inviteSentAt?.S?.trim();
+
+      const needsNormalized = currentNormalized !== normalized;
+      const needsInviteCompleted = !!authUserId && !inviteCompletedAt;
+
+      if (!needsNormalized && !needsInviteCompleted) continue;
+
+      const expressionParts: string[] = [];
+      const values: Record<string, AttributeValue> = {};
+      if (needsNormalized) {
+        expressionParts.push("userIdNormalized = :normalized");
+        values[":normalized"] = { S: normalized };
+      }
+      if (needsInviteCompleted) {
+        expressionParts.push("inviteCompletedAt = :inviteCompletedAt");
+        values[":inviteCompletedAt"] = { S: inviteSentAt || new Date().toISOString() };
+      }
+
+      await client.send(
+        new UpdateItemCommand({
+          TableName: PARTICIPANTS_TABLE,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: userId },
+          },
+          UpdateExpression: `SET ${expressionParts.join(", ")}`,
+          ExpressionAttributeValues: values,
+        }),
+      );
+
+      if (needsNormalized) normalizedUpdated += 1;
+      if (needsInviteCompleted) inviteCompletedUpdated += 1;
+    }
+    participantLastEvaluatedKey = participantScanResp.LastEvaluatedKey;
+  } while (participantLastEvaluatedKey);
+
+  console.log(
+    `Backfill done: scanned=${scanned}, attemptedCreates=${created}, normalizedUpdated=${normalizedUpdated}, inviteCompletedUpdated=${inviteCompletedUpdated}`,
+  );
 }
 
 run().catch((error) => {

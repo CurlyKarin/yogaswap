@@ -7,6 +7,8 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     GetItemCommand: jest.fn((input) => input),
     PutItemCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
+    ScanCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -48,6 +50,8 @@ describe("updateParticipant Lambda", () => {
       USER_POOL_ID: "test-user-pool-id",
       BASE_URL: "https://yogaswap.example.com",
       SES_SOURCE_EMAIL: "support@yogaswap.de",
+      AUTH_TOKENS_TABLE: "test-auth-tokens",
+      AUTH_TOKEN_TTL_SECONDS: "3600",
     };
     mockSend.mockReset();
     cognitoMockSend.mockReset();
@@ -223,7 +227,9 @@ describe("updateParticipant Lambda", () => {
           role: { S: "admin" },
         },
       })
-      .mockResolvedValueOnce({ Item: undefined });
+      .mockResolvedValueOnce({ Item: undefined })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [] });
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(404);
     expect(JSON.parse(result.body).error).toBe("Participant not found");
@@ -317,12 +323,45 @@ describe("updateParticipant Lambda", () => {
 
     const resultActive = await handler(
       makeEvent({
-        body: JSON.stringify({ authUserId: "cognito-sub-123" }),
+        body: JSON.stringify({
+          authUserId: "cognito-sub-123",
+          inviteCompletedAt: "2026-01-02T12:00:00.000Z",
+        }),
       }),
     );
 
     expect(resultActive.statusCode).toBe(200);
     expect(JSON.parse(resultActive.body).status).toBe("active");
+
+    mockSend.mockReset();
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          inviteSentAt: { S: "2026-01-01T12:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const resultStuckSub = await handler(
+      makeEvent({
+        body: JSON.stringify({ authUserId: "cognito-sub-only" }),
+      }),
+    );
+
+    expect(resultStuckSub.statusCode).toBe(200);
+    expect(JSON.parse(resultStuckSub.body).status).toBe("invited");
   });
 
   test("returns 403 when membership is missing", async () => {
