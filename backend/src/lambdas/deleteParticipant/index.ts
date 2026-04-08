@@ -9,6 +9,7 @@ import { unmarshall } from "@aws-sdk/util-dynamodb";
 import type { ParticipantProfile } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
+import { buildStudioAccessRemovedMail } from "../shared/templates/auth/authMailTemplates";
 import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
@@ -128,20 +129,21 @@ export const handler = async (
     // Optional notification email when participant has an email address.
     if (profile?.email) {
       const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+      const mailLocale = process.env.MAIL_LOCALE || "de";
+      const removedMail = buildStudioAccessRemovedMail({
+        locale: mailLocale,
+        nickname: profile.userId || userId,
+      });
       try {
         await ses.send(
           new SendEmailCommand({
             Source: sesSourceEmail,
             Destination: { ToAddresses: [profile.email] },
             Message: {
-              Subject: { Data: "YogaSwap: Zugang im Studio entfernt" },
+              Subject: { Data: removedMail.subject },
               Body: {
                 Html: {
-                  Data:
-                    "<p>Dein Zugang zu diesem YogaSwap-Studio wurde entfernt.</p>" +
-                    "<p>Dein Konto ist aktuell nur deaktiviert und noch nicht vollstaendig geloescht.</p>" +
-                    "<p>Wenn du eine vollstaendige Entfernung deines Kontos moechtest, schreibe bitte an support@yogaswap.de.</p>" +
-                    "<p>Falls das ein Versehen war, melde dich bitte beim Studio-Team.</p>",
+                  Data: removedMail.html,
                 },
               },
             },

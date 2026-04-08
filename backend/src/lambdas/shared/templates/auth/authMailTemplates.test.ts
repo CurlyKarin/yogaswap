@@ -3,6 +3,7 @@ import {
   buildInvitePreparationMail,
   buildRecoveryMail,
   buildReactivationMail,
+  buildStudioAccessRemovedMail,
 } from "./authMailTemplates";
 
 describe("authMailTemplates", () => {
@@ -15,6 +16,7 @@ describe("authMailTemplates", () => {
 
     expect(mail.subject).toBe("YogaSwap Einladung");
     expect(mail.html).toContain("Hallo Karin");
+    expect(mail.html).toContain("Accountname (Spitzname): Karin");
     expect(mail.html).toContain("https://example.com/invite-token");
     expect(mail.html).toContain("eingeladen");
   });
@@ -28,6 +30,7 @@ describe("authMailTemplates", () => {
 
     expect(mail.subject).toBe("YogaSwap Passwort zuruecksetzen");
     expect(mail.html).toContain("Hallo Karin");
+    expect(mail.html).toContain("Accountname (Spitzname): Karin");
     expect(mail.html).toContain("https://example.com/recovery-token");
     expect(mail.html).toContain("Passwort fuer YogaSwap wurde zurueckgesetzt");
   });
@@ -41,6 +44,7 @@ describe("authMailTemplates", () => {
 
     expect(mail.subject).toBe("YogaSwap Reaktivierung");
     expect(mail.html).toContain("Hallo Karin");
+    expect(mail.html).toContain("Accountname (Spitzname): Karin");
     expect(mail.html).toContain("https://example.com/login");
     expect(mail.html).toContain("reaktiviert");
   });
@@ -53,7 +57,19 @@ describe("authMailTemplates", () => {
 
     expect(mail.subject).toBe("YogaSwap Einladung");
     expect(mail.html).toContain("Hallo Karin");
+    expect(mail.html).toContain("Accountname (Spitzname): Karin");
     expect(mail.html).toContain("Dein Zugang wird vorbereitet");
+  });
+
+  test("buildStudioAccessRemovedMail returns german template with nickname", () => {
+    const mail = buildStudioAccessRemovedMail({
+      locale: "de",
+      nickname: "Karin",
+    });
+
+    expect(mail.subject).toBe("YogaSwap: Zugang im Studio entfernt");
+    expect(mail.html).toContain("Zugang zu diesem YogaSwap-Studio wurde entfernt");
+    expect(mail.html).toContain("Accountname (Spitzname): Karin");
   });
 
   test("unknown locale falls back to german for all builders", () => {

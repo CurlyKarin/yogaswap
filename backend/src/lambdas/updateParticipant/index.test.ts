@@ -50,6 +50,8 @@ describe("updateParticipant Lambda", () => {
       USER_POOL_ID: "test-user-pool-id",
       BASE_URL: "https://yogaswap.example.com",
       SES_SOURCE_EMAIL: "support@yogaswap.de",
+      AUTH_TOKENS_TABLE: "test-auth-tokens",
+      AUTH_TOKEN_TTL_SECONDS: "3600",
     };
     mockSend.mockReset();
     cognitoMockSend.mockReset();

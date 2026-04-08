@@ -36,6 +36,7 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
       subject: "YogaSwap Einladung",
       html: `
         <h2>Hallo ${input.nickname}!</h2>
+        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
         <p>Du wurdest zu YogaSwap eingeladen.</p>
         <p><a href="${input.link}">Klicke hier, um ein neues Passwort festzulegen</a></p>
         <p>Danach erhältst du eine E-Mail mit einem Code zur Bestätigung.</p>
@@ -55,6 +56,7 @@ export function buildRecoveryMail(input: RecoveryMailInput): MailTemplate {
       subject: "YogaSwap Passwort zuruecksetzen",
       html: `
         <h2>Hallo ${input.nickname}!</h2>
+        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
         <p>Dein Passwort fuer YogaSwap wurde zurueckgesetzt.</p>
         <p><a href="${input.link}">Klicke hier, um ein neues Passwort festzulegen</a></p>
         <p>Danach erhältst du eine E-Mail mit einem Code zur Bestätigung.</p>
@@ -74,6 +76,7 @@ export function buildReactivationMail(input: ReactivationMailInput): MailTemplat
       subject: "YogaSwap Reaktivierung",
       html: `
         <h2>Hallo ${input.nickname}!</h2>
+        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
         <p>Dein Zugang zu YogaSwap wurde fuer dieses Studio reaktiviert.</p>
         <p>Du kannst dich mit deinem bestehenden Passwort wieder anmelden.</p>
         <p><a href="${input.loginUrl}">Zur Anmeldung</a></p>
@@ -98,6 +101,7 @@ export function buildInvitePreparationMail(input: InvitePreparationMailInput): M
       subject: "YogaSwap Einladung",
       html: `
         <h2>Hallo ${input.nickname}!</h2>
+        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
         <p>Dein Zugang wird vorbereitet.</p>
         <p>Bitte kontaktiere dein Studio, falls du keinen gueltigen Einladungslink erhalten hast.</p>
       `,
@@ -105,6 +109,30 @@ export function buildInvitePreparationMail(input: InvitePreparationMailInput): M
   }
   return {
     subject: "YogaSwap Einladung",
+    html: "",
+  };
+}
+
+type StudioAccessRemovedMailInput = {
+  locale?: string;
+  nickname: string;
+};
+
+export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput): MailTemplate {
+  const locale = normalizeLocale(input.locale);
+  if (locale === "de") {
+    return {
+      subject: "YogaSwap: Zugang im Studio entfernt",
+      html:
+        `<p>Dein Zugang zu diesem YogaSwap-Studio wurde entfernt.</p>` +
+        `<p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>` +
+        "<p>Dein Konto ist aktuell nur deaktiviert und noch nicht vollstaendig geloescht.</p>" +
+        "<p>Wenn du eine vollstaendige Entfernung deines Kontos moechtest, schreibe bitte an support@yogaswap.de.</p>" +
+        "<p>Falls das ein Versehen war, melde dich bitte beim Studio-Team.</p>",
+    };
+  }
+  return {
+    subject: "YogaSwap: Zugang im Studio entfernt",
     html: "",
   };
 }

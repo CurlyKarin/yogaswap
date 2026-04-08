@@ -5,13 +5,13 @@ import {
   QueryCommand,
 } from "@aws-sdk/client-dynamodb";
 import {
-  AdminSetUserPasswordCommand,
   AdminUpdateUserAttributesCommand,
   AdminUserGlobalSignOutCommand,
   CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+import crypto from "crypto";
 import type {
   ParticipantProfile,
   ParticipantSettings,
@@ -21,19 +21,15 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
+import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
 
 const client = dynamoClient;
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
 const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 
-function generateSafeTempPassword(length = 10) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*";
-  let pw = "";
-  for (let i = 0; i < length; i++) {
-    pw += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return pw;
+function generateOneTimeToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString("base64url");
 }
 
 type UpdateParticipantBody = {
@@ -265,13 +261,29 @@ export const handler = async (
             }
 
             if (emailChanged && body.forcePasswordResetOnEmailChange) {
-              const rawPassword = `${generateSafeTempPassword(10)}A1`;
-              await cognito.send(
-                new AdminSetUserPasswordCommand({
-                  UserPoolId: userPoolId,
-                  Username: cognitoUsername,
-                  Password: rawPassword,
-                  Permanent: false,
+              const authTokensTable = process.env.AUTH_TOKENS_TABLE;
+              if (!authTokensTable) {
+                return {
+                  statusCode: 500,
+                  body: JSON.stringify({ error: "AUTH_TOKENS_TABLE env var is not set" }),
+                };
+              }
+
+              const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
+              const nowSeconds = Math.floor(Date.now() / 1000);
+              const oneTimeToken = generateOneTimeToken();
+              await client.send(
+                new PutItemCommand({
+                  TableName: authTokensTable,
+                  Item: {
+                    tenantId: { S: tenantId },
+                    token: { S: oneTimeToken },
+                    cognitoUsername: { S: cognitoUsername },
+                    userId: { S: targetUserId },
+                    purpose: { S: "admin-password-reset" },
+                    createdAt: { N: String(nowSeconds) },
+                    expiresAt: { N: String(nowSeconds + tokenTtlSeconds) },
+                  },
                 }),
               );
               passwordResetTriggered = true;
@@ -279,27 +291,23 @@ export const handler = async (
               const baseUrlEnv = process.env.BASE_URL || "";
               const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
               const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
-              const link = `${baseUrl}/invite?nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
+              const mailLocale = process.env.MAIL_LOCALE || "de";
+              const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
+              const recoveryMail = buildRecoveryMail({
+                locale: mailLocale,
+                nickname: targetUserId,
+                link,
+              });
               try {
                 await ses.send(
                   new SendEmailCommand({
                     Source: sesSourceEmail,
                     Destination: { ToAddresses: [email] },
                     Message: {
-                      Subject: { Data: "YogaSwap Passwort zuruecksetzen" },
+                      Subject: { Data: recoveryMail.subject },
                       Body: {
                         Html: {
-                          Data: `
-                            <h2>Hallo ${targetUserId}!</h2>
-                            <p>Deine E-Mail-Adresse wurde aktualisiert. Bitte setze jetzt ein neues Passwort.</p>
-                            <p><a href="${link}">Klicke hier, um ein neues Passwort zu setzen</a></p>
-                            <div style="margin-top:12px;">
-                              <p style="margin:0 0 6px 0;"><strong>Temporäres Passwort (bitte kopieren & einfügen):</strong></p>
-                              <div>
-                                <code style="display:inline-block;background:#f0f0f0;padding:8px 10px;border-radius:4px;line-height:1.4;font-family:monospace;">${rawPassword}</code>
-                              </div>
-                            </div>
-                          `,
+                          Data: recoveryMail.html,
                         },
                       },
                     },
