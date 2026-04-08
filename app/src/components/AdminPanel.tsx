@@ -352,6 +352,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setCreateSaving(true);
     setCreateError("");
     try {
+      const shouldPreUpdateEmailForReactivation =
+        !!createReactivationUserId && createOverwriteEmailOnReactivate && emailValue.length > 0;
+
+      if (shouldPreUpdateEmailForReactivation) {
+        await updateParticipant(createReactivationUserId, { email: emailValue });
+      }
+
       // #67: Teilnehmer anlegen ohne Einladung (kein Cognito/SES).
       // Wir legen zunächst ohne E-Mail an, speichern E-Mail (falls vorhanden) danach separat im Profil.
       const result = await inviteUser({ nickname: nicknameValue, role: createRole });
@@ -364,7 +371,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         return;
       }
 
-      if (emailValue.length > 0 && (!result.reactivated || createOverwriteEmailOnReactivate)) {
+      if (
+        emailValue.length > 0 &&
+        (!result.reactivated || createOverwriteEmailOnReactivate) &&
+        !shouldPreUpdateEmailForReactivation
+      ) {
         await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
       } else if (emailValue.length > 0 && result.reactivated && !createOverwriteEmailOnReactivate) {
         setBulkInviteResult(
@@ -374,11 +385,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
 
       const effectiveEmail = emailValue || createEmail;
       if (result.reactivated) {
+        const reactivationNotificationTarget =
+          createOverwriteEmailOnReactivate && emailValue
+            ? emailValue
+            : "bestehende Profil-E-Mail";
         if (result.emailSent) {
           setBulkInviteResult(
-            effectiveEmail
-              ? `Reaktivierung: Info-Mail gesendet an ${effectiveEmail}.`
-              : "Reaktivierung: Info-Mail wurde gesendet.",
+            `Reaktivierung: Info-Mail gesendet an ${reactivationNotificationTarget}.`,
           );
         } else {
           setBulkInviteResult("Reaktivierung erfolgt, aber E-Mail konnte nicht versendet werden.");
@@ -954,8 +967,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       onChange={(e) => setCreateOverwriteEmailOnReactivate(e.target.checked)}
                       disabled={createSaving}
                     />
-                    E-Mail bei Reaktivierung ueberschreiben
+                    Eingegebene E-Mail fuer Reaktivierung uebernehmen
                   </label>
+                  <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                    {createOverwriteEmailOnReactivate && createEmail.trim()
+                      ? `Mail geht an: ${createEmail.trim()}`
+                      : "Mail geht an: bestehende Profil-E-Mail"}
+                  </p>
                 </>
               )}
               {createActiveConflict && (

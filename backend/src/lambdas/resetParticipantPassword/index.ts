@@ -4,6 +4,7 @@ import { GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import crypto from "crypto";
+import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
 
 const ses = new SESClient({});
 const dynamodb = dynamoClient;
@@ -16,6 +17,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const authTokensTable = process.env.AUTH_TOKENS_TABLE;
   const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+  const mailLocale = process.env.MAIL_LOCALE || "de";
   const baseUrlEnv = process.env.BASE_URL || "";
   const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
 
@@ -100,20 +102,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     let emailSent = false;
     try {
+      const recoveryMail = buildRecoveryMail({
+        locale: mailLocale,
+        nickname: targetUserId,
+        link,
+      });
       await ses.send(
         new SendEmailCommand({
           Source: sesSourceEmail,
           Destination: { ToAddresses: [email] },
           Message: {
-            Subject: { Data: "YogaSwap Passwort zuruecksetzen" },
+            Subject: { Data: recoveryMail.subject },
             Body: {
               Html: {
-                Data: `
-                <h2>Hallo ${targetUserId}!</h2>
-                <p>Dein Passwort fuer YogaSwap wurde zurueckgesetzt.</p>
-                <p><a href="${link}">Klicke hier, um ein neues Passwort festzulegen</a></p>
-                <p>Danach erhältst du eine E-Mail mit einem Code zur Bestätigung.</p>
-              `,
+                Data: recoveryMail.html,
               },
             },
           },

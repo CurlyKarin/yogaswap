@@ -10,6 +10,11 @@ import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
+import {
+  buildInviteMail,
+  buildInvitePreparationMail,
+  buildReactivationMail,
+} from "../shared/templates/auth/authMailTemplates";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
@@ -146,6 +151,7 @@ export const handler = async (event: any) => {
   const tenantId = getTenantId(event);
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
   const tokenInviteEnabled = !!tokensTable;
+  const mailLocale = process.env.MAIL_LOCALE || "de";
 
   const emailNormalized = typeof email === "string" ? email.trim() : "";
   const hasEmail = emailNormalized.length > 0;
@@ -256,20 +262,19 @@ export const handler = async (event: any) => {
         const baseUrlEnv = process.env.BASE_URL || "";
         const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
         const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
-        const reactivatedHtml = `
-          <h2>Hallo ${nicknameRaw}!</h2>
-          <p>Dein Zugang zu YogaSwap wurde fuer dieses Studio reaktiviert.</p>
-          <p>Du kannst dich mit deinem bestehenden Passwort wieder anmelden.</p>
-          <p><a href="${baseUrl}">Zur Anmeldung</a></p>
-        `;
+        const reactivationMail = buildReactivationMail({
+          locale: mailLocale,
+          nickname: nicknameRaw,
+          loginUrl: baseUrl,
+        });
         try {
           await ses.send(
             new SendEmailCommand({
               Source: sesSourceEmail,
               Destination: { ToAddresses: [existingEmail.trim()] },
               Message: {
-                Subject: { Data: "YogaSwap Reaktivierung" },
-                Body: { Html: { Data: reactivatedHtml } },
+                Subject: { Data: reactivationMail.subject },
+                Body: { Html: { Data: reactivationMail.html } },
               },
             }),
           );
@@ -549,25 +554,20 @@ export const handler = async (event: any) => {
   }
 
   // Send invitation email (Token-Link, kein temporäres Passwort im E-Mail-Body)
-  const emailHtml = reactivated
-    ? `
-      <h2>Hallo ${nicknameRaw}!</h2>
-      <p>Dein Zugang zu YogaSwap wurde für dieses Studio reaktiviert.</p>
-      <p>Du kannst dich mit deinem bestehenden Passwort wieder anmelden.</p>
-      <p><a href="${baseUrl}">Zur Anmeldung</a></p>
-    `
-    : tokensTable && oneTimeToken
-      ? `
-        <h2>Hallo ${nicknameRaw}!</h2>
-        <p>Du wurdest zu YogaSwap eingeladen.</p>
-        <p><a href="${link}">Klicke hier, um ein neues Passwort festzulegen</a></p>
-        <p>Danach erhältst du eine E-Mail mit einem Code zur Bestätigung.</p>
-      `
-      : `
-        <h2>Hallo ${nicknameRaw}!</h2>
-        <p>Dein Zugang wird vorbereitet.</p>
-        <p>Bitte kontaktiere dein Studio, falls du keinen gueltigen Einladungslink erhalten hast.</p>
-      `;
+  const reactivationMail = buildReactivationMail({
+    locale: mailLocale,
+    nickname: nicknameRaw,
+    loginUrl: baseUrl,
+  });
+  const inviteMail = buildInviteMail({
+    locale: mailLocale,
+    nickname: nicknameRaw,
+    link,
+  });
+  const fallbackMail = buildInvitePreparationMail({
+    locale: mailLocale,
+    nickname: nicknameRaw,
+  });
 
   let emailSent = false;
   try {
@@ -579,8 +579,18 @@ export const handler = async (event: any) => {
       Source: sesSourceEmail,
       Destination: { ToAddresses: [emailNormalized] },
       Message: {
-        Subject: { Data: reactivated ? "YogaSwap Reaktivierung" : "YogaSwap Einladung" },
-        Body: { Html: { Data: emailHtml } }
+        Subject: {
+          Data: reactivated
+            ? reactivationMail.subject
+            : (tokensTable && oneTimeToken ? inviteMail.subject : fallbackMail.subject),
+        },
+        Body: {
+          Html: {
+            Data: reactivated
+              ? reactivationMail.html
+              : (tokensTable && oneTimeToken ? inviteMail.html : fallbackMail.html),
+          },
+        }
       }
     }));
     emailSent = true;
