@@ -240,5 +240,23 @@ describe("Invite", () => {
       });
     });
   });
+
+  it("zeigt klare Meldung, wenn Token zu anderem Flow gehoert", async () => {
+    mockedStartPasswordResetFromToken.mockRejectedValue(
+      new Error("Token purpose is invalid"),
+    );
+
+    const { panel } = renderWithParams(
+      "?tenantId=default-tenant&token=t1&nickname=Alice&email=alice@example.com",
+    );
+
+    await waitFor(() => {
+      expect(
+        within(panel).getByText(
+          /Dieser Link gehoert zu einem anderen Vorgang\. Bitte nutze den neuesten Link aus deiner E-Mail\./i,
+        ),
+      ).toBeInTheDocument();
+    });
+  });
 });
 

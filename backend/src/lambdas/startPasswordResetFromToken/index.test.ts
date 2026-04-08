@@ -58,6 +58,7 @@ describe("startPasswordResetFromToken Lambda", () => {
       Item: {
         tenantId: { S: "tenant-1" },
         token: { S: "t1" },
+        purpose: { S: "invite-activation" },
         expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
         cognitoUsername: { S: "Alice" },
       },
@@ -81,6 +82,7 @@ describe("startPasswordResetFromToken Lambda", () => {
       Item: {
         tenantId: { S: "tenant-1" },
         token: { S: "t1" },
+        purpose: { S: "invite-activation" },
         expiresAt: { N: String(Math.floor(nowMs / 1000) - 1) },
         cognitoUsername: { S: "Alice" },
       },
@@ -99,6 +101,7 @@ describe("startPasswordResetFromToken Lambda", () => {
       Item: {
         tenantId: { S: "tenant-1" },
         token: { S: "t1" },
+        purpose: { S: "invite-activation" },
         expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
         usedAt: { N: "1" },
         cognitoUsername: { S: "Alice" },
@@ -126,6 +129,7 @@ describe("startPasswordResetFromToken Lambda", () => {
       Item: {
         tenantId: { S: "tenant-1" },
         token: { S: "t1" },
+        purpose: { S: "invite-activation" },
         expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
         cognitoUsername: { S: "Alice" },
       },
@@ -149,6 +153,7 @@ describe("startPasswordResetFromToken Lambda", () => {
       Item: {
         tenantId: { S: "tenant-1" },
         token: { S: "t1" },
+        purpose: { S: "invite-activation" },
         expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
         cognitoUsername: { S: "Alice" },
       },
@@ -172,6 +177,7 @@ describe("startPasswordResetFromToken Lambda", () => {
       Item: {
         tenantId: { S: "tenant-1" },
         token: { S: "t1" },
+        purpose: { S: "invite-activation" },
         expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
         cognitoUsername: { S: "Alice" },
       },
@@ -185,6 +191,26 @@ describe("startPasswordResetFromToken Lambda", () => {
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(400);
     expect(JSON.parse(result.body).error).toMatch(/not allowed for this account state/i);
+  });
+
+  test("returns 400 for token with unsupported purpose", async () => {
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        purpose: { S: "user-password-reset" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: "Alice" },
+      },
+    });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/purpose is invalid/i);
+    expect(cognitoMockSend).not.toHaveBeenCalled();
   });
 });
 

@@ -20,6 +20,15 @@ function parseMode(modeRaw: string | null): AuthViewMode | null {
   return null;
 }
 
+function mapTokenStartErrorMessage(rawMessage: string): string {
+  const msg = rawMessage.trim();
+  if (!msg) return "Token konnte nicht verarbeitet werden.";
+  if (msg.includes("Token purpose is invalid")) {
+    return "Dieser Link gehoert zu einem anderen Vorgang. Bitte nutze den neuesten Link aus deiner E-Mail.";
+  }
+  return msg;
+}
+
 export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -137,7 +146,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       } catch (err: unknown) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
-        setError(msg || "Token konnte nicht verarbeitet werden.");
+        setError(mapTokenStartErrorMessage(msg));
         setCodeSent(false);
       } finally {
         if (!cancelled) setLoading(false);

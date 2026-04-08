@@ -7,6 +7,7 @@ import { GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 
 const cognito = new CognitoIdentityProviderClient({});
+const ALLOWED_PURPOSES = new Set(["invite-activation", "admin-password-reset"]);
 
 // Note: We deliberately re-use the lightweight shared dynamoClient pattern in other lambdas,
 // but for isolation (and easier test mocking) we instantiate here.
@@ -51,6 +52,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const item = getResp.Item;
     if (!item) {
       return { statusCode: 404, body: JSON.stringify({ error: "Token not found" }) };
+    }
+
+    const purpose = item.purpose?.S?.trim();
+    if (!purpose || !ALLOWED_PURPOSES.has(purpose)) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Token purpose is invalid" }),
+      };
     }
 
     const expiresAt = Number(item.expiresAt?.N ?? "0");
