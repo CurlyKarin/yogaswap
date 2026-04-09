@@ -641,11 +641,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           >
             {bulkInviteSending ? "Sende..." : `Ausgewählte einladen (${selectedEligibleUserIds.length})`}
           </button>
-          {bulkInviteResult && <span style={{ color: "#374151", fontSize: 12 }}>{bulkInviteResult}</span>}
+          {bulkInviteResult && (
+            <span style={{ color: "#374151", fontSize: 12 }} role="status" aria-live="polite">
+              {bulkInviteResult}
+            </span>
+          )}
         </div>
 
         {participantsError && (
-          <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }}>
+          <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }} role="alert">
             {participantsError}
           </p>
         )}
@@ -661,7 +665,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "36px 130px 110px 110px 1fr 160px",
+                gridTemplateColumns: "36px 130px 110px 150px 1fr 160px",
                 gap: "0.5rem",
                 alignItems: "center",
                 fontWeight: 600,
@@ -688,7 +692,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                   key={p.userId}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "36px 130px 110px 110px 1fr 160px",
+                    gridTemplateColumns: "36px 130px 110px 150px 1fr 160px",
                     gap: "0.5rem",
                     alignItems: "center",
                     padding: "0.25rem 0",
@@ -715,7 +719,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                   <span
                     title={getStatusPresentation(p.status).label}
                     aria-label={`Status: ${getStatusPresentation(p.status).label}`}
-                    style={{ display: "inline-flex", justifyContent: "center" }}
+                    style={{ display: "inline-flex", justifyContent: "center", alignItems: "center", gap: 6 }}
                   >
                     <span
                       style={{
@@ -725,6 +729,9 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                         backgroundColor: getStatusPresentation(p.status).color,
                       }}
                     />
+                    <span style={{ fontSize: 12, color: "#374151" }}>
+                      {getStatusPresentation(p.status).label}
+                    </span>
                   </span>
                   <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
                   <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
@@ -822,7 +829,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                     )}
                   </div>
                   {inviteResultByUserId[p.userId] && (
-                    <div style={{ gridColumn: "1 / -1", color: "#374151", fontSize: 12 }}>
+                    <div style={{ gridColumn: "1 / -1", color: "#374151", fontSize: 12 }} role="status" aria-live="polite">
                       {inviteResultByUserId[p.userId]}
                     </div>
                   )}

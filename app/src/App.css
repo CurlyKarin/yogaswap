@@ -145,6 +145,16 @@ button:disabled {
   cursor: not-allowed; 
 }
 
+/* Einheitliche, sichtbare Fokus-Indikatoren (A11y-Basis) */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 1px;
+}
+
 .not-enrolled {
   margin-top: 8px;
   font-size: 12px;
@@ -160,6 +170,7 @@ button:disabled {
   max-width: 420px;
   margin: 40px auto 0;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  text-align: left;
 }
 .todo-form {
   display: flex;
@@ -223,6 +234,7 @@ button:disabled {
   background: #fff; padding: 16px 20px;
   border-radius: 8px; max-width: 480px; width: 90%;
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  text-align: left;
 }
 .modal.modal-compact {
   max-width: 520px;
@@ -357,7 +369,7 @@ button:disabled {
 }
 
 .participants-table-inner {
-  min-width: 620px;
+  min-width: 700px;
   width: max-content;
 }
 

@@ -375,7 +375,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
               required
             />
 
-            {error && <p style={{ color: "red" }}>{error}</p>}
+            {error && (
+              <p style={{ color: "red" }} role="alert">
+                {error}
+              </p>
+            )}
 
             <button type="submit" disabled={loading || !authCleared || !codeSent} className="btn-primary btn-block">
               {loading ? "Verarbeite…" : modeCopy[authMode].submitLabel}
@@ -437,7 +441,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
               minLength={6}
             />
 
-            {error && <p style={{ color: "red" }}>{error}</p>}
+            {error && (
+              <p style={{ color: "red" }} role="alert">
+                {error}
+              </p>
+            )}
 
             <button type="submit" disabled={loading} className="btn-primary btn-block">
               {loading ? "Verarbeite…" : modeCopy[authMode].submitLabel}
