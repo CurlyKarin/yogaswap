@@ -25,6 +25,7 @@ import {
   buildEmailChangedNewAddressMail,
   buildEmailChangedOldAddressMail,
   buildRecoveryMail,
+  buildRoleChangedMail,
 } from "../shared/templates/auth/authMailTemplates";
 
 const client = dynamoClient;
@@ -220,6 +221,10 @@ export const handler = async (
     }
     let passwordResetTriggered = false;
     let passwordResetEmailSent = false;
+    let roleChanged = false;
+    let roleChangedEmailSent = false;
+    let previousRole: UserRole | undefined;
+    let nextRoleForMail: UserRole | undefined;
     const updated: ParticipantProfile = {
       ...existing,
       tenantId,
@@ -443,6 +448,17 @@ export const handler = async (
           body: JSON.stringify({ error: "Invalid role value" }),
         };
       }
+      const targetMembershipResp = await client.send(
+        new GetItemCommand({
+          TableName: membershipsTable,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: targetUserId },
+          },
+          ConsistentRead: true,
+        }),
+      );
+      const currentRole = targetMembershipResp.Item?.role?.S as UserRole | undefined;
       await client.send(
         new PutItemCommand({
           TableName: membershipsTable,
@@ -453,6 +469,40 @@ export const handler = async (
           }),
         }),
       );
+      previousRole = currentRole;
+      nextRoleForMail = nextRole;
+      roleChanged = currentRole !== nextRole;
+    }
+
+    if (roleChanged && existingStatus === "active" && updated.email) {
+      const baseUrlEnv = process.env.BASE_URL || "";
+      const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+      const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+      const mailLocale = process.env.MAIL_LOCALE || "de";
+      try {
+        const roleChangedMail = buildRoleChangedMail({
+          locale: mailLocale,
+          nickname: targetUserId,
+          loginUrl: baseUrl,
+          oldRole: previousRole ?? "participant",
+          newRole: nextRoleForMail ?? "participant",
+        });
+        await ses.send(
+          new SendEmailCommand({
+            Source: sesSourceEmail,
+            Destination: { ToAddresses: [updated.email] },
+            Message: {
+              Subject: { Data: roleChangedMail.subject },
+              Body: {
+                Html: { Data: roleChangedMail.html },
+              },
+            },
+          }),
+        );
+        roleChangedEmailSent = true;
+      } catch (mailErr) {
+        console.warn("Failed to send role-change notification mail:", mailErr);
+      }
     }
 
     await client.send(
@@ -469,6 +519,8 @@ export const handler = async (
         status: deriveParticipantStatus(updated),
         passwordResetTriggered,
         passwordResetEmailSent,
+        roleChanged,
+        roleChangedEmailSent,
       }),
     };
   } catch (error) {

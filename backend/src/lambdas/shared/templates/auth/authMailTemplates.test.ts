@@ -5,6 +5,7 @@ import {
   buildInvitePreparationMail,
   buildRecoveryMail,
   buildReactivationMail,
+  buildRoleChangedMail,
   buildStudioAccessRemovedMail,
 } from "./authMailTemplates";
 
@@ -100,6 +101,23 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("Hallo Karin");
     expect(mail.html).toContain("karin.neu@example.com");
     expect(mail.html).toContain("Falls das nicht von dir veranlasst wurde");
+  });
+
+  test("buildRoleChangedMail returns german role-change template", () => {
+    const mail = buildRoleChangedMail({
+      locale: "de",
+      nickname: "Karin",
+      oldRole: "participant",
+      newRole: "instructor",
+      loginUrl: "https://app.yogaswap.de",
+    });
+
+    expect(mail.subject).toBe("YogaSwap: Rolle aktualisiert");
+    expect(mail.html).toContain("Hallo Karin");
+    expect(mail.html).toContain("Accountname (Spitzname): Karin");
+    expect(mail.html).toContain("participant");
+    expect(mail.html).toContain("instructor");
+    expect(mail.html).toContain("https://app.yogaswap.de");
   });
 
   test("unknown locale falls back to german for all builders", () => {

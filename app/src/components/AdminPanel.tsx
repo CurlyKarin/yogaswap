@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, KeyRound, Link2, Mail, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { Mail, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   deleteParticipant,
   getParticipants,
@@ -76,7 +76,6 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const [bulkInviteResult, setBulkInviteResult] = useState("");
   const [deleteRunningByUserId, setDeleteRunningByUserId] = useState<Record<string, boolean>>({});
   const [deleteTarget, setDeleteTarget] = useState<ParticipantWithStatus | null>(null);
-  const [openActionsMenuUserId, setOpenActionsMenuUserId] = useState<string | null>(null);
 
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
@@ -263,22 +262,19 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         return;
       }
       const shouldForcePasswordReset =
-        emailChanged &&
         original?.status === "active" &&
         editingForcePasswordResetOnEmailChange &&
         nextEmailText.length > 0;
 
-      const updated = await updateParticipant(
+      await updateParticipant(
         editingUserId,
         canEditRoles
           ? {
               email: nextEmail,
               role: editingRole,
-              ...(shouldForcePasswordReset ? { forcePasswordResetOnEmailChange: true } : {}),
             }
           : {
               email: nextEmail,
-              ...(shouldForcePasswordReset ? { forcePasswordResetOnEmailChange: true } : {}),
             },
       );
 
@@ -296,17 +292,40 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       );
 
       setEditingUserId(null);
+      const roleChanged = canEditRoles && original?.role !== editingRole;
       if (shouldForcePasswordReset) {
-        const resetEmailSent = (updated as { passwordResetEmailSent?: boolean }).passwordResetEmailSent;
-        setBulkInviteResult(
-          resetEmailSent
-            ? `E-Mail aktualisiert. Passwort-Reset-Mail gesendet an ${nextEmailText}.`
-            : "E-Mail aktualisiert. Passwort-Reset wurde erzwungen, aber die E-Mail konnte nicht versendet werden.",
-        );
+        setBulkInviteResult("Änderungen gespeichert. Passwort-Reset wird gesendet.");
       } else if (emailChanged && original?.status === "active") {
         setBulkInviteResult(
           "E-Mail aktualisiert. Info-Mail wurde an die neue Adresse gesendet.",
         );
+      } else if (roleChanged && original?.status === "active") {
+        setBulkInviteResult("Rolle aktualisiert. Nutzer wurde über die Änderung informiert.");
+      } else if (roleChanged) {
+        setBulkInviteResult("Rolle aktualisiert.");
+      }
+      if (canEditRoles && original?.status === "active" && nextEmailText.length > 0) {
+        const effectiveParticipant: ParticipantWithStatus = {
+          ...original,
+          email: nextEmailText,
+          role: canEditRoles ? editingRole : original.role,
+        };
+        if (editingForcePasswordResetOnEmailChange) {
+          const resetResult = await sendPasswordResetForParticipant(effectiveParticipant, {
+            refreshAfter: false,
+          });
+          if (resetResult?.ok && resetResult.emailSent) {
+            setBulkInviteResult("Änderungen gespeichert. Passwort-Reset-Mail wurde gesendet.");
+          } else if (resetResult?.ok && !resetResult.emailSent) {
+            setBulkInviteResult(
+              "Änderungen gespeichert. Passwort-Reset angestoßen, aber E-Mail konnte nicht versendet werden.",
+            );
+          } else {
+            setBulkInviteResult(
+              "Änderungen gespeichert, aber Passwort-Reset konnte nicht gestartet werden.",
+            );
+          }
+        }
       }
     } catch (err) {
       console.error("Failed to update participant email", err);
@@ -315,6 +334,17 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       setEditingSaving(false);
     }
   };
+
+  const editingOriginal = editingUserId
+    ? safeParticipants.find((p) => p.userId === editingUserId)
+    : undefined;
+  const editingEmailTrimmed = editingEmail.trim();
+  const editingOriginalEmail = (editingOriginal?.email ?? "").trim();
+  const editingEmailChanged = editingEmailTrimmed.toLowerCase() !== editingOriginalEmail.toLowerCase();
+  const editingRoleChanged = !!(canEditRoles && editingOriginal && editingOriginal.role !== editingRole);
+  const editingCanSendReset = !!(canEditRoles && editingOriginal?.status === "active");
+  const editingHasChanges =
+    editingEmailChanged || editingRoleChanged || (editingCanSendReset && editingForcePasswordResetOnEmailChange);
 
   const openCreate = () => {
     setCreateOpen(true);
@@ -487,10 +517,14 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     }
   };
 
-  const sendPasswordResetForParticipant = async (p: ParticipantWithStatus) => {
-    if (!p.email) return;
-    if (p.status !== "active") return;
+  const sendPasswordResetForParticipant = async (
+    p: ParticipantWithStatus,
+    options?: { refreshAfter?: boolean },
+  ): Promise<{ ok: boolean; emailSent: boolean } | undefined> => {
+    if (!p.email) return undefined;
+    if (p.status !== "active") return undefined;
 
+    const refreshAfter = options?.refreshAfter ?? true;
     const userId = p.userId;
     // Avoid stale global status text from previous create/bulk actions.
     setBulkInviteResult("");
@@ -509,10 +543,14 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           [userId]: "Passwort-Reset angestoßen, aber E-Mail konnte nicht versendet werden.",
         }));
       }
-      await refreshParticipants();
+      if (refreshAfter) {
+        await refreshParticipants();
+      }
+      return { ok: true, emailSent: !!result.emailSent };
     } catch (err) {
       console.error("Failed to reset password", err);
       setInviteResultByUserId((prev) => ({ ...prev, [userId]: "Fehler beim Passwort-Reset." }));
+      return { ok: false, emailSent: false };
     } finally {
       setInviteSendingByUserId((prev) => ({ ...prev, [userId]: false }));
     }
@@ -666,7 +704,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "36px 130px 110px 150px 1fr 220px",
+                gridTemplateColumns: "36px 130px 110px 150px minmax(220px, 1fr) 220px",
                 gap: "0.5rem",
                 alignItems: "center",
                 fontWeight: 600,
@@ -685,15 +723,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               <span>Nickname</span>
               <span>Rolle</span>
               <span>Status</span>
-              <span>E-Mail</span>
-              <span>Aktion</span>
+                  <span style={{ whiteSpace: "nowrap" }}>E-Mail</span>
+                  <span style={{ whiteSpace: "nowrap" }}>Aktion</span>
               </div>
               {safeParticipants.map((p) => (
                 <div
                   key={p.userId}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "36px 130px 110px 150px 1fr 220px",
+                    gridTemplateColumns: "36px 130px 110px 150px minmax(220px, 1fr) 220px",
                     gap: "0.5rem",
                     alignItems: "center",
                     padding: "0.25rem 0",
@@ -734,8 +772,30 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       {getStatusPresentation(p.status).label}
                     </span>
                   </span>
-                  <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
-                  <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end", flexWrap: "nowrap", alignItems: "center", position: "relative" }}>
+                  <span
+                    style={{
+                      color: p.email ? "#111827" : "#9ca3af",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      minWidth: 0,
+                    }}
+                    title={p.email ?? "-"}
+                  >
+                    {p.email ?? "-"}
+                  </span>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.25rem",
+                      justifyContent: "flex-end",
+                      flexWrap: "nowrap",
+                      alignItems: "center",
+                      position: "relative",
+                      width: "100%",
+                      justifySelf: "end",
+                    }}
+                  >
                     {!(p.status === "active" && canEditRoles) && (
                       <button
                         type="button"
@@ -805,93 +865,6 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                         <Trash2 size={14} aria-hidden="true" />
                       </button>
                     )}
-                    {canEditRoles && p.status === "active" && (
-                      <>
-                        <button
-                          type="button"
-                          aria-label={`Weitere Aktionen ${p.userId}`}
-                          title={`Weitere Aktionen ${p.userId}`}
-                          onClick={() =>
-                            setOpenActionsMenuUserId((prev) =>
-                              prev === p.userId ? null : p.userId,
-                            )
-                          }
-                          disabled={participantsLoading || editingSaving || createSaving}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            <MoreHorizontal size={14} aria-hidden="true" />
-                            {openActionsMenuUserId === p.userId ? (
-                              <ChevronUp size={14} aria-hidden="true" />
-                            ) : (
-                              <ChevronDown size={14} aria-hidden="true" />
-                            )}
-                          </span>
-                        </button>
-                        {openActionsMenuUserId === p.userId && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              right: 0,
-                              top: "calc(100% + 4px)",
-                              background: "#fff",
-                              border: "1px solid #e5e7eb",
-                              borderRadius: 8,
-                              padding: 6,
-                              boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
-                              zIndex: 20,
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 4,
-                              minWidth: 170,
-                            }}
-                          >
-                            <button
-                              type="button"
-                              title="Einladungslink (Recovery) erneut an registrierte Nutzerin senden"
-                              aria-label={`Einladungslink senden ${p.userId}`}
-                              disabled={
-                                !p.email ||
-                                !!inviteSendingByUserId[p.userId] ||
-                                participantsLoading ||
-                                editingSaving ||
-                                createSaving
-                              }
-                              onClick={() => {
-                                void sendInviteForParticipant(p);
-                                setOpenActionsMenuUserId(null);
-                              }}
-                            >
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                <Link2 size={14} aria-hidden="true" />
-                                Link senden
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              title={!p.email ? "E-Mail fehlt" : "Passwort zurücksetzen"}
-                              aria-label={`Passwort zurücksetzen ${p.userId}`}
-                              disabled={
-                                !p.email ||
-                                p.status !== "active" ||
-                                !!inviteSendingByUserId[p.userId] ||
-                                participantsLoading ||
-                                editingSaving ||
-                                createSaving
-                              }
-                              onClick={() => {
-                                void sendPasswordResetForParticipant(p);
-                                setOpenActionsMenuUserId(null);
-                              }}
-                            >
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                <KeyRound size={14} aria-hidden="true" />
-                                PW Reset
-                              </span>
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
                   </div>
                   {inviteResultByUserId[p.userId] && (
                     <div style={{ gridColumn: "1 / -1", color: "#374151", fontSize: 12 }} role="status" aria-live="polite">
@@ -939,7 +912,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                   ))}
                 </select>
               )}
-              {canEditRoles && (
+              {canEditRoles && editingOriginal?.status === "active" && (
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
                     type="checkbox"
@@ -947,7 +920,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                     onChange={(e) => setEditingForcePasswordResetOnEmailChange(e.target.checked)}
                     disabled={editingSaving}
                   />
-                  Bei E-Mail-Wechsel Passwort-Reset erzwingen (nur bei registrierten Nutzern)
+                  Passwort-Reset-Mail senden
                 </label>
               )}
               {editingError && <p style={{ color: "crimson", margin: 0 }}>{editingError}</p>}
@@ -966,9 +939,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 type="button"
                 className="btn-primary modal-action-btn"
                 onClick={saveEditEmail}
-                disabled={editingSaving}
+                disabled={editingSaving || !editingHasChanges}
               >
-                {editingSaving ? "Speichere..." : "Speichern"}
+                {editingSaving
+                  ? "Speichere..."
+                  : canEditRoles && editingOriginal?.status === "active"
+                    ? "Speichern und Senden"
+                    : "Speichern"}
               </button>
             </div>
           </div>

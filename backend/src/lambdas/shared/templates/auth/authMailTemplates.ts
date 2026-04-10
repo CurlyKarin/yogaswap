@@ -132,6 +132,14 @@ type EmailChangedOldAddressMailInput = {
   newEmail: string;
 };
 
+type RoleChangedMailInput = {
+  locale?: string;
+  nickname: string;
+  loginUrl: string;
+  oldRole: string;
+  newRole: string;
+};
+
 export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   if (locale === "de") {
@@ -190,6 +198,25 @@ export function buildEmailChangedOldAddressMail(
   }
   return {
     subject: "YogaSwap Sicherheitshinweis: E-Mail-Adresse geaendert",
+    html: "",
+  };
+}
+
+export function buildRoleChangedMail(input: RoleChangedMailInput): MailTemplate {
+  const locale = normalizeLocale(input.locale);
+  if (locale === "de") {
+    return {
+      subject: "YogaSwap: Rolle aktualisiert",
+      html: `
+        <h2>Hallo ${input.nickname}!</h2>
+        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
+        <p>Deine Rolle im Studio wurde geaendert: <strong>${input.oldRole}</strong> -> <strong>${input.newRole}</strong>.</p>
+        <p><a href="${input.loginUrl}">Zur Anmeldung</a></p>
+      `,
+    };
+  }
+  return {
+    subject: "YogaSwap: Rolle aktualisiert",
     html: "",
   };
 }
