@@ -21,7 +21,11 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
-import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
+import {
+  buildEmailChangedNewAddressMail,
+  buildEmailChangedOldAddressMail,
+  buildRecoveryMail,
+} from "../shared/templates/auth/authMailTemplates";
 
 const client = dynamoClient;
 const cognito = new CognitoIdentityProviderClient({});
@@ -258,6 +262,64 @@ export const handler = async (
                   Username: cognitoUsername,
                 }),
               );
+            }
+
+            if (emailChanged) {
+              const baseUrlEnv = process.env.BASE_URL || "";
+              const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+              const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+              const mailLocale = process.env.MAIL_LOCALE || "de";
+              const oldEmail = (existing.email ?? "").trim();
+
+              // Best practice: confirm change to new address.
+              try {
+                const changedNewMail = buildEmailChangedNewAddressMail({
+                  locale: mailLocale,
+                  nickname: targetUserId,
+                  loginUrl: baseUrl,
+                  newEmail: email,
+                });
+                await ses.send(
+                  new SendEmailCommand({
+                    Source: sesSourceEmail,
+                    Destination: { ToAddresses: [email] },
+                    Message: {
+                      Subject: { Data: changedNewMail.subject },
+                      Body: {
+                        Html: { Data: changedNewMail.html },
+                      },
+                    },
+                  }),
+                );
+              } catch (mailErr) {
+                console.warn("Failed to send email-change confirmation to new address:", mailErr);
+              }
+
+              // Optional security notification to old address (if different).
+              if (oldEmail && oldEmail.toLowerCase() !== email.toLowerCase()) {
+                try {
+                  const changedOldMail = buildEmailChangedOldAddressMail({
+                    locale: mailLocale,
+                    nickname: targetUserId,
+                    loginUrl: baseUrl,
+                    newEmail: email,
+                  });
+                  await ses.send(
+                    new SendEmailCommand({
+                      Source: sesSourceEmail,
+                      Destination: { ToAddresses: [oldEmail] },
+                      Message: {
+                        Subject: { Data: changedOldMail.subject },
+                        Body: {
+                          Html: { Data: changedOldMail.html },
+                        },
+                      },
+                    }),
+                  );
+                } catch (mailErr) {
+                  console.warn("Failed to send email-change security mail to old address:", mailErr);
+                }
+              }
             }
 
             if (emailChanged && body.forcePasswordResetOnEmailChange) {

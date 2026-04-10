@@ -1,4 +1,6 @@
 import {
+  buildEmailChangedNewAddressMail,
+  buildEmailChangedOldAddressMail,
   buildInviteMail,
   buildInvitePreparationMail,
   buildRecoveryMail,
@@ -70,6 +72,34 @@ describe("authMailTemplates", () => {
     expect(mail.subject).toBe("YogaSwap: Zugang im Studio entfernt");
     expect(mail.html).toContain("Zugang zu diesem YogaSwap-Studio wurde entfernt");
     expect(mail.html).toContain("Accountname (Spitzname): Karin");
+  });
+
+  test("buildEmailChangedNewAddressMail returns german template with app link", () => {
+    const mail = buildEmailChangedNewAddressMail({
+      locale: "de",
+      nickname: "Karin",
+      newEmail: "karin.neu@example.com",
+      loginUrl: "https://app.yogaswap.de",
+    });
+
+    expect(mail.subject).toBe("YogaSwap: E-Mail-Adresse aktualisiert");
+    expect(mail.html).toContain("Hallo Karin");
+    expect(mail.html).toContain("karin.neu@example.com");
+    expect(mail.html).toContain("https://app.yogaswap.de");
+  });
+
+  test("buildEmailChangedOldAddressMail returns german security template", () => {
+    const mail = buildEmailChangedOldAddressMail({
+      locale: "de",
+      nickname: "Karin",
+      newEmail: "karin.neu@example.com",
+      loginUrl: "https://app.yogaswap.de",
+    });
+
+    expect(mail.subject).toBe("YogaSwap Sicherheitshinweis: E-Mail-Adresse geaendert");
+    expect(mail.html).toContain("Hallo Karin");
+    expect(mail.html).toContain("karin.neu@example.com");
+    expect(mail.html).toContain("Falls das nicht von dir veranlasst wurde");
   });
 
   test("unknown locale falls back to german for all builders", () => {

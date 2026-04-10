@@ -304,7 +304,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         );
       } else if (emailChanged && original?.status === "active") {
         setBulkInviteResult(
-          "E-Mail aktualisiert. Aktive Sessions wurden aus Sicherheitsgründen beendet.",
+          "E-Mail aktualisiert. Info-Mail wurde an die neue Adresse gesendet.",
         );
       }
     } catch (err) {

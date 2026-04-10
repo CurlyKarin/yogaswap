@@ -118,6 +118,20 @@ type StudioAccessRemovedMailInput = {
   nickname: string;
 };
 
+type EmailChangedNewAddressMailInput = {
+  locale?: string;
+  nickname: string;
+  loginUrl: string;
+  newEmail: string;
+};
+
+type EmailChangedOldAddressMailInput = {
+  locale?: string;
+  nickname: string;
+  loginUrl: string;
+  newEmail: string;
+};
+
 export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   if (locale === "de") {
@@ -133,6 +147,49 @@ export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput
   }
   return {
     subject: "YogaSwap: Zugang im Studio entfernt",
+    html: "",
+  };
+}
+
+export function buildEmailChangedNewAddressMail(
+  input: EmailChangedNewAddressMailInput,
+): MailTemplate {
+  const locale = normalizeLocale(input.locale);
+  if (locale === "de") {
+    return {
+      subject: "YogaSwap: E-Mail-Adresse aktualisiert",
+      html: `
+        <h2>Hallo ${input.nickname}!</h2>
+        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
+        <p>Deine Login-E-Mail-Adresse wurde auf <strong>${input.newEmail}</strong> geaendert.</p>
+        <p><a href="${input.loginUrl}">Zur Anmeldung</a></p>
+      `,
+    };
+  }
+  return {
+    subject: "YogaSwap: E-Mail-Adresse aktualisiert",
+    html: "",
+  };
+}
+
+export function buildEmailChangedOldAddressMail(
+  input: EmailChangedOldAddressMailInput,
+): MailTemplate {
+  const locale = normalizeLocale(input.locale);
+  if (locale === "de") {
+    return {
+      subject: "YogaSwap Sicherheitshinweis: E-Mail-Adresse geaendert",
+      html: `
+        <h2>Hallo ${input.nickname}!</h2>
+        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
+        <p>Fuer deinen Zugang wurde die Login-E-Mail-Adresse auf <strong>${input.newEmail}</strong> geaendert.</p>
+        <p>Falls das nicht von dir veranlasst wurde, kontaktiere bitte umgehend dein Studio.</p>
+        <p><a href="${input.loginUrl}">Zur Anmeldung</a></p>
+      `,
+    };
+  }
+  return {
+    subject: "YogaSwap Sicherheitshinweis: E-Mail-Adresse geaendert",
     html: "",
   };
 }
