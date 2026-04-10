@@ -765,11 +765,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       >
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                           <Mail size={14} aria-hidden="true" />
-                          {inviteSendingByUserId[p.userId]
-                            ? "..."
-                            : p.status === "invited"
-                              ? "Erneut"
-                              : "Einladen"}
+                          {inviteSendingByUserId[p.userId] ? "..." : null}
                         </span>
                       </button>
                     )}
@@ -809,7 +805,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                         <Trash2 size={14} aria-hidden="true" />
                       </button>
                     )}
-                    {canEditRoles && (
+                    {canEditRoles && p.status === "active" && (
                       <>
                         <button
                           type="button"
