@@ -100,6 +100,9 @@ describe("ForgotPassword", () => {
     fireEvent.change(within(page).getByPlaceholderText("Neues Passwort"), {
       target: { value: "SicheresPasswort123!" },
     });
+    fireEvent.change(within(page).getByPlaceholderText("Neues Passwort wiederholen"), {
+      target: { value: "SicheresPasswort123!" },
+    });
     fireEvent.click(within(page).getByRole("button", { name: /Neues Passwort setzen/i }));
 
     await waitFor(() => {

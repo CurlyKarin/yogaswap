@@ -210,6 +210,11 @@ describe("Invite", () => {
         token: "t1",
       });
     });
+    const hiddenUsername = panel.querySelector(
+      "input[name='username'][autocomplete='username']",
+    ) as HTMLInputElement | null;
+    expect(hiddenUsername).toBeTruthy();
+    expect(hiddenUsername?.value).toBe("Alice");
 
     // code + new password
     fireEvent.change(within(panel).getByPlaceholderText(/Code aus E-Mail/i), {

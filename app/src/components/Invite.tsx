@@ -349,6 +349,24 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
           )}
 
           <form onSubmit={handleSubmitTokenReset} className="invite-form">
+            {/* Password managers need an explicit username field in reset flows. */}
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              value={usernameForReset || nicknameParam}
+              readOnly
+              tabIndex={-1}
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: "-10000px",
+                width: 1,
+                height: 1,
+                opacity: 0,
+                pointerEvents: "none",
+              }}
+            />
             <input
               type="text"
               placeholder="Code aus E-Mail"

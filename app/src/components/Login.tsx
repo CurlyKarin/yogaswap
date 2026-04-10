@@ -42,6 +42,23 @@ export default function Login({ onLogin }: Props) {
     e.preventDefault();
     const success = await login({ username, password });
     if (success) {
+      if (fromPasswordResetFlow && username.trim() && password) {
+        // Best-effort trigger for password managers after reset flows.
+        // Some browsers (especially with generated passwords) only offer save/update
+        // when Credential Management API is explicitly touched.
+        try {
+          const maybeCtor = (window as unknown as { PasswordCredential?: new (data: { id: string; password: string }) => unknown })
+            .PasswordCredential;
+          const credsApi = (navigator as Navigator & { credentials?: { store?: (credential: unknown) => Promise<unknown> } })
+            .credentials;
+          if (maybeCtor && credsApi?.store) {
+            const credential = new maybeCtor({ id: username.trim(), password });
+            void credsApi.store(credential);
+          }
+        } catch {
+          // ignore: unsupported browser or blocked API
+        }
+      }
       const user = loadCurrentUser();
       if (user) {
         onLogin(user);

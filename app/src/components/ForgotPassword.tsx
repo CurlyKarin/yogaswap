@@ -9,7 +9,7 @@ export default function ForgotPassword() {
   const newPasswordInputRef = useRef<HTMLInputElement | null>(null);
   const [username, setUsername] = useState("");
   const [code, setCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -45,6 +45,23 @@ export default function ForgotPassword() {
     }, 1000);
   };
 
+  const tryStoreCredential = (userId: string, passwordValue: string) => {
+    try {
+      const maybeCtor = (window as unknown as {
+        PasswordCredential?: new (data: { id: string; password: string }) => unknown;
+      }).PasswordCredential;
+      const credsApi = (navigator as Navigator & {
+        credentials?: { store?: (credential: unknown) => Promise<unknown> };
+      }).credentials;
+      if (maybeCtor && credsApi?.store && userId && passwordValue) {
+        const credential = new maybeCtor({ id: userId, password: passwordValue });
+        void credsApi.store(credential);
+      }
+    } catch {
+      // ignore unsupported/blocked browsers
+    }
+  };
+
   const getUsernameValue = () => {
     const fromState = username.trim();
     if (fromState) return fromState;
@@ -54,8 +71,6 @@ export default function ForgotPassword() {
 
   /** Keychain/Safari setzt generierte Passwörter oft per input-Event, nicht change — State sonst leer beim Submit. */
   const getNewPasswordValue = () => {
-    const fromState = newPassword;
-    if (fromState.trim()) return fromState;
     return newPasswordInputRef.current?.value ?? "";
   };
 
@@ -63,6 +78,7 @@ export default function ForgotPassword() {
     setError("");
     setInfo("");
     setResetDone(false);
+    setConfirmPassword("");
     const user = getUsernameValue();
     if (!user) {
       setError("Bitte Spitzname eingeben.");
@@ -102,9 +118,13 @@ export default function ForgotPassword() {
       setError("Bitte den Code aus der E-Mail eingeben.");
       return;
     }
-    const pw = getNewPasswordValue();
+    const pw = getNewPasswordValue().trim();
     if (!pw || pw.length < 6) {
       setError("Das neue Passwort muss mindestens 6 Zeichen lang sein.");
+      return;
+    }
+    if (!confirmPassword || pw !== confirmPassword) {
+      setError("Die Passwoerter stimmen nicht ueberein.");
       return;
     }
 
@@ -115,6 +135,8 @@ export default function ForgotPassword() {
         confirmationCode: code.trim(),
         newPassword: pw,
       });
+      // Best-effort hint for password managers right after a successful reset.
+      tryStoreCredential(user, pw);
       // Password reset should never "auto-login" from this view.
       // We force a clean auth state and redirect to login.
       try {
@@ -183,10 +205,18 @@ export default function ForgotPassword() {
               type="password"
               name="new-password"
               placeholder="Neues Passwort"
-              value={newPassword}
               autoComplete="new-password"
-              onChange={(e) => setNewPassword(e.target.value)}
-              onInput={(e) => setNewPassword((e.target as HTMLInputElement).value)}
+              disabled={loading}
+              minLength={6}
+              required
+            />
+            <input
+              type="password"
+              name="confirm-new-password"
+              placeholder="Neues Passwort wiederholen"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={loading}
               minLength={6}
               required
