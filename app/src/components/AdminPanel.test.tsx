@@ -152,6 +152,8 @@ describe("AdminPanel", () => {
           role: "participant",
           email: "alice@example.com",
           status: "active",
+          authUserId: "sub-alice",
+          inviteCompletedAt: "2026-04-01T10:00:00.000Z",
         },
       ])
       .mockResolvedValueOnce([
@@ -161,6 +163,8 @@ describe("AdminPanel", () => {
           role: "participant",
           email: "alice@example.com",
           status: "active",
+          authUserId: "sub-alice",
+          inviteCompletedAt: "2026-04-01T10:00:00.000Z",
         },
       ]);
 
@@ -174,9 +178,12 @@ describe("AdminPanel", () => {
     if (!panel) throw new Error("Panel not found");
 
     await waitFor(() => {
+      expect(within(panel).getByLabelText("Weitere Aktionen alice")).toBeInTheDocument();
+    });
+    fireEvent.click(within(panel).getByLabelText("Weitere Aktionen alice"));
+    await waitFor(() => {
       expect(within(panel).getByLabelText("Passwort zurücksetzen alice")).toBeInTheDocument();
     });
-
     fireEvent.click(within(panel).getByLabelText("Passwort zurücksetzen alice"));
 
     await waitFor(() => {

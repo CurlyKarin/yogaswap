@@ -13,7 +13,7 @@ body {
   text-align: center;
   margin: 0 auto;
   padding: 20px;
-  max-width: 980px; /* etwas breiter, damit Grid gut passt */
+  max-width: 1120px; /* mehr Platz fuer Admin-Tabelle auf Desktop */
   width: 100%;
   box-sizing: border-box;
 }
