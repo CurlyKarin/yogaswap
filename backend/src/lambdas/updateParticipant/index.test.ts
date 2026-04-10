@@ -153,10 +153,19 @@ describe("updateParticipant Lambda", () => {
           tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
           email: { S: "alice@example.com" },
+          authUserId: { S: "sub-123" },
         },
       }) // target participant
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          role: { S: "participant" },
+        },
+      }) // target membership (current role)
       .mockResolvedValueOnce({}) // memberships PutItem (role change)
       .mockResolvedValueOnce({}); // participants PutItem
+    sesMockSend.mockResolvedValueOnce({});
 
     const result = await handler(
       makeEvent({
@@ -165,6 +174,9 @@ describe("updateParticipant Lambda", () => {
     );
 
     expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.roleChanged).toBe(true);
+    expect(body.roleChangedEmailSent).toBe(true);
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: "test-memberships",
@@ -173,6 +185,11 @@ describe("updateParticipant Lambda", () => {
           userId: { S: "alice" },
           role: { S: "instructor" },
         }),
+      }),
+    );
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Destination: { ToAddresses: ["alice@example.com"] },
       }),
     );
   });

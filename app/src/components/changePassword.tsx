@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { confirmSignIn, fetchAuthSession } from "aws-amplify/auth";
 import { useLocation, useNavigate } from "react-router-dom";
 import { saveCurrentUser } from "shared/lib/storage";
@@ -13,10 +13,12 @@ export default function ChangePassword() {
 
   const { username } = (state as { username: string }) || {};
 
-  if (!username) {
-    navigate("/login");
-    return null;
-  }
+  useEffect(() => {
+    if (!username) {
+      navigate("/login", { replace: true });
+    }
+  }, [username, navigate]);
+  if (!username) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,13 +52,18 @@ export default function ChangePassword() {
       <form onSubmit={handleSubmit}>
         <input
           type="password"
+          aria-label="Neues Passwort"
           placeholder="Neues Passwort"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           style={{ fontSize: 16 }}
           required
         />
-        {error && <p style={{ color: "crimson" }}>{error}</p>}
+        {error && (
+          <p style={{ color: "crimson" }} role="alert">
+            {error}
+          </p>
+        )}
         <button type="submit" disabled={loading} className="btn-primary btn-block">
           Passwort festlegen
         </button>

@@ -95,16 +95,20 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   }, [courses, tenant?.settings, membership, currentUser.nickname]);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div role="status" aria-live="polite">
+        Loading...
+      </div>
+    );
   }
   if (error) {
-    return <div>{error}</div>;
+    return <div role="alert">{error}</div>;
   }
 
   const coursesWithUpcoming = visibleCourses.filter((c) => getCourseDates(c).length > 0);
   if (visibleCourses.length === 0 || coursesWithUpcoming.length === 0) {
     return (
-      <div className="muted" style={{ textAlign: "center", padding: "2rem" }}>
+      <div className="muted" style={{ textAlign: "center", padding: "2rem" }} role="status" aria-live="polite">
         Aktuell keine Termine zum Anzeigen. Es gibt nur vergangene Termine oder noch keine Kurse.
       </div>
     );

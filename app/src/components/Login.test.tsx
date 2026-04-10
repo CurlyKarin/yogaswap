@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Login from "./Login";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
 import { loadCurrentUser } from "shared/lib/storage";
@@ -78,6 +78,40 @@ describe("Login", () => {
     );
 
     expect(screen.getByText(/Login fehlgeschlagen/i)).toBeInTheDocument();
+  });
+
+  it("nutzt bei Weiterleitung aus Passwort-Reset den Nutzernamen statt Demo-Prefill", () => {
+    const onLogin = vi.fn();
+
+    useCognitoAuthMock.mockReturnValue({
+      login: vi.fn().mockResolvedValue(false),
+      isLoading: false,
+      error: null,
+    });
+
+    const { container } = render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/login",
+            state: {
+              info: "Passwort wurde zurueckgesetzt.",
+              prefillUsername: "alice",
+              prefillPassword: "NeuesPasswort123!",
+            },
+          } as never,
+        ]}
+      >
+        <Routes>
+          <Route path="/login" element={<Login onLogin={onLogin} />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const page = container.querySelector(".login-wrap") as HTMLElement;
+
+    expect(within(page).getByPlaceholderText("Spitzname")).toHaveValue("alice");
+    expect(within(page).getByPlaceholderText("Passwort")).toHaveValue("NeuesPasswort123!");
+    expect(within(page).queryByText(/Demo:/i)).not.toBeInTheDocument();
   });
 });
 

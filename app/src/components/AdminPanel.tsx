@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Mail, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   deleteParticipant,
   getParticipants,
@@ -262,22 +262,19 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         return;
       }
       const shouldForcePasswordReset =
-        emailChanged &&
         original?.status === "active" &&
         editingForcePasswordResetOnEmailChange &&
         nextEmailText.length > 0;
 
-      const updated = await updateParticipant(
+      await updateParticipant(
         editingUserId,
         canEditRoles
           ? {
               email: nextEmail,
               role: editingRole,
-              ...(shouldForcePasswordReset ? { forcePasswordResetOnEmailChange: true } : {}),
             }
           : {
               email: nextEmail,
-              ...(shouldForcePasswordReset ? { forcePasswordResetOnEmailChange: true } : {}),
             },
       );
 
@@ -295,17 +292,40 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       );
 
       setEditingUserId(null);
+      const roleChanged = canEditRoles && original?.role !== editingRole;
       if (shouldForcePasswordReset) {
-        const resetEmailSent = (updated as { passwordResetEmailSent?: boolean }).passwordResetEmailSent;
-        setBulkInviteResult(
-          resetEmailSent
-            ? `E-Mail aktualisiert. Passwort-Reset-Mail gesendet an ${nextEmailText}.`
-            : "E-Mail aktualisiert. Passwort-Reset wurde erzwungen, aber die E-Mail konnte nicht versendet werden.",
-        );
+        setBulkInviteResult("Änderungen gespeichert. Passwort-Reset wird gesendet.");
       } else if (emailChanged && original?.status === "active") {
         setBulkInviteResult(
-          "E-Mail aktualisiert. Aktive Sessions wurden aus Sicherheitsgründen beendet.",
+          "E-Mail aktualisiert. Info-Mail wurde an die neue Adresse gesendet.",
         );
+      } else if (roleChanged && original?.status === "active") {
+        setBulkInviteResult("Rolle aktualisiert. Nutzer wurde über die Änderung informiert.");
+      } else if (roleChanged) {
+        setBulkInviteResult("Rolle aktualisiert.");
+      }
+      if (canEditRoles && original?.status === "active" && nextEmailText.length > 0) {
+        const effectiveParticipant: ParticipantWithStatus = {
+          ...original,
+          email: nextEmailText,
+          role: canEditRoles ? editingRole : original.role,
+        };
+        if (editingForcePasswordResetOnEmailChange) {
+          const resetResult = await sendPasswordResetForParticipant(effectiveParticipant, {
+            refreshAfter: false,
+          });
+          if (resetResult?.ok && resetResult.emailSent) {
+            setBulkInviteResult("Änderungen gespeichert. Passwort-Reset-Mail wurde gesendet.");
+          } else if (resetResult?.ok && !resetResult.emailSent) {
+            setBulkInviteResult(
+              "Änderungen gespeichert. Passwort-Reset angestoßen, aber E-Mail konnte nicht versendet werden.",
+            );
+          } else {
+            setBulkInviteResult(
+              "Änderungen gespeichert, aber Passwort-Reset konnte nicht gestartet werden.",
+            );
+          }
+        }
       }
     } catch (err) {
       console.error("Failed to update participant email", err);
@@ -314,6 +334,17 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       setEditingSaving(false);
     }
   };
+
+  const editingOriginal = editingUserId
+    ? safeParticipants.find((p) => p.userId === editingUserId)
+    : undefined;
+  const editingEmailTrimmed = editingEmail.trim();
+  const editingOriginalEmail = (editingOriginal?.email ?? "").trim();
+  const editingEmailChanged = editingEmailTrimmed.toLowerCase() !== editingOriginalEmail.toLowerCase();
+  const editingRoleChanged = !!(canEditRoles && editingOriginal && editingOriginal.role !== editingRole);
+  const editingCanSendReset = !!(canEditRoles && editingOriginal?.status === "active");
+  const editingHasChanges =
+    editingEmailChanged || editingRoleChanged || (editingCanSendReset && editingForcePasswordResetOnEmailChange);
 
   const openCreate = () => {
     setCreateOpen(true);
@@ -486,10 +517,14 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     }
   };
 
-  const sendPasswordResetForParticipant = async (p: ParticipantWithStatus) => {
-    if (!p.email) return;
-    if (p.status !== "active") return;
+  const sendPasswordResetForParticipant = async (
+    p: ParticipantWithStatus,
+    options?: { refreshAfter?: boolean },
+  ): Promise<{ ok: boolean; emailSent: boolean } | undefined> => {
+    if (!p.email) return undefined;
+    if (p.status !== "active") return undefined;
 
+    const refreshAfter = options?.refreshAfter ?? true;
     const userId = p.userId;
     // Avoid stale global status text from previous create/bulk actions.
     setBulkInviteResult("");
@@ -508,10 +543,14 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           [userId]: "Passwort-Reset angestoßen, aber E-Mail konnte nicht versendet werden.",
         }));
       }
-      await refreshParticipants();
+      if (refreshAfter) {
+        await refreshParticipants();
+      }
+      return { ok: true, emailSent: !!result.emailSent };
     } catch (err) {
       console.error("Failed to reset password", err);
       setInviteResultByUserId((prev) => ({ ...prev, [userId]: "Fehler beim Passwort-Reset." }));
+      return { ok: false, emailSent: false };
     } finally {
       setInviteSendingByUserId((prev) => ({ ...prev, [userId]: false }));
     }
@@ -641,11 +680,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           >
             {bulkInviteSending ? "Sende..." : `Ausgewählte einladen (${selectedEligibleUserIds.length})`}
           </button>
-          {bulkInviteResult && <span style={{ color: "#374151", fontSize: 12 }}>{bulkInviteResult}</span>}
+          {bulkInviteResult && (
+            <span style={{ color: "#374151", fontSize: 12 }} role="status" aria-live="polite">
+              {bulkInviteResult}
+            </span>
+          )}
         </div>
 
         {participantsError && (
-          <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }}>
+          <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }} role="alert">
             {participantsError}
           </p>
         )}
@@ -661,7 +704,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "36px 130px 110px 110px 1fr 160px",
+                gridTemplateColumns: "36px 130px 110px 150px minmax(220px, 1fr) 220px",
                 gap: "0.5rem",
                 alignItems: "center",
                 fontWeight: 600,
@@ -680,15 +723,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               <span>Nickname</span>
               <span>Rolle</span>
               <span>Status</span>
-              <span>E-Mail</span>
-              <span>Aktion</span>
+                  <span style={{ whiteSpace: "nowrap" }}>E-Mail</span>
+                  <span style={{ whiteSpace: "nowrap" }}>Aktion</span>
               </div>
               {safeParticipants.map((p) => (
                 <div
                   key={p.userId}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "36px 130px 110px 110px 1fr 160px",
+                    gridTemplateColumns: "36px 130px 110px 150px minmax(220px, 1fr) 220px",
                     gap: "0.5rem",
                     alignItems: "center",
                     padding: "0.25rem 0",
@@ -715,7 +758,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                   <span
                     title={getStatusPresentation(p.status).label}
                     aria-label={`Status: ${getStatusPresentation(p.status).label}`}
-                    style={{ display: "inline-flex", justifyContent: "center" }}
+                    style={{ display: "inline-flex", justifyContent: "center", alignItems: "center", gap: 6 }}
                   >
                     <span
                       style={{
@@ -725,63 +768,65 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                         backgroundColor: getStatusPresentation(p.status).color,
                       }}
                     />
+                    <span style={{ fontSize: 12, color: "#374151" }}>
+                      {getStatusPresentation(p.status).label}
+                    </span>
                   </span>
-                  <span style={{ color: p.email ? "#111827" : "#9ca3af" }}>{p.email ?? "-"}</span>
-                  <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      title={
-                        !p.email
-                          ? "E-Mail fehlt"
-                          : p.status === "active" && !canEditRoles
-                            ? "Bereits registriert"
-                            : p.status === "active" && canEditRoles
-                              ? "Einladungslink (Recovery) erneut an registrierte Nutzerin senden"
+                  <span
+                    style={{
+                      color: p.email ? "#111827" : "#9ca3af",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      minWidth: 0,
+                    }}
+                    title={p.email ?? "-"}
+                  >
+                    {p.email ?? "-"}
+                  </span>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.25rem",
+                      justifyContent: "flex-end",
+                      flexWrap: "nowrap",
+                      alignItems: "center",
+                      position: "relative",
+                      width: "100%",
+                      justifySelf: "end",
+                    }}
+                  >
+                    {!(p.status === "active" && canEditRoles) && (
+                      <button
+                        type="button"
+                        title={
+                          !p.email
+                            ? "E-Mail fehlt"
+                            : p.status === "active" && !canEditRoles
+                              ? "Bereits registriert"
                               : p.status === "invited"
                                 ? "Einladung erneut senden"
                                 : "Einladung senden"
-                      }
-                      aria-label={
-                        p.status === "active" && canEditRoles
-                          ? `Einladungslink senden ${p.userId}`
-                          : p.status === "invited"
+                        }
+                        aria-label={
+                          p.status === "invited"
                             ? `Erneut einladen ${p.userId}`
                             : `Einladen ${p.userId}`
-                      }
-                      disabled={
-                        !p.email ||
-                        (p.status === "active" && !canEditRoles) ||
-                        !!inviteSendingByUserId[p.userId] ||
-                        participantsLoading ||
-                        editingSaving ||
-                        createSaving
-                      }
-                      onClick={() => sendInviteForParticipant(p)}
-                    >
-                      {inviteSendingByUserId[p.userId]
-                        ? "..."
-                        : p.status === "active" && canEditRoles
-                          ? "Link"
-                          : p.status === "invited"
-                            ? "Erneut"
-                            : "Einladen"}
-                    </button>
-                    {canEditRoles && (
-                      <button
-                        type="button"
-                        title={!p.email ? "E-Mail fehlt" : p.status !== "active" ? "Nur für registrierte Nutzer" : "Passwort zurücksetzen"}
-                        aria-label={`Passwort zurücksetzen ${p.userId}`}
+                        }
                         disabled={
                           !p.email ||
-                          p.status !== "active" ||
+                          (p.status === "active" && !canEditRoles) ||
                           !!inviteSendingByUserId[p.userId] ||
                           participantsLoading ||
                           editingSaving ||
                           createSaving
                         }
-                        onClick={() => sendPasswordResetForParticipant(p)}
+                        onClick={() => sendInviteForParticipant(p)}
                       >
-                        PW Reset
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <Mail size={14} aria-hidden="true" />
+                          {inviteSendingByUserId[p.userId] ? "..." : null}
+                        </span>
                       </button>
                     )}
                     <button
@@ -822,7 +867,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                     )}
                   </div>
                   {inviteResultByUserId[p.userId] && (
-                    <div style={{ gridColumn: "1 / -1", color: "#374151", fontSize: 12 }}>
+                    <div style={{ gridColumn: "1 / -1", color: "#374151", fontSize: 12 }} role="status" aria-live="polite">
                       {inviteResultByUserId[p.userId]}
                     </div>
                   )}
@@ -867,7 +912,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                   ))}
                 </select>
               )}
-              {canEditRoles && (
+              {canEditRoles && editingOriginal?.status === "active" && (
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
                     type="checkbox"
@@ -875,7 +920,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                     onChange={(e) => setEditingForcePasswordResetOnEmailChange(e.target.checked)}
                     disabled={editingSaving}
                   />
-                  Bei E-Mail-Wechsel Passwort-Reset erzwingen (nur bei registrierten Nutzern)
+                  Passwort-Reset-Mail senden
                 </label>
               )}
               {editingError && <p style={{ color: "crimson", margin: 0 }}>{editingError}</p>}
@@ -894,9 +939,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 type="button"
                 className="btn-primary modal-action-btn"
                 onClick={saveEditEmail}
-                disabled={editingSaving}
+                disabled={editingSaving || !editingHasChanges}
               >
-                {editingSaving ? "Speichere..." : "Speichern"}
+                {editingSaving
+                  ? "Speichere..."
+                  : canEditRoles && editingOriginal?.status === "active"
+                    ? "Speichern und Senden"
+                    : "Speichern"}
               </button>
             </div>
           </div>

@@ -349,6 +349,24 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
           )}
 
           <form onSubmit={handleSubmitTokenReset} className="invite-form">
+            {/* Password managers need an explicit username field in reset flows. */}
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              value={usernameForReset || nicknameParam}
+              readOnly
+              tabIndex={-1}
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: "-10000px",
+                width: 1,
+                height: 1,
+                opacity: 0,
+                pointerEvents: "none",
+              }}
+            />
             <input
               type="text"
               placeholder="Code aus E-Mail"
@@ -375,7 +393,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
               required
             />
 
-            {error && <p style={{ color: "red" }}>{error}</p>}
+            {error && (
+              <p style={{ color: "red" }} role="alert">
+                {error}
+              </p>
+            )}
 
             <button type="submit" disabled={loading || !authCleared || !codeSent} className="btn-primary btn-block">
               {loading ? "Verarbeite…" : modeCopy[authMode].submitLabel}
@@ -437,7 +459,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
               minLength={6}
             />
 
-            {error && <p style={{ color: "red" }}>{error}</p>}
+            {error && (
+              <p style={{ color: "red" }} role="alert">
+                {error}
+              </p>
+            )}
 
             <button type="submit" disabled={loading} className="btn-primary btn-block">
               {loading ? "Verarbeite…" : modeCopy[authMode].submitLabel}
