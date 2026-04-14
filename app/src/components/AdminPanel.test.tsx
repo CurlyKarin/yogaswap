@@ -395,7 +395,7 @@ describe("AdminPanel", () => {
       status: "invited",
     });
 
-    const { container } = render(<AdminPanel />);
+    const { container } = render(<AdminPanel canEditRoles />);
     const panel = container.querySelector("div");
     if (!panel) throw new Error("Panel not found");
 
@@ -437,6 +437,47 @@ describe("AdminPanel", () => {
         within(panel).getByText(/Reaktivierung: Info-Mail gesendet an alice\.new@example\.com\./i),
       ).toBeInTheDocument();
     });
+  });
+
+  it("Kursleitung sieht Reaktivierungs-E-Mail nur read-only und ohne Checkbox", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "invited",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "alice" },
+    });
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByText(/Reaktivierung erkannt fuer bestehenden Teilnehmer: alice/i),
+      ).toBeInTheDocument();
+    });
+
+    const emailInput = within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement;
+    expect(emailInput).toBeDisabled();
+    expect(emailInput.value).toBe("alice@example.com");
+    expect(
+      within(dialog).queryByRole("checkbox", {
+        name: /Eingegebene E-Mail fuer Reaktivierung uebernehmen/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("uebernimmt E-Mail in Create-Form anhand des Nicknames", async () => {

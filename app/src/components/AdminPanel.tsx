@@ -194,6 +194,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           ? remoteMatch.userId
           : null,
       );
+      if (!canEditRoles && remoteMatch && remoteMatch.status !== "active") {
+        setCreateEmail(remoteMatch.email ?? "");
+        setCreateEmailAutoFilled(!!remoteMatch.email);
+        return;
+      }
       if (remoteMatch?.email) {
         setCreateEmail((prev) => (prev.trim() ? prev : remoteMatch.email ?? ""));
         setCreateEmailAutoFilled(true);
@@ -374,6 +379,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const editingSendsInvite = editingOriginal?.status === "invited";
   const editingHasChanges =
     editingEmailChanged || editingRoleChanged || (editingCanSendReset && editingForcePasswordResetOnEmailChange);
+  const createIsTrainerReactivationReadonly = !canEditRoles && !!createReactivationUserId;
 
   const openCreate = () => {
     setCreateOpen(true);
@@ -413,7 +419,10 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setCreateError("");
     try {
       const shouldPreUpdateEmailForReactivation =
-        !!createReactivationUserId && createOverwriteEmailOnReactivate && emailValue.length > 0;
+        canEditRoles &&
+        !!createReactivationUserId &&
+        createOverwriteEmailOnReactivate &&
+        emailValue.length > 0;
 
       if (shouldPreUpdateEmailForReactivation) {
         await updateParticipant(createReactivationUserId, { email: emailValue });
@@ -436,11 +445,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
 
       if (
         emailValue.length > 0 &&
-        (!result.reactivated || createOverwriteEmailOnReactivate) &&
+        (!result.reactivated || (canEditRoles && createOverwriteEmailOnReactivate)) &&
         !shouldPreUpdateEmailForReactivation
       ) {
         await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
-      } else if (emailValue.length > 0 && result.reactivated && !createOverwriteEmailOnReactivate) {
+      } else if (emailValue.length > 0 && result.reactivated && (!canEditRoles || !createOverwriteEmailOnReactivate)) {
         setBulkInviteResult(
           "Reaktivierung: bestehende E-Mail blieb unverändert (kein Überschreiben).",
         );
@@ -449,7 +458,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       const effectiveEmail = emailValue || createEmail;
       if (result.reactivated) {
         const reactivationNotificationTarget =
-          createOverwriteEmailOnReactivate && emailValue
+          canEditRoles && createOverwriteEmailOnReactivate && emailValue
             ? emailValue
             : "bestehende Profil-E-Mail";
         if (result.emailSent) {
@@ -1003,6 +1012,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                   if (localMatch?.status === "active") {
                     setCreateOverwriteEmailOnReactivate(false);
                   }
+                  if (!canEditRoles && localMatch && localMatch.status !== "active") {
+                    setCreateEmail(localMatch.email ?? "");
+                    setCreateEmailAutoFilled(!!localMatch.email);
+                    return;
+                  }
                   if (createEmail.trim()) return;
                   const suggestedEmail = getKnownEmailByNickname(nextNickname);
                   if (suggestedEmail) setCreateEmail(suggestedEmail);
@@ -1021,10 +1035,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 placeholder="E-Mail"
                 value={createEmail}
                 onChange={(e) => {
+                  if (createIsTrainerReactivationReadonly) return;
                   setCreateEmail(e.target.value);
                   setCreateEmailAutoFilled(false);
                 }}
-                disabled={createSaving}
+                disabled={createSaving || createIsTrainerReactivationReadonly}
                 className="dialog-field"
               />
               {createEmailAutoFilled && (
@@ -1043,15 +1058,22 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                   <p style={{ margin: "0.15rem 0 0", color: "#92400e", fontSize: 12 }}>
                     Spitzname existiert bereits (case-insensitiv). Es wird kein neuer User angelegt.
                   </p>
-                  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      type="checkbox"
-                      checked={createOverwriteEmailOnReactivate}
-                      onChange={(e) => setCreateOverwriteEmailOnReactivate(e.target.checked)}
-                      disabled={createSaving}
-                    />
-                    Eingegebene E-Mail fuer Reaktivierung uebernehmen
-                  </label>
+                  {!canEditRoles && (
+                    <p style={{ margin: "0.15rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                      Die E-Mail bleibt bei Reaktivierung fuer Kursleitung unveraendert.
+                    </p>
+                  )}
+                  {canEditRoles && (
+                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={createOverwriteEmailOnReactivate}
+                        onChange={(e) => setCreateOverwriteEmailOnReactivate(e.target.checked)}
+                        disabled={createSaving}
+                      />
+                      Eingegebene E-Mail fuer Reaktivierung uebernehmen
+                    </label>
+                  )}
                   <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
                     {createOverwriteEmailOnReactivate && createEmail.trim()
                       ? `Mail geht an: ${createEmail.trim()}`
