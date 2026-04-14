@@ -577,6 +577,10 @@ describe("AdminPanel", () => {
       email: "alice@example.com",
       status: "invited",
     });
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+    });
 
     const { container } = render(<AdminPanel />);
     const panel = container.querySelector("div");
@@ -591,11 +595,68 @@ describe("AdminPanel", () => {
     fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
       target: { value: "alice@example.com" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern und Senden/i }));
 
     await waitFor(() => {
       expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", { email: "alice@example.com" });
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        email: "alice@example.com",
+        nickname: "alice",
+        role: "participant",
+      });
     });
+  });
+
+  it("Trainer kann Admins/Trainer nicht bearbeiten oder einladen", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "admin1",
+        role: "admin",
+        email: "admin@example.com",
+        status: "invited",
+      },
+      {
+        tenantId: "default-tenant",
+        userId: "trainer1",
+        role: "instructor",
+        email: "trainer@example.com",
+        status: "no_login",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("admin1")).toBeInTheDocument();
+      expect(within(panel).getByText("trainer1")).toBeInTheDocument();
+    });
+
+    expect(within(panel).getByLabelText("Bearbeiten admin1")).toBeDisabled();
+    expect(within(panel).getByLabelText("Bearbeiten trainer1")).toBeDisabled();
+    expect(within(panel).getByLabelText("Erneut einladen admin1")).toBeDisabled();
+    expect(within(panel).getByLabelText("Einladen trainer1")).toBeDisabled();
+  });
+
+  it("zeigt Rollenauswahl im Anlegen-Dialog nur für Admin", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([]);
+
+    const { container, rerender } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByLabelText("Neuer Teilnehmer"));
+    let dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    expect(within(dialog).queryByLabelText("Rolle")).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /Abbrechen/i }));
+
+    rerender(<AdminPanel canEditRoles />);
+    fireEvent.click(within(panel).getByLabelText("Neuer Teilnehmer"));
+    dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    expect(within(dialog).getByLabelText("Rolle")).toBeInTheDocument();
   });
 
   it("erzwingt optional Passwort-Reset beim E-Mail-Wechsel", async () => {

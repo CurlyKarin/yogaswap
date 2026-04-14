@@ -97,6 +97,30 @@ describe('createParticipants Lambda', () => {
     expect(cognitoMockSend).not.toHaveBeenCalled();
   });
 
+  test('returns 403 when instructor tries to create non-participant role', async () => {
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: 'test-tenant' },
+        userId: { S: 'trainer-1' },
+        role: { S: 'instructor' },
+      },
+    });
+
+    const event = baseEvent({
+      email: 'admin@example.com',
+      nickname: 'newadmin',
+      role: 'admin',
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+    event.requestContext = { authorizer: { principalId: 'trainer-1' } } as any;
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toMatch(/Instructors can only create\/invite participants/i);
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(sesMockSend).not.toHaveBeenCalled();
+  });
+
   test('creates a foreign-managed participant if email is empty (skips Cognito/SES)', async () => {
     const event = baseEvent({
       email: '',

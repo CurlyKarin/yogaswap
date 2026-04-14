@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mail, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   deleteParticipant,
@@ -204,10 +204,20 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       setCreateEmailAutoFilled(false);
     }
   };
-  const isInviteEligible = (p: ParticipantWithStatus) => !!p.email && p.status !== "active";
+  const canTrainerManageTarget = useCallback(
+    (p: ParticipantWithStatus) => p.role === "participant",
+    [],
+  );
+  const isInviteEligible = useCallback(
+    (p: ParticipantWithStatus) =>
+      !!p.email &&
+      p.status !== "active" &&
+      (canEditRoles || canTrainerManageTarget(p)),
+    [canEditRoles, canTrainerManageTarget],
+  );
   const inviteEligibleUserIds = useMemo(
     () => safeParticipants.filter(isInviteEligible).map((p) => p.userId),
-    [safeParticipants],
+    [safeParticipants, isInviteEligible],
   );
   const selectedEligibleUserIds = inviteEligibleUserIds.filter((id) => !!selectedInviteUserIds[id]);
   const allEligibleSelected =
@@ -238,7 +248,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setEditingSaving(false);
   };
   const canEditEmailForParticipant = (p: ParticipantWithStatus): boolean =>
-    canEditRoles || (p.status !== "active" && !p.authUserId);
+    canEditRoles ||
+    (
+      canTrainerManageTarget(p) &&
+      p.status !== "active" &&
+      !p.authUserId &&
+      !p.inviteCompletedAt
+    );
 
   const saveEditEmail = async () => {
     if (!editingUserId) return;
@@ -293,12 +309,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
 
       setEditingUserId(null);
       const roleChanged = canEditRoles && original?.role !== editingRole;
+      const wasInvited = original?.status === "invited";
       if (shouldForcePasswordReset) {
         setBulkInviteResult("Änderungen gespeichert. Passwort-Reset wird gesendet.");
       } else if (emailChanged && original?.status === "active") {
         setBulkInviteResult(
           "E-Mail aktualisiert. Info-Mail wurde an die neue Adresse gesendet.",
         );
+      } else if (wasInvited) {
+        setBulkInviteResult("Änderungen gespeichert. Einladung wird erneut gesendet.");
       } else if (roleChanged && original?.status === "active") {
         setBulkInviteResult("Rolle aktualisiert. Nutzer wurde über die Änderung informiert.");
       } else if (roleChanged) {
@@ -327,6 +346,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           }
         }
       }
+      if (wasInvited && nextEmailText.length > 0) {
+        const effectiveParticipant: ParticipantWithStatus = {
+          ...original,
+          email: nextEmailText,
+          role: canEditRoles ? editingRole : original.role,
+          status: "invited",
+        };
+        await sendInviteForParticipant(effectiveParticipant, { refreshAfter: false });
+      }
     } catch (err) {
       console.error("Failed to update participant email", err);
       setEditingError("E-Mail konnte nicht gespeichert werden.");
@@ -343,6 +371,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const editingEmailChanged = editingEmailTrimmed.toLowerCase() !== editingOriginalEmail.toLowerCase();
   const editingRoleChanged = !!(canEditRoles && editingOriginal && editingOriginal.role !== editingRole);
   const editingCanSendReset = !!(canEditRoles && editingOriginal?.status === "active");
+  const editingSendsInvite = editingOriginal?.status === "invited";
   const editingHasChanges =
     editingEmailChanged || editingRoleChanged || (editingCanSendReset && editingForcePasswordResetOnEmailChange);
 
@@ -392,7 +421,10 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
 
       // #67: Teilnehmer anlegen ohne Einladung (kein Cognito/SES).
       // Wir legen zunächst ohne E-Mail an, speichern E-Mail (falls vorhanden) danach separat im Profil.
-      const result = await inviteUser({ nickname: nicknameValue, role: createRole });
+      const result = await inviteUser({
+        nickname: nicknameValue,
+        role: canEditRoles ? createRole : "participant",
+      });
       if (result.error === "Nickname already exists") {
         setCreateError("Dieser Spitzname ist bereits vergeben.");
         return;
@@ -452,6 +484,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     options?: { refreshAfter?: boolean },
   ) => {
     if (!p.email) return;
+    if (!canEditRoles && !canTrainerManageTarget(p)) return;
     if (p.status === "active" && !canEditRoles) return;
 
     const refreshAfter = options?.refreshAfter ?? true;
@@ -796,39 +829,36 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       justifySelf: "end",
                     }}
                   >
-                    {!(p.status === "active" && canEditRoles) && (
-                      <button
-                        type="button"
-                        title={
-                          !p.email
-                            ? "E-Mail fehlt"
-                            : p.status === "active" && !canEditRoles
-                              ? "Bereits registriert"
-                              : p.status === "invited"
-                                ? "Einladung erneut senden"
-                                : "Einladung senden"
-                        }
-                        aria-label={
-                          p.status === "invited"
-                            ? `Erneut einladen ${p.userId}`
-                            : `Einladen ${p.userId}`
-                        }
-                        disabled={
-                          !p.email ||
-                          (p.status === "active" && !canEditRoles) ||
-                          !!inviteSendingByUserId[p.userId] ||
-                          participantsLoading ||
-                          editingSaving ||
-                          createSaving
-                        }
-                        onClick={() => sendInviteForParticipant(p)}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <Mail size={14} aria-hidden="true" />
-                          {inviteSendingByUserId[p.userId] ? "..." : null}
-                        </span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      title={
+                        !p.email
+                          ? "E-Mail fehlt"
+                          : !isInviteEligible(p)
+                            ? "Einladen nicht möglich"
+                            : p.status === "invited"
+                              ? "Einladung erneut senden"
+                              : "Einladung senden"
+                      }
+                      aria-label={
+                        p.status === "invited"
+                          ? `Erneut einladen ${p.userId}`
+                          : `Einladen ${p.userId}`
+                      }
+                      disabled={
+                        !isInviteEligible(p) ||
+                        !!inviteSendingByUserId[p.userId] ||
+                        participantsLoading ||
+                        editingSaving ||
+                        createSaving
+                      }
+                      onClick={() => sendInviteForParticipant(p)}
+                    >
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <Mail size={14} aria-hidden="true" />
+                        {inviteSendingByUserId[p.userId] ? "..." : null}
+                      </span>
+                    </button>
                     <button
                       type="button"
                       title={
@@ -943,7 +973,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               >
                 {editingSaving
                   ? "Speichere..."
-                  : canEditRoles && editingOriginal?.status === "active"
+                  : editingSendsInvite || (canEditRoles && editingOriginal?.status === "active")
                     ? "Speichern und Senden"
                     : "Speichern"}
               </button>
@@ -1051,21 +1081,23 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 </div>
               )}
 
-              <select
-                aria-label="Rolle"
-                value={createRole}
-                onChange={(e) =>
-                  setCreateRole(e.target.value as "participant" | "instructor" | "admin")
-                }
-                disabled={createSaving}
-                className="dialog-field"
-              >
-                {ROLE_OPTIONS.map((role) => (
-                  <option key={role} value={role}>
-                    {ROLE_LABELS_DE[role]}
-                  </option>
-                ))}
-              </select>
+              {canEditRoles && (
+                <select
+                  aria-label="Rolle"
+                  value={createRole}
+                  onChange={(e) =>
+                    setCreateRole(e.target.value as "participant" | "instructor" | "admin")
+                  }
+                  disabled={createSaving}
+                  className="dialog-field"
+                >
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {ROLE_LABELS_DE[role]}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}
             </div>

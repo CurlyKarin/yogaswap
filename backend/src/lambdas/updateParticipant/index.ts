@@ -206,13 +206,38 @@ export const handler = async (
     const existing = unmarshall(existingItem) as ParticipantProfile;
     const existingCognitoUsername = existingItem.cognitoUsername?.S;
     const existingStatus = deriveParticipantStatus(existing);
+    let targetMembershipRole: UserRole | undefined;
+    if (actorMembershipRole === "instructor" || requestsRoleChange) {
+      const targetMembershipResp = await client.send(
+        new GetItemCommand({
+          TableName: membershipsTable,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: targetUserId },
+          },
+          ConsistentRead: true,
+        }),
+      );
+      targetMembershipRole = targetMembershipResp.Item?.role?.S as UserRole | undefined;
+    }
     if (requestsEmailChange) {
       const requestedEmail = typeof body.email === "string" ? body.email.trim() : body.email;
       const currentEmail = (existing.email ?? "").trim().toLowerCase();
       const nextEmail = (requestedEmail ?? "").trim().toLowerCase();
       const emailChanged = currentEmail !== nextEmail;
       const hasAuthLink = !!existing.authUserId;
-      if (emailChanged && actorMembershipRole !== "admin" && (existingStatus === "active" || hasAuthLink)) {
+      const wasPreviouslyRegistered = !!existing.inviteCompletedAt;
+      if (emailChanged && actorMembershipRole === "instructor" && targetMembershipRole && targetMembershipRole !== "participant") {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({ error: "Instructors can update participants only" }),
+        };
+      }
+      if (
+        emailChanged &&
+        actorMembershipRole !== "admin" &&
+        (existingStatus === "active" || hasAuthLink || wasPreviouslyRegistered)
+      ) {
         return {
           statusCode: 403,
           body: JSON.stringify({ error: "Only admins can change email of registered participants" }),
@@ -260,7 +285,7 @@ export const handler = async (
                 ],
               }),
             );
-            if (emailChanged) {
+            if (emailChanged && existingStatus === "active") {
               await cognito.send(
                 new AdminUserGlobalSignOutCommand({
                   UserPoolId: userPoolId,
@@ -269,7 +294,7 @@ export const handler = async (
               );
             }
 
-            if (emailChanged) {
+            if (emailChanged && existingStatus === "active") {
               const baseUrlEnv = process.env.BASE_URL || "";
               const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
               const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
@@ -327,7 +352,7 @@ export const handler = async (
               }
             }
 
-            if (emailChanged && body.forcePasswordResetOnEmailChange) {
+            if (emailChanged && existingStatus === "active" && body.forcePasswordResetOnEmailChange) {
               const authTokensTable = process.env.AUTH_TOKENS_TABLE;
               if (!authTokensTable) {
                 return {
@@ -448,17 +473,7 @@ export const handler = async (
           body: JSON.stringify({ error: "Invalid role value" }),
         };
       }
-      const targetMembershipResp = await client.send(
-        new GetItemCommand({
-          TableName: membershipsTable,
-          Key: {
-            tenantId: { S: tenantId },
-            userId: { S: targetUserId },
-          },
-          ConsistentRead: true,
-        }),
-      );
-      const currentRole = targetMembershipResp.Item?.role?.S as UserRole | undefined;
+      const currentRole = targetMembershipRole;
       await client.send(
         new PutItemCommand({
           TableName: membershipsTable,

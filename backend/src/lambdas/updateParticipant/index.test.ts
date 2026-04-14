@@ -653,6 +653,13 @@ describe("updateParticipant Lambda", () => {
           inviteSentAt: { S: "2026-01-01T12:00:00.000Z" },
         },
       })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          role: { S: "participant" },
+        },
+      }) // target membership role
       .mockResolvedValueOnce({});
     cognitoMockSend.mockResolvedValue({});
 
@@ -691,6 +698,60 @@ describe("updateParticipant Lambda", () => {
           userId: { S: "alice" },
           email: { S: "old@example.com" },
           authUserId: { S: "sub-123" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          role: { S: "participant" },
+        },
+      });
+
+    const result = await handler(
+      makeEvent({
+        requestContext: { authorizer: { principalId: "instructor-1" } } as any,
+        body: JSON.stringify({ email: "new@example.com" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toMatch(/Only admins can change email of registered participants/i);
+  });
+
+  test("returns 403 when instructor tries to change email of previously registered invited participant", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // canManage membership lookup
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      }) // canManage tenant lookup
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "instructor-1" },
+          role: { S: "instructor" },
+        },
+      }) // actor role check (email change)
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "old@example.com" },
+          inviteSentAt: { S: "2026-01-01T12:00:00.000Z" },
+          inviteCompletedAt: { S: "2026-01-02T12:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          role: { S: "participant" },
         },
       });
 
