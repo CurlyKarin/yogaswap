@@ -70,11 +70,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const [createError, setCreateError] = useState("");
   const [createEmailAutoFilled, setCreateEmailAutoFilled] = useState(false);
   const [createOverwriteEmailOnReactivate, setCreateOverwriteEmailOnReactivate] = useState(false);
+  const [createReactivationCheckboxFocused, setCreateReactivationCheckboxFocused] = useState(false);
   const [createReactivationUserId, setCreateReactivationUserId] = useState<string | null>(null);
   const [createNicknameCheckState, setCreateNicknameCheckState] =
     useState<CreateNicknameCheckState>("idle");
   const [createMatchedParticipant, setCreateMatchedParticipant] =
     useState<ParticipantWithStatus | null>(null);
+  const [createLastResolvedNickname, setCreateLastResolvedNickname] = useState<string | null>(null);
 
   const [inviteSendingByUserId, setInviteSendingByUserId] = useState<Record<string, boolean>>(
     {},
@@ -94,6 +96,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const createEmailInputRef = useRef<HTMLInputElement | null>(null);
   const createRoleSelectRef = useRef<HTMLSelectElement | null>(null);
   const createCancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const createReactivationCheckboxRef = useRef<HTMLInputElement | null>(null);
 
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
@@ -186,6 +189,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       setCreateOverwriteEmailOnReactivate(false);
       setCreateMatchedParticipant(null);
       setCreateNicknameCheckState("idle");
+      setCreateLastResolvedNickname(null);
       return { state: "idle" as const, match: null as ParticipantWithStatus | null };
     }
     if (normalized.length < 3) {
@@ -193,7 +197,14 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       setCreateOverwriteEmailOnReactivate(false);
       setCreateMatchedParticipant(null);
       setCreateNicknameCheckState("too_short");
+      setCreateLastResolvedNickname(null);
       return { state: "too_short" as const, match: null as ParticipantWithStatus | null };
+    }
+    if (normalized === createLastResolvedNickname && createNicknameCheckState !== "idle") {
+      return {
+        state: createNicknameCheckState,
+        match: createMatchedParticipant,
+      } as const;
     }
 
     const applyMatch = (match: ParticipantWithStatus) => {
@@ -232,6 +243,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     const localMatch = getKnownParticipantByNickname(normalized);
     if (localMatch) {
       applyMatch(localMatch);
+      setCreateLastResolvedNickname(normalized);
       const hasTenantMembership = !!localMatch.role;
       if (hasTenantMembership && localMatch.status === "active") {
         return { state: "active_conflict" as const, match: localMatch };
@@ -249,6 +261,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       );
       if (remoteMatch) {
         applyMatch(remoteMatch);
+        setCreateLastResolvedNickname(normalized);
         const hasTenantMembership = !!remoteMatch.role;
         if (hasTenantMembership && remoteMatch.status === "active") {
           return { state: "active_conflict" as const, match: remoteMatch };
@@ -259,12 +272,14 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         return { state: "reactivation" as const, match: remoteMatch };
       }
       applyNew();
+      setCreateLastResolvedNickname(normalized);
       return { state: "new" as const, match: null as ParticipantWithStatus | null };
     } catch {
       applyNew();
+      setCreateLastResolvedNickname(normalized);
       return { state: "new" as const, match: null as ParticipantWithStatus | null };
     }
-  }, [getKnownParticipantByNickname]);
+  }, [createLastResolvedNickname, createMatchedParticipant, createNicknameCheckState, getKnownParticipantByNickname]);
   const canTrainerManageTarget = useCallback(
     (p: ParticipantWithStatus) => p.role === "participant",
     [],
@@ -483,8 +498,10 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setCreateMatchedParticipant(null);
     setCreateReactivationUserId(null);
     setCreateOverwriteEmailOnReactivate(false);
+    setCreateReactivationCheckboxFocused(false);
     setCreateEmail("");
     setCreateEmailAutoFilled(false);
+    setCreateLastResolvedNickname(null);
   };
 
   const openCreate = () => {
@@ -497,8 +514,10 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setCreateSaving(false);
     setCreateOverwriteEmailOnReactivate(false);
     setCreateReactivationUserId(null);
+    setCreateReactivationCheckboxFocused(false);
     setCreateNicknameCheckState("idle");
     setCreateMatchedParticipant(null);
+    setCreateLastResolvedNickname(null);
   };
   useEffect(() => {
     if (editingUserId) {
@@ -607,6 +626,19 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         setTimeout(() => focusEmailWhenEnabled(attempt + 1), 0);
       };
       focusEmailWhenEnabled();
+      return;
+    }
+    if (resolved.state === "reactivation" && canEditRoles) {
+      const focusCheckboxWhenAvailable = (attempt = 0) => {
+        const checkboxEl = createReactivationCheckboxRef.current;
+        if (checkboxEl) {
+          checkboxEl.focus();
+          return;
+        }
+        if (attempt >= 6) return;
+        setTimeout(() => focusCheckboxWhenAvailable(attempt + 1), 0);
+      };
+      focusCheckboxWhenAvailable();
       return;
     }
     const fallbackTarget = canEditRoles
@@ -1295,6 +1327,75 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 className="dialog-field"
               />
 
+              {createIsReactivation && (
+                <>
+                  <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
+                    Reaktivierung erkannt fuer bestehenden Teilnehmer: {createReactivationUserId ?? "-"}
+                  </p>
+                  {createCanUnlockReactivationEmail ? (
+                    <>
+                      <label
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          borderRadius: 6,
+                          padding: "2px 4px",
+                          outline: createReactivationCheckboxFocused ? "2px solid #2563eb" : "none",
+                          outlineOffset: 2,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          ref={createReactivationCheckboxRef}
+                          checked={createOverwriteEmailOnReactivate}
+                          onChange={(e) => {
+                            const nextChecked = e.target.checked;
+                            setCreateOverwriteEmailOnReactivate(nextChecked);
+                            if (!nextChecked) {
+                              const fallbackEmail = createMatchedParticipant?.email ?? "";
+                              setCreateEmail(fallbackEmail);
+                              setCreateEmailAutoFilled(!!fallbackEmail);
+                            }
+                          }}
+                          onFocus={() => setCreateReactivationCheckboxFocused(true)}
+                          onBlur={() => setCreateReactivationCheckboxFocused(false)}
+                          disabled={createSaving}
+                          style={{ accentColor: "#2563eb" }}
+                        />
+                        E-Mail fuer Reaktivierung bearbeiten
+                        <strong style={{ color: createOverwriteEmailOnReactivate ? "#166534" : "#6b7280" }}>
+                          {createOverwriteEmailOnReactivate ? "(aktiv)" : "(inaktiv)"}
+                        </strong>
+                      </label>
+                      <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                        {createOverwriteEmailOnReactivate
+                          ? "Bearbeitung aktiv: E-Mail-Feld ist freigegeben."
+                          : "Bearbeitung inaktiv: E-Mail-Feld bleibt gesperrt."}
+                      </p>
+                      <p
+                        role="status"
+                        aria-live="polite"
+                        style={{ margin: 0, fontSize: 11, color: "#6b7280" }}
+                      >
+                        {createOverwriteEmailOnReactivate
+                          ? "Status: E-Mail-Bearbeitung aktiviert."
+                          : "Status: E-Mail-Bearbeitung deaktiviert."}
+                      </p>
+                    </>
+                  ) : (
+                    <p style={{ margin: "0.15rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                      Bei Reaktivierung bleibt die bestehende E-Mail unverändert.
+                    </p>
+                  )}
+                  <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                    {createOverwriteEmailOnReactivate && createEmail.trim()
+                      ? `Mail geht an: ${createEmail.trim()}`
+                      : "Mail geht an: bestehende Profil-E-Mail"}
+                  </p>
+                </>
+              )}
+
               <input
                 type="email"
                 aria-label="E-Mail"
@@ -1323,41 +1424,6 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
                   E-Mail aus bestehendem Profil uebernommen.
                 </p>
-              )}
-              {createIsReactivation && (
-                <>
-                  <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
-                    Reaktivierung erkannt fuer bestehenden Teilnehmer: {createReactivationUserId ?? "-"}
-                  </p>
-                  {createCanUnlockReactivationEmail ? (
-                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input
-                        type="checkbox"
-                        checked={createOverwriteEmailOnReactivate}
-                        onChange={(e) => {
-                          const nextChecked = e.target.checked;
-                          setCreateOverwriteEmailOnReactivate(nextChecked);
-                          if (!nextChecked) {
-                            const fallbackEmail = createMatchedParticipant?.email ?? "";
-                            setCreateEmail(fallbackEmail);
-                            setCreateEmailAutoFilled(!!fallbackEmail);
-                          }
-                        }}
-                        disabled={createSaving}
-                      />
-                      E-Mail fuer Reaktivierung bearbeiten
-                    </label>
-                  ) : (
-                    <p style={{ margin: "0.15rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                      Bei Reaktivierung bleibt die bestehende E-Mail unverändert.
-                    </p>
-                  )}
-                  <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                    {createOverwriteEmailOnReactivate && createEmail.trim()
-                      ? `Mail geht an: ${createEmail.trim()}`
-                      : "Mail geht an: bestehende Profil-E-Mail"}
-                  </p>
-                </>
               )}
               {createActiveConflict && (
                 <div style={{ margin: "0.25rem 0 0", color: "#991b1b", fontSize: 12 }}>

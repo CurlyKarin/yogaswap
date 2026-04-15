@@ -613,6 +613,81 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("fokussiert bei Reaktivierung per Tab zuerst die Reaktivierungs-Checkbox", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: undefined,
+        email: "alice@example.com",
+        status: "active",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    const nicknameInput = within(dialog).getByPlaceholderText("Spitzname") as HTMLInputElement;
+    fireEvent.change(nicknameInput, { target: { value: "alice" } });
+    nicknameInput.focus();
+    fireEvent.keyDown(nicknameInput, { key: "Tab" });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        within(dialog).getByRole("checkbox", { name: /E-Mail fuer Reaktivierung bearbeiten/i }),
+      );
+    });
+  });
+
+  it("setzt Reaktivierungs-Eingaben beim erneuten Blur ohne Nickname-Änderung nicht zurück", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: undefined,
+        email: "alice@example.com",
+        status: "active",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    const nicknameInput = within(dialog).getByPlaceholderText("Spitzname") as HTMLInputElement;
+    const emailInput = within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement;
+
+    fireEvent.change(nicknameInput, { target: { value: "alice" } });
+    fireEvent.blur(nicknameInput);
+    let reactivationCheckbox: HTMLInputElement;
+    await waitFor(() => {
+      reactivationCheckbox = within(dialog).getByRole("checkbox", {
+        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+      }) as HTMLInputElement;
+      expect(reactivationCheckbox.checked).toBe(false);
+      expect(emailInput.disabled).toBe(true);
+    });
+
+    fireEvent.click(reactivationCheckbox!);
+    fireEvent.change(emailInput, { target: { value: "alice.new@example.com" } });
+    expect(reactivationCheckbox!.checked).toBe(true);
+    expect(emailInput.value).toBe("alice.new@example.com");
+
+    fireEvent.focus(nicknameInput);
+    fireEvent.blur(nicknameInput);
+
+    await waitFor(() => {
+      expect(reactivationCheckbox!.checked).toBe(true);
+      expect(emailInput.disabled).toBe(false);
+      expect(emailInput.value).toBe("alice.new@example.com");
+    });
+  });
+
   it("Kursleitung sieht Reaktivierungs-E-Mail nur read-only und ohne Checkbox", async () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
