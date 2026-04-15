@@ -474,6 +474,10 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const createEmailEditable =
     createNicknameCheckState === "new" ||
     (createCanUnlockReactivationEmail && createOverwriteEmailOnReactivate);
+  const deleteTargetHasLoginHistory = !!(
+    deleteTarget &&
+    (deleteTarget.authUserId || deleteTarget.inviteCompletedAt || deleteTarget.status === "active")
+  );
   const resetCreateNicknameResolution = () => {
     setCreateNicknameCheckState("idle");
     setCreateMatchedParticipant(null);
@@ -1462,8 +1466,9 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               Teilnehmer <strong>{deleteTarget.userId}</strong> aus diesem Studio entfernen?
             </p>
             <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
-              Mit Login bleibt das globale Profil erhalten. Ohne Login kann zusätzlich das Profil
-              gelöscht werden, falls keine weitere Studio-Zuordnung existiert.
+              {deleteTargetHasLoginHistory
+                ? "Dieser Zugang wird nur aus diesem Studio entfernt. Das Profil bleibt erhalten und es wird eine Info-Mail versendet."
+                : "Dieser Nutzer hat sich noch nicht registriert. Der Eintrag wird (falls keine weitere Studio-Zuordnung existiert) vollständig entfernt, ohne Info-Mail."}
             </p>
             <div className="modal-actions">
               <button

@@ -88,6 +88,9 @@ describe("AdminPanel", () => {
 
     fireEvent.click(within(panel).getByLabelText("Löschen alice"));
     const deleteDialog = within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i });
+    expect(
+      within(deleteDialog).getByText(/vollständig entfernt, ohne Info-Mail/i),
+    ).toBeInTheDocument();
     fireEvent.click(within(deleteDialog).getByRole("button", { name: /^Löschen$/i }));
 
     await waitFor(() => {
@@ -95,6 +98,34 @@ describe("AdminPanel", () => {
       expect(within(panel).getByText(/Profil-Cleanup/i)).toBeInTheDocument();
       expect(within(panel).getByText(/Info-Mail gesendet an alice@example.com/i)).toBeInTheDocument();
     });
+  });
+
+  it("zeigt im Löschdialog für registrierte Nutzer den Hinweis auf Info-Mail", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "active",
+        authUserId: "sub-123",
+        inviteCompletedAt: "2026-04-10T10:00:00.000Z",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Löschen alice"));
+    const deleteDialog = within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i });
+    expect(
+      within(deleteDialog).getByText(/Profil bleibt erhalten und es wird eine Info-Mail versendet/i),
+    ).toBeInTheDocument();
   });
 
   it("schließt den Anlegen-Dialog per Escape", async () => {
