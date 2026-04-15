@@ -96,6 +96,7 @@ export const handler = async (
 
     let profileDeleted = false;
     const hasAuthUserId = !!profile?.authUserId;
+    const hasRegistrationHistory = !!profile?.authUserId || !!profile?.inviteCompletedAt;
     const notificationEmail = profile?.email?.trim() || "";
     let notificationEmailSent = false;
 
@@ -126,8 +127,9 @@ export const handler = async (
       }
     }
 
-    // Optional notification email when participant has an email address.
-    if (profile?.email) {
+    // Optional notification email only for participants with login history.
+    // Never-registered invited/no-login users are removed quietly to avoid confusing mails.
+    if (profile?.email && hasRegistrationHistory) {
       const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
       const mailLocale = process.env.MAIL_LOCALE || "de";
       const removedMail = buildStudioAccessRemovedMail({

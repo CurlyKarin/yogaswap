@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Mail, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   deleteParticipant,
@@ -38,6 +38,13 @@ function getStatusPresentation(status: ParticipantWithStatus["status"]): {
 type AdminPanelProps = {
   canEditRoles?: boolean;
 };
+type CreateNicknameCheckState =
+  | "idle"
+  | "too_short"
+  | "new"
+  | "reactivation"
+  | "active_conflict"
+  | "exists_in_tenant";
 
 export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
@@ -63,7 +70,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const [createError, setCreateError] = useState("");
   const [createEmailAutoFilled, setCreateEmailAutoFilled] = useState(false);
   const [createOverwriteEmailOnReactivate, setCreateOverwriteEmailOnReactivate] = useState(false);
+  const [createReactivationCheckboxFocused, setCreateReactivationCheckboxFocused] = useState(false);
   const [createReactivationUserId, setCreateReactivationUserId] = useState<string | null>(null);
+  const [createNicknameCheckState, setCreateNicknameCheckState] =
+    useState<CreateNicknameCheckState>("idle");
+  const [createMatchedParticipant, setCreateMatchedParticipant] =
+    useState<ParticipantWithStatus | null>(null);
+  const [createLastResolvedNickname, setCreateLastResolvedNickname] = useState<string | null>(null);
 
   const [inviteSendingByUserId, setInviteSendingByUserId] = useState<Record<string, boolean>>(
     {},
@@ -76,6 +89,14 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const [bulkInviteResult, setBulkInviteResult] = useState("");
   const [deleteRunningByUserId, setDeleteRunningByUserId] = useState<Record<string, boolean>>({});
   const [deleteTarget, setDeleteTarget] = useState<ParticipantWithStatus | null>(null);
+  const editingModalRef = useRef<HTMLDivElement | null>(null);
+  const createModalRef = useRef<HTMLDivElement | null>(null);
+  const deleteModalRef = useRef<HTMLDivElement | null>(null);
+  const createNicknameInputRef = useRef<HTMLInputElement | null>(null);
+  const createEmailInputRef = useRef<HTMLInputElement | null>(null);
+  const createRoleSelectRef = useRef<HTMLSelectElement | null>(null);
+  const createCancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const createReactivationCheckboxRef = useRef<HTMLInputElement | null>(null);
 
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
@@ -139,21 +160,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     () => (Array.isArray(participants) ? participants : []),
     [participants],
   );
-  const getKnownEmailByNickname = (nicknameValue: string): string => {
-    const normalized = nicknameValue.trim().toLowerCase();
-    if (!normalized) return "";
-    const match = safeParticipants.find(
-      (p) => (p.userId || "").trim().toLowerCase() === normalized && !!p.email,
-    );
-    return match?.email ?? "";
-  };
-  const getKnownParticipantByNickname = (nicknameValue: string): ParticipantWithStatus | undefined => {
-    const normalized = nicknameValue.trim().toLowerCase();
-    if (!normalized) return undefined;
-    return safeParticipants.find((p) => (p.userId || "").trim().toLowerCase() === normalized);
-  };
-  const createMatch = getKnownParticipantByNickname(createNickname);
-  const createActiveConflict = !!createMatch && createMatch.status === "active";
+  const getKnownParticipantByNickname = useCallback(
+    (nicknameValue: string): ParticipantWithStatus | undefined => {
+      const normalized = nicknameValue.trim().toLowerCase();
+      if (!normalized) return undefined;
+      return safeParticipants.find((p) => (p.userId || "").trim().toLowerCase() === normalized);
+    },
+    [safeParticipants],
+  );
+  const createActiveConflict = createNicknameCheckState === "active_conflict";
   const createSuggestedNickname = useMemo(() => {
     if (!createActiveConflict) return "";
     const base = createNickname.trim();
@@ -167,21 +182,76 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     }
     return candidate;
   }, [createActiveConflict, createNickname, safeParticipants]);
-  const prefillCreateEmailByNickname = async (nicknameValue: string) => {
-    if (createEmail.trim()) return;
+  const resolveCreateNicknameContext = useCallback(async (nicknameValue: string) => {
     const normalized = nicknameValue.trim().toLowerCase();
     if (!normalized) {
       setCreateReactivationUserId(null);
-      return;
+      setCreateOverwriteEmailOnReactivate(false);
+      setCreateMatchedParticipant(null);
+      setCreateNicknameCheckState("idle");
+      setCreateLastResolvedNickname(null);
+      return { state: "idle" as const, match: null as ParticipantWithStatus | null };
+    }
+    if (normalized.length < 3) {
+      setCreateReactivationUserId(null);
+      setCreateOverwriteEmailOnReactivate(false);
+      setCreateMatchedParticipant(null);
+      setCreateNicknameCheckState("too_short");
+      setCreateLastResolvedNickname(null);
+      return { state: "too_short" as const, match: null as ParticipantWithStatus | null };
+    }
+    if (normalized === createLastResolvedNickname && createNicknameCheckState !== "idle") {
+      return {
+        state: createNicknameCheckState,
+        match: createMatchedParticipant,
+      } as const;
     }
 
+    const applyMatch = (match: ParticipantWithStatus) => {
+      setCreateMatchedParticipant(match);
+      const hasTenantMembership = !!match.role;
+      if (hasTenantMembership && match.status === "active") {
+        setCreateNicknameCheckState("active_conflict");
+        setCreateReactivationUserId(null);
+        setCreateOverwriteEmailOnReactivate(false);
+        setCreateEmail("");
+        setCreateEmailAutoFilled(false);
+        return;
+      }
+      if (hasTenantMembership) {
+        setCreateNicknameCheckState("exists_in_tenant");
+        setCreateReactivationUserId(null);
+        setCreateOverwriteEmailOnReactivate(false);
+        setCreateEmail(match.email ?? "");
+        setCreateEmailAutoFilled(!!match.email);
+        return;
+      }
+      setCreateNicknameCheckState("reactivation");
+      setCreateReactivationUserId(match.userId);
+      setCreateOverwriteEmailOnReactivate(false);
+      setCreateEmail(match.email ?? "");
+      setCreateEmailAutoFilled(!!match.email);
+    };
+    const applyNew = () => {
+      setCreateNicknameCheckState("new");
+      setCreateMatchedParticipant(null);
+      setCreateReactivationUserId(null);
+      setCreateOverwriteEmailOnReactivate(false);
+      setCreateEmailAutoFilled(false);
+    };
+
     const localMatch = getKnownParticipantByNickname(normalized);
-    setCreateReactivationUserId(localMatch && localMatch.status !== "active" ? localMatch.userId : null);
-    const localEmail = localMatch?.email ?? "";
-    if (localEmail) {
-      setCreateEmail(localEmail);
-      setCreateEmailAutoFilled(true);
-      return;
+    if (localMatch) {
+      applyMatch(localMatch);
+      setCreateLastResolvedNickname(normalized);
+      const hasTenantMembership = !!localMatch.role;
+      if (hasTenantMembership && localMatch.status === "active") {
+        return { state: "active_conflict" as const, match: localMatch };
+      }
+      if (hasTenantMembership) {
+        return { state: "exists_in_tenant" as const, match: localMatch };
+      }
+      return { state: "reactivation" as const, match: localMatch };
     }
 
     try {
@@ -189,25 +259,75 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       const remoteMatch = remoteList.find(
         (p) => (p.userId || "").trim().toLowerCase() === normalized,
       );
-      setCreateReactivationUserId(
-        remoteMatch && (!remoteMatch.role || remoteMatch.status !== "active")
-          ? remoteMatch.userId
-          : null,
-      );
-      if (remoteMatch?.email) {
-        setCreateEmail((prev) => (prev.trim() ? prev : remoteMatch.email ?? ""));
-        setCreateEmailAutoFilled(true);
-      } else {
-        setCreateEmailAutoFilled(false);
+      if (remoteMatch) {
+        applyMatch(remoteMatch);
+        setCreateLastResolvedNickname(normalized);
+        const hasTenantMembership = !!remoteMatch.role;
+        if (hasTenantMembership && remoteMatch.status === "active") {
+          return { state: "active_conflict" as const, match: remoteMatch };
+        }
+        if (hasTenantMembership) {
+          return { state: "exists_in_tenant" as const, match: remoteMatch };
+        }
+        return { state: "reactivation" as const, match: remoteMatch };
       }
+      applyNew();
+      setCreateLastResolvedNickname(normalized);
+      return { state: "new" as const, match: null as ParticipantWithStatus | null };
     } catch {
-      setCreateEmailAutoFilled(false);
+      applyNew();
+      setCreateLastResolvedNickname(normalized);
+      return { state: "new" as const, match: null as ParticipantWithStatus | null };
     }
+  }, [createLastResolvedNickname, createMatchedParticipant, createNicknameCheckState, getKnownParticipantByNickname]);
+  const canTrainerManageTarget = useCallback(
+    (p: ParticipantWithStatus) => p.role === "participant",
+    [],
+  );
+  const getFocusableElements = useCallback(
+    (container: HTMLElement): HTMLElement[] =>
+      Array.from(
+        container.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+        ),
+      ),
+    [],
+  );
+  const focusFirstInModal = useCallback(
+    (modalEl: HTMLDivElement | null) => {
+      if (!modalEl) return;
+      const focusable = getFocusableElements(modalEl);
+      const preferredInput =
+        focusable.find((el) => el.tagName === "INPUT" || el.tagName === "SELECT") ?? focusable[0];
+      if (preferredInput) {
+        preferredInput.focus();
+        return;
+      }
+      modalEl.focus();
+    },
+    [getFocusableElements],
+  );
+  const shouldHandleModalEnter = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter") return false;
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
+    const target = event.target as HTMLElement | null;
+    if (!target) return false;
+    const tag = target.tagName;
+    if (tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || tag === "A") return false;
+    if ((target as HTMLInputElement).type === "checkbox") return false;
+    return true;
   };
-  const isInviteEligible = (p: ParticipantWithStatus) => !!p.email && p.status !== "active";
+  const shouldHandleModalEscape = (event: React.KeyboardEvent<HTMLElement>) => event.key === "Escape";
+  const isInviteEligible = useCallback(
+    (p: ParticipantWithStatus) =>
+      !!p.email &&
+      p.status !== "active" &&
+      (canEditRoles || canTrainerManageTarget(p)),
+    [canEditRoles, canTrainerManageTarget],
+  );
   const inviteEligibleUserIds = useMemo(
     () => safeParticipants.filter(isInviteEligible).map((p) => p.userId),
-    [safeParticipants],
+    [safeParticipants, isInviteEligible],
   );
   const selectedEligibleUserIds = inviteEligibleUserIds.filter((id) => !!selectedInviteUserIds[id]);
   const allEligibleSelected =
@@ -238,7 +358,13 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setEditingSaving(false);
   };
   const canEditEmailForParticipant = (p: ParticipantWithStatus): boolean =>
-    canEditRoles || (p.status !== "active" && !p.authUserId);
+    canEditRoles ||
+    (
+      canTrainerManageTarget(p) &&
+      p.status !== "active" &&
+      !p.authUserId &&
+      !p.inviteCompletedAt
+    );
 
   const saveEditEmail = async () => {
     if (!editingUserId) return;
@@ -293,12 +419,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
 
       setEditingUserId(null);
       const roleChanged = canEditRoles && original?.role !== editingRole;
+      const wasInvited = original?.status === "invited";
       if (shouldForcePasswordReset) {
         setBulkInviteResult("Änderungen gespeichert. Passwort-Reset wird gesendet.");
       } else if (emailChanged && original?.status === "active") {
         setBulkInviteResult(
           "E-Mail aktualisiert. Info-Mail wurde an die neue Adresse gesendet.",
         );
+      } else if (wasInvited) {
+        setBulkInviteResult("Änderungen gespeichert. Einladung wird erneut gesendet.");
       } else if (roleChanged && original?.status === "active") {
         setBulkInviteResult("Rolle aktualisiert. Nutzer wurde über die Änderung informiert.");
       } else if (roleChanged) {
@@ -327,6 +456,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           }
         }
       }
+      if (wasInvited && nextEmailText.length > 0) {
+        const effectiveParticipant: ParticipantWithStatus = {
+          ...original,
+          email: nextEmailText,
+          role: canEditRoles ? editingRole : original.role,
+          status: "invited",
+        };
+        await sendInviteForParticipant(effectiveParticipant, { refreshAfter: false });
+      }
     } catch (err) {
       console.error("Failed to update participant email", err);
       setEditingError("E-Mail konnte nicht gespeichert werden.");
@@ -343,8 +481,28 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const editingEmailChanged = editingEmailTrimmed.toLowerCase() !== editingOriginalEmail.toLowerCase();
   const editingRoleChanged = !!(canEditRoles && editingOriginal && editingOriginal.role !== editingRole);
   const editingCanSendReset = !!(canEditRoles && editingOriginal?.status === "active");
+  const editingSendsInvite = editingOriginal?.status === "invited";
   const editingHasChanges =
     editingEmailChanged || editingRoleChanged || (editingCanSendReset && editingForcePasswordResetOnEmailChange);
+  const createIsReactivation = createNicknameCheckState === "reactivation";
+  const createCanUnlockReactivationEmail = canEditRoles && createIsReactivation;
+  const createEmailEditable =
+    createNicknameCheckState === "new" ||
+    (createCanUnlockReactivationEmail && createOverwriteEmailOnReactivate);
+  const deleteTargetHasLoginHistory = !!(
+    deleteTarget &&
+    (deleteTarget.authUserId || deleteTarget.inviteCompletedAt || deleteTarget.status === "active")
+  );
+  const resetCreateNicknameResolution = () => {
+    setCreateNicknameCheckState("idle");
+    setCreateMatchedParticipant(null);
+    setCreateReactivationUserId(null);
+    setCreateOverwriteEmailOnReactivate(false);
+    setCreateReactivationCheckboxFocused(false);
+    setCreateEmail("");
+    setCreateEmailAutoFilled(false);
+    setCreateLastResolvedNickname(null);
+  };
 
   const openCreate = () => {
     setCreateOpen(true);
@@ -356,22 +514,152 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     setCreateSaving(false);
     setCreateOverwriteEmailOnReactivate(false);
     setCreateReactivationUserId(null);
+    setCreateReactivationCheckboxFocused(false);
+    setCreateNicknameCheckState("idle");
+    setCreateMatchedParticipant(null);
+    setCreateLastResolvedNickname(null);
+  };
+  useEffect(() => {
+    if (editingUserId) {
+      queueMicrotask(() => focusFirstInModal(editingModalRef.current));
+    }
+  }, [editingUserId, focusFirstInModal]);
+  useEffect(() => {
+    if (createOpen) {
+      queueMicrotask(() => focusFirstInModal(createModalRef.current));
+    }
+  }, [createOpen, focusFirstInModal]);
+  useEffect(() => {
+    if (deleteTarget) {
+      queueMicrotask(() => focusFirstInModal(deleteModalRef.current));
+    }
+  }, [deleteTarget, focusFirstInModal]);
+  useEffect(() => {
+    const anyModalOpen = !!editingUserId || createOpen || !!deleteTarget;
+    if (!anyModalOpen) return;
+
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        target === createNicknameInputRef.current &&
+        !event.shiftKey &&
+        !createEmailEditable
+      ) {
+        // Let the nickname field handler run first so it can resolve
+        // the nickname and send focus to the proper next control.
+        return;
+      }
+      const activeModal =
+        (editingUserId && editingModalRef.current) ||
+        (createOpen && createModalRef.current) ||
+        (deleteTarget && deleteModalRef.current) ||
+        null;
+      if (!activeModal) return;
+
+      const focusable = getFocusableElements(activeModal);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        activeModal.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const isInsideModal = !!active && activeModal.contains(active);
+      const activeIndex = isInsideModal ? focusable.indexOf(active as HTMLElement) : -1;
+
+      // Safari can jump to the browser chrome on Tab. We fully control
+      // focus movement while a modal is open to keep focus trapped.
+      event.preventDefault();
+
+      if (!isInsideModal || activeIndex < 0) {
+        if (event.shiftKey) {
+          last.focus();
+        } else {
+          first.focus();
+        }
+        return;
+      }
+
+      if (event.shiftKey) {
+        const prevIndex = activeIndex <= 0 ? focusable.length - 1 : activeIndex - 1;
+        focusable[prevIndex].focus();
+        return;
+      }
+      const nextIndex = activeIndex >= focusable.length - 1 ? 0 : activeIndex + 1;
+      focusable[nextIndex].focus();
+    };
+
+    document.addEventListener("keydown", onDocumentKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onDocumentKeyDown, true);
+    };
+  }, [editingUserId, createOpen, deleteTarget, getFocusableElements, createEmailEditable]);
+  useEffect(() => {
+    if (!createOpen) return;
+    if (createNicknameCheckState !== "new") return;
+    if (document.activeElement !== createNicknameInputRef.current) return;
+    setTimeout(() => {
+      createEmailInputRef.current?.focus();
+    }, 0);
+  }, [createOpen, createNicknameCheckState]);
+  const handleCreateNicknameKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Tab" || event.shiftKey) return;
+    if (createEmailEditable || createSaving) return;
+    const nicknameValue = createNickname.trim();
+    if (nicknameValue.length < 3) return;
+
+    event.preventDefault();
+    const resolved = await resolveCreateNicknameContext(nicknameValue);
+    if (resolved.state === "new") {
+      const focusEmailWhenEnabled = (attempt = 0) => {
+        const emailEl = createEmailInputRef.current;
+        if (!emailEl) return;
+        if (!emailEl.disabled) {
+          emailEl.focus();
+          return;
+        }
+        if (attempt >= 6) return;
+        setTimeout(() => focusEmailWhenEnabled(attempt + 1), 0);
+      };
+      focusEmailWhenEnabled();
+      return;
+    }
+    if (resolved.state === "reactivation" && canEditRoles) {
+      const focusCheckboxWhenAvailable = (attempt = 0) => {
+        const checkboxEl = createReactivationCheckboxRef.current;
+        if (checkboxEl) {
+          checkboxEl.focus();
+          return;
+        }
+        if (attempt >= 6) return;
+        setTimeout(() => focusCheckboxWhenAvailable(attempt + 1), 0);
+      };
+      focusCheckboxWhenAvailable();
+      return;
+    }
+    const fallbackTarget = canEditRoles
+      ? createRoleSelectRef.current ?? createCancelButtonRef.current
+      : createCancelButtonRef.current;
+    fallbackTarget?.focus();
   };
 
   const saveCreate = async () => {
     const nicknameValue = createNickname.trim();
-    const emailValue = createEmail.trim();
     if (!nicknameValue) {
       setCreateError("Bitte einen Nickname eingeben.");
       return;
     }
-    const isValidEmailOrEmpty =
-      emailValue.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
-    if (!isValidEmailOrEmpty) {
-      setCreateError("Bitte eine gültige E-Mail-Adresse eingeben (oder leer lassen).");
+    if (nicknameValue.length < 3) {
+      setCreateNicknameCheckState("too_short");
+      setCreateError("Bitte mindestens 3 Zeichen für den Nickname eingeben.");
       return;
     }
-    if (createActiveConflict) {
+    const resolved = await resolveCreateNicknameContext(nicknameValue);
+    if (resolved.state === "active_conflict") {
       setCreateError(
         createSuggestedNickname
           ? `Dieser Spitzname ist im Tenant bereits aktiv. Vorschlag: ${createSuggestedNickname}`
@@ -379,20 +667,42 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       );
       return;
     }
+    if (resolved.state === "exists_in_tenant") {
+      setCreateError("Dieser Teilnehmer existiert bereits im Studio. Bitte bearbeiten oder erneut einladen.");
+      return;
+    }
+
+    const isReactivationFlow = resolved.state === "reactivation";
+    const reactivationUserId = isReactivationFlow ? resolved.match?.userId ?? null : null;
+    const emailValue = (isReactivationFlow && !(canEditRoles && createOverwriteEmailOnReactivate))
+      ? (resolved.match?.email ?? "").trim()
+      : createEmail.trim();
+    const isValidEmailOrEmpty =
+      emailValue.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
+    if (!isValidEmailOrEmpty) {
+      setCreateError("Bitte eine gültige E-Mail-Adresse eingeben (oder leer lassen).");
+      return;
+    }
 
     setCreateSaving(true);
     setCreateError("");
     try {
       const shouldPreUpdateEmailForReactivation =
-        !!createReactivationUserId && createOverwriteEmailOnReactivate && emailValue.length > 0;
+        canEditRoles &&
+        !!reactivationUserId &&
+        createOverwriteEmailOnReactivate &&
+        emailValue.length > 0;
 
       if (shouldPreUpdateEmailForReactivation) {
-        await updateParticipant(createReactivationUserId, { email: emailValue });
+        await updateParticipant(reactivationUserId, { email: emailValue });
       }
 
       // #67: Teilnehmer anlegen ohne Einladung (kein Cognito/SES).
       // Wir legen zunächst ohne E-Mail an, speichern E-Mail (falls vorhanden) danach separat im Profil.
-      const result = await inviteUser({ nickname: nicknameValue, role: createRole });
+      const result = await inviteUser({
+        nickname: nicknameValue,
+        role: canEditRoles ? createRole : "participant",
+      });
       if (result.error === "Nickname already exists") {
         setCreateError("Dieser Spitzname ist bereits vergeben.");
         return;
@@ -404,20 +714,20 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
 
       if (
         emailValue.length > 0 &&
-        (!result.reactivated || createOverwriteEmailOnReactivate) &&
+        (!result.reactivated || (canEditRoles && createOverwriteEmailOnReactivate)) &&
         !shouldPreUpdateEmailForReactivation
       ) {
         await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
-      } else if (emailValue.length > 0 && result.reactivated && !createOverwriteEmailOnReactivate) {
+      } else if (emailValue.length > 0 && result.reactivated && (!canEditRoles || !createOverwriteEmailOnReactivate)) {
         setBulkInviteResult(
-          "Reaktivierung: bestehende E-Mail blieb unverändert (kein Überschreiben).",
+          "Reaktivierung: bestehende E-Mail bleibt unverändert.",
         );
       }
 
       const effectiveEmail = emailValue || createEmail;
       if (result.reactivated) {
         const reactivationNotificationTarget =
-          createOverwriteEmailOnReactivate && emailValue
+          canEditRoles && createOverwriteEmailOnReactivate && emailValue
             ? emailValue
             : "bestehende Profil-E-Mail";
         if (result.emailSent) {
@@ -452,6 +762,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     options?: { refreshAfter?: boolean },
   ) => {
     if (!p.email) return;
+    if (!canEditRoles && !canTrainerManageTarget(p)) return;
     if (p.status === "active" && !canEditRoles) return;
 
     const refreshAfter = options?.refreshAfter ?? true;
@@ -796,39 +1107,36 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       justifySelf: "end",
                     }}
                   >
-                    {!(p.status === "active" && canEditRoles) && (
-                      <button
-                        type="button"
-                        title={
-                          !p.email
-                            ? "E-Mail fehlt"
-                            : p.status === "active" && !canEditRoles
-                              ? "Bereits registriert"
-                              : p.status === "invited"
-                                ? "Einladung erneut senden"
-                                : "Einladung senden"
-                        }
-                        aria-label={
-                          p.status === "invited"
-                            ? `Erneut einladen ${p.userId}`
-                            : `Einladen ${p.userId}`
-                        }
-                        disabled={
-                          !p.email ||
-                          (p.status === "active" && !canEditRoles) ||
-                          !!inviteSendingByUserId[p.userId] ||
-                          participantsLoading ||
-                          editingSaving ||
-                          createSaving
-                        }
-                        onClick={() => sendInviteForParticipant(p)}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <Mail size={14} aria-hidden="true" />
-                          {inviteSendingByUserId[p.userId] ? "..." : null}
-                        </span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      title={
+                        !p.email
+                          ? "E-Mail fehlt"
+                          : !isInviteEligible(p)
+                            ? "Einladen nicht möglich"
+                            : p.status === "invited"
+                              ? "Einladung erneut senden"
+                              : "Einladung senden"
+                      }
+                      aria-label={
+                        p.status === "invited"
+                          ? `Erneut einladen ${p.userId}`
+                          : `Einladen ${p.userId}`
+                      }
+                      disabled={
+                        !isInviteEligible(p) ||
+                        !!inviteSendingByUserId[p.userId] ||
+                        participantsLoading ||
+                        editingSaving ||
+                        createSaving
+                      }
+                      onClick={() => sendInviteForParticipant(p)}
+                    >
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <Mail size={14} aria-hidden="true" />
+                        {inviteSendingByUserId[p.userId] ? "..." : null}
+                      </span>
+                    </button>
                     <button
                       type="button"
                       title={
@@ -880,7 +1188,26 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       </div>
 
       {editingUserId && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer E-Mail bearbeiten">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Teilnehmer E-Mail bearbeiten"
+          ref={editingModalRef}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (shouldHandleModalEscape(event)) {
+              if (editingSaving) return;
+              event.preventDefault();
+              setEditingUserId(null);
+              return;
+            }
+            if (!shouldHandleModalEnter(event)) return;
+            if (editingSaving || !editingHasChanges) return;
+            event.preventDefault();
+            void saveEditEmail();
+          }}
+        >
           <div className="modal modal-compact">
             <h4>Teilnehmer bearbeiten</h4>
             <p style={{ marginTop: 0, color: "#4b5563" }}>
@@ -943,7 +1270,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               >
                 {editingSaving
                   ? "Speichere..."
-                  : canEditRoles && editingOriginal?.status === "active"
+                  : editingSendsInvite || (canEditRoles && editingOriginal?.status === "active")
                     ? "Speichern und Senden"
                     : "Speichern"}
               </button>
@@ -953,7 +1280,28 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       )}
 
       {createOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer anlegen">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Teilnehmer anlegen"
+          ref={createModalRef}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (shouldHandleModalEscape(event)) {
+              if (createSaving) return;
+              event.preventDefault();
+              setCreateOpen(false);
+              return;
+            }
+            if (!shouldHandleModalEnter(event)) return;
+            if (createSaving || createActiveConflict || createNicknameCheckState === "exists_in_tenant") {
+              return;
+            }
+            event.preventDefault();
+            void saveCreate();
+          }}
+        >
           <div className="modal modal-compact">
             <h4>Teilnehmer anlegen</h4>
 
@@ -962,72 +1310,120 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 type="text"
                 aria-label="Spitzname"
                 placeholder="Spitzname"
+                ref={createNicknameInputRef}
                 value={createNickname}
                 onChange={(e) => {
                   const nextNickname = e.target.value;
                   setCreateNickname(nextNickname);
-                  const localMatch = getKnownParticipantByNickname(nextNickname);
-                  setCreateReactivationUserId(
-                    localMatch && localMatch.status !== "active" ? localMatch.userId : null,
-                  );
-                  if (localMatch?.status === "active") {
-                    setCreateOverwriteEmailOnReactivate(false);
-                  }
-                  if (createEmail.trim()) return;
-                  const suggestedEmail = getKnownEmailByNickname(nextNickname);
-                  if (suggestedEmail) setCreateEmail(suggestedEmail);
-                  setCreateEmailAutoFilled(!!suggestedEmail);
+                  resetCreateNicknameResolution();
+                }}
+                onKeyDown={(event) => {
+                  void handleCreateNicknameKeyDown(event);
                 }}
                 onBlur={() => {
-                  void prefillCreateEmailByNickname(createNickname);
+                  void resolveCreateNicknameContext(createNickname);
                 }}
                 disabled={createSaving}
                 className="dialog-field"
               />
 
-              <input
-                type="email"
-                aria-label="E-Mail"
-                placeholder="E-Mail"
-                value={createEmail}
-                onChange={(e) => {
-                  setCreateEmail(e.target.value);
-                  setCreateEmailAutoFilled(false);
-                }}
-                disabled={createSaving}
-                className="dialog-field"
-              />
-              {createEmailAutoFilled && (
-                <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                  E-Mail aus bestehendem Profil uebernommen.
-                </p>
-              )}
-              <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                Bei Reaktivierung bleibt die bestehende E-Mail standardmaessig unveraendert.
-              </p>
-              {createReactivationUserId && (
+              {createIsReactivation && (
                 <>
                   <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
-                    Reaktivierung erkannt fuer bestehenden Teilnehmer: {createReactivationUserId}
+                    Reaktivierung erkannt fuer bestehenden Teilnehmer: {createReactivationUserId ?? "-"}
                   </p>
-                  <p style={{ margin: "0.15rem 0 0", color: "#92400e", fontSize: 12 }}>
-                    Spitzname existiert bereits (case-insensitiv). Es wird kein neuer User angelegt.
-                  </p>
-                  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      type="checkbox"
-                      checked={createOverwriteEmailOnReactivate}
-                      onChange={(e) => setCreateOverwriteEmailOnReactivate(e.target.checked)}
-                      disabled={createSaving}
-                    />
-                    Eingegebene E-Mail fuer Reaktivierung uebernehmen
-                  </label>
+                  {createCanUnlockReactivationEmail ? (
+                    <>
+                      <label
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          borderRadius: 6,
+                          padding: "2px 4px",
+                          outline: createReactivationCheckboxFocused ? "2px solid #2563eb" : "none",
+                          outlineOffset: 2,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          ref={createReactivationCheckboxRef}
+                          checked={createOverwriteEmailOnReactivate}
+                          onChange={(e) => {
+                            const nextChecked = e.target.checked;
+                            setCreateOverwriteEmailOnReactivate(nextChecked);
+                            if (!nextChecked) {
+                              const fallbackEmail = createMatchedParticipant?.email ?? "";
+                              setCreateEmail(fallbackEmail);
+                              setCreateEmailAutoFilled(!!fallbackEmail);
+                            }
+                          }}
+                          onFocus={() => setCreateReactivationCheckboxFocused(true)}
+                          onBlur={() => setCreateReactivationCheckboxFocused(false)}
+                          disabled={createSaving}
+                          style={{ accentColor: "#2563eb" }}
+                        />
+                        E-Mail fuer Reaktivierung bearbeiten
+                        <strong style={{ color: createOverwriteEmailOnReactivate ? "#166534" : "#6b7280" }}>
+                          {createOverwriteEmailOnReactivate ? "(aktiv)" : "(inaktiv)"}
+                        </strong>
+                      </label>
+                      <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                        {createOverwriteEmailOnReactivate
+                          ? "Bearbeitung aktiv: E-Mail-Feld ist freigegeben."
+                          : "Bearbeitung inaktiv: E-Mail-Feld bleibt gesperrt."}
+                      </p>
+                      <p
+                        role="status"
+                        aria-live="polite"
+                        style={{ margin: 0, fontSize: 11, color: "#6b7280" }}
+                      >
+                        {createOverwriteEmailOnReactivate
+                          ? "Status: E-Mail-Bearbeitung aktiviert."
+                          : "Status: E-Mail-Bearbeitung deaktiviert."}
+                      </p>
+                    </>
+                  ) : (
+                    <p style={{ margin: "0.15rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                      Bei Reaktivierung bleibt die bestehende E-Mail unverändert.
+                    </p>
+                  )}
                   <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
                     {createOverwriteEmailOnReactivate && createEmail.trim()
                       ? `Mail geht an: ${createEmail.trim()}`
                       : "Mail geht an: bestehende Profil-E-Mail"}
                   </p>
                 </>
+              )}
+
+              <input
+                type="email"
+                aria-label="E-Mail"
+                placeholder="E-Mail"
+                ref={createEmailInputRef}
+                value={createEmail}
+                onChange={(e) => {
+                  if (!createEmailEditable) return;
+                  setCreateEmail(e.target.value);
+                  setCreateEmailAutoFilled(false);
+                }}
+                disabled={createSaving || !createEmailEditable}
+                className="dialog-field"
+              />
+              {createNicknameCheckState === "too_short" && (
+                <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
+                  Nickname-Prüfung startet ab 3 Zeichen.
+                </p>
+              )}
+              {createNicknameCheckState === "exists_in_tenant" && (
+                <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
+                  Teilnehmer existiert bereits im Studio. Bitte bearbeiten oder erneut einladen.
+                </p>
+              )}
+              {createEmailAutoFilled && (
+                <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                  E-Mail aus bestehendem Profil uebernommen.
+                </p>
               )}
               {createActiveConflict && (
                 <div style={{ margin: "0.25rem 0 0", color: "#991b1b", fontSize: 12 }}>
@@ -1040,7 +1436,20 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       {" "}
                       <button
                         type="button"
-                        onClick={() => setCreateNickname(createSuggestedNickname)}
+                        onClick={() => {
+                          const nextNickname = createSuggestedNickname;
+                          setCreateNickname(nextNickname);
+                          setCreateError("");
+                          resetCreateNicknameResolution();
+                          setCreateNicknameCheckState("new");
+                          queueMicrotask(() => {
+                            void resolveCreateNicknameContext(nextNickname).then((resolved) => {
+                              if (resolved.state === "new") {
+                                createEmailInputRef.current?.focus();
+                              }
+                            });
+                          });
+                        }}
                         disabled={createSaving}
                         style={{ marginLeft: 6 }}
                       >
@@ -1051,21 +1460,24 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 </div>
               )}
 
-              <select
-                aria-label="Rolle"
-                value={createRole}
-                onChange={(e) =>
-                  setCreateRole(e.target.value as "participant" | "instructor" | "admin")
-                }
-                disabled={createSaving}
-                className="dialog-field"
-              >
-                {ROLE_OPTIONS.map((role) => (
-                  <option key={role} value={role}>
-                    {ROLE_LABELS_DE[role]}
-                  </option>
-                ))}
-              </select>
+              {canEditRoles && (
+                <select
+                  aria-label="Rolle"
+                  ref={createRoleSelectRef}
+                  value={createRole}
+                  onChange={(e) =>
+                    setCreateRole(e.target.value as "participant" | "instructor" | "admin")
+                  }
+                  disabled={createSaving}
+                  className="dialog-field"
+                >
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {ROLE_LABELS_DE[role]}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}
             </div>
@@ -1074,6 +1486,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               <button
                 type="button"
                 className="modal-action-btn"
+                ref={createCancelButtonRef}
                 onClick={() => setCreateOpen(false)}
                 disabled={createSaving}
               >
@@ -1083,7 +1496,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 type="button"
                 className="btn-primary modal-action-btn"
                 onClick={saveCreate}
-                disabled={createSaving || createActiveConflict}
+                disabled={createSaving || createActiveConflict || createNicknameCheckState === "exists_in_tenant"}
               >
                 {createSaving
                   ? createReactivationUserId
@@ -1099,15 +1512,29 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       )}
 
       {deleteTarget && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Teilnehmer löschen">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Teilnehmer löschen"
+          ref={deleteModalRef}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (!shouldHandleModalEscape(event)) return;
+            if (deleteRunningByUserId[deleteTarget.userId]) return;
+            event.preventDefault();
+            setDeleteTarget(null);
+          }}
+        >
           <div className="modal modal-compact">
             <h4>Teilnehmer löschen</h4>
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               Teilnehmer <strong>{deleteTarget.userId}</strong> aus diesem Studio entfernen?
             </p>
             <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
-              Mit Login bleibt das globale Profil erhalten. Ohne Login kann zusätzlich das Profil
-              gelöscht werden, falls keine weitere Studio-Zuordnung existiert.
+              {deleteTargetHasLoginHistory
+                ? "Dieser Zugang wird nur aus diesem Studio entfernt. Das Profil bleibt erhalten und es wird eine Info-Mail versendet."
+                : "Dieser Nutzer hat sich noch nicht registriert. Der Eintrag wird (falls keine weitere Studio-Zuordnung existiert) vollständig entfernt, ohne Info-Mail."}
             </p>
             <div className="modal-actions">
               <button

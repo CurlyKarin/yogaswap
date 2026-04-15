@@ -52,7 +52,7 @@ describe("deleteParticipant Lambda", () => {
       ...overrides,
     } as any);
 
-  test("deletes membership and profile for no-login participant without other memberships", async () => {
+  test("deletes membership and profile for no-login participant without sending notification mail", async () => {
     mockSend
       .mockResolvedValueOnce({
         Item: {
@@ -84,8 +84,6 @@ describe("deleteParticipant Lambda", () => {
       .mockResolvedValueOnce({}) // membership delete
       .mockResolvedValueOnce({ Count: 0, Items: [] }) // no remaining memberships
       .mockResolvedValueOnce({}); // participant delete
-    sesMockSend.mockResolvedValueOnce({});
-
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body)).toEqual({
@@ -93,21 +91,9 @@ describe("deleteParticipant Lambda", () => {
       membershipDeleted: true,
       profileDeleted: true,
       notificationEmail: "alice@example.com",
-      notificationEmailSent: true,
+      notificationEmailSent: false,
     });
-    expect(sesMockSend).toHaveBeenCalledTimes(1);
-    expect(sesMockSend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        Message: expect.objectContaining({
-          Subject: { Data: "YogaSwap: Zugang im Studio entfernt" },
-          Body: expect.objectContaining({
-            Html: expect.objectContaining({
-              Data: expect.stringContaining("Accountname (Spitzname): alice"),
-            }),
-          }),
-        }),
-      }),
-    );
+    expect(sesMockSend).not.toHaveBeenCalled();
   });
 
   test("deletes only membership when participant has authUserId", async () => {

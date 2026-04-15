@@ -10,6 +10,7 @@ import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
+import { getTenantContext } from "../shared/tenantContext";
 import {
   buildInviteMail,
   buildInvitePreparationMail,
@@ -149,6 +150,7 @@ export const handler = async (event: any) => {
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
   const { email, nickname, role } = body ?? {};
   const tenantId = getTenantId(event);
+  const { userId: actorUserId } = getTenantContext(event as any);
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
   const tokenInviteEnabled = !!tokensTable;
   const mailLocale = process.env.MAIL_LOCALE || "de";
@@ -160,6 +162,33 @@ export const handler = async (event: any) => {
 
   if (!nicknameRaw || !role) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing required fields" }) };
+  }
+
+  // AuthZ guard: instructors may only create/invite participants.
+  // (Admins may invite all supported roles.)
+  let actorRole: string | undefined;
+  if (actorUserId && process.env.MEMBERSHIPS_TABLE) {
+    try {
+      const actorMembership = await dynamodb.send(
+        new GetItemCommand({
+          TableName: process.env.MEMBERSHIPS_TABLE,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: actorUserId },
+          },
+          ConsistentRead: true,
+        }),
+      );
+      actorRole = actorMembership.Item?.role?.S;
+    } catch (authErr) {
+      console.warn("Could not resolve actor membership role in createParticipants:", authErr);
+    }
+  }
+  if (actorRole === "instructor" && role !== "participant") {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: "Instructors can only create/invite participants" }),
+    };
   }
 
   // "First entry wins": resolve canonical userId case-insensitively.
@@ -212,6 +241,30 @@ export const handler = async (event: any) => {
       }
     } catch (lookupErr) {
       console.warn("Failed canonical participant lookup, fallback to raw nickname", lookupErr);
+    }
+  }
+
+  if (actorRole === "instructor" && process.env.MEMBERSHIPS_TABLE) {
+    try {
+      const targetMembership = await dynamodb.send(
+        new GetItemCommand({
+          TableName: process.env.MEMBERSHIPS_TABLE,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: canonicalUserId },
+          },
+          ConsistentRead: true,
+        }),
+      );
+      const targetRole = targetMembership.Item?.role?.S;
+      if (targetRole && targetRole !== "participant") {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({ error: "Instructors can only invite participant accounts" }),
+        };
+      }
+    } catch (authErr) {
+      console.warn("Could not resolve target membership role in createParticipants:", authErr);
     }
   }
 
