@@ -90,6 +90,10 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   const editingModalRef = useRef<HTMLDivElement | null>(null);
   const createModalRef = useRef<HTMLDivElement | null>(null);
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
+  const createNicknameInputRef = useRef<HTMLInputElement | null>(null);
+  const createEmailInputRef = useRef<HTMLInputElement | null>(null);
+  const createRoleSelectRef = useRef<HTMLSelectElement | null>(null);
+  const createCancelButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const refreshParticipants = async () => {
     setParticipantsLoading(true);
@@ -288,6 +292,17 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
     },
     [getFocusableElements],
   );
+  const shouldHandleModalEnter = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter") return false;
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
+    const target = event.target as HTMLElement | null;
+    if (!target) return false;
+    const tag = target.tagName;
+    if (tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || tag === "A") return false;
+    if ((target as HTMLInputElement).type === "checkbox") return false;
+    return true;
+  };
+  const shouldHandleModalEscape = (event: React.KeyboardEvent<HTMLElement>) => event.key === "Escape";
   const isInviteEligible = useCallback(
     (p: ParticipantWithStatus) =>
       !!p.email &&
@@ -502,6 +517,17 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
 
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        target === createNicknameInputRef.current &&
+        !event.shiftKey &&
+        !createEmailEditable
+      ) {
+        // Let the nickname field handler run first so it can resolve
+        // the nickname and send focus to the proper next control.
+        return;
+      }
       const activeModal =
         (editingUserId && editingModalRef.current) ||
         (createOpen && createModalRef.current) ||
@@ -520,25 +546,70 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
       const last = focusable[focusable.length - 1];
       const active = document.activeElement as HTMLElement | null;
       const isInsideModal = !!active && activeModal.contains(active);
+      const activeIndex = isInsideModal ? focusable.indexOf(active as HTMLElement) : -1;
 
-      if (event.shiftKey) {
-        if (!isInsideModal || active === first) {
-          event.preventDefault();
+      // Safari can jump to the browser chrome on Tab. We fully control
+      // focus movement while a modal is open to keep focus trapped.
+      event.preventDefault();
+
+      if (!isInsideModal || activeIndex < 0) {
+        if (event.shiftKey) {
           last.focus();
+        } else {
+          first.focus();
         }
         return;
       }
-      if (!isInsideModal || active === last) {
-        event.preventDefault();
-        first.focus();
+
+      if (event.shiftKey) {
+        const prevIndex = activeIndex <= 0 ? focusable.length - 1 : activeIndex - 1;
+        focusable[prevIndex].focus();
+        return;
       }
+      const nextIndex = activeIndex >= focusable.length - 1 ? 0 : activeIndex + 1;
+      focusable[nextIndex].focus();
     };
 
     document.addEventListener("keydown", onDocumentKeyDown, true);
     return () => {
       document.removeEventListener("keydown", onDocumentKeyDown, true);
     };
-  }, [editingUserId, createOpen, deleteTarget, getFocusableElements]);
+  }, [editingUserId, createOpen, deleteTarget, getFocusableElements, createEmailEditable]);
+  useEffect(() => {
+    if (!createOpen) return;
+    if (createNicknameCheckState !== "new") return;
+    if (document.activeElement !== createNicknameInputRef.current) return;
+    setTimeout(() => {
+      createEmailInputRef.current?.focus();
+    }, 0);
+  }, [createOpen, createNicknameCheckState]);
+  const handleCreateNicknameKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Tab" || event.shiftKey) return;
+    if (createEmailEditable || createSaving) return;
+    const nicknameValue = createNickname.trim();
+    if (nicknameValue.length < 3) return;
+
+    event.preventDefault();
+    const resolved = await resolveCreateNicknameContext(nicknameValue);
+    if (resolved.state === "new") {
+      const focusEmailWhenEnabled = (attempt = 0) => {
+        const emailEl = createEmailInputRef.current;
+        if (!emailEl) return;
+        if (!emailEl.disabled) {
+          emailEl.focus();
+          return;
+        }
+        if (attempt >= 6) return;
+        setTimeout(() => focusEmailWhenEnabled(attempt + 1), 0);
+      };
+      focusEmailWhenEnabled();
+      return;
+    }
+    const fallbackTarget = canEditRoles
+      ? createRoleSelectRef.current ?? createCancelButtonRef.current
+      : createCancelButtonRef.current;
+    fallbackTarget?.focus();
+  };
 
   const saveCreate = async () => {
     const nicknameValue = createNickname.trim();
@@ -1088,6 +1159,18 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           aria-label="Teilnehmer E-Mail bearbeiten"
           ref={editingModalRef}
           tabIndex={-1}
+          onKeyDown={(event) => {
+            if (shouldHandleModalEscape(event)) {
+              if (editingSaving) return;
+              event.preventDefault();
+              setEditingUserId(null);
+              return;
+            }
+            if (!shouldHandleModalEnter(event)) return;
+            if (editingSaving || !editingHasChanges) return;
+            event.preventDefault();
+            void saveEditEmail();
+          }}
         >
           <div className="modal modal-compact">
             <h4>Teilnehmer bearbeiten</h4>
@@ -1168,6 +1251,20 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           aria-label="Teilnehmer anlegen"
           ref={createModalRef}
           tabIndex={-1}
+          onKeyDown={(event) => {
+            if (shouldHandleModalEscape(event)) {
+              if (createSaving) return;
+              event.preventDefault();
+              setCreateOpen(false);
+              return;
+            }
+            if (!shouldHandleModalEnter(event)) return;
+            if (createSaving || createActiveConflict || createNicknameCheckState === "exists_in_tenant") {
+              return;
+            }
+            event.preventDefault();
+            void saveCreate();
+          }}
         >
           <div className="modal modal-compact">
             <h4>Teilnehmer anlegen</h4>
@@ -1177,11 +1274,15 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 type="text"
                 aria-label="Spitzname"
                 placeholder="Spitzname"
+                ref={createNicknameInputRef}
                 value={createNickname}
                 onChange={(e) => {
                   const nextNickname = e.target.value;
                   setCreateNickname(nextNickname);
                   resetCreateNicknameResolution();
+                }}
+                onKeyDown={(event) => {
+                  void handleCreateNicknameKeyDown(event);
                 }}
                 onBlur={() => {
                   void resolveCreateNicknameContext(createNickname);
@@ -1194,6 +1295,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                 type="email"
                 aria-label="E-Mail"
                 placeholder="E-Mail"
+                ref={createEmailInputRef}
                 value={createEmail}
                 onChange={(e) => {
                   if (!createEmailEditable) return;
@@ -1265,9 +1367,18 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          setCreateNickname(createSuggestedNickname);
+                          const nextNickname = createSuggestedNickname;
+                          setCreateNickname(nextNickname);
                           setCreateError("");
                           resetCreateNicknameResolution();
+                          setCreateNicknameCheckState("new");
+                          queueMicrotask(() => {
+                            void resolveCreateNicknameContext(nextNickname).then((resolved) => {
+                              if (resolved.state === "new") {
+                                createEmailInputRef.current?.focus();
+                              }
+                            });
+                          });
                         }}
                         disabled={createSaving}
                         style={{ marginLeft: 6 }}
@@ -1282,6 +1393,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               {canEditRoles && (
                 <select
                   aria-label="Rolle"
+                  ref={createRoleSelectRef}
                   value={createRole}
                   onChange={(e) =>
                     setCreateRole(e.target.value as "participant" | "instructor" | "admin")
@@ -1304,6 +1416,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
               <button
                 type="button"
                 className="modal-action-btn"
+                ref={createCancelButtonRef}
                 onClick={() => setCreateOpen(false)}
                 disabled={createSaving}
               >
@@ -1336,6 +1449,12 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
           aria-label="Teilnehmer löschen"
           ref={deleteModalRef}
           tabIndex={-1}
+          onKeyDown={(event) => {
+            if (!shouldHandleModalEscape(event)) return;
+            if (deleteRunningByUserId[deleteTarget.userId]) return;
+            event.preventDefault();
+            setDeleteTarget(null);
+          }}
         >
           <div className="modal modal-compact">
             <h4>Teilnehmer löschen</h4>

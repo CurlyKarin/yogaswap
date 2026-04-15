@@ -97,6 +97,105 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("schließt den Anlegen-Dialog per Escape", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([]);
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(within(panel).queryByRole("dialog", { name: /Teilnehmer anlegen/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it("schließt den Bearbeiten-Dialog per Escape", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(within(panel).queryByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it("schließt den Lösch-Dialog nicht per Escape während Löschen läuft", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+    ]);
+    let resolveDelete!: (value: {
+      success: boolean;
+      membershipDeleted: boolean;
+      profileDeleted: boolean;
+      notificationEmail: string;
+      notificationEmailSent: boolean;
+    }) => void;
+    const pendingDelete = new Promise<{
+      success: boolean;
+      membershipDeleted: boolean;
+      profileDeleted: boolean;
+      notificationEmail: string;
+      notificationEmailSent: boolean;
+    }>((resolve) => {
+      resolveDelete = resolve;
+    });
+    mockedDeleteParticipant.mockImplementationOnce(() => pendingDelete);
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+    fireEvent.click(within(panel).getByLabelText("Löschen alice"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Löschen$/i }));
+
+    await waitFor(() => {
+      expect(within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i })).toBeInTheDocument();
+    });
+    fireEvent.keyDown(within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i }), { key: "Escape" });
+    expect(within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i })).toBeInTheDocument();
+
+    resolveDelete({
+      success: true,
+      membershipDeleted: true,
+      profileDeleted: true,
+      notificationEmail: "alice@example.com",
+      notificationEmailSent: true,
+    });
+    await waitFor(() => {
+      expect(within(panel).queryByRole("dialog", { name: /Teilnehmer löschen/i })).not.toBeInTheDocument();
+    });
+  });
+
   it("sendet Einladung aus der Teilnehmerliste", async () => {
     mockedGetParticipants
       .mockResolvedValueOnce([
@@ -602,7 +701,31 @@ describe("AdminPanel", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /Uebernehmen/i }));
     expect((within(dialog).getByPlaceholderText("Spitzname") as HTMLInputElement).value).toBe("kai1");
     expect(within(dialog).queryByText(/bereits aktiv/i)).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: /^Anlegen$/i })).not.toBeDisabled();
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: /^Anlegen$/i })).not.toBeDisabled();
+      expect((within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement).disabled).toBe(false);
+    });
+  });
+
+  it("fokussiert E-Mail direkt bei Tab nach neuer Nickname-Prüfung", async () => {
+    mockedGetParticipants.mockResolvedValue([]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    const nicknameInput = within(dialog).getByPlaceholderText("Spitzname") as HTMLInputElement;
+    const emailInput = within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement;
+
+    fireEvent.change(nicknameInput, { target: { value: "mira" } });
+    nicknameInput.focus();
+    fireEvent.keyDown(nicknameInput, { key: "Tab" });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(emailInput);
+    });
   });
 
   it("erkennt eingeladenen Studio-Teilnehmer nicht als Reaktivierung", async () => {
