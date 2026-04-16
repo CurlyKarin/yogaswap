@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
-import { GetItemCommand, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { GetItemCommand, PutItemCommand, QueryCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import crypto from "crypto";
@@ -112,6 +112,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
     const nowSeconds = Math.floor(Date.now() / 1000);
     const oneTimeToken = generateOneTimeToken();
+    const tokenNonce = generateOneTimeToken(12);
+
+    await dynamodb.send(
+      new UpdateItemCommand({
+        TableName: participantsTable,
+        Key: {
+          tenantId: { S: tenantId },
+          userId: { S: canonicalUserId },
+        },
+        UpdateExpression: "SET latestAuthTokenNonce = :nonce",
+        ExpressionAttributeValues: {
+          ":nonce": { S: tokenNonce },
+        },
+      }),
+    );
 
     await dynamodb.send(
       new PutItemCommand({
@@ -122,6 +137,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           cognitoUsername: { S: cognitoUsername },
           userId: { S: canonicalUserId },
           purpose: { S: "user-password-reset" },
+          tokenNonce: { S: tokenNonce },
           createdAt: { N: String(nowSeconds) },
           expiresAt: { N: String(nowSeconds + tokenTtlSeconds) },
         },

@@ -47,6 +47,7 @@ async function saveParticipantProfile(params: {
   inviteSentAt?: string;
   cognitoUsername?: string;
   authUserId?: string;
+  latestAuthTokenNonce?: string;
 }) {
   if (!process.env.PARTICIPANTS_TABLE) {
     console.warn("PARTICIPANTS_TABLE environment variable not set, skipping participant profile write.");
@@ -93,6 +94,9 @@ async function saveParticipantProfile(params: {
   }
   if (params.authUserId && params.authUserId.trim()) {
     item.authUserId = { S: params.authUserId.trim() };
+  }
+  if (params.latestAuthTokenNonce && params.latestAuthTokenNonce.trim()) {
+    item.latestAuthTokenNonce = { S: params.latestAuthTokenNonce.trim() };
   }
 
   await dynamodb.send(
@@ -547,11 +551,13 @@ export const handler = async (event: any) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
 
   let oneTimeToken: string | undefined;
+  let oneTimeTokenNonce: string | undefined;
   let link = `${baseUrl}/invite?mode=invite_activation&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
 
   // Token nur für "echte Einladung" (nicht für Reaktivierung ohne Passwortreset).
   if (!reactivated && tokensTable) {
     oneTimeToken = generateOneTimeToken();
+    oneTimeTokenNonce = generateOneTimeToken(12);
     try {
       await dynamodb.send(
         new PutItemCommand({
@@ -562,6 +568,7 @@ export const handler = async (event: any) => {
             cognitoUsername: { S: cognitoUsername },
             userId: { S: userId },
             purpose: { S: "invite-activation" },
+            tokenNonce: { S: oneTimeTokenNonce },
             createdAt: { N: String(nowSeconds) },
             expiresAt: { N: String(nowSeconds + tokenTtlSeconds) },
           },
@@ -646,6 +653,7 @@ export const handler = async (event: any) => {
       email: emailNormalized,
       inviteSentAt,
       cognitoUsername,
+      latestAuthTokenNonce: oneTimeTokenNonce,
     });
   } catch (err: any) {
     console.warn("Failed to save participant profile (ignored):", err?.message || err);

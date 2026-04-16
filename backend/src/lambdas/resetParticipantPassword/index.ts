@@ -80,6 +80,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
     const nowSeconds = Math.floor(Date.now() / 1000);
     const oneTimeToken = generateOneTimeToken();
+    const tokenNonce = generateOneTimeToken(12);
+
+    await dynamodb.send(
+      new PutItemCommand({
+        TableName: participantsTable,
+        Item: {
+          ...participant,
+          tenantId: { S: tenantId },
+          userId: { S: targetUserId },
+          latestAuthTokenNonce: { S: tokenNonce },
+        },
+      }),
+    );
 
     await dynamodb.send(
       new PutItemCommand({
@@ -90,6 +103,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           cognitoUsername: { S: cognitoUsername },
           userId: { S: targetUserId },
           purpose: { S: "admin-password-reset" },
+          tokenNonce: { S: tokenNonce },
           createdAt: { N: String(nowSeconds) },
           expiresAt: { N: String(nowSeconds + tokenTtlSeconds) },
         },

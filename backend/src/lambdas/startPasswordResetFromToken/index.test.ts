@@ -32,6 +32,7 @@ describe("startPasswordResetFromToken Lambda", () => {
     process.env = {
       ...OLD_ENV,
       AUTH_TOKENS_TABLE: "test-auth-tokens",
+      PARTICIPANTS_TABLE: "test-participants",
       USER_POOL_ID: "test-user-pool-id",
     };
 
@@ -61,9 +62,17 @@ describe("startPasswordResetFromToken Lambda", () => {
         purpose: { S: "invite-activation" },
         expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
         cognitoUsername: { S: "Alice" },
+        userId: { S: "alice" },
+        tokenNonce: { S: "nonce-1" },
       },
     }); // GetItem
-
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        userId: { S: "alice" },
+        latestAuthTokenNonce: { S: "nonce-1" },
+      },
+    }); // Participant lookup
     dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
     cognitoMockSend.mockResolvedValueOnce({});
 
@@ -72,6 +81,35 @@ describe("startPasswordResetFromToken Lambda", () => {
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).username).toBe("Alice");
     expect(cognitoMockSend).toHaveBeenCalledTimes(1);
+  });
+
+  test("returns 400 when token is superseded by newer nonce", async () => {
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        purpose: { S: "invite-activation" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: "Alice" },
+        userId: { S: "alice" },
+        tokenNonce: { S: "nonce-old" },
+      },
+    }); // GetItem token
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        userId: { S: "alice" },
+        latestAuthTokenNonce: { S: "nonce-new" },
+      },
+    }); // participant lookup
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/superseded/i);
+    expect(cognitoMockSend).not.toHaveBeenCalled();
   });
 
   test("returns 400 for expired token", async () => {

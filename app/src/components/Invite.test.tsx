@@ -169,5 +169,23 @@ describe("Invite", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("zeigt klare Meldung, wenn ein neuerer Link den Token ersetzt hat", async () => {
+    mockedStartPasswordResetFromToken.mockRejectedValue(
+      new Error("Token superseded by newer link"),
+    );
+
+    const { panel } = renderWithParams(
+      "?tenantId=default-tenant&token=t1&nickname=Alice&email=alice@example.com",
+    );
+
+    await waitFor(() => {
+      expect(
+        within(panel).getByText(
+          /Dieser Link wurde durch einen neueren Link ersetzt\. Bitte nutze die zuletzt gesendete E-Mail\./i,
+        ),
+      ).toBeInTheDocument();
+    });
+  });
 });
 

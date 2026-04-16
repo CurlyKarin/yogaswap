@@ -282,7 +282,7 @@ locals {
       name             = "request-self-password-reset"
       file_name        = "requestSelfPasswordReset.zip"
       table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
@@ -323,10 +323,11 @@ locals {
     "start_password_reset_from_token" = {
       name             = "start-password-reset-from-token"
       file_name        = "startPasswordResetFromToken.zip"
-      table_arns       = [module.auth_tokens_table.table_arn]
+      table_arns       = [module.auth_tokens_table.table_arn, module.participants_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:UpdateItem"]
       tables = {
         "AUTH_TOKENS_TABLE" = module.auth_tokens_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -340,6 +341,7 @@ locals {
       environment = {
         USER_POOL_ID      = aws_cognito_user_pool.yogaswap.id
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
+        PARTICIPANTS_TABLE = module.participants_table.table_name
       }
     }
   }

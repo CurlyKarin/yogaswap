@@ -26,6 +26,9 @@ function mapTokenStartErrorMessage(rawMessage: string): string {
   if (msg.includes("Token purpose is invalid")) {
     return "Dieser Link gehoert zu einem anderen Vorgang. Bitte nutze den neuesten Link aus deiner E-Mail.";
   }
+  if (msg.includes("Token superseded by newer link")) {
+    return "Dieser Link wurde durch einen neueren Link ersetzt. Bitte nutze die zuletzt gesendete E-Mail.";
+  }
   return msg;
 }
 

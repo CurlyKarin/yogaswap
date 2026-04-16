@@ -8,6 +8,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
     GetItemCommand: jest.fn((input) => input),
     PutItemCommand: jest.fn((input) => input),
     QueryCommand: jest.fn((input) => input),
+    UpdateItemCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -90,6 +91,7 @@ describe("requestSelfPasswordReset Lambda", () => {
           role: { S: "participant" },
         },
       }) // membership exists
+      .mockResolvedValueOnce({}) // participant nonce update
       .mockResolvedValueOnce({}); // put token
     sesMockSend.mockResolvedValueOnce({});
 
@@ -104,6 +106,7 @@ describe("requestSelfPasswordReset Lambda", () => {
           purpose: { S: "user-password-reset" },
           userId: { S: "Alice" },
           cognitoUsername: { S: "Alice" },
+          tokenNonce: expect.objectContaining({ S: expect.any(String) }),
         }),
       }),
     );
