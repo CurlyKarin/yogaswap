@@ -402,27 +402,8 @@ describe('createParticipants Lambda', () => {
     );
   });
 
-  test('reactivates existing login without token table (legacy email only)', async () => {
-    const usernameExistsError = new Error('User already exists');
-    (usernameExistsError as any).name = 'UsernameExistsException';
-
+  test('returns 500 when AUTH_TOKENS_TABLE is missing for email invite flow', async () => {
     delete process.env.AUTH_TOKENS_TABLE;
-
-    cognitoMockSend
-      .mockRejectedValueOnce(usernameExistsError)
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce(adminGetUserResponse('legacyuser', 'sub-legacy'));
-    sesMockSend.mockResolvedValueOnce({});
-    dynamoMockSend
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: { S: 'default-tenant' },
-          userId: { S: 'legacyuser' },
-          authUserId: { S: 'sub-legacy' },
-        },
-      })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({});
 
     const event = baseEvent({
       email: 'legacy@example.com',
@@ -431,12 +412,9 @@ describe('createParticipants Lambda', () => {
     });
 
     const result = await handler(event);
-    expect(result.statusCode).toBe(200);
-    const body = JSON.parse(result.body);
-    expect(body.reactivated).toBe(true);
-    expect(body.link).not.toMatch(/token=/);
+    expect(result.statusCode).toBe(500);
+    expect(JSON.parse(result.body).error).toMatch(/AUTH_TOKENS_TABLE is required/i);
 
-    expect(cognitoMockSend).toHaveBeenCalledTimes(3);
     process.env.AUTH_TOKENS_TABLE = 'test-auth-tokens-table';
   });
 

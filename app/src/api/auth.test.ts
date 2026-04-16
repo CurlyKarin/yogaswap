@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import axios from "axios";
-import { startPasswordResetFromToken } from "./auth";
+import { requestSelfPasswordReset, startPasswordResetFromToken } from "./auth";
 
 vi.mock("axios");
 
@@ -35,6 +35,37 @@ describe("startPasswordResetFromToken", () => {
     await expect(
       startPasswordResetFromToken({ token: "t1", tenantId: "tenant-1" }),
     ).rejects.toThrow(/Token already used or expired/i);
+  });
+});
+
+describe("requestSelfPasswordReset", () => {
+  beforeEach(() => {
+    vi.mocked(axios.post).mockReset();
+  });
+
+  it("ruft POST /auth/password-reset/request mit nickname im Body auf", async () => {
+    vi.mocked(axios.post).mockResolvedValueOnce({
+      data: { success: true, emailSent: true },
+    });
+
+    const result = await requestSelfPasswordReset({ nickname: "alice" });
+
+    expect(axios.post).toHaveBeenCalledWith("/auth/password-reset/request", {
+      nickname: "alice",
+    });
+    expect(result).toEqual({ success: true, emailSent: true });
+  });
+
+  it("wirft Error mit backend error-Message", async () => {
+    vi.mocked(axios.post).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: { error: "Too many reset attempts. Please wait." } },
+      message: "Request failed with status code 429",
+    });
+
+    await expect(requestSelfPasswordReset({ nickname: "alice" })).rejects.toThrow(
+      /Too many reset attempts/i,
+    );
   });
 });
 

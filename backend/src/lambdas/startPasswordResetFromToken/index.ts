@@ -7,7 +7,7 @@ import { GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 
 const cognito = new CognitoIdentityProviderClient({});
-const ALLOWED_PURPOSES = new Set(["invite-activation", "admin-password-reset"]);
+const ALLOWED_PURPOSES = new Set(["invite-activation", "admin-password-reset", "user-password-reset"]);
 const AUDIT_EVENT = "auth_token_password_reset";
 
 // Note: We deliberately re-use the lightweight shared dynamoClient pattern in other lambdas,
@@ -16,6 +16,7 @@ const dynamo = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
+  const participantsTable = process.env.PARTICIPANTS_TABLE;
   const userPoolId = process.env.USER_POOL_ID;
 
   if (!tokensTable || !userPoolId) {
@@ -116,6 +117,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         purpose,
       });
       return { statusCode: 400, body: JSON.stringify({ error: "Token is missing cognitoUsername" }) };
+    }
+    const tokenNonce = item.tokenNonce?.S?.trim();
+    const tokenUserId = item.userId?.S?.trim();
+    if (tokenNonce) {
+      if (!participantsTable || !tokenUserId) {
+        return { statusCode: 400, body: JSON.stringify({ error: "Token is invalid" }) };
+      }
+      const participantResp = await dynamo.send(
+        new GetItemCommand({
+          TableName: participantsTable,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: tokenUserId },
+          },
+          ConsistentRead: true,
+        }),
+      );
+      const latestNonce = participantResp.Item?.latestAuthTokenNonce?.S?.trim();
+      if (latestNonce && latestNonce !== tokenNonce) {
+        console.warn("AUDIT", {
+          event: AUDIT_EVENT,
+          stage: "reject",
+          tenantId,
+          reason: "token_superseded",
+          purpose,
+        });
+        return { statusCode: 400, body: JSON.stringify({ error: "Token superseded by newer link" }) };
+      }
     }
 
     // Consume-before-trigger strategy:

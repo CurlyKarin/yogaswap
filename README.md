@@ -787,9 +787,8 @@ node scripts/createAdminUser.js $USER_POOL_ID admin@example.com admin MeinPasswo
 - Beim Login wird der **Nickname** verwendet, nicht die E-Mail
 
 **Falls du kein Passwort angibst:**
-Das Script generiert ein temporäres Passwort, das in der Konsole ausgegeben wird. Du musst dann:
-1. Die `/invite` Seite verwenden oder
-2. Beim ersten Login das Passwort ändern (wird zu `/change-password` weitergeleitet)
+Das Script kann ein temporäres Passwort erzeugen. Dieser Legacy-Weg ist nicht mehr Teil des empfohlenen App-Flows.
+Setze stattdessen direkt ein permanentes Passwort oder nutze anschließend den Passwort-Reset per Link (`Passwort vergessen`).
 
 **Option 2: Mit AWS CLI (alternativ)**
 
@@ -813,7 +812,7 @@ aws cognito-idp admin-add-user-to-group \
   --username admin \
   --group-name admin
 
-# Optional: Passwort permanent setzen (damit User nicht beim ersten Login ändern muss)
+# Empfohlen: Passwort permanent setzen (damit kein Legacy-Temp-Flow nötig ist)
 aws cognito-idp admin-set-user-password \
   --user-pool-id $USER_POOL_ID \
   --username admin \
@@ -830,7 +829,7 @@ aws cognito-idp admin-set-user-password \
 3. Klicke auf "Users" → "Create user"
 4. **Username:** Gib den Nickname ein (muss eindeutig sein)
 5. **Email:** Gib die E-Mail ein (kann mehrfach verwendet werden)
-6. Setze ein temporäres Passwort
+6. Setze ein Passwort und ergänze danach (empfohlen) `admin-set-user-password --permanent`
 7. Nach dem Erstellen: Klicke auf den User → "Groups" → Füge zur Gruppe "admin" hinzu
 
 **Hinweis:** Der Username in Cognito ist der Nickname (muss eindeutig sein). Die E-Mail kann mehrfach verwendet werden.
@@ -960,16 +959,16 @@ Falls die Lambda immer noch die alte E-Mail-Adresse verwendet, obwohl du `ses_so
    Prüfe, ob `tofu plan` jetzt eine Änderung anzeigt. Falls ja, führe `tofu apply` aus.
 
 **Bis die E-Mail-Adresse verifiziert und deployed ist:**
-- Wenn die E-Mail nicht versendet werden kann, zeigt das AdminPanel das temporäre Passwort an
-- Du kannst es dann persönlich übermitteln
+- Wenn die E-Mail nicht versendet werden kann, zeigt das AdminPanel einen Fehlerhinweis.
+- In tokenbasierten Flows wird kein temporäres Passwort angezeigt oder verteilt.
 
 ---
 
 ### 🔧 Passwort für existierenden Admin-User permanent setzen
 
-**Falls dein Admin-User bereits erstellt wurde und das Passwort als temporär gesetzt ist:**
+**Falls dein Admin-User bereits mit temporärem Passwort angelegt wurde:**
 
-Du kannst das Passwort für einen existierenden User permanent setzen (damit keine Passwortänderung beim ersten Login erforderlich ist):
+Setze einmalig ein permanentes Passwort, damit der Login wieder ohne Legacy-Challenge funktioniert:
 
 **Mit AWS CLI:**
 ```bash
@@ -989,12 +988,6 @@ aws cognito-idp admin-set-user-password \
 - `admin` → Dein Nickname/Username
 - `MeinPasswort123!` → Dein gewünschtes Passwort
 
-**Nach diesem Befehl:** Du kannst dich direkt mit dem Passwort einloggen, ohne es ändern zu müssen!
+**Nach diesem Befehl:** Du kannst dich direkt mit dem Passwort einloggen.
 
-**Alternative: Invite-Seite verwenden**
-Falls du das temporäre Passwort kennst, kannst du auch die `/invite` Seite verwenden:
-1. Öffne: `https://deine-cloudfront-url/invite?nickname=admin&email=admin@example.com`
-2. Gib das temporäre Passwort ein
-3. Setze ein neues Passwort
-
-**Tipp:** Beim nächsten Mal gib beim Erstellen des Admin-Users immer ein Passwort an, damit es automatisch permanent gesetzt wird.
+**Tipp:** Beim nächsten Mal gib beim Erstellen des Admin-Users direkt ein Passwort an oder setze es unmittelbar permanent.

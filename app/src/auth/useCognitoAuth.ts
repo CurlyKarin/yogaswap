@@ -3,7 +3,6 @@ import { signIn, signOut, fetchAuthSession } from 'aws-amplify/auth';
 import { saveCurrentUser, loadCurrentUser, clearCurrentUser } from 'shared/lib/storage';
 import { useCallback, useState } from 'react';
 import { User, UserRole } from 'shared/types';
-import { useNavigate } from 'react-router-dom';
 
 type AuthReturn = {
   user: User | null;
@@ -17,7 +16,6 @@ export const useCognitoAuth = (): AuthReturn => {
   const [user, setUser] = useState<User | null>(loadCurrentUser());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   const login = useCallback(async (credentials: { username: string; password: string }) => {
     setIsLoading(true);
@@ -49,10 +47,14 @@ export const useCognitoAuth = (): AuthReturn => {
       }
 
       if (result.nextStep?.signInStep?.includes('NEW_PASSWORD_REQUIRED')) {
-        navigate('/change-password', {
-          state: { username: credentials.username },
-        });
-        setIsLoading(false);
+        try {
+          await signOut({ global: true });
+        } catch {
+          // ignore signout errors
+        }
+        clearCurrentUser();
+        setUser(null);
+        setError("Dieser Zugang erwartet einen veralteten Temp-Passwort-Flow. Bitte nutze 'Passwort vergessen?'.");
         return false;
       }
 
@@ -74,7 +76,7 @@ export const useCognitoAuth = (): AuthReturn => {
     } finally {
       setIsLoading(false);
     }
-  }, [navigate]);
+  }, []);
 
   const logout = useCallback(async () => {
     try {

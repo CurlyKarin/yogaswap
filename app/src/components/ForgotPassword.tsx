@@ -1,22 +1,13 @@
-import { useRef, useState } from "react";
-import { confirmResetPassword, resetPassword, signOut } from "aws-amplify/auth";
-import { useNavigate } from "react-router-dom";
-import { clearCurrentUser } from "shared/lib/storage";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { requestSelfPasswordReset } from "../api/auth";
 
 export default function ForgotPassword() {
-  const navigate = useNavigate();
-  const usernameInputRef = useRef<HTMLInputElement | null>(null);
-  const newPasswordInputRef = useRef<HTMLInputElement | null>(null);
   const [username, setUsername] = useState("");
-  const [code, setCode] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [codeSent, setCodeSent] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resetDone, setResetDone] = useState(false);
-  const [lastSetPassword, setLastSetPassword] = useState("");
-  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
+  const [requested, setRequested] = useState(false);
 
   const mapResetRequestErrorMessage = (err: unknown): string => {
     const msg = err instanceof Error ? err.message : String(err ?? "");
@@ -29,57 +20,13 @@ export default function ForgotPassword() {
     ) {
       return "Zu viele Anfragen. Bitte warte kurz und versuche es dann erneut.";
     }
-    return "Wenn ein Konto existiert, wurde ein Code per E-Mail versendet.";
+    return "Wenn ein Konto existiert, wurde ein Reset-Link per E-Mail versendet.";
   };
 
-  const startResendCooldown = (seconds = 30) => {
-    setResendCooldownSeconds(seconds);
-    const id = window.setInterval(() => {
-      setResendCooldownSeconds((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(id);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const tryStoreCredential = (userId: string, passwordValue: string) => {
-    try {
-      const maybeCtor = (window as unknown as {
-        PasswordCredential?: new (data: { id: string; password: string }) => unknown;
-      }).PasswordCredential;
-      const credsApi = (navigator as Navigator & {
-        credentials?: { store?: (credential: unknown) => Promise<unknown> };
-      }).credentials;
-      if (maybeCtor && credsApi?.store && userId && passwordValue) {
-        const credential = new maybeCtor({ id: userId, password: passwordValue });
-        void credsApi.store(credential);
-      }
-    } catch {
-      // ignore unsupported/blocked browsers
-    }
-  };
-
-  const getUsernameValue = () => {
-    const fromState = username.trim();
-    if (fromState) return fromState;
-    const fromInput = usernameInputRef.current?.value?.trim() ?? "";
-    return fromInput;
-  };
-
-  /** Keychain/Safari setzt generierte Passwörter oft per input-Event, nicht change — State sonst leer beim Submit. */
-  const getNewPasswordValue = () => {
-    return newPasswordInputRef.current?.value ?? "";
-  };
-
-  const requestCodeForUser = async () => {
+  const requestResetLink = async () => {
     setError("");
     setInfo("");
-    setResetDone(false);
-    setConfirmPassword("");
-    const user = getUsernameValue();
+    const user = username.trim();
     if (!user) {
       setError("Bitte Spitzname eingeben.");
       return;
@@ -87,95 +34,33 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      await resetPassword({ username: user });
-      setCodeSent(true);
-      setInfo("Wenn ein Konto existiert, wurde ein Code per E-Mail versendet.");
-      startResendCooldown();
+      await requestSelfPasswordReset({ nickname: user });
+      setRequested(true);
+      setInfo("Wenn ein Konto existiert, wurde ein Reset-Link per E-Mail versendet.");
     } catch (err: unknown) {
       // Keep enumeration-safe default, but surface rate-limit feedback.
       const mapped = mapResetRequestErrorMessage(err);
       setInfo(mapped);
+      setRequested(true);
     } finally {
       setLoading(false);
     }
   };
-  const requestCode = async (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await requestCodeForUser();
-  };
-
-  const submitNewPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setInfo("");
-
-    const user = getUsernameValue();
-    if (!user) {
-      setError("Bitte Spitzname eingeben.");
-      return;
-    }
-    if (!code.trim()) {
-      setError("Bitte den Code aus der E-Mail eingeben.");
-      return;
-    }
-    const pw = getNewPasswordValue().trim();
-    if (!pw || pw.length < 6) {
-      setError("Das neue Passwort muss mindestens 6 Zeichen lang sein.");
-      return;
-    }
-    if (!confirmPassword || pw !== confirmPassword) {
-      setError("Die Passwoerter stimmen nicht ueberein.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await confirmResetPassword({
-        username: user,
-        confirmationCode: code.trim(),
-        newPassword: pw,
-      });
-      // Best-effort hint for password managers right after a successful reset.
-      tryStoreCredential(user, pw);
-      // Password reset should never "auto-login" from this view.
-      // We force a clean auth state and redirect to login.
-      try {
-        await signOut({ global: true });
-      } catch {
-        // ignore when no active session exists
-      }
-      clearCurrentUser();
-      setLastSetPassword(pw);
-      // Kurz warten, damit der Browser die erfolgreiche Passwort-Übermittlung (inkl. Keychain) abarbeiten kann,
-      // bevor React das Formular neu rendert.
-      queueMicrotask(() => {
-        setResetDone(true);
-        setInfo("Passwort wurde zurueckgesetzt. Du kannst jetzt zur Anmeldung wechseln.");
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg || "Passwort konnte nicht zurückgesetzt werden.");
-    } finally {
-      setLoading(false);
-    }
+    await requestResetLink();
   };
 
   return (
     <div className="auth-form" style={{ padding: "2rem", maxWidth: 420, margin: "auto" }}>
       <h2>Passwort vergessen</h2>
       <p className="muted">
-        {codeSent
-          ? "Gib den Code aus der E-Mail ein und setze ein neues Passwort."
-          : "Fordere einen Code an und setze danach ein neues Passwort."}
+        Mit "Reset-Link anfordern" erhältst du eine E-Mail mit einem Link, über den du ein neues
+        Passwort setzen kannst.
       </p>
 
-      <form
-        onSubmit={codeSent ? submitNewPassword : requestCode}
-        className="todo-form"
-        autoComplete={codeSent ? "on" : "off"}
-      >
+      <form onSubmit={onSubmit} className="todo-form" autoComplete="on">
         <input
-          ref={usernameInputRef}
           type="text"
           name="username"
           placeholder="Spitzname"
@@ -185,44 +70,6 @@ export default function ForgotPassword() {
           disabled={loading}
           required
         />
-
-        {codeSent && (
-          <>
-            <input
-              type="text"
-              name="one-time-code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="Code aus E-Mail"
-              aria-label="Code aus E-Mail"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              disabled={loading}
-              required
-            />
-            <input
-              ref={newPasswordInputRef}
-              type="password"
-              name="new-password"
-              placeholder="Neues Passwort"
-              autoComplete="new-password"
-              disabled={loading}
-              minLength={6}
-              required
-            />
-            <input
-              type="password"
-              name="confirm-new-password"
-              placeholder="Neues Passwort wiederholen"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={loading}
-              minLength={6}
-              required
-            />
-          </>
-        )}
 
         {info && (
           <p style={{ color: "#374151" }} role="status" aria-live="polite">
@@ -236,46 +83,12 @@ export default function ForgotPassword() {
         )}
 
         <button type="submit" disabled={loading} className="btn-primary btn-block">
-          {loading
-            ? "Verarbeite..."
-            : codeSent
-              ? "Neues Passwort setzen"
-              : "Code anfordern"}
+          {loading ? "Verarbeite..." : requested ? "Link erneut senden" : "Reset-Link anfordern"}
         </button>
-        {codeSent && !resetDone && (
-          <button
-            type="button"
-            className="btn-block"
-            disabled={loading || resendCooldownSeconds > 0}
-            onClick={() => {
-              void requestCodeForUser();
-            }}
-          >
-            {resendCooldownSeconds > 0
-              ? `Code erneut anfordern (${resendCooldownSeconds}s)`
-              : "Code erneut anfordern"}
-          </button>
-        )}
-        {resetDone && (
-          <button
-            type="button"
-            className="btn-block"
-            onClick={() =>
-              navigate("/login", {
-                replace: true,
-                state: {
-                  info:
-                    "Passwort wurde zurueckgesetzt. Bitte melde dich mit deinem neuen Passwort an.",
-                  prefillUsername: username.trim(),
-                  prefillPassword: lastSetPassword,
-                },
-              })
-            }
-          >
-            Zur Anmeldung
-          </button>
-        )}
       </form>
+      <p style={{ marginTop: 12, fontSize: 14 }}>
+        <Link to="/login">Zur Anmeldung</Link>
+      </p>
     </div>
   );
 }
