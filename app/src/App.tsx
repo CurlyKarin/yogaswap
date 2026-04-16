@@ -6,7 +6,6 @@ import Login from "./components/Login";
 import CourseList from "./components/CourseList";
 import AdminPanel from "./components/AdminPanel";
 import Invite from "./components/Invite";
-import ChangePassword from "./components/changePassword";
 import ForgotPassword from "./components/ForgotPassword";
 import Impressum from "./components/Impressum";
 import Datenschutz from "./components/Datenschutz";
@@ -182,7 +181,6 @@ export default function App() {
     <Routes>
       <Route path="/invite" element={<InviteWithRedirect />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/login" element={<Login onLogin={() => {}} />} />
       <Route path="/impressum" element={<div className="app-container"><Impressum /></div>} />
       <Route path="/datenschutz" element={<div className="app-container"><Datenschutz /></div>} />

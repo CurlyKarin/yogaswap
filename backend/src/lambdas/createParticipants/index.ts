@@ -11,11 +11,7 @@ import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } fro
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
-import {
-  buildInviteMail,
-  buildInvitePreparationMail,
-  buildReactivationMail,
-} from "../shared/templates/auth/authMailTemplates";
+import { buildInviteMail, buildReactivationMail } from "../shared/templates/auth/authMailTemplates";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
@@ -152,7 +148,6 @@ export const handler = async (event: any) => {
   const tenantId = getTenantId(event);
   const { userId: actorUserId } = getTenantContext(event as any);
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
-  const tokenInviteEnabled = !!tokensTable;
   const mailLocale = process.env.MAIL_LOCALE || "de";
 
   const emailNormalized = typeof email === "string" ? email.trim() : "";
@@ -268,9 +263,8 @@ export const handler = async (event: any) => {
     }
   }
 
-  // Security hardening (#94): For new/invite flows with email we require token-table mode.
-  // Existing login reactivation without token table remains allowed (no temp password mail).
-  if (hasEmail && !tokensTable && !existingAuthUserId) {
+  // Security hardening (#94): For all email invite/reset flows we require token-table mode.
+  if (hasEmail && !tokensTable) {
     return {
       statusCode: 500,
       body: JSON.stringify({
@@ -357,10 +351,8 @@ export const handler = async (event: any) => {
     };
   }
 
-  // Bootstrap password for Cognito admin operations.
-  // In token-based flow we keep it internal and then trigger the code flow from /invite.
+  // Internal bootstrap password to move Cognito users into a reset-code-capable state.
   const rawPassword = generateSafeTempPassword(10) + "A1"; // ensure mix / length
-  // Do NOT put passwords in URLs.
 
   const userId = canonicalUserId;
 
@@ -382,18 +374,16 @@ export const handler = async (event: any) => {
 
     // Token-based invite flow relies on reset code endpoint (AdminResetUserPassword).
     // For reliability, move newly created users to CONFIRMED with an internal password.
-    if (tokenInviteEnabled) {
-      await cognito.send(
-        new AdminSetUserPasswordCommand({
-          UserPoolId: process.env.USER_POOL_ID!,
-          Username: cognitoUsername,
-          Password: rawPassword,
-          Permanent: true,
-        }),
-      );
-    }
+    await cognito.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: process.env.USER_POOL_ID!,
+        Username: cognitoUsername,
+        Password: rawPassword,
+        Permanent: true,
+      }),
+    );
   } catch (err: any) {
-    // If user exists, set a new temporary password (so admin can re-invite)
+    // If user exists, re-prepare account for token-based reset link flow.
     if (err?.name === "UsernameExistsException") {
       let hasLoginProfile = false;
       if (process.env.PARTICIPANTS_TABLE) {
@@ -434,50 +424,42 @@ export const handler = async (event: any) => {
       }
 
       if (hasLoginProfile) {
-        if (tokenInviteEnabled) {
-          // Bereits registriert: gleicher Token-/Invite-Link wie Neulinge (AdminResetUserPassword erst nach Klick).
-          // Ohne diesen Pfad: reactivated + kein Token → keine E-Mail mit Link, UI-Status oft „active“ → Einladen-Button aus.
-          reactivated = false;
-          console.log("Username exists with login; resending token-based invite (recovery).");
-          try {
-            await cognito.send(
-              new AdminUpdateUserAttributesCommand({
-                UserPoolId: process.env.USER_POOL_ID!,
-                Username: cognitoUsername,
-                UserAttributes: [
-                  { Name: "email", Value: emailNormalized },
-                  { Name: "email_verified", Value: "true" },
-                  { Name: "nickname", Value: nicknameRaw },
-                ],
-              }),
-            );
-            // Einige Cognito-Zustände (z. B. nach Altflows) erlauben kein AdminResetUserPassword.
-            // Durch ein permanentes Passwort wird der User wieder in einen reset-fähigen Zustand gebracht.
-            await cognito.send(
-              new AdminSetUserPasswordCommand({
-                UserPoolId: process.env.USER_POOL_ID!,
-                Username: cognitoUsername,
-                Password: rawPassword,
-                Permanent: true,
-              }),
-            );
-          } catch (err2: any) {
-            console.error("AdminUpdateUserAttributes/AdminSetUserPassword failed (registered user resend):", err2);
-            return { statusCode: 500, body: JSON.stringify({ error: "Failed to prepare existing user" }) };
-          }
-        } else {
-          reactivated = true;
-          console.log("Username exists with authUserId; reactivating without password reset.");
+        reactivated = false;
+        console.log("Username exists with login; resending token-based invite (recovery).");
+        try {
+          await cognito.send(
+            new AdminUpdateUserAttributesCommand({
+              UserPoolId: process.env.USER_POOL_ID!,
+              Username: cognitoUsername,
+              UserAttributes: [
+                { Name: "email", Value: emailNormalized },
+                { Name: "email_verified", Value: "true" },
+                { Name: "nickname", Value: nicknameRaw },
+              ],
+            }),
+          );
+          // Einige Cognito-Zustände (z. B. nach Altflows) erlauben kein AdminResetUserPassword.
+          // Durch ein permanentes Passwort wird der User wieder in einen reset-fähigen Zustand gebracht.
+          await cognito.send(
+            new AdminSetUserPasswordCommand({
+              UserPoolId: process.env.USER_POOL_ID!,
+              Username: cognitoUsername,
+              Password: rawPassword,
+              Permanent: true,
+            }),
+          );
+        } catch (err2: any) {
+          console.error("AdminUpdateUserAttributes/AdminSetUserPassword failed (registered user resend):", err2);
+          return { statusCode: 500, body: JSON.stringify({ error: "Failed to prepare existing user" }) };
         }
       } else {
-        console.log("Username exists; setting a new temporary password via AdminSetUserPassword");
+        console.log("Username exists; preparing account state for token-based reset.");
         try {
           await cognito.send(new AdminSetUserPasswordCommand({
             UserPoolId: process.env.USER_POOL_ID!,
             Username: cognitoUsername,
             Password: rawPassword,
-            // In token mode we need a CONFIRMED user so reset code can be issued reliably.
-            Permanent: tokenInviteEnabled,
+            Permanent: true,
           }));
           // Ensure reset code can be delivered to the currently entered invite email.
           await cognito.send(
@@ -597,7 +579,7 @@ export const handler = async (event: any) => {
     }
   }
 
-  if (!reactivated && tokenInviteEnabled && !oneTimeToken) {
+  if (!reactivated && !oneTimeToken) {
     return {
       statusCode: 500,
       body: JSON.stringify({
@@ -617,10 +599,6 @@ export const handler = async (event: any) => {
     nickname: nicknameRaw,
     link,
   });
-  const fallbackMail = buildInvitePreparationMail({
-    locale: mailLocale,
-    nickname: nicknameRaw,
-  });
 
   let emailSent = false;
   try {
@@ -635,13 +613,13 @@ export const handler = async (event: any) => {
         Subject: {
           Data: reactivated
             ? reactivationMail.subject
-            : (tokensTable && oneTimeToken ? inviteMail.subject : fallbackMail.subject),
+            : inviteMail.subject,
         },
         Body: {
           Html: {
             Data: reactivated
               ? reactivationMail.html
-              : (tokensTable && oneTimeToken ? inviteMail.html : fallbackMail.html),
+              : inviteMail.html,
           },
         }
       }
