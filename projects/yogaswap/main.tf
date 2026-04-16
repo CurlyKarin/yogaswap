@@ -137,6 +137,18 @@ locals {
       s3_actions   = []
       s3_resources = []
     },
+    "create_course" = {
+      name             = "create-course"
+      file_name        = "createCourse.zip"
+      table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn]
+      dynamodb_actions = ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:PutItem"]
+      tables = {
+        "COURSES_TABLE"     = module.courses_table.table_name
+        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+    },
     "get_participants" = {
       name             = "get-participants"
       file_name        = "getParticipants.zip"
@@ -361,6 +373,7 @@ locals {
     "DELETE /course-overrides/{courseId}/{date}" = "delete_override"
     "POST /process-promotions"                   = "process_promotions"
     "GET /courses"                               = "get_courses"
+    "POST /courses"                              = "create_course"
     "GET /participants"                          = "get_participants"
     "POST /participants"                         = "create_participants"
     "POST /participants/{userId}/password-reset" = "reset_participant_password"
@@ -391,6 +404,7 @@ module "yogaswap_api" {
     "DELETE /participants/{userId}",
     "POST /participants",
     "POST /participants/{userId}/password-reset",
+    "POST /courses",
     "GET /tenant-context",
   ]
 }
