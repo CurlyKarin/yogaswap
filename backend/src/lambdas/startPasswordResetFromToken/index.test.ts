@@ -241,7 +241,7 @@ describe("startPasswordResetFromToken Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/too many reset attempts/i);
   });
 
-  test("returns 400 for token with unsupported purpose", async () => {
+  test("accepts token with user-password-reset purpose", async () => {
     const nowMs = Date.now();
     jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
 
@@ -254,11 +254,13 @@ describe("startPasswordResetFromToken Lambda", () => {
         cognitoUsername: { S: "Alice" },
       },
     });
+    dynamoMockSend.mockResolvedValueOnce({});
+    cognitoMockSend.mockResolvedValueOnce({});
 
     const result = await handler(makeEvent());
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toMatch(/purpose is invalid/i);
-    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).success).toBe(true);
+    expect(cognitoMockSend).toHaveBeenCalledTimes(1);
   });
 });
 

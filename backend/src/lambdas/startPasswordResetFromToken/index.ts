@@ -7,7 +7,7 @@ import { GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 
 const cognito = new CognitoIdentityProviderClient({});
-const ALLOWED_PURPOSES = new Set(["invite-activation", "admin-password-reset"]);
+const ALLOWED_PURPOSES = new Set(["invite-activation", "admin-password-reset", "user-password-reset"]);
 const AUDIT_EVENT = "auth_token_password_reset";
 
 // Note: We deliberately re-use the lightweight shared dynamoClient pattern in other lambdas,

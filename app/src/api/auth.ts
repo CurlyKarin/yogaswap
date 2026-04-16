@@ -10,6 +10,15 @@ export interface StartPasswordResetFromTokenResponse {
   username: string;
 }
 
+export interface RequestSelfPasswordResetRequest {
+  nickname: string;
+}
+
+export interface RequestSelfPasswordResetResponse {
+  success: boolean;
+  emailSent?: boolean;
+}
+
 function readErrorMessageFromData(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const record = data as Record<string, unknown>;
@@ -36,6 +45,27 @@ export async function startPasswordResetFromToken(
   try {
     const response = await axios.post<StartPasswordResetFromTokenResponse>(
       `/auth/password-reset/from-token?token=${encodeURIComponent(token)}&tenantId=${encodeURIComponent(tenantId)}`,
+    );
+    return response.data;
+  } catch (err: unknown) {
+    const messageFromResponse = readErrorMessageFromUnknownError(err);
+    if (messageFromResponse) {
+      throw new Error(messageFromResponse);
+    }
+    if (err instanceof Error) {
+      throw new Error(err.message || "Request failed");
+    }
+    throw new Error("Request failed");
+  }
+}
+
+export async function requestSelfPasswordReset(
+  req: RequestSelfPasswordResetRequest,
+): Promise<RequestSelfPasswordResetResponse> {
+  try {
+    const response = await axios.post<RequestSelfPasswordResetResponse>(
+      "/auth/password-reset/request",
+      req,
     );
     return response.data;
   } catch (err: unknown) {

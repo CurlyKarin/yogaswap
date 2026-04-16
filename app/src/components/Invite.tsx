@@ -50,8 +50,8 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       submitLabel: "Zugang aktivieren",
     },
     password_recovery: {
-      subtitle: "Setze dein Passwort zurueck. Gib dazu den Code aus der E-Mail ein.",
-      submitLabel: "Passwort zuruecksetzen",
+      subtitle: "Setze jetzt ein neues Passwort. Gib dazu den Code aus der E-Mail ein.",
+      submitLabel: "Passwort setzen",
     },
     admin_reset: {
       subtitle: "Dein Passwort wurde durch das Studio zurueckgesetzt. Gib den Code aus der E-Mail ein.",

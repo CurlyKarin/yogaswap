@@ -225,7 +225,7 @@ describe("Invite", () => {
     });
 
     fireEvent.click(
-      within(panel).getByRole("button", { name: /Passwort zuruecksetzen/i }),
+      within(panel).getByRole("button", { name: /Passwort setzen/i }),
     );
 
     await waitFor(() => {
