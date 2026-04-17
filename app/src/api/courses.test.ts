@@ -24,6 +24,9 @@ describe("getCourses", () => {
           status: "draft",
           participants: ["alice"],
           dates: ["2025-06-16"],
+          visibleDates: ["2025-06-23"],
+          planningMode: "bounded_series",
+          visibilityMode: "fixed_window",
         },
       ],
     });
@@ -32,16 +35,21 @@ describe("getCourses", () => {
 
     expect(axios.get).toHaveBeenCalledWith("/courses");
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
-      id: 1,
-      name: "Yoga Basics",
-      weekday: "Mon",
-      time: "18:30",
-      capacity: 10,
-      status: "draft",
-      participants: ["alice"],
-      dates: ["2025-06-16"],
-    });
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        id: 1,
+        name: "Yoga Basics",
+        weekday: "Mon",
+        time: "18:30",
+        capacity: 10,
+        status: "draft",
+        planningMode: "bounded_series",
+        visibilityMode: "fixed_window",
+        visibleDates: ["2025-06-23"],
+        participants: ["alice"],
+        dates: ["2025-06-23"],
+      }),
+    );
   });
 
   it("ersetzt fehlende participants/dates durch leere Arrays", async () => {
@@ -93,16 +101,18 @@ describe("getCourses", () => {
       capacity: 14,
       status: "draft",
     });
-    expect(result).toEqual({
-      id: 3,
-      name: "Core",
-      weekday: "Wed",
-      time: "19:00",
-      capacity: 14,
-      status: "draft",
-      participants: [],
-      dates: [],
-    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 3,
+        name: "Core",
+        weekday: "Wed",
+        time: "19:00",
+        capacity: 14,
+        status: "draft",
+        participants: [],
+        dates: [],
+      }),
+    );
   });
 
   it("bearbeitet Kurs", async () => {

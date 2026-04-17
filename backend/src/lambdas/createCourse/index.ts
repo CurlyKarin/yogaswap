@@ -5,7 +5,10 @@ import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
+const COURSE_PLANNING_MODES = new Set(["bounded_series", "rolling_continuous"]);
+const COURSE_VISIBILITY_MODES = new Set(["fixed_window", "rolling_horizon"]);
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 type CreateCourseBody = {
   name?: string;
@@ -13,6 +16,15 @@ type CreateCourseBody = {
   time?: string;
   capacity?: number;
   status?: string;
+  planningMode?: string;
+  visibilityMode?: string;
+  seriesStartDate?: string;
+  seriesEndDate?: string;
+  visibleFrom?: string;
+  visibleUntil?: string;
+  visibilityHorizonWeeks?: number;
+  excludedDates?: string[];
+  includedDates?: string[];
 };
 
 function parseBody(event: APIGatewayProxyEvent): CreateCourseBody | null {
@@ -24,6 +36,20 @@ function parseBody(event: APIGatewayProxyEvent): CreateCourseBody | null {
   } catch {
     return null;
   }
+}
+
+function normalizeDateListInput(value: unknown): string[] | null {
+  if (value == null) return [];
+  if (!Array.isArray(value)) return null;
+  const normalized = value.map((entry) => (typeof entry === "string" ? entry.trim() : ""));
+  if (normalized.some((entry) => !ISO_DATE_ONLY.test(entry))) return null;
+  return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
+}
+
+function isValidDateRange(start?: string, end?: string): boolean {
+  if (!start || !end) return false;
+  if (!ISO_DATE_ONLY.test(start) || !ISO_DATE_ONLY.test(end)) return false;
+  return start <= end;
 }
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -50,6 +76,22 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const weekday = typeof body.weekday === "string" ? body.weekday.trim() : "";
   const time = typeof body.time === "string" ? body.time.trim() : "";
   const status = typeof body.status === "string" ? body.status.trim() : "draft";
+  const planningMode =
+    typeof body.planningMode === "string" ? body.planningMode.trim() : undefined;
+  const visibilityMode =
+    typeof body.visibilityMode === "string" ? body.visibilityMode.trim() : undefined;
+  const seriesStartDate =
+    typeof body.seriesStartDate === "string" ? body.seriesStartDate.trim() : undefined;
+  const seriesEndDate =
+    typeof body.seriesEndDate === "string" ? body.seriesEndDate.trim() : undefined;
+  const visibleFrom =
+    typeof body.visibleFrom === "string" ? body.visibleFrom.trim() : undefined;
+  const visibleUntil =
+    typeof body.visibleUntil === "string" ? body.visibleUntil.trim() : undefined;
+  const visibilityHorizonWeeks =
+    Number.isFinite(body.visibilityHorizonWeeks) ? Number(body.visibilityHorizonWeeks) : undefined;
+  const excludedDates = normalizeDateListInput(body.excludedDates);
+  const includedDates = normalizeDateListInput(body.includedDates);
   const capacity = Number.isFinite(body.capacity) ? Number(body.capacity) : NaN;
 
   if (!name) {
@@ -66,6 +108,43 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
   if (!COURSE_STATUSES.has(status)) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid status value" }) };
+  }
+  if (planningMode && !COURSE_PLANNING_MODES.has(planningMode)) {
+    return { statusCode: 400, body: JSON.stringify({ error: "Invalid planningMode value" }) };
+  }
+  if (visibilityMode && !COURSE_VISIBILITY_MODES.has(visibilityMode)) {
+    return { statusCode: 400, body: JSON.stringify({ error: "Invalid visibilityMode value" }) };
+  }
+  if ((planningMode === "bounded_series" || seriesStartDate || seriesEndDate) && !isValidDateRange(seriesStartDate, seriesEndDate)) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: "seriesStartDate and seriesEndDate are required as ISO dates with start <= end",
+      }),
+    };
+  }
+  if ((visibilityMode === "fixed_window" || visibleFrom || visibleUntil) && !isValidDateRange(visibleFrom, visibleUntil)) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: "visibleFrom and visibleUntil are required as ISO dates with start <= end",
+      }),
+    };
+  }
+  if (
+    (visibilityMode === "rolling_horizon" || visibilityHorizonWeeks != null) &&
+    (!Number.isInteger(visibilityHorizonWeeks) || (visibilityHorizonWeeks ?? 0) <= 0)
+  ) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "visibilityHorizonWeeks must be a positive integer" }),
+    };
+  }
+  if (!excludedDates || !includedDates) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "excludedDates/includedDates must contain ISO dates (YYYY-MM-DD)" }),
+    };
   }
 
   try {
@@ -102,21 +181,38 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextId = maxId + 1;
     const nextCourseId = String(nextId);
 
+    const item: Record<string, any> = {
+      tenantId: { S: tenantId },
+      courseId: { S: nextCourseId },
+      id: { N: String(nextId) },
+      name: { S: name },
+      weekday: { S: weekday },
+      time: { S: time },
+      capacity: { N: String(capacity) },
+      status: { S: status },
+      participants: { L: [] },
+      dates: { L: [] },
+    };
+    if (planningMode) item.planningMode = { S: planningMode };
+    if (visibilityMode) item.visibilityMode = { S: visibilityMode };
+    if (seriesStartDate) item.seriesStartDate = { S: seriesStartDate };
+    if (seriesEndDate) item.seriesEndDate = { S: seriesEndDate };
+    if (visibleFrom) item.visibleFrom = { S: visibleFrom };
+    if (visibleUntil) item.visibleUntil = { S: visibleUntil };
+    if (visibilityHorizonWeeks != null) {
+      item.visibilityHorizonWeeks = { N: String(visibilityHorizonWeeks) };
+    }
+    if (excludedDates.length > 0) {
+      item.excludedDates = { L: excludedDates.map((entry) => ({ S: entry })) };
+    }
+    if (includedDates.length > 0) {
+      item.includedDates = { L: includedDates.map((entry) => ({ S: entry })) };
+    }
+
     await client.send(
       new PutItemCommand({
         TableName: coursesTable,
-        Item: {
-          tenantId: { S: tenantId },
-          courseId: { S: nextCourseId },
-          id: { N: String(nextId) },
-          name: { S: name },
-          weekday: { S: weekday },
-          time: { S: time },
-          capacity: { N: String(capacity) },
-          status: { S: status },
-          participants: { L: [] },
-          dates: { L: [] },
-        },
+        Item: item,
         ConditionExpression: "attribute_not_exists(courseId)",
       }),
     );
@@ -131,6 +227,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         time,
         capacity,
         status,
+        planningMode,
+        visibilityMode,
+        seriesStartDate,
+        seriesEndDate,
+        visibleFrom,
+        visibleUntil,
+        visibilityHorizonWeeks,
+        excludedDates,
+        includedDates,
+        visibleDates: [],
         participants: [],
         dates: [],
       }),

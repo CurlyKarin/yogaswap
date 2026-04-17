@@ -4,6 +4,7 @@ import { Course, CourseStatus } from "shared/types";
 type ApiCourse = Omit<Course, "participants" | "dates"> & {
   participants?: string[];
   dates?: string[];
+  visibleDates?: string[];
 };
 
 export type CreateCourseRequest = {
@@ -31,8 +32,18 @@ export async function getCourses(): Promise<Course[]> {
       time: item.time,
       capacity: item.capacity,
       status: item.status ?? "active",
+      planningMode: item.planningMode,
+      visibilityMode: item.visibilityMode,
+      seriesStartDate: item.seriesStartDate,
+      seriesEndDate: item.seriesEndDate,
+      visibleFrom: item.visibleFrom,
+      visibleUntil: item.visibleUntil,
+      visibilityHorizonWeeks: item.visibilityHorizonWeeks,
+      excludedDates: item.excludedDates ?? [],
+      includedDates: item.includedDates ?? [],
+      visibleDates: item.visibleDates ?? item.dates ?? [],
       participants: item.participants ?? [],
-      dates: item.dates ?? [],
+      dates: item.visibleDates ?? item.dates ?? [],
     }));
   } catch (error) {
     console.error("Fehler beim Laden der Courses:", error);
@@ -49,8 +60,18 @@ export async function createCourse(request: CreateCourseRequest): Promise<Course
     time: response.data.time,
     capacity: response.data.capacity,
     status: response.data.status ?? "active",
+    planningMode: response.data.planningMode,
+    visibilityMode: response.data.visibilityMode,
+    seriesStartDate: response.data.seriesStartDate,
+    seriesEndDate: response.data.seriesEndDate,
+    visibleFrom: response.data.visibleFrom,
+    visibleUntil: response.data.visibleUntil,
+    visibilityHorizonWeeks: response.data.visibilityHorizonWeeks,
+    excludedDates: response.data.excludedDates ?? [],
+    includedDates: response.data.includedDates ?? [],
+    visibleDates: response.data.visibleDates ?? response.data.dates ?? [],
     participants: response.data.participants ?? [],
-    dates: response.data.dates ?? [],
+    dates: response.data.visibleDates ?? response.data.dates ?? [],
   };
 }
 
@@ -63,8 +84,18 @@ export async function updateCourse(courseId: number | string, request: UpdateCou
     time: response.data.time,
     capacity: response.data.capacity,
     status: response.data.status ?? "active",
+    planningMode: response.data.planningMode,
+    visibilityMode: response.data.visibilityMode,
+    seriesStartDate: response.data.seriesStartDate,
+    seriesEndDate: response.data.seriesEndDate,
+    visibleFrom: response.data.visibleFrom,
+    visibleUntil: response.data.visibleUntil,
+    visibilityHorizonWeeks: response.data.visibilityHorizonWeeks,
+    excludedDates: response.data.excludedDates ?? [],
+    includedDates: response.data.includedDates ?? [],
+    visibleDates: response.data.visibleDates ?? response.data.dates ?? [],
     participants: response.data.participants ?? [],
-    dates: response.data.dates ?? [],
+    dates: response.data.visibleDates ?? response.data.dates ?? [],
   };
 }
 

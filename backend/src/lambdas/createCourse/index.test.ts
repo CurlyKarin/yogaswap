@@ -74,6 +74,22 @@ describe("createCourse Lambda", () => {
     expect(mockSend).not.toHaveBeenCalled();
   });
 
+  test("returns 400 on invalid scheduling model fields", async () => {
+    const result = await handler(
+      makeEvent({
+        name: "Flow",
+        weekday: "Mon",
+        time: "08:00",
+        capacity: 10,
+        planningMode: "bounded_series",
+        seriesStartDate: "2026-03-31",
+        seriesEndDate: "2026-03-01",
+      }),
+    );
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/seriesStartDate and seriesEndDate/);
+  });
+
   test("creates course with default draft status", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
@@ -146,5 +162,57 @@ describe("createCourse Lambda", () => {
     );
 
     expect(result.statusCode).toBe(409);
+  });
+
+  test("creates course with scheduling model fields", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        name: "Quartal Flow",
+        weekday: "Mon",
+        time: "18:00",
+        capacity: 12,
+        status: "draft",
+        planningMode: "bounded_series",
+        visibilityMode: "fixed_window",
+        seriesStartDate: "2026-01-01",
+        seriesEndDate: "2026-03-31",
+        visibleFrom: "2026-01-01",
+        visibleUntil: "2026-03-31",
+        excludedDates: ["2026-02-02"],
+        includedDates: ["2026-02-04"],
+      }),
+    );
+
+    expect(result.statusCode).toBe(201);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          planningMode: { S: "bounded_series" },
+          visibilityMode: { S: "fixed_window" },
+          seriesStartDate: { S: "2026-01-01" },
+          seriesEndDate: { S: "2026-03-31" },
+          visibleFrom: { S: "2026-01-01" },
+          visibleUntil: { S: "2026-03-31" },
+          excludedDates: { L: [{ S: "2026-02-02" }] },
+          includedDates: { L: [{ S: "2026-02-04" }] },
+        }),
+      }),
+    );
+
+    const body = JSON.parse(result.body);
+    expect(body).toEqual(
+      expect.objectContaining({
+        planningMode: "bounded_series",
+        visibilityMode: "fixed_window",
+        excludedDates: ["2026-02-02"],
+        includedDates: ["2026-02-04"],
+        visibleDates: [],
+      }),
+    );
   });
 });

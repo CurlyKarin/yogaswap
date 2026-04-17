@@ -33,6 +33,8 @@ export type Swap = {
 };
 
 export type CourseStatus = "inactive" | "draft" | "active";
+export type CoursePlanningMode = "bounded_series" | "rolling_continuous";
+export type CourseVisibilityMode = "fixed_window" | "rolling_horizon";
 
 export type Course = {
   // Tenant, zu dem der Kurs gehört
@@ -43,6 +45,16 @@ export type Course = {
   time: string;    // z.B. "18:30"
   capacity: number;
   status?: CourseStatus;
+  planningMode?: CoursePlanningMode;
+  visibilityMode?: CourseVisibilityMode;
+  seriesStartDate?: string;
+  seriesEndDate?: string;
+  visibleFrom?: string;
+  visibleUntil?: string;
+  visibilityHorizonWeeks?: number;
+  excludedDates?: string[];
+  includedDates?: string[];
+  visibleDates?: string[];
   participants: string[]; // Nicknames
   dates: string[]; // Liste der Termine
   // Optional zugeordnete Kursleiter (Nicknames oder User-IDs)
