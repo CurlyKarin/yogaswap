@@ -26,6 +26,44 @@ body {
   margin-top: 1.5rem;
 }
 
+.course-management-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  text-align: left;
+}
+
+.course-management-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.course-management-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.course-card-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.course-card-actions-status {
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.course-card-actions-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+
 /* Header */
 .app-top {
   display: flex;
@@ -406,6 +444,10 @@ a:focus-visible {
   }
   .main-section-admin {
     margin-top: 1rem;
+  }
+  .course-management-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
   }
   .admin-panel {
     padding: 0.75rem;
