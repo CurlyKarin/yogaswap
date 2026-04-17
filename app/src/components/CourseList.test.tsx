@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 import CourseList from "./CourseList";
-import { getCourses } from "../api/courses";
+import { createCourse, deleteCourse, getCourses, updateCourse } from "../api/courses";
 import { getOverrides } from "../api/overrides";
 import { getSwaps } from "../api/swaps";
 import type { User, Tenant, UserTenantMembership, Course } from "shared/types";
+import { canSeeCourse } from "shared/permissions";
 
 vi.mock("../api/courses");
 vi.mock("../api/overrides");
@@ -24,8 +26,12 @@ vi.mock("./useCourseSwaps", () => {
 });
 
 const mockedGetCourses = getCourses as unknown as ReturnType<typeof vi.fn>;
+const mockedCreateCourse = createCourse as unknown as ReturnType<typeof vi.fn>;
+const mockedUpdateCourse = updateCourse as unknown as ReturnType<typeof vi.fn>;
+const mockedDeleteCourse = deleteCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedGetOverrides = getOverrides as unknown as ReturnType<typeof vi.fn>;
 const mockedGetSwaps = getSwaps as unknown as ReturnType<typeof vi.fn>;
+const mockedCanSeeCourse = canSeeCourse as unknown as ReturnType<typeof vi.fn>;
 
 vi.mock("shared/permissions", () => ({
   canSeeCourse: vi.fn(),
@@ -52,6 +58,10 @@ const baseMembership: UserTenantMembership = {
 describe("CourseList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedCreateCourse.mockReset();
+    mockedUpdateCourse.mockReset();
+    mockedDeleteCourse.mockReset();
+    mockedCanSeeCourse.mockImplementation(() => true);
   });
 
   it("zeigt während des Ladens 'Loading...' an und rendert anschließend Kurse (mit zukünftigen Terminen)", async () => {
@@ -170,7 +180,7 @@ describe("CourseList", () => {
     (canSeeCourse as unknown as ReturnType<typeof vi.fn>)
       .mockImplementation((membershipArg: UserTenantMembership, _settings, courseArg: Course) => {
         // Nur Kurs mit ID 2 ist sichtbar
-        expect(membershipArg).toBe(baseMembership);
+        expect(membershipArg).toEqual(baseMembership);
         return courseArg.id === 2;
       });
 
@@ -226,6 +236,290 @@ describe("CourseList", () => {
 
     // Ohne Tenant/Membership wird canSeeCourse nicht aufgerufen
     expect(canSeeCourse).not.toHaveBeenCalled();
+  });
+
+  it("zeigt Admin-Kursverwaltung und legt Kurs über Modal an", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "draft",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+    mockedCreateCourse.mockResolvedValue({
+      id: 2,
+      name: "Neuer Kurs",
+      weekday: "Tue",
+      time: "18:30",
+      capacity: 12,
+      status: "draft",
+      participants: [],
+      dates: [],
+    });
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const courseMatches = await screen.findAllByText("Kurs A");
+    expect(courseMatches.length).toBeGreaterThan(0);
+
+    const user = userEvent.setup();
+    const createButtons = screen.getAllByRole("button", { name: /kurs anlegen/i });
+    await user.click(createButtons[createButtons.length - 1]);
+    await user.type(screen.getByLabelText("Kursname"), "Neuer Kurs");
+    await user.clear(screen.getByLabelText("Kapazität"));
+    await user.type(screen.getByLabelText("Kapazität"), "12");
+    await user.click(screen.getByRole("button", { name: /^anlegen$/i }));
+
+    await waitFor(() => {
+      expect(mockedCreateCourse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Neuer Kurs",
+          capacity: 12,
+        }),
+      );
+    });
+  });
+
+  it("zeigt Instructor-Aktionen deaktiviert", async () => {
+    const instructorMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "instructor",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={instructorMembership} />);
+
+    const courseMatches = await screen.findAllByText("Kurs A");
+    expect(courseMatches.length).toBeGreaterThan(0);
+
+    expect(
+      screen
+        .getAllByRole("button", { name: /kurs anlegen/i })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("button", { name: /kurs bearbeiten kurs a/i })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("button", { name: /kurs löschen kurs a/i })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("button", { name: /termine bearbeiten kurs a/i })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+  });
+
+  it("aktiviert Speichern im Edit-Dialog erst nach Änderungen", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "draft",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+    mockedUpdateCourse.mockResolvedValue({
+      ...mockCourses[0],
+      name: "Kurs A Neu",
+    });
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const courseMatches = await screen.findAllByText("Kurs A");
+    expect(courseMatches.length).toBeGreaterThan(0);
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole("button", { name: /kurs bearbeiten kurs a/i })[0]);
+
+    const saveButton = screen.getByRole("button", { name: /^speichern$/i });
+    expect(saveButton).toBeDisabled();
+
+    const nameInput = screen.getByLabelText("Kursname bearbeiten");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Kurs A Neu");
+    expect(saveButton).not.toBeDisabled();
+
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(mockedUpdateCourse).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          name: "Kurs A Neu",
+        }),
+      );
+    });
+  });
+
+  it("setzt Fokus beim Öffnen ins Edit-Modal und hält Tab im Dialog", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "draft",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+    await user.click(screen.getAllByRole("button", { name: /kurs bearbeiten kurs a/i })[0]);
+
+    const nameInput = screen.getByLabelText("Kursname bearbeiten");
+    await waitFor(() => {
+      expect(nameInput).toHaveFocus();
+    });
+
+    // Durch viele Tabs darf der Fokus den Dialog nicht verlassen.
+    for (let i = 0; i < 10; i += 1) {
+      await user.tab();
+      const active = document.activeElement;
+      expect(active).not.toBeNull();
+      expect(screen.getByLabelText("Kurs bearbeiten").contains(active as Node)).toBe(true);
+    }
+  });
+
+  it("schließt den Lösch-Dialog mit Escape", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "inactive",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+    await user.click(screen.getAllByRole("button", { name: /kurs löschen kurs a/i })[0]);
+
+    expect(screen.getByLabelText("Kurs löschen")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Kurs löschen")).not.toBeInTheDocument();
+    });
+  });
+
+  it("öffnet Mitglieder- und Termine-Dialog über Statusleisten-Icons", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+
+    await user.click(screen.getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i })[0]);
+    expect(screen.getByLabelText("Kursmitglieder bearbeiten")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Kursmitglieder bearbeiten")).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i })[0]);
+    expect(screen.getByLabelText("Kurstermine bearbeiten")).toBeInTheDocument();
   });
 });
 
