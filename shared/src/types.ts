@@ -32,6 +32,8 @@ export type Swap = {
   status: SwapStatus;
 };
 
+export type CourseStatus = "inactive" | "draft" | "active";
+
 export type Course = {
   // Tenant, zu dem der Kurs gehört
   tenantId?: string;
@@ -40,6 +42,7 @@ export type Course = {
   weekday: string; // z.B. "Mon", "Tue", ...
   time: string;    // z.B. "18:30"
   capacity: number;
+  status?: CourseStatus;
   participants: string[]; // Nicknames
   dates: string[]; // Liste der Termine
   // Optional zugeordnete Kursleiter (Nicknames oder User-IDs)

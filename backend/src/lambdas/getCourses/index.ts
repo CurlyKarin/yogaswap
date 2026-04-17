@@ -40,10 +40,12 @@ export const handler = async (
     }
     const courses = items.map((item) => ({
       id: Number(item.id?.N ?? item.courseId?.S ?? 0),
+      courseId: item.courseId?.S,
       name: item.name.S!,
       weekday: item.weekday.S!,
       time: item.time.S!,
       capacity: Number(item.capacity.N!),
+      status: item.status?.S ?? "active",
       participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
       dates: item.dates.L ? item.dates.L.map((d: any) => d.S) : [],
     }));

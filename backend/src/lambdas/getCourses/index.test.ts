@@ -33,10 +33,12 @@ describe("getCourses Lambda", () => {
       Items: [
         {
           id: { N: "1" },
+          courseId: { S: "1" },
           name: { S: "Yoga" },
           weekday: { S: "Monday" },
           time: { S: "10:00" },
           capacity: { N: "12" },
+          status: { S: "draft" },
           participants: { L: [{ S: "Anna" }, { S: "Ben" }] },
           dates: { L: [{ S: "2025-10-01" }, { S: "2025-10-08" }] },
         },
@@ -52,10 +54,12 @@ describe("getCourses Lambda", () => {
     expect(body).toEqual([
       {
         id: 1,
+        courseId: "1",
         name: "Yoga",
         weekday: "Monday",
         time: "10:00",
         capacity: 12,
+        status: "draft",
         participants: ["Anna", "Ben"],
         dates: ["2025-10-01", "2025-10-08"],
       },
