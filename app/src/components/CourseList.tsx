@@ -87,6 +87,19 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(", ");
 
+function getFocusableElements(node: HTMLElement): HTMLElement[] {
+  return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+}
+
+function focusFirstElement(node: HTMLElement): void {
+  const focusables = getFocusableElements(node);
+  if (focusables.length > 0) {
+    focusables[0].focus();
+    return;
+  }
+  node.focus();
+}
+
 function sortCoursesForDisplay(a: Course, b: Course): number {
   const weekdayA = WEEKDAY_ORDER[a.weekday] ?? 99;
   const weekdayB = WEEKDAY_ORDER[b.weekday] ?? 99;
@@ -301,31 +314,26 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     if (event.key !== "Tab") return;
     const modalNode = modalRef.current;
     if (!modalNode) return;
+    event.preventDefault();
 
-    const focusables = Array.from(modalNode.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    const focusables = getFocusableElements(modalNode);
     if (focusables.length === 0) {
-      event.preventDefault();
       modalNode.focus();
       return;
     }
 
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
     const active = document.activeElement as HTMLElement | null;
+    const currentIndex = active ? focusables.indexOf(active) : -1;
 
-    if (!active || !modalNode.contains(active)) {
-      event.preventDefault();
-      first.focus();
+    if (currentIndex === -1) {
+      focusables[0].focus();
       return;
     }
 
-    if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    } else if (event.shiftKey && active === first) {
-      event.preventDefault();
-      last.focus();
-    }
+    const nextIndex = event.shiftKey
+      ? (currentIndex - 1 + focusables.length) % focusables.length
+      : (currentIndex + 1) % focusables.length;
+    focusables[nextIndex].focus();
   };
 
   const createNameValid = createState.name.trim().length > 0;
@@ -358,12 +366,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       : null;
     if (!activeModal) return;
 
-    const firstFocusable = activeModal.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
-    if (firstFocusable) {
-      firstFocusable.focus();
-      return;
-    }
-    activeModal.focus();
+    focusFirstElement(activeModal);
   }, [createOpen, editOpen, deleteOpen, membersTargetId, datesTargetId]);
 
   useEffect(() => {
