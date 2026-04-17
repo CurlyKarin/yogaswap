@@ -149,6 +149,34 @@ locals {
       s3_actions   = []
       s3_resources = []
     },
+    "update_course" = {
+      name             = "update-course"
+      file_name        = "updateCourse.zip"
+      table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:Scan"]
+      tables = {
+        "COURSES_TABLE"     = module.courses_table.table_name
+        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+        "OVERRIDES_TABLE"   = module.course_overrides_table.table_name
+        "SWAPS_TABLE"       = module.swaps_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+    },
+    "delete_course" = {
+      name             = "delete-course"
+      file_name        = "deleteCourse.zip"
+      table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan"]
+      tables = {
+        "COURSES_TABLE"     = module.courses_table.table_name
+        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+        "OVERRIDES_TABLE"   = module.course_overrides_table.table_name
+        "SWAPS_TABLE"       = module.swaps_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+    },
     "get_participants" = {
       name             = "get-participants"
       file_name        = "getParticipants.zip"
@@ -374,6 +402,8 @@ locals {
     "POST /process-promotions"                   = "process_promotions"
     "GET /courses"                               = "get_courses"
     "POST /courses"                              = "create_course"
+    "PUT /courses/{courseId}"                    = "update_course"
+    "DELETE /courses/{courseId}"                 = "delete_course"
     "GET /participants"                          = "get_participants"
     "POST /participants"                         = "create_participants"
     "POST /participants/{userId}/password-reset" = "reset_participant_password"
@@ -405,6 +435,8 @@ module "yogaswap_api" {
     "POST /participants",
     "POST /participants/{userId}/password-reset",
     "POST /courses",
+    "PUT /courses/{courseId}",
+    "DELETE /courses/{courseId}",
     "GET /tenant-context",
   ]
 }
