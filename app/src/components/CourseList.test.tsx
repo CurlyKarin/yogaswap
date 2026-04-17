@@ -338,5 +338,139 @@ describe("CourseList", () => {
         .some((button) => button.hasAttribute("disabled")),
     ).toBe(true);
   });
+
+  it("aktiviert Speichern im Edit-Dialog erst nach Änderungen", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "draft",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+    mockedUpdateCourse.mockResolvedValue({
+      ...mockCourses[0],
+      name: "Kurs A Neu",
+    });
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const courseMatches = await screen.findAllByText("Kurs A");
+    expect(courseMatches.length).toBeGreaterThan(0);
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole("button", { name: /kurs bearbeiten kurs a/i })[0]);
+
+    const saveButton = screen.getByRole("button", { name: /^speichern$/i });
+    expect(saveButton).toBeDisabled();
+
+    const nameInput = screen.getByLabelText("Kursname bearbeiten");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Kurs A Neu");
+    expect(saveButton).not.toBeDisabled();
+
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(mockedUpdateCourse).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          name: "Kurs A Neu",
+        }),
+      );
+    });
+  });
+
+  it("setzt Fokus beim Öffnen ins Edit-Modal und hält Tab im Dialog", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "draft",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+    await user.click(screen.getAllByRole("button", { name: /kurs bearbeiten kurs a/i })[0]);
+
+    const nameInput = screen.getByLabelText("Kursname bearbeiten");
+    await waitFor(() => {
+      expect(nameInput).toHaveFocus();
+    });
+
+    // Durch viele Tabs darf der Fokus den Dialog nicht verlassen.
+    for (let i = 0; i < 10; i += 1) {
+      await user.tab();
+      const active = document.activeElement;
+      expect(active).not.toBeNull();
+      expect(screen.getByLabelText("Kurs bearbeiten").contains(active as Node)).toBe(true);
+    }
+  });
+
+  it("schließt den Lösch-Dialog mit Escape", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "inactive",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+    await user.click(screen.getAllByRole("button", { name: /kurs löschen kurs a/i })[0]);
+
+    expect(screen.getByLabelText("Kurs löschen")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Kurs löschen")).not.toBeInTheDocument();
+    });
+  });
 });
 

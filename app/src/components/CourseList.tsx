@@ -1,6 +1,6 @@
 import CourseCard from "./CourseCard";
 import { useCourseSwaps } from "./useCourseSwaps";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef, type KeyboardEvent, type RefObject } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import {
   Course,
@@ -78,6 +78,15 @@ const STATUS_OPTIONS: Array<{ value: CourseStatus; label: string }> = [
   { value: "active", label: "Aktiv" },
 ];
 
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[href]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+
 function sortCoursesForDisplay(a: Course, b: Course): number {
   const weekdayA = WEEKDAY_ORDER[a.weekday] ?? 99;
   const weekdayB = WEEKDAY_ORDER[b.weekday] ?? 99;
@@ -116,7 +125,11 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     status: "draft",
   });
   const [editState, setEditState] = useState<CourseEditorState | null>(null);
+  const [editInitialState, setEditInitialState] = useState<CourseEditorState | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const createModalRef = useRef<HTMLDivElement | null>(null);
+  const editModalRef = useRef<HTMLDivElement | null>(null);
+  const deleteModalRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = membership?.role === "admin";
   const isInstructor = membership?.role === "instructor";
@@ -217,7 +230,9 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   };
 
   const openEditModal = (course: Course) => {
-    setEditState(toEditorState(course));
+    const next = toEditorState(course);
+    setEditState(next);
+    setEditInitialState(next);
     resetFormError();
     setEditOpen(true);
   };
@@ -233,6 +248,112 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     if (!Number.isInteger(parsed) || parsed < 0) return null;
     return parsed;
   };
+
+  const closeCreateModal = () => {
+    if (saving) return;
+    setCreateOpen(false);
+  };
+
+  const closeEditModal = () => {
+    if (saving) return;
+    setEditOpen(false);
+    setEditState(null);
+    setEditInitialState(null);
+  };
+
+  const closeDeleteModal = () => {
+    if (saving) return;
+    setDeleteOpen(false);
+    setDeleteTargetId(null);
+  };
+
+  const handleFocusTrap = (event: KeyboardEvent<HTMLDivElement>, modalRef: RefObject<HTMLDivElement | null>) => {
+    if (event.key !== "Tab") return;
+    const modalNode = modalRef.current;
+    if (!modalNode) return;
+
+    const focusables = Array.from(modalNode.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    if (focusables.length === 0) {
+      event.preventDefault();
+      modalNode.focus();
+      return;
+    }
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+
+    if (!active || !modalNode.contains(active)) {
+      event.preventDefault();
+      first.focus();
+      return;
+    }
+
+    if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    } else if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    }
+  };
+
+  const createNameValid = createState.name.trim().length > 0;
+  const createCapacityValid = parseCapacity(createState.capacity) != null;
+  const canSubmitCreate = canManageCourses && !saving && createNameValid && createCapacityValid;
+
+  const editNameValid = (editState?.name.trim().length ?? 0) > 0;
+  const editCapacityValid = editState ? parseCapacity(editState.capacity) != null : false;
+  const editChanged =
+    !!editState &&
+    !!editInitialState &&
+    (editState.name !== editInitialState.name ||
+      editState.weekday !== editInitialState.weekday ||
+      editState.time !== editInitialState.time ||
+      editState.capacity !== editInitialState.capacity ||
+      editState.status !== editInitialState.status);
+  const canSubmitEdit = canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
+
+  useEffect(() => {
+    const activeModal = createOpen
+      ? createModalRef.current
+      : editOpen
+      ? editModalRef.current
+      : deleteOpen
+      ? deleteModalRef.current
+      : null;
+    if (!activeModal) return;
+
+    const firstFocusable = activeModal.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+    if (firstFocusable) {
+      firstFocusable.focus();
+      return;
+    }
+    activeModal.focus();
+  }, [createOpen, editOpen, deleteOpen]);
+
+  useEffect(() => {
+    if (!createOpen && !editOpen && !deleteOpen) return;
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (saving) return;
+      event.preventDefault();
+      if (deleteOpen) {
+        setDeleteOpen(false);
+        setDeleteTargetId(null);
+      } else if (editOpen) {
+        setEditOpen(false);
+        setEditState(null);
+        setEditInitialState(null);
+      } else if (createOpen) {
+        setCreateOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [createOpen, editOpen, deleteOpen, saving]);
 
   const saveCreateCourse = async () => {
     if (!canManageCourses) return;
@@ -257,7 +378,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         capacity,
         status: createState.status,
       });
-      setCreateOpen(false);
+      closeCreateModal();
       await fetchData();
     } catch (err) {
       console.error("Failed to create course", err);
@@ -268,7 +389,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   };
 
   const saveEditCourse = async () => {
-    if (!canManageCourses || !editState) return;
+    if (!canManageCourses || !editState || !editChanged) return;
     const trimmedName = editState.name.trim();
     if (!trimmedName) {
       setFormError("Bitte einen Kursnamen eingeben.");
@@ -290,8 +411,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         capacity,
         status: editState.status,
       });
-      setEditOpen(false);
-      setEditState(null);
+      closeEditModal();
       await fetchData();
     } catch (err) {
       console.error("Failed to update course", err);
@@ -307,8 +427,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     setFormError(null);
     try {
       await deleteCourse(deleteTargetId);
-      setDeleteOpen(false);
-      setDeleteTargetId(null);
+      closeDeleteModal();
       await fetchData();
     } catch (err) {
       console.error("Failed to delete course", err);
@@ -420,9 +539,24 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       </div>
 
       {createOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Kurs anlegen">
-          <div className="modal modal-compact">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Kurs anlegen"
+          onKeyDown={(event) => {
+            handleFocusTrap(event, createModalRef);
+            if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) {
+              event.preventDefault();
+              saveCreateCourse();
+            }
+          }}
+        >
+          <div className="modal modal-compact" ref={createModalRef} tabIndex={-1}>
             <h4>Kurs anlegen</h4>
+            <p className="course-editor-note">
+              Stammdaten jetzt anlegen. Mitglieder-Zuordnung und Terminplanung folgen als eigene Schritte.
+            </p>
             <div className="dialog-stack">
               <input
                 type="text"
@@ -489,10 +623,15 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
               {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
             </div>
             <div className="modal-actions dialog-actions">
-              <button type="button" className="modal-action-btn" onClick={() => setCreateOpen(false)} disabled={saving}>
+              <button type="button" className="modal-action-btn" onClick={closeCreateModal} disabled={saving}>
                 Abbrechen
               </button>
-              <button type="button" className="btn-primary modal-action-btn" onClick={saveCreateCourse} disabled={saving}>
+              <button
+                type="button"
+                className="btn-primary modal-action-btn"
+                onClick={saveCreateCourse}
+                disabled={!canSubmitCreate}
+              >
                 {saving ? "Speichere..." : "Anlegen"}
               </button>
             </div>
@@ -501,11 +640,23 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       )}
 
       {editOpen && editState && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Kurs bearbeiten">
-          <div className="modal modal-compact">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Kurs bearbeiten"
+          onKeyDown={(event) => {
+            handleFocusTrap(event, editModalRef);
+            if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) {
+              event.preventDefault();
+              saveEditCourse();
+            }
+          }}
+        >
+          <div className="modal modal-compact" ref={editModalRef} tabIndex={-1}>
             <h4>Kurs bearbeiten</h4>
-            <p style={{ marginTop: 0, color: "#4b5563" }}>
-              Kurs-ID: <strong>{editState.id}</strong>
+            <p className="course-editor-note" style={{ marginTop: 0 }}>
+              Stammdaten bearbeiten. Mitglieder und Termine werden im nächsten Schritt hier ergänzt.
             </p>
             <div className="dialog-stack">
               <input
@@ -577,15 +728,17 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
               <button
                 type="button"
                 className="modal-action-btn"
-                onClick={() => {
-                  setEditOpen(false);
-                  setEditState(null);
-                }}
+                onClick={closeEditModal}
                 disabled={saving}
               >
                 Abbrechen
               </button>
-              <button type="button" className="btn-primary modal-action-btn" onClick={saveEditCourse} disabled={saving}>
+              <button
+                type="button"
+                className="btn-primary modal-action-btn"
+                onClick={saveEditCourse}
+                disabled={!canSubmitEdit}
+              >
                 {saving ? "Speichere..." : "Speichern"}
               </button>
             </div>
@@ -594,8 +747,20 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       )}
 
       {deleteOpen && deleteTargetCourse && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Kurs löschen">
-          <div className="modal modal-compact">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Kurs löschen"
+          onKeyDown={(event) => {
+            handleFocusTrap(event, deleteModalRef);
+            if (event.key === "Enter") {
+              event.preventDefault();
+              confirmDeleteCourse();
+            }
+          }}
+        >
+          <div className="modal modal-compact" ref={deleteModalRef} tabIndex={-1}>
             <h4>Kurs löschen</h4>
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               Kurs <strong>{deleteTargetCourse.name}</strong> wirklich löschen?
@@ -609,10 +774,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
               <button
                 type="button"
                 className="modal-action-btn"
-                onClick={() => {
-                  setDeleteOpen(false);
-                  setDeleteTargetId(null);
-                }}
+                onClick={closeDeleteModal}
                 disabled={saving}
               >
                 Abbrechen

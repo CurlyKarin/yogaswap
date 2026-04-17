@@ -313,6 +313,13 @@ a:focus-visible {
   box-sizing: border-box;
 }
 
+.course-editor-note {
+  margin: 0 0 10px;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 /* Footer (Impressum / Datenschutz) */
 .app-footer {
   margin-top: 2rem;
