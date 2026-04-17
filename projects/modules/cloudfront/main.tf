@@ -136,6 +136,13 @@ resource "aws_cloudfront_distribution" "spa" {
       cookies {
         forward = "none"
       }
+      headers = [
+        "Authorization",
+        "x-tenant-id",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+      ]
     }
     compress = true
   }
