@@ -337,6 +337,16 @@ describe("CourseList", () => {
         .getAllByRole("button", { name: /kurs löschen kurs a/i })
         .some((button) => button.hasAttribute("disabled")),
     ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("button", { name: /termine bearbeiten kurs a/i })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
   });
 
   it("aktiviert Speichern im Edit-Dialog erst nach Änderungen", async () => {
@@ -471,6 +481,45 @@ describe("CourseList", () => {
     await waitFor(() => {
       expect(screen.queryByLabelText("Kurs löschen")).not.toBeInTheDocument();
     });
+  });
+
+  it("öffnet Mitglieder- und Termine-Dialog über Statusleisten-Icons", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+
+    await user.click(screen.getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i })[0]);
+    expect(screen.getByLabelText("Kursmitglieder bearbeiten")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Kursmitglieder bearbeiten")).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i })[0]);
+    expect(screen.getByLabelText("Kurstermine bearbeiten")).toBeInTheDocument();
   });
 });
 

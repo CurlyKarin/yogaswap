@@ -1,7 +1,7 @@
 import CourseCard from "./CourseCard";
 import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState, useMemo, useCallback, useRef, type KeyboardEvent, type RefObject } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, CalendarDays } from "lucide-react";
 import {
   Course,
   CourseDateOverride,
@@ -127,9 +127,13 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   const [editState, setEditState] = useState<CourseEditorState | null>(null);
   const [editInitialState, setEditInitialState] = useState<CourseEditorState | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [membersTargetId, setMembersTargetId] = useState<number | null>(null);
+  const [datesTargetId, setDatesTargetId] = useState<number | null>(null);
   const createModalRef = useRef<HTMLDivElement | null>(null);
   const editModalRef = useRef<HTMLDivElement | null>(null);
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
+  const membersModalRef = useRef<HTMLDivElement | null>(null);
+  const datesModalRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = membership?.role === "admin";
   const isInstructor = membership?.role === "instructor";
@@ -214,6 +218,12 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   const deleteTargetCourse = deleteTargetId
     ? visibleCourses.find((course) => course.id === deleteTargetId)
     : undefined;
+  const membersTargetCourse = membersTargetId
+    ? visibleCourses.find((course) => course.id === membersTargetId)
+    : undefined;
+  const datesTargetCourse = datesTargetId
+    ? visibleCourses.find((course) => course.id === datesTargetId)
+    : undefined;
 
   const resetFormError = () => setFormError(null);
 
@@ -243,6 +253,16 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     setDeleteOpen(true);
   };
 
+  const openMembersModal = (courseId: number) => {
+    setMembersTargetId(courseId);
+    resetFormError();
+  };
+
+  const openDatesModal = (courseId: number) => {
+    setDatesTargetId(courseId);
+    resetFormError();
+  };
+
   const parseCapacity = (capacityText: string): number | null => {
     const parsed = Number.parseInt(capacityText, 10);
     if (!Number.isInteger(parsed) || parsed < 0) return null;
@@ -265,6 +285,16 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     if (saving) return;
     setDeleteOpen(false);
     setDeleteTargetId(null);
+  };
+
+  const closeMembersModal = () => {
+    if (saving) return;
+    setMembersTargetId(null);
+  };
+
+  const closeDatesModal = () => {
+    if (saving) return;
+    setDatesTargetId(null);
   };
 
   const handleFocusTrap = (event: KeyboardEvent<HTMLDivElement>, modalRef: RefObject<HTMLDivElement | null>) => {
@@ -321,6 +351,10 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       ? editModalRef.current
       : deleteOpen
       ? deleteModalRef.current
+      : membersTargetId
+      ? membersModalRef.current
+      : datesTargetId
+      ? datesModalRef.current
       : null;
     if (!activeModal) return;
 
@@ -330,16 +364,20 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       return;
     }
     activeModal.focus();
-  }, [createOpen, editOpen, deleteOpen]);
+  }, [createOpen, editOpen, deleteOpen, membersTargetId, datesTargetId]);
 
   useEffect(() => {
-    if (!createOpen && !editOpen && !deleteOpen) return;
+    if (!createOpen && !editOpen && !deleteOpen && !membersTargetId && !datesTargetId) return;
 
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (saving) return;
       event.preventDefault();
-      if (deleteOpen) {
+      if (datesTargetId) {
+        setDatesTargetId(null);
+      } else if (membersTargetId) {
+        setMembersTargetId(null);
+      } else if (deleteOpen) {
         setDeleteOpen(false);
         setDeleteTargetId(null);
       } else if (editOpen) {
@@ -353,7 +391,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [createOpen, editOpen, deleteOpen, saving]);
+  }, [createOpen, editOpen, deleteOpen, membersTargetId, datesTargetId, saving]);
 
   const saveCreateCourse = async () => {
     if (!canManageCourses) return;
@@ -500,6 +538,24 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                     </strong>
                   </span>
                   <div className="course-card-actions-buttons">
+                    <button
+                      type="button"
+                      title={canManageCourses ? "Mitglieder bearbeiten" : "Nur Admin kann Mitglieder bearbeiten"}
+                      aria-label={`Mitglieder bearbeiten ${course.name}`}
+                      disabled={!canManageCourses || saving}
+                      onClick={() => openMembersModal(course.id)}
+                    >
+                      <Users size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      title={canManageCourses ? "Termine bearbeiten" : "Nur Admin kann Termine bearbeiten"}
+                      aria-label={`Termine bearbeiten ${course.name}`}
+                      disabled={!canManageCourses || saving}
+                      onClick={() => openDatesModal(course.id)}
+                    >
+                      <CalendarDays size={14} aria-hidden="true" />
+                    </button>
                     <button
                       type="button"
                       title={canManageCourses ? "Kurs bearbeiten" : "Nur Admin kann Kurse bearbeiten"}
@@ -740,6 +796,60 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                 disabled={!canSubmitEdit}
               >
                 {saving ? "Speichere..." : "Speichern"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {membersTargetCourse && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Kursmitglieder bearbeiten"
+          onKeyDown={(event) => {
+            handleFocusTrap(event, membersModalRef);
+          }}
+        >
+          <div className="modal modal-compact" ref={membersModalRef} tabIndex={-1}>
+            <h4>Mitglieder verwalten</h4>
+            <p className="course-editor-note">
+              Kurs: <strong>{membersTargetCourse.name}</strong>
+            </p>
+            <p className="course-editor-note">
+              Hier folgt als Nächstes die Zuordnung von Teilnehmern zu diesem Kurs (inkl. Kapazitätsprüfung).
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="modal-action-btn" onClick={closeMembersModal} disabled={saving}>
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {datesTargetCourse && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Kurstermine bearbeiten"
+          onKeyDown={(event) => {
+            handleFocusTrap(event, datesModalRef);
+          }}
+        >
+          <div className="modal modal-compact" ref={datesModalRef} tabIndex={-1}>
+            <h4>Termine verwalten</h4>
+            <p className="course-editor-note">
+              Kurs: <strong>{datesTargetCourse.name}</strong>
+            </p>
+            <p className="course-editor-note">
+              Hier folgt als Nächstes die Terminliste mit Absagen/Status pro Termin als erster MVP-Schritt.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="modal-action-btn" onClick={closeDatesModal} disabled={saving}>
+                Schließen
               </button>
             </div>
           </div>
