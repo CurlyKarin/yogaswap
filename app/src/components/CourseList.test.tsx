@@ -279,7 +279,7 @@ describe("CourseList", () => {
     const user = userEvent.setup();
     const createButtons = screen.getAllByRole("button", { name: /kurs anlegen/i });
     await user.click(createButtons[createButtons.length - 1]);
-    expect(screen.getByText(/Serienplanung: z\. B\. Quartal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kursblock: z\. B\. Quartal/i)).toBeInTheDocument();
     await user.type(screen.getByLabelText("Kursname"), "Neuer Kurs");
     await user.clear(screen.getByLabelText("Kapazität"));
     await user.type(screen.getByLabelText("Kapazität"), "12");
@@ -389,7 +389,7 @@ describe("CourseList", () => {
 
     const saveButton = screen.getByRole("button", { name: /^speichern$/i });
     expect(saveButton).toBeDisabled();
-    expect(screen.getByText(/Serienplanung: z\. B\. Quartal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kursblock: z\. B\. Quartal/i)).toBeInTheDocument();
 
     const nameInput = screen.getByLabelText("Kursname bearbeiten");
     await user.clear(nameInput);
@@ -565,20 +565,31 @@ describe("CourseList", () => {
     const datesButtons = screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i });
     await user.click(datesButtons[datesButtons.length - 1]);
 
-    expect(screen.getByLabelText("Serienstart")).toHaveValue("2026-01-01");
-    expect(screen.getByLabelText("Serienende")).toHaveValue("2026-01-31");
+    expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent("2026-01-01");
+    expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent("2026-01-31");
 
-    await user.click(screen.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
+    await user.click(screen.getByRole("button", { name: /kalender für zeitraum öffnen/i }));
     expect(screen.getByRole("button", { name: /kalender schließen/i })).toBeInTheDocument();
-    const excludedCell = screen.getByRole("button", { name: /datum 2026-01-13/i });
-    await user.dblClick(excludedCell);
-    expect(screen.getByText(/^2026-01-13$/)).toBeInTheDocument();
-    await user.dblClick(excludedCell);
-    expect(screen.getByText(/keine ausgeschlossenen termine/i)).toBeInTheDocument();
-    await user.dblClick(excludedCell);
-    expect(screen.getByText(/^2026-01-13$/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /datum 2026-01-05/i }));
+    await user.click(screen.getByRole("button", { name: /datum 2026-01-26/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent("2026-01-05");
+      expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent("2026-01-26");
+    });
     await user.click(screen.getByRole("button", { name: /kalender schließen/i }));
     expect(screen.queryByRole("button", { name: /datum 2026-01-13/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
+    const excludedCell = screen.getByRole("button", { name: /ausnahme datum 2026-01-13/i });
+    await user.click(excludedCell);
+    expect(screen.getByText(/^2026-01-13$/)).toBeInTheDocument();
+    await user.click(excludedCell);
+    expect(screen.getByText(/keine ausgeschlossenen termine/i)).toBeInTheDocument();
+    await user.click(excludedCell);
+    expect(screen.getByText(/^2026-01-13$/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /kalender schließen/i }));
+    expect(screen.queryByRole("button", { name: /ausnahme datum 2026-01-13/i })).not.toBeInTheDocument();
 
     const saveButtons = screen.getAllByRole("button", { name: /termine übernehmen/i });
     await user.click(saveButtons[saveButtons.length - 1]);
@@ -589,8 +600,8 @@ describe("CourseList", () => {
         expect.objectContaining({
           planningMode: "bounded_series",
           visibilityMode: "fixed_window",
-          seriesStartDate: "2026-01-01",
-          seriesEndDate: "2026-01-31",
+          seriesStartDate: "2026-01-05",
+          seriesEndDate: "2026-01-26",
           excludedDates: ["2026-01-13"],
         }),
       );

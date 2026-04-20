@@ -55,8 +55,11 @@ type CourseDatesEditorState = {
   seriesStartDate: string;
   seriesEndDate: string;
   excludedDates: string[];
-  calendarMonth: string;
+  rangeCalendarMonth: string;
+  excludedCalendarMonth: string;
+  rangeDatePickerOpen: boolean;
   excludedDatePickerOpen: boolean;
+  rangeSelectionTarget: "start" | "end";
 };
 
 const WEEKDAY_ORDER: Record<string, number> = {
@@ -93,20 +96,20 @@ const STATUS_OPTIONS: Array<{ value: CourseStatus; label: string }> = [
 ];
 
 const PLANNING_MODE_OPTIONS: Array<{ value: CoursePlanningMode; label: string }> = [
-  { value: "bounded_series", label: "Serienplanung (fixes Fenster)" },
+  { value: "bounded_series", label: "Kursblock (fixes Fenster)" },
   { value: "rolling_continuous", label: "Durchlaufend (rollende Sicht)" },
 ];
 
 function planningModeLabel(mode: CoursePlanningMode | undefined): string {
   if (mode === "rolling_continuous") return "Durchlaufend (rollend)";
-  return "Serienplanung (fixes Fenster)";
+  return "Kursblock (fixes Fenster)";
 }
 
 function planningModeHint(mode: CoursePlanningMode): string {
   if (mode === "rolling_continuous") {
     return "Durchlaufend: Termine sind rollend sichtbar (z. B. 8 Wochen in die Zukunft).";
   }
-  return "Serienplanung: z. B. Quartal oder Kursblock mit Start- und Enddatum.";
+  return "Kursblock: z. B. Quartal oder Kursreihe mit Start- und Enddatum.";
 }
 
 function toIsoDateOnly(date: Date): string {
@@ -217,6 +220,8 @@ type CalendarCell = {
   inSeriesRange: boolean;
   isSeriesDate: boolean;
   isExcluded: boolean;
+  isRangeStart: boolean;
+  isRangeEnd: boolean;
 };
 
 function buildSeriesCalendarCells(
@@ -258,6 +263,8 @@ function buildSeriesCalendarCells(
       inSeriesRange,
       isSeriesDate,
       isExcluded: excludedSet.has(isoDate),
+      isRangeStart: isoDate === normalizedRangeStart,
+      isRangeEnd: isoDate === normalizedRangeEnd,
     });
   }
   return cells;
@@ -493,8 +500,11 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       seriesStartDate: initialStart,
       seriesEndDate: course.seriesEndDate ?? defaults.end,
       excludedDates: dedupeAndSortDates(course.excludedDates ?? []),
-      calendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
+      rangeCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
+      excludedCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
+      rangeDatePickerOpen: false,
       excludedDatePickerOpen: false,
+      rangeSelectionTarget: "start",
     });
     resetFormError();
   };
@@ -596,19 +606,33 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       datesState.excludedDates,
     );
   }, [datesState]);
-  const datesCalendarCells = useMemo(() => {
+  const rangeCalendarCells = useMemo(() => {
     if (!datesState) return [];
     return buildSeriesCalendarCells(
-      datesState.calendarMonth,
+      datesState.rangeCalendarMonth,
       datesState.weekday,
       datesState.seriesStartDate,
       datesState.seriesEndDate,
       datesState.excludedDates,
     );
   }, [datesState]);
-  const datesCalendarMonthLabel = useMemo(() => {
+  const rangeCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
-    return formatMonthLabel(datesState.calendarMonth);
+    return formatMonthLabel(datesState.rangeCalendarMonth);
+  }, [datesState]);
+  const excludedCalendarCells = useMemo(() => {
+    if (!datesState) return [];
+    return buildSeriesCalendarCells(
+      datesState.excludedCalendarMonth,
+      datesState.weekday,
+      datesState.seriesStartDate,
+      datesState.seriesEndDate,
+      datesState.excludedDates,
+    );
+  }, [datesState]);
+  const excludedCalendarMonthLabel = useMemo(() => {
+    if (!datesState) return "";
+    return formatMonthLabel(datesState.excludedCalendarMonth);
   }, [datesState]);
 
   useEffect(() => {
@@ -739,6 +763,31 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     }
   };
 
+  const toggleRangeDatePicker = () => {
+    if (saving) return;
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            rangeDatePickerOpen: !prev.rangeDatePickerOpen,
+            excludedDatePickerOpen: false,
+          }
+        : prev,
+    );
+  };
+
+  const closeRangeDatePicker = () => {
+    if (saving) return;
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            rangeDatePickerOpen: false,
+          }
+        : prev,
+    );
+  };
+
   const toggleExcludedDatePicker = () => {
     if (saving) return;
     setDatesState((prev) =>
@@ -746,6 +795,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         ? {
             ...prev,
             excludedDatePickerOpen: !prev.excludedDatePickerOpen,
+            rangeDatePickerOpen: false,
           }
         : prev,
     );
@@ -763,13 +813,56 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     );
   };
 
+  const setSeriesRangeDate = (isoDate: string) => {
+    if (saving) return;
+    if (!isValidIsoDateOnly(isoDate)) return;
+    setDatesState((prev) => {
+      if (!prev) return prev;
+      const target = prev.rangeSelectionTarget;
+      let nextStart = prev.seriesStartDate;
+      let nextEnd = prev.seriesEndDate;
+      if (target === "start") {
+        // First click starts a new range selection.
+        nextStart = isoDate;
+        nextEnd = isoDate;
+      } else {
+        nextEnd = isoDate;
+        if (compareIsoDate(nextStart, nextEnd) > 0) {
+          const previousStart = nextStart;
+          nextStart = nextEnd;
+          nextEnd = previousStart;
+        }
+      }
+
+      return {
+        ...prev,
+        seriesStartDate: nextStart,
+        seriesEndDate: nextEnd,
+        rangeSelectionTarget: target === "start" ? "end" : "start",
+      };
+    });
+    setFormError(null);
+  };
+
+  const shiftRangeCalendarMonth = (monthDelta: number) => {
+    if (saving) return;
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            rangeCalendarMonth: shiftMonthKey(prev.rangeCalendarMonth, monthDelta),
+          }
+        : prev,
+    );
+  };
+
   const shiftExcludedCalendarMonth = (monthDelta: number) => {
     if (saving) return;
     setDatesState((prev) =>
       prev
         ? {
             ...prev,
-            calendarMonth: shiftMonthKey(prev.calendarMonth, monthDelta),
+            excludedCalendarMonth: shiftMonthKey(prev.excludedCalendarMonth, monthDelta),
           }
         : prev,
     );
@@ -1249,39 +1342,105 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
               </p>
             ) : (
               <div className="dialog-stack">
-                <label className="course-editor-field-label">
-                  Startdatum
-                  <input
-                    type="date"
-                    aria-label="Serienstart"
-                    value={datesState.seriesStartDate}
-                    onChange={(event) =>
-                      setDatesState((prev) =>
-                        prev ? { ...prev, seriesStartDate: normalizeIsoDate(event.target.value) } : prev,
-                      )
-                    }
-                    disabled={saving}
-                    className="dialog-field"
-                  />
-                </label>
-                <label className="course-editor-field-label">
-                  Enddatum
-                  <input
-                    type="date"
-                    aria-label="Serienende"
-                    value={datesState.seriesEndDate}
-                    onChange={(event) =>
-                      setDatesState((prev) =>
-                        prev ? { ...prev, seriesEndDate: normalizeIsoDate(event.target.value) } : prev,
-                      )
-                    }
-                    disabled={saving}
-                    className="dialog-field"
-                  />
-                </label>
+                <div className="course-editor-subsection">
+                  <strong className="course-editor-list-title">Zeitraum</strong>
+                  <p className="course-editor-note">
+                    Start: <strong aria-label="Startdatum Wert">{datesState.seriesStartDate}</strong> | Ende:{" "}
+                    <strong aria-label="Enddatum Wert">{datesState.seriesEndDate}</strong>
+                  </p>
+                  <div className="course-editor-inline-row">
+                    <button
+                      type="button"
+                      className="modal-action-btn course-editor-icon-btn"
+                      onClick={toggleRangeDatePicker}
+                      disabled={saving}
+                      title={datesState.rangeDatePickerOpen ? "Kalender ausblenden" : "Kalender öffnen"}
+                      aria-label="Kalender für Zeitraum öffnen"
+                    >
+                      <Calendar size={16} aria-hidden="true" />
+                    </button>
+                    <span className="course-editor-note">
+                      Wähle einen Zeitraum.
+                    </span>
+                  </div>
+                  {datesState.rangeDatePickerOpen && (
+                    <div className="course-editor-calendar-block" role="group" aria-label="Kalender Zeitraum">
+                      <div className="course-editor-calendar-nav">
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={() => shiftRangeCalendarMonth(-1)}
+                          disabled={saving}
+                        >
+                          Vorheriger Monat
+                        </button>
+                        <strong>{rangeCalendarMonthLabel}</strong>
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={() => shiftRangeCalendarMonth(1)}
+                          disabled={saving}
+                        >
+                          Nächster Monat
+                        </button>
+                      </div>
+                      <div className="course-editor-calendar-weekdays" aria-hidden="true">
+                        {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((label) => (
+                          <span key={label}>{label}</span>
+                        ))}
+                      </div>
+                      <div className="course-editor-calendar-grid">
+                        {rangeCalendarCells.map((cell) => {
+                          const cellClassName = [
+                            "course-editor-calendar-cell",
+                            cell.inCurrentMonth ? "" : "is-outside-month",
+                            cell.inSeriesRange ? "is-in-range" : "",
+                            cell.isRangeStart ? "is-range-start" : "",
+                            cell.isRangeEnd ? "is-range-end" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ");
+                          return (
+                            <button
+                              key={cell.isoDate}
+                              type="button"
+                              className={cellClassName}
+                              aria-label={`Datum ${cell.isoDate}`}
+                              onClick={() => setSeriesRangeDate(cell.isoDate)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  setSeriesRangeDate(cell.isoDate);
+                                }
+                              }}
+                              disabled={saving}
+                              title="Klick: Start/Ende setzen"
+                            >
+                              {cell.dayOfMonth}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="course-editor-calendar-legend">
+                        <span><em className="legend-dot range" /> Zeitraum</span>
+                        <span><em className="legend-dot boundary" /> Start/Ende</span>
+                      </div>
+                      <div className="course-editor-calendar-actions">
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={closeRangeDatePicker}
+                          disabled={saving}
+                        >
+                          Kalender schließen
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div className="course-editor-subsection">
-                  <strong className="course-editor-list-title">Ausnahmetermine</strong>
+                  <strong className="course-editor-list-title">Ausgeschlossene Termin</strong>
                   <div className="course-editor-inline-row">
                     <button
                       type="button"
@@ -1293,8 +1452,13 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                     >
                       <Calendar size={16} aria-hidden="true" />
                     </button>
-                    <span className="course-editor-note">Doppelklick auf einen Serientermin: als Ausnahme setzen/entfernen.</span>
+                    <span className="course-editor-note">
+                      Nur Serientermine im Zeitraum sind wählbar.
+                    </span>
                   </div>
+                  <p className="course-editor-mobile-hint">
+                    Mobile: Tippen auf Serientermin setzt/entfernt eine Ausnahme.
+                  </p>
                   {datesState.excludedDatePickerOpen && (
                     <div className="course-editor-calendar-block" role="group" aria-label="Kalender Ausnahmetermine">
                       <div className="course-editor-calendar-nav">
@@ -1306,7 +1470,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                         >
                           Vorheriger Monat
                         </button>
-                        <strong>{datesCalendarMonthLabel}</strong>
+                        <strong>{excludedCalendarMonthLabel}</strong>
                         <button
                           type="button"
                           className="modal-action-btn course-editor-inline-action"
@@ -1322,7 +1486,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                         ))}
                       </div>
                       <div className="course-editor-calendar-grid">
-                        {datesCalendarCells.map((cell) => {
+                        {excludedCalendarCells.map((cell) => {
                           const cellClassName = [
                             "course-editor-calendar-cell",
                             cell.inCurrentMonth ? "" : "is-outside-month",
@@ -1331,28 +1495,21 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                           ]
                             .filter(Boolean)
                             .join(" ");
-                          const canPick = cell.isSeriesDate;
                           return (
                             <button
-                              key={cell.isoDate}
+                              key={`excluded-${cell.isoDate}`}
                               type="button"
                               className={cellClassName}
-                              aria-label={`Datum ${cell.isoDate}`}
-                              onDoubleClick={() => toggleExcludedDateFromCalendar(cell.isoDate)}
+                              aria-label={`Ausnahme Datum ${cell.isoDate}`}
+                              onClick={() => toggleExcludedDateFromCalendar(cell.isoDate)}
                               onKeyDown={(event) => {
                                 if (event.key === "Enter") {
                                   event.preventDefault();
                                   toggleExcludedDateFromCalendar(cell.isoDate);
                                 }
                               }}
-                              disabled={!canPick || saving}
-                              title={
-                                canPick
-                                  ? cell.isExcluded
-                                    ? "Doppelklick: Ausnahme entfernen"
-                                    : "Doppelklick: Ausnahme hinzufügen"
-                                  : "Nur Serientermine im Zeitraum auswählbar"
-                              }
+                              disabled={!cell.isSeriesDate || saving}
+                              title={cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar"}
                             >
                               {cell.dayOfMonth}
                             </button>
@@ -1378,7 +1535,6 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                 </div>
 
                 <div className="course-editor-subsection">
-                  <strong className="course-editor-list-title">Ausgeschlossene Termine</strong>
                   {datesState.excludedDates.length === 0 ? (
                     <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
                   ) : (
