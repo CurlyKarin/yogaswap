@@ -91,6 +91,13 @@ function planningModeLabel(mode: CoursePlanningMode | undefined): string {
   return "Serienplanung (fixes Fenster)";
 }
 
+function planningModeHint(mode: CoursePlanningMode): string {
+  if (mode === "rolling_continuous") {
+    return "Durchlaufend: Termine sind rollend sichtbar (z. B. 8 Wochen in die Zukunft).";
+  }
+  return "Serienplanung: z. B. Quartal oder Kursblock mit Start- und Enddatum.";
+}
+
 function toIsoDateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -748,6 +755,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                   </option>
                 ))}
               </select>
+              <p className="course-editor-inline-hint">{planningModeHint(createState.planningMode)}</p>
               {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
             </div>
             <div className="modal-actions dialog-actions">
@@ -867,6 +875,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                   </option>
                 ))}
               </select>
+              <p className="course-editor-inline-hint">{planningModeHint(editState.planningMode)}</p>
               {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
             </div>
             <div className="modal-actions dialog-actions">

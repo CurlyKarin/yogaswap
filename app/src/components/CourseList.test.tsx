@@ -279,6 +279,7 @@ describe("CourseList", () => {
     const user = userEvent.setup();
     const createButtons = screen.getAllByRole("button", { name: /kurs anlegen/i });
     await user.click(createButtons[createButtons.length - 1]);
+    expect(screen.getByText(/Serienplanung: z\. B\. Quartal/i)).toBeInTheDocument();
     await user.type(screen.getByLabelText("Kursname"), "Neuer Kurs");
     await user.clear(screen.getByLabelText("Kapazität"));
     await user.type(screen.getByLabelText("Kapazität"), "12");
@@ -388,6 +389,7 @@ describe("CourseList", () => {
 
     const saveButton = screen.getByRole("button", { name: /^speichern$/i });
     expect(saveButton).toBeDisabled();
+    expect(screen.getByText(/Serienplanung: z\. B\. Quartal/i)).toBeInTheDocument();
 
     const nameInput = screen.getByLabelText("Kursname bearbeiten");
     await user.clear(nameInput);
