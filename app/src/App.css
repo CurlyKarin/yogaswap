@@ -430,6 +430,12 @@ a:focus-visible {
   font-size: 12px;
 }
 
+.course-editor-calendar-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
 .legend-dot {
   display: inline-block;
   width: 9px;

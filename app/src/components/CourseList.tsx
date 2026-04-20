@@ -751,6 +751,18 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     );
   };
 
+  const closeExcludedDatePicker = () => {
+    if (saving) return;
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            excludedDatePickerOpen: false,
+          }
+        : prev,
+    );
+  };
+
   const shiftExcludedCalendarMonth = (monthDelta: number) => {
     if (saving) return;
     setDatesState((prev) =>
@@ -1351,6 +1363,16 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                         <span><em className="legend-dot series" /> Serientermin</span>
                         <span><em className="legend-dot excluded" /> ausgeschlossen</span>
                       </div>
+                      <div className="course-editor-calendar-actions">
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={closeExcludedDatePicker}
+                          disabled={saving}
+                        >
+                          Kalender schließen
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1369,11 +1391,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                   {datesPreview.length === 0 ? (
                     <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
                   ) : (
-                    <ul className="course-editor-list">
-                      {datesPreview.map((entry) => (
-                        <li key={entry}>{entry}</li>
-                      ))}
-                    </ul>
+                    <p className="course-editor-comma-list">{datesPreview.join(", ")}</p>
                   )}
                 </div>
               </div>
