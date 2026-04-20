@@ -305,9 +305,11 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     isValidIsoDateOnly(datesState.seriesStartDate) &&
     isValidIsoDateOnly(datesState.seriesEndDate) &&
     compareIsoDate(datesState.seriesStartDate, datesState.seriesEndDate) <= 0;
+  const isActiveReadOnly = course?.status === "active";
 
   const canSaveDatesConfig =
     canManageCourses &&
+    !isActiveReadOnly &&
     !saving &&
     !!datesState &&
     datesState.planningMode === "bounded_series" &&
@@ -422,7 +424,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
   };
 
   const setSeriesRangeDate = (isoDate: string) => {
-    if (saving) return;
+    if (saving || isActiveReadOnly) return;
     if (!isValidIsoDateOnly(isoDate)) return;
     setDatesState((prev) => {
       if (!prev) return prev;
@@ -475,7 +477,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
   };
 
   const toggleExcludedDateFromCalendar = (isoDate: string) => {
-    if (saving) return;
+    if (saving || isActiveReadOnly) return;
     setDatesState((prev) => {
       if (!prev) return prev;
       const inSeriesRange =
@@ -499,7 +501,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
   };
 
   const saveDatesConfig = async () => {
-    if (!datesState || !canManageCourses) return;
+    if (!datesState || !canManageCourses || isActiveReadOnly) return;
     if (datesState.planningMode !== "bounded_series") {
       setFormError("Terminverwaltung v1 unterstützt aktuell nur Serienplanung.");
       return;
@@ -552,6 +554,11 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
         <p className="course-editor-note">
           Planungsmodus: <strong>{planningModeLabel(course.planningMode)}</strong>
         </p>
+        {isActiveReadOnly && (
+          <p className="course-editor-note">
+            Kurs ist aktiv. Terminplanung ist gesperrt. Änderungen erfolgen über Terminabsage.
+          </p>
+        )}
         {datesState.planningMode !== "bounded_series" ? (
           <p className="course-editor-note">
             Terminverwaltung v1 unterstützt aktuell nur Serienplanung. Bitte den Planungsmodus in den
@@ -576,7 +583,9 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                 >
                   <Calendar size={16} aria-hidden="true" />
                 </button>
-                <span className="course-editor-note">Wähle einen Zeitraum.</span>
+                <span className="course-editor-note">
+                  {isActiveReadOnly ? "Kalenderansicht (nur lesen)." : "Wähle einen Zeitraum."}
+                </span>
               </div>
               {datesState.rangeDatePickerOpen && (
                 <div className="course-editor-calendar-block" role="group" aria-label="Kalender Zeitraum">
@@ -628,8 +637,8 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                               setSeriesRangeDate(cell.isoDate);
                             }
                           }}
-                          disabled={saving}
-                          title="Klick: Start/Ende setzen"
+                          disabled={saving || isActiveReadOnly}
+                          title={isActiveReadOnly ? "Nur Ansicht im aktiven Kurs" : "Klick: Start/Ende setzen"}
                         >
                           {cell.dayOfMonth}
                         </button>
@@ -721,8 +730,12 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                               toggleExcludedDateFromCalendar(cell.isoDate);
                             }
                           }}
-                          disabled={!cell.isSeriesDate || saving}
-                          title={cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar"}
+                          disabled={!cell.isSeriesDate || saving || isActiveReadOnly}
+                          title={
+                            isActiveReadOnly
+                              ? "Nur Ansicht im aktiven Kurs"
+                              : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
+                          }
                         >
                           {cell.dayOfMonth}
                         </button>
@@ -767,17 +780,25 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
         )}
         {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
         <div className="modal-actions">
-          <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>
-            Abbrechen
-          </button>
-          <button
-            type="button"
-            className="btn-primary modal-action-btn"
-            onClick={saveDatesConfig}
-            disabled={!canSaveDatesConfig}
-          >
-            {saving ? "Speichere..." : "Termine übernehmen"}
-          </button>
+          {isActiveReadOnly ? (
+            <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>
+              Schließen
+            </button>
+          ) : (
+            <>
+              <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-primary modal-action-btn"
+                onClick={saveDatesConfig}
+                disabled={!canSaveDatesConfig}
+              >
+                {saving ? "Speichere..." : "Termine übernehmen"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

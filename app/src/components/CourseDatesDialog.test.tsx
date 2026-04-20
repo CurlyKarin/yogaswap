@@ -19,7 +19,7 @@ function makeCourse(overrides: Partial<Course> = {}): Course {
     weekday: "Tue",
     time: "10:00",
     capacity: 10,
-    status: "active",
+    status: "draft",
     planningMode: "bounded_series",
     seriesStartDate: "2026-01-01",
     seriesEndDate: "2026-01-31",
@@ -143,5 +143,39 @@ describe("CourseDatesDialog", () => {
     await user.click(tuesdayCell);
 
     expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
+  });
+
+  it("ist bei aktivem Kurs read-only mit Kalenderansicht", async () => {
+    mockedUpdateCourse.mockResolvedValue({});
+    const onClose = vi.fn();
+    render(
+      <CourseDatesDialog
+        course={makeCourse({ status: "active" })}
+        canManageCourses
+        onClose={onClose}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+
+    expect(dialogQueries.getByText(/kurs ist aktiv\. terminplanung ist gesperrt/i)).toBeInTheDocument();
+    expect(dialogQueries.queryByRole("button", { name: /termine übernehmen/i })).not.toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: /^schließen$/i })).toBeInTheDocument();
+
+    await user.click(dialogQueries.getByRole("button", { name: /kalender für zeitraum öffnen/i }));
+    const rangeDateButton = dialogQueries.getByRole("button", { name: /datum 2026-01-06/i });
+    expect(rangeDateButton).toBeDisabled();
+
+    await user.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
+    const excludedDateButton = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-01-13/i });
+    expect(excludedDateButton).toBeDisabled();
+
+    await user.click(dialogQueries.getByRole("button", { name: /^schließen$/i }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(mockedUpdateCourse).not.toHaveBeenCalled();
   });
 });

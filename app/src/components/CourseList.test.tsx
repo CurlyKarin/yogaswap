@@ -549,7 +549,7 @@ describe("CourseList", () => {
         weekday: "Tue",
         time: "10:00",
         capacity: 10,
-        status: "active",
+        status: "draft",
         planningMode: "bounded_series",
         seriesStartDate: "2026-01-01",
         seriesEndDate: "2026-01-31",
