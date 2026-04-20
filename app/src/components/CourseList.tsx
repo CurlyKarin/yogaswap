@@ -207,10 +207,16 @@ function shiftMonthKey(value: string, monthDelta: number): string {
   return toMonthKey(parsed);
 }
 
-function formatMonthLabel(monthKey: string): string {
+function formatMonthLabel(monthKey: string, locale?: string): string {
   const parsed = parseMonthKey(monthKey);
   if (!parsed) return monthKey;
-  return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric", timeZone: "UTC" }).format(parsed);
+  return new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(parsed);
+}
+
+function formatIsoDateForDisplay(isoDate: string, locale?: string): string {
+  const parsed = parseIsoDateOnlyUtc(isoDate);
+  if (!parsed) return isoDate;
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(parsed);
 }
 
 type CalendarCell = {
@@ -616,10 +622,14 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       datesState.excludedDates,
     );
   }, [datesState]);
+  const displayLocale =
+    typeof navigator !== "undefined" && typeof navigator.language === "string" && navigator.language
+      ? navigator.language
+      : "de-DE";
   const rangeCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
-    return formatMonthLabel(datesState.rangeCalendarMonth);
-  }, [datesState]);
+    return formatMonthLabel(datesState.rangeCalendarMonth, displayLocale);
+  }, [datesState, displayLocale]);
   const excludedCalendarCells = useMemo(() => {
     if (!datesState) return [];
     return buildSeriesCalendarCells(
@@ -632,8 +642,22 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   }, [datesState]);
   const excludedCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
-    return formatMonthLabel(datesState.excludedCalendarMonth);
-  }, [datesState]);
+    return formatMonthLabel(datesState.excludedCalendarMonth, displayLocale);
+  }, [datesState, displayLocale]);
+  const formattedSeriesStart = datesState
+    ? formatIsoDateForDisplay(datesState.seriesStartDate, displayLocale)
+    : "";
+  const formattedSeriesEnd = datesState
+    ? formatIsoDateForDisplay(datesState.seriesEndDate, displayLocale)
+    : "";
+  const formattedExcludedDates = useMemo(() => {
+    if (!datesState) return [];
+    return datesState.excludedDates.map((entry) => formatIsoDateForDisplay(entry, displayLocale));
+  }, [datesState, displayLocale]);
+  const formattedPreviewDates = useMemo(
+    () => datesPreview.map((entry) => formatIsoDateForDisplay(entry, displayLocale)),
+    [datesPreview, displayLocale],
+  );
 
   useEffect(() => {
     const activeModal = createOpen
@@ -1345,8 +1369,8 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                 <div className="course-editor-subsection">
                   <strong className="course-editor-list-title">Zeitraum</strong>
                   <p className="course-editor-note">
-                    Start: <strong aria-label="Startdatum Wert">{datesState.seriesStartDate}</strong> | Ende:{" "}
-                    <strong aria-label="Enddatum Wert">{datesState.seriesEndDate}</strong>
+                    Start: <strong aria-label="Startdatum Wert">{formattedSeriesStart}</strong> | Ende:{" "}
+                    <strong aria-label="Enddatum Wert">{formattedSeriesEnd}</strong>
                   </p>
                   <div className="course-editor-inline-row">
                     <button
@@ -1538,7 +1562,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                   {datesState.excludedDates.length === 0 ? (
                     <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
                   ) : (
-                    <p className="course-editor-comma-list">{datesState.excludedDates.join(", ")}</p>
+                    <p className="course-editor-comma-list">{formattedExcludedDates.join(", ")}</p>
                   )}
                 </div>
 
@@ -1547,7 +1571,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                   {datesPreview.length === 0 ? (
                     <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
                   ) : (
-                    <p className="course-editor-comma-list">{datesPreview.join(", ")}</p>
+                    <p className="course-editor-comma-list">{formattedPreviewDates.join(", ")}</p>
                   )}
                 </div>
               </div>

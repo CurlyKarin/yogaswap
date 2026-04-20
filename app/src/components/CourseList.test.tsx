@@ -55,6 +55,12 @@ const baseMembership: UserTenantMembership = {
   role: "participant",
 };
 
+function formatDateForDisplay(isoDate: string): string {
+  return new Intl.DateTimeFormat(navigator.language, { dateStyle: "medium", timeZone: "UTC" }).format(
+    new Date(`${isoDate}T12:00:00.000Z`),
+  );
+}
+
 describe("CourseList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -565,8 +571,8 @@ describe("CourseList", () => {
     const datesButtons = screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i });
     await user.click(datesButtons[datesButtons.length - 1]);
 
-    expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent("2026-01-01");
-    expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent("2026-01-31");
+    expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-01"));
+    expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-31"));
 
     await user.click(screen.getByRole("button", { name: /kalender für zeitraum öffnen/i }));
     expect(screen.getByRole("button", { name: /kalender schließen/i })).toBeInTheDocument();
@@ -574,8 +580,8 @@ describe("CourseList", () => {
     await user.click(screen.getByRole("button", { name: /datum 2026-01-05/i }));
     await user.click(screen.getByRole("button", { name: /datum 2026-01-26/i }));
     await waitFor(() => {
-      expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent("2026-01-05");
-      expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent("2026-01-26");
+      expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-05"));
+      expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-26"));
     });
     await user.click(screen.getByRole("button", { name: /kalender schließen/i }));
     expect(screen.queryByRole("button", { name: /datum 2026-01-13/i })).not.toBeInTheDocument();
@@ -583,11 +589,11 @@ describe("CourseList", () => {
     await user.click(screen.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
     const excludedCell = screen.getByRole("button", { name: /ausnahme datum 2026-01-13/i });
     await user.click(excludedCell);
-    expect(screen.getByText(/^2026-01-13$/)).toBeInTheDocument();
+    expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
     await user.click(excludedCell);
     expect(screen.getByText(/keine ausgeschlossenen termine/i)).toBeInTheDocument();
     await user.click(excludedCell);
-    expect(screen.getByText(/^2026-01-13$/)).toBeInTheDocument();
+    expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /kalender schließen/i }));
     expect(screen.queryByRole("button", { name: /ausnahme datum 2026-01-13/i })).not.toBeInTheDocument();
 
