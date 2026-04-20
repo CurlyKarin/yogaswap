@@ -1,5 +1,5 @@
 import axios from "axios";
-import { Course, CourseStatus } from "shared/types";
+import { Course, CoursePlanningMode, CourseStatus, CourseVisibilityMode } from "shared/types";
 
 type ApiCourse = Omit<Course, "participants" | "dates"> & {
   participants?: string[];
@@ -13,6 +13,15 @@ export type CreateCourseRequest = {
   time: string;
   capacity: number;
   status?: CourseStatus;
+  planningMode?: CoursePlanningMode;
+  visibilityMode?: CourseVisibilityMode;
+  seriesStartDate?: string;
+  seriesEndDate?: string;
+  visibleFrom?: string;
+  visibleUntil?: string;
+  visibilityHorizonWeeks?: number;
+  excludedDates?: string[];
+  includedDates?: string[];
 };
 
 export type UpdateCourseRequest = Partial<CreateCourseRequest>;

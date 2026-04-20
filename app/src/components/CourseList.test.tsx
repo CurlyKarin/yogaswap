@@ -289,6 +289,8 @@ describe("CourseList", () => {
         expect.objectContaining({
           name: "Neuer Kurs",
           capacity: 12,
+          planningMode: "bounded_series",
+          visibilityMode: "fixed_window",
         }),
       );
     });
@@ -497,6 +499,7 @@ describe("CourseList", () => {
         time: "10:00",
         capacity: 10,
         status: "active",
+        planningMode: "rolling_continuous",
         participants: [],
         dates: ["2099-06-16"],
       },
@@ -511,15 +514,18 @@ describe("CourseList", () => {
     const user = userEvent.setup();
     await screen.findAllByText("Kurs A");
 
-    await user.click(screen.getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i })[0]);
+    const membersButtons = screen.getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i });
+    await user.click(membersButtons[membersButtons.length - 1]);
     expect(screen.getByLabelText("Kursmitglieder bearbeiten")).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await waitFor(() => {
       expect(screen.queryByLabelText("Kursmitglieder bearbeiten")).not.toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i })[0]);
+    const datesButtons = screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i });
+    await user.click(datesButtons[datesButtons.length - 1]);
     expect(screen.getByLabelText("Kurstermine bearbeiten")).toBeInTheDocument();
+    expect(screen.getByText(/Durchlaufend \(rollend\)/i)).toBeInTheDocument();
   });
 });
 

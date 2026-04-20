@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, Users, CalendarDays } from "lucide-react";
 import {
   Course,
   CourseDateOverride,
+  CoursePlanningMode,
   CourseStatus,
   Swap,
   User,
@@ -35,6 +36,7 @@ type CourseEditorState = {
   time: string;
   capacity: string;
   status: CourseStatus;
+  planningMode: CoursePlanningMode;
 };
 
 type CourseCreateState = {
@@ -43,6 +45,7 @@ type CourseCreateState = {
   time: string;
   capacity: string;
   status: CourseStatus;
+  planningMode: CoursePlanningMode;
 };
 
 const WEEKDAY_ORDER: Record<string, number> = {
@@ -77,6 +80,48 @@ const STATUS_OPTIONS: Array<{ value: CourseStatus; label: string }> = [
   { value: "draft", label: "In Planung" },
   { value: "active", label: "Aktiv" },
 ];
+
+const PLANNING_MODE_OPTIONS: Array<{ value: CoursePlanningMode; label: string }> = [
+  { value: "bounded_series", label: "Serienplanung (fixes Fenster)" },
+  { value: "rolling_continuous", label: "Durchlaufend (rollende Sicht)" },
+];
+
+function planningModeLabel(mode: CoursePlanningMode | undefined): string {
+  if (mode === "rolling_continuous") return "Durchlaufend (rollend)";
+  return "Serienplanung (fixes Fenster)";
+}
+
+function toIsoDateOnly(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function buildSchedulingFromMode(mode: CoursePlanningMode) {
+  if (mode === "rolling_continuous") {
+    return {
+      planningMode: "rolling_continuous" as const,
+      visibilityMode: "rolling_horizon" as const,
+      visibilityHorizonWeeks: 8,
+    };
+  }
+
+  const today = new Date();
+  const start = toIsoDateOnly(today);
+  const end = toIsoDateOnly(addDays(today, 90));
+  return {
+    planningMode: "bounded_series" as const,
+    visibilityMode: "fixed_window" as const,
+    seriesStartDate: start,
+    seriesEndDate: end,
+    visibleFrom: start,
+    visibleUntil: end,
+  };
+}
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -116,6 +161,7 @@ function toEditorState(course: Course): CourseEditorState {
     time: course.time,
     capacity: String(course.capacity),
     status: course.status ?? "active",
+    planningMode: course.planningMode ?? "bounded_series",
   };
 }
 
@@ -136,6 +182,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     time: "18:00",
     capacity: "10",
     status: "draft",
+    planningMode: "bounded_series",
   });
   const [editState, setEditState] = useState<CourseEditorState | null>(null);
   const [editInitialState, setEditInitialState] = useState<CourseEditorState | null>(null);
@@ -247,6 +294,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       time: "18:00",
       capacity: "10",
       status: "draft",
+      planningMode: "bounded_series",
     });
     resetFormError();
     setCreateOpen(true);
@@ -349,7 +397,8 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       editState.weekday !== editInitialState.weekday ||
       editState.time !== editInitialState.time ||
       editState.capacity !== editInitialState.capacity ||
-      editState.status !== editInitialState.status);
+      editState.status !== editInitialState.status ||
+      editState.planningMode !== editInitialState.planningMode);
   const canSubmitEdit = canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
 
   useEffect(() => {
@@ -418,6 +467,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         time: createState.time,
         capacity,
         status: createState.status,
+        ...buildSchedulingFromMode(createState.planningMode),
       });
       closeCreateModal();
       await fetchData();
@@ -451,6 +501,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         time: editState.time,
         capacity,
         status: editState.status,
+        ...buildSchedulingFromMode(editState.planningMode),
       });
       closeEditModal();
       await fetchData();
@@ -679,6 +730,24 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                   </option>
                 ))}
               </select>
+              <select
+                aria-label="Planungsmodus"
+                value={createState.planningMode}
+                onChange={(event) =>
+                  setCreateState((prev) => ({
+                    ...prev,
+                    planningMode: event.target.value as CoursePlanningMode,
+                  }))
+                }
+                disabled={saving}
+                className="dialog-field"
+              >
+                {PLANNING_MODE_OPTIONS.map((mode) => (
+                  <option key={mode.value} value={mode.value}>
+                    {mode.label}
+                  </option>
+                ))}
+              </select>
               {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
             </div>
             <div className="modal-actions dialog-actions">
@@ -781,6 +850,23 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                   </option>
                 ))}
               </select>
+              <select
+                aria-label="Planungsmodus bearbeiten"
+                value={editState.planningMode}
+                onChange={(event) =>
+                  setEditState((prev) =>
+                    prev ? { ...prev, planningMode: event.target.value as CoursePlanningMode } : prev,
+                  )
+                }
+                disabled={saving}
+                className="dialog-field"
+              >
+                {PLANNING_MODE_OPTIONS.map((mode) => (
+                  <option key={mode.value} value={mode.value}>
+                    {mode.label}
+                  </option>
+                ))}
+              </select>
               {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
             </div>
             <div className="modal-actions dialog-actions">
@@ -846,6 +932,9 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
             <h4>Termine verwalten</h4>
             <p className="course-editor-note">
               Kurs: <strong>{datesTargetCourse.name}</strong>
+            </p>
+            <p className="course-editor-note">
+              Planungsmodus: <strong>{planningModeLabel(datesTargetCourse.planningMode)}</strong>
             </p>
             <p className="course-editor-note">
               Hier folgt als Nächstes die Terminliste mit Absagen/Status pro Termin als erster MVP-Schritt.
