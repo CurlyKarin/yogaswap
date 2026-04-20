@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
+import { deriveVisibleDates } from "../shared/courseDates";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -293,7 +294,29 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
 
       if (currentStatus === "active" && nextStatus === "inactive") {
-        const existingDates = item.dates?.L?.map((d) => d.S ?? "").filter(Boolean) ?? [];
+        const existingFallbackDates = item.dates?.L?.map((d) => d.S ?? "").filter(Boolean) ?? [];
+        const existingExcludedDates =
+          item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [];
+        const existingIncludedDates =
+          item.includedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [];
+        const derivedExistingDates = deriveVisibleDates({
+          planningMode: item.planningMode?.S,
+          visibilityMode: item.visibilityMode?.S,
+          weekday: item.weekday?.S ?? "",
+          seriesStartDate: item.seriesStartDate?.S,
+          seriesEndDate: item.seriesEndDate?.S,
+          visibleFrom: item.visibleFrom?.S,
+          visibleUntil: item.visibleUntil?.S,
+          visibilityHorizonWeeks: item.visibilityHorizonWeeks?.N
+            ? Number(item.visibilityHorizonWeeks.N)
+            : undefined,
+          excludedDates: existingExcludedDates,
+          includedDates: existingIncludedDates,
+          fallbackDates: existingFallbackDates,
+        });
+        const existingDates = Array.from(
+          new Set([...existingFallbackDates, ...derivedExistingDates]),
+        ).sort((a, b) => a.localeCompare(b));
         const canDeactivate = await canDeactivateCourse({
           tenantId,
           courseId,
@@ -321,7 +344,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       (item.capacity?.N ? Number.parseInt(item.capacity.N, 10) : 0);
     const nextId = item.id?.N ? Number.parseInt(item.id.N, 10) : Number.parseInt(courseId, 10);
     const nextParticipants = item.participants?.L ?? [];
-    const nextDates = item.dates?.L ?? [];
     const nextPlanningMode = planningMode ?? item.planningMode?.S;
     const nextVisibilityMode = visibilityMode ?? item.visibilityMode?.S;
     const nextSeriesStartDate = seriesStartDate ?? item.seriesStartDate?.S;
@@ -372,6 +394,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       };
     }
 
+    const nextDates = deriveVisibleDates({
+      planningMode: nextPlanningMode,
+      visibilityMode: nextVisibilityMode,
+      weekday: nextWeekday,
+      seriesStartDate: nextSeriesStartDate,
+      seriesEndDate: nextSeriesEndDate,
+      visibleFrom: nextVisibleFrom,
+      visibleUntil: nextVisibleUntil,
+      visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
+      excludedDates: nextExcludedDates,
+      includedDates: nextIncludedDates,
+      fallbackDates: item.dates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [],
+    });
+
     const updateItem: Record<string, any> = {
       tenantId: { S: tenantId },
       courseId: { S: courseId },
@@ -382,7 +418,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       capacity: { N: String(nextCapacity) },
       status: { S: nextStatus },
       participants: { L: nextParticipants },
-      dates: { L: nextDates },
+      dates: { L: nextDates.map((entry) => ({ S: entry })) },
     };
     if (nextPlanningMode) updateItem.planningMode = { S: nextPlanningMode };
     if (nextVisibilityMode) updateItem.visibilityMode = { S: nextVisibilityMode };
@@ -426,9 +462,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
         excludedDates: nextExcludedDates,
         includedDates: nextIncludedDates,
-        visibleDates: nextDates.map((d) => d.S).filter(Boolean),
+        visibleDates: nextDates,
         participants: nextParticipants.map((p) => p.S).filter(Boolean),
-        dates: nextDates.map((d) => d.S).filter(Boolean),
+        dates: nextDates,
       }),
     };
   } catch (error) {

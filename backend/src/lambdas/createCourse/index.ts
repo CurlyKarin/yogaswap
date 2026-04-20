@@ -2,6 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { GetItemCommand, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
+import { deriveVisibleDates } from "../shared/courseDates";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -180,6 +181,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }, 0);
     const nextId = maxId + 1;
     const nextCourseId = String(nextId);
+    const visibleDates = deriveVisibleDates({
+      planningMode,
+      visibilityMode,
+      weekday,
+      seriesStartDate,
+      seriesEndDate,
+      visibleFrom,
+      visibleUntil,
+      visibilityHorizonWeeks,
+      excludedDates,
+      includedDates,
+      fallbackDates: [],
+    });
 
     const item: Record<string, any> = {
       tenantId: { S: tenantId },
@@ -191,7 +205,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       capacity: { N: String(capacity) },
       status: { S: status },
       participants: { L: [] },
-      dates: { L: [] },
+      dates: { L: visibleDates.map((entry) => ({ S: entry })) },
     };
     if (planningMode) item.planningMode = { S: planningMode };
     if (visibilityMode) item.visibilityMode = { S: visibilityMode };
@@ -236,9 +250,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         visibilityHorizonWeeks,
         excludedDates,
         includedDates,
-        visibleDates: [],
+        visibleDates,
         participants: [],
-        dates: [],
+        dates: visibleDates,
       }),
     };
   } catch (error: unknown) {

@@ -211,8 +211,10 @@ describe("createCourse Lambda", () => {
         visibilityMode: "fixed_window",
         excludedDates: ["2026-02-02"],
         includedDates: ["2026-02-04"],
-        visibleDates: [],
       }),
     );
+    expect(body.visibleDates).toContain("2026-01-05");
+    expect(body.visibleDates).toContain("2026-02-04");
+    expect(body.visibleDates).not.toContain("2026-02-02");
   });
 });
