@@ -1,7 +1,7 @@
 import CourseCard from "./CourseCard";
 import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState, useMemo, useCallback, useRef, type KeyboardEvent, type RefObject } from "react";
-import { Plus, Pencil, Trash2, Users, CalendarDays } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, CalendarDays, Calendar } from "lucide-react";
 import {
   Course,
   CourseDateOverride,
@@ -56,6 +56,8 @@ type CourseDatesEditorState = {
   seriesEndDate: string;
   excludedDates: string[];
   pendingExcludedDate: string;
+  calendarMonth: string;
+  excludedDatePickerOpen: boolean;
 };
 
 const WEEKDAY_ORDER: Record<string, number> = {
@@ -118,6 +120,12 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
+function addDaysUtc(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
 function buildSchedulingFromMode(mode: CoursePlanningMode) {
   if (mode === "rolling_continuous") {
     return {
@@ -162,6 +170,101 @@ function buildDefaultSeriesWindow(): { start: string; end: string } {
     start: toIsoDateOnly(today),
     end: toIsoDateOnly(addDays(today, 84)),
   };
+}
+
+function parseIsoDateOnlyUtc(value: string): Date | null {
+  if (!isValidIsoDateOnly(value)) return null;
+  const parsed = new Date(`${value}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return toIsoDateOnly(parsed) === value ? parsed : null;
+}
+
+function toMonthKey(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthKeyFromIsoDate(value: string): string | null {
+  const parsed = parseIsoDateOnlyUtc(value);
+  if (!parsed) return null;
+  return toMonthKey(parsed);
+}
+
+function parseMonthKey(value: string): Date | null {
+  if (!/^\d{4}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}-01T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function shiftMonthKey(value: string, monthDelta: number): string {
+  const parsed = parseMonthKey(value);
+  if (!parsed) {
+    return value;
+  }
+  parsed.setUTCMonth(parsed.getUTCMonth() + monthDelta);
+  return toMonthKey(parsed);
+}
+
+function formatMonthLabel(monthKey: string): string {
+  const parsed = parseMonthKey(monthKey);
+  if (!parsed) return monthKey;
+  return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric", timeZone: "UTC" }).format(parsed);
+}
+
+type CalendarCell = {
+  isoDate: string;
+  dayOfMonth: number;
+  inCurrentMonth: boolean;
+  inSeriesRange: boolean;
+  isSeriesDate: boolean;
+  isExcluded: boolean;
+  isSelected: boolean;
+};
+
+function buildSeriesCalendarCells(
+  monthKey: string,
+  weekday: string,
+  rangeStartIso: string,
+  rangeEndIso: string,
+  excludedDates: string[],
+  selectedDate: string,
+): CalendarCell[] {
+  const monthStart = parseMonthKey(monthKey);
+  const rangeStart = parseIsoDateOnlyUtc(rangeStartIso);
+  const rangeEnd = parseIsoDateOnlyUtc(rangeEndIso);
+  if (!monthStart || !rangeStart || !rangeEnd) return [];
+  const normalizedRangeStart = toIsoDateOnly(rangeStart);
+  const normalizedRangeEnd = toIsoDateOnly(rangeEnd);
+  if (compareIsoDate(normalizedRangeStart, normalizedRangeEnd) > 0) return [];
+
+  const weekdayIndex = WEEKDAY_ORDER[weekday];
+  if (!weekdayIndex || weekdayIndex < 1 || weekdayIndex > 7) return [];
+  const jsWeekday = weekdayIndex % 7;
+
+  monthStart.setUTCDate(1);
+  const offsetToMonday = (monthStart.getUTCDay() + 6) % 7;
+  const gridStart = addDaysUtc(monthStart, -offsetToMonday);
+  const currentMonth = toMonthKey(monthStart);
+  const excludedSet = new Set(dedupeAndSortDates(excludedDates));
+
+  const cells: CalendarCell[] = [];
+  for (let index = 0; index < 42; index += 1) {
+    const current = addDaysUtc(gridStart, index);
+    const isoDate = toIsoDateOnly(current);
+    const inSeriesRange =
+      compareIsoDate(isoDate, normalizedRangeStart) >= 0 && compareIsoDate(isoDate, normalizedRangeEnd) <= 0;
+    const isSeriesDate = inSeriesRange && current.getUTCDay() === jsWeekday;
+    cells.push({
+      isoDate,
+      dayOfMonth: current.getUTCDate(),
+      inCurrentMonth: toMonthKey(current) === currentMonth,
+      inSeriesRange,
+      isSeriesDate,
+      isExcluded: excludedSet.has(isoDate),
+      isSelected: isoDate === selectedDate,
+    });
+  }
+  return cells;
 }
 
 function generateSeriesPreviewDates(weekday: string, startDate: string, endDate: string, excludedDates: string[]): string[] {
@@ -385,15 +488,18 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
 
   const openDatesModal = (course: Course) => {
     const defaults = buildDefaultSeriesWindow();
+    const initialStart = course.seriesStartDate ?? defaults.start;
     setDatesTargetId(course.id);
     setDatesState({
       courseId: course.id,
       weekday: course.weekday,
       planningMode: course.planningMode ?? "bounded_series",
-      seriesStartDate: course.seriesStartDate ?? defaults.start,
+      seriesStartDate: initialStart,
       seriesEndDate: course.seriesEndDate ?? defaults.end,
       excludedDates: dedupeAndSortDates(course.excludedDates ?? []),
       pendingExcludedDate: "",
+      calendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
+      excludedDatePickerOpen: false,
     });
     resetFormError();
   };
@@ -494,6 +600,21 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       datesState.seriesEndDate,
       datesState.excludedDates,
     );
+  }, [datesState]);
+  const datesCalendarCells = useMemo(() => {
+    if (!datesState) return [];
+    return buildSeriesCalendarCells(
+      datesState.calendarMonth,
+      datesState.weekday,
+      datesState.seriesStartDate,
+      datesState.seriesEndDate,
+      datesState.excludedDates,
+      datesState.pendingExcludedDate,
+    );
+  }, [datesState]);
+  const datesCalendarMonthLabel = useMemo(() => {
+    if (!datesState) return "";
+    return formatMonthLabel(datesState.calendarMonth);
   }, [datesState]);
 
   useEffect(() => {
@@ -641,6 +762,51 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
           }
         : prev,
     );
+  };
+
+  const toggleExcludedDatePicker = () => {
+    if (saving) return;
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            excludedDatePickerOpen: !prev.excludedDatePickerOpen,
+          }
+        : prev,
+    );
+  };
+
+  const shiftExcludedCalendarMonth = (monthDelta: number) => {
+    if (saving) return;
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            calendarMonth: shiftMonthKey(prev.calendarMonth, monthDelta),
+          }
+        : prev,
+    );
+  };
+
+  const selectExcludedDateFromCalendar = (isoDate: string) => {
+    if (saving) return;
+    setDatesState((prev) => {
+      if (!prev) return prev;
+      const inSeriesRange =
+        compareIsoDate(isoDate, prev.seriesStartDate) >= 0 && compareIsoDate(isoDate, prev.seriesEndDate) <= 0;
+      const weekdayIndex = WEEKDAY_ORDER[prev.weekday];
+      const date = parseIsoDateOnlyUtc(isoDate);
+      const isSeriesWeekday =
+        !!date && !!weekdayIndex && weekdayIndex >= 1 && weekdayIndex <= 7 && date.getUTCDay() === weekdayIndex % 7;
+      if (!inSeriesRange || !isSeriesWeekday) {
+        return prev;
+      }
+      return {
+        ...prev,
+        pendingExcludedDate: isoDate,
+      };
+    });
+    setFormError(null);
   };
 
   const removeExcludedDate = (date: string) => {
@@ -1136,28 +1302,99 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                 </label>
 
                 <div className="course-editor-subsection">
-                  <label className="course-editor-field-label">
-                    Ausnahmetermin hinzufügen
-                    <input
-                      type="date"
-                      aria-label="Ausnahmetermin"
-                      value={datesState.pendingExcludedDate}
-                      onChange={(event) =>
-                        setDatesState((prev) =>
-                          prev ? { ...prev, pendingExcludedDate: normalizeIsoDate(event.target.value) } : prev,
-                        )
-                      }
+                  <strong className="course-editor-list-title">Ausnahmetermine</strong>
+                  <div className="course-editor-inline-row">
+                    <button
+                      type="button"
+                      className="modal-action-btn course-editor-icon-btn"
+                      onClick={toggleExcludedDatePicker}
                       disabled={saving}
-                      className="dialog-field"
-                    />
-                  </label>
+                      title={datesState.excludedDatePickerOpen ? "Kalender ausblenden" : "Kalender öffnen"}
+                      aria-label="Kalender für Ausnahmetermin öffnen"
+                    >
+                      <Calendar size={16} aria-hidden="true" />
+                    </button>
+                    {datesState.pendingExcludedDate ? (
+                      <span className="course-editor-selected-date">
+                        Gewählt: <strong>{datesState.pendingExcludedDate}</strong>
+                      </span>
+                    ) : (
+                      <span className="course-editor-note">Noch kein Datum ausgewählt.</span>
+                    )}
+                  </div>
+                  {datesState.excludedDatePickerOpen && (
+                    <div className="course-editor-calendar-block" role="group" aria-label="Kalender Ausnahmetermine">
+                      <div className="course-editor-calendar-nav">
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={() => shiftExcludedCalendarMonth(-1)}
+                          disabled={saving}
+                        >
+                          Vorheriger Monat
+                        </button>
+                        <strong>{datesCalendarMonthLabel}</strong>
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={() => shiftExcludedCalendarMonth(1)}
+                          disabled={saving}
+                        >
+                          Nächster Monat
+                        </button>
+                      </div>
+                      <div className="course-editor-calendar-weekdays" aria-hidden="true">
+                        {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((label) => (
+                          <span key={label}>{label}</span>
+                        ))}
+                      </div>
+                      <div className="course-editor-calendar-grid">
+                        {datesCalendarCells.map((cell) => {
+                          const cellClassName = [
+                            "course-editor-calendar-cell",
+                            cell.inCurrentMonth ? "" : "is-outside-month",
+                            cell.isSeriesDate ? "is-series-date" : "",
+                            cell.isExcluded ? "is-excluded-date" : "",
+                            cell.isSelected ? "is-selected-date" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ");
+                          const canPick = cell.isSeriesDate;
+                          return (
+                            <button
+                              key={cell.isoDate}
+                              type="button"
+                              className={cellClassName}
+                              aria-label={`Datum ${cell.isoDate}`}
+                              onClick={() => selectExcludedDateFromCalendar(cell.isoDate)}
+                              disabled={!canPick || saving}
+                              title={
+                                canPick
+                                  ? cell.isExcluded
+                                    ? "Bereits ausgeschlossen"
+                                    : "Als Ausnahmetermin auswählbar"
+                                  : "Nur Serientermine im Zeitraum auswählbar"
+                              }
+                            >
+                              {cell.dayOfMonth}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="course-editor-calendar-legend">
+                        <span><em className="legend-dot series" /> Serientermin</span>
+                        <span><em className="legend-dot excluded" /> ausgeschlossen</span>
+                        <span><em className="legend-dot selected" /> ausgewählt</span>
+                      </div>
+                    </div>
+                  )}
                   <button
                     type="button"
-                    className="modal-action-btn"
+                    className="modal-action-btn course-editor-inline-action"
                     onClick={addExcludedDate}
                     disabled={saving || !datesState.pendingExcludedDate}
                   >
-                    Ausnahmedatum hinzufügen
+                    Hinzufügen
                   </button>
                 </div>
 

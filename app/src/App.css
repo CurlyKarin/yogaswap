@@ -343,6 +343,124 @@ a:focus-visible {
   margin-top: 4px;
 }
 
+.course-editor-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.course-editor-icon-btn {
+  min-width: 40px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.course-editor-inline-action {
+  align-self: flex-start;
+  min-width: 96px;
+}
+
+.course-editor-selected-date {
+  color: #374151;
+  font-size: 14px;
+}
+
+.course-editor-calendar-block {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f9fafb;
+}
+
+.course-editor-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.course-editor-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 4px;
+  color: #6b7280;
+  font-size: 12px;
+  text-align: center;
+}
+
+.course-editor-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.course-editor-calendar-cell {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  min-height: 34px;
+  padding: 0;
+  background: #fff;
+  color: #111827;
+  font-size: 13px;
+}
+
+.course-editor-calendar-cell:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.course-editor-calendar-cell.is-outside-month {
+  opacity: 0.45;
+}
+
+.course-editor-calendar-cell.is-series-date {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.course-editor-calendar-cell.is-excluded-date {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.course-editor-calendar-cell.is-selected-date {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 1px;
+}
+
+.course-editor-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.legend-dot.series {
+  background: #93c5fd;
+}
+
+.legend-dot.excluded {
+  background: #fca5a5;
+}
+
+.legend-dot.selected {
+  background: #1d4ed8;
+}
+
 .course-editor-list-title {
   color: #111827;
   font-size: 14px;
