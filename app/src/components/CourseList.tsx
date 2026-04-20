@@ -55,7 +55,6 @@ type CourseDatesEditorState = {
   seriesStartDate: string;
   seriesEndDate: string;
   excludedDates: string[];
-  pendingExcludedDate: string;
   calendarMonth: string;
   excludedDatePickerOpen: boolean;
 };
@@ -218,7 +217,6 @@ type CalendarCell = {
   inSeriesRange: boolean;
   isSeriesDate: boolean;
   isExcluded: boolean;
-  isSelected: boolean;
 };
 
 function buildSeriesCalendarCells(
@@ -227,7 +225,6 @@ function buildSeriesCalendarCells(
   rangeStartIso: string,
   rangeEndIso: string,
   excludedDates: string[],
-  selectedDate: string,
 ): CalendarCell[] {
   const monthStart = parseMonthKey(monthKey);
   const rangeStart = parseIsoDateOnlyUtc(rangeStartIso);
@@ -261,7 +258,6 @@ function buildSeriesCalendarCells(
       inSeriesRange,
       isSeriesDate,
       isExcluded: excludedSet.has(isoDate),
-      isSelected: isoDate === selectedDate,
     });
   }
   return cells;
@@ -497,7 +493,6 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       seriesStartDate: initialStart,
       seriesEndDate: course.seriesEndDate ?? defaults.end,
       excludedDates: dedupeAndSortDates(course.excludedDates ?? []),
-      pendingExcludedDate: "",
       calendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
       excludedDatePickerOpen: false,
     });
@@ -609,7 +604,6 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       datesState.seriesStartDate,
       datesState.seriesEndDate,
       datesState.excludedDates,
-      datesState.pendingExcludedDate,
     );
   }, [datesState]);
   const datesCalendarMonthLabel = useMemo(() => {
@@ -745,25 +739,6 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     }
   };
 
-  const addExcludedDate = () => {
-    if (!datesState) return;
-    const nextDate = normalizeIsoDate(datesState.pendingExcludedDate);
-    if (!isValidIsoDateOnly(nextDate)) {
-      setFormError("Bitte ein gültiges Ausnahmedatum auswählen.");
-      return;
-    }
-    setFormError(null);
-    setDatesState((prev) =>
-      prev
-        ? {
-            ...prev,
-            excludedDates: dedupeAndSortDates([...prev.excludedDates, nextDate]),
-            pendingExcludedDate: "",
-          }
-        : prev,
-    );
-  };
-
   const toggleExcludedDatePicker = () => {
     if (saving) return;
     setDatesState((prev) =>
@@ -788,7 +763,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     );
   };
 
-  const selectExcludedDateFromCalendar = (isoDate: string) => {
+  const toggleExcludedDateFromCalendar = (isoDate: string) => {
     if (saving) return;
     setDatesState((prev) => {
       if (!prev) return prev;
@@ -801,23 +776,15 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       if (!inSeriesRange || !isSeriesWeekday) {
         return prev;
       }
+      const hasExcludedDate = prev.excludedDates.includes(isoDate);
       return {
         ...prev,
-        pendingExcludedDate: isoDate,
+        excludedDates: hasExcludedDate
+          ? prev.excludedDates.filter((entry) => entry !== isoDate)
+          : dedupeAndSortDates([...prev.excludedDates, isoDate]),
       };
     });
     setFormError(null);
-  };
-
-  const removeExcludedDate = (date: string) => {
-    setDatesState((prev) =>
-      prev
-        ? {
-            ...prev,
-            excludedDates: prev.excludedDates.filter((entry) => entry !== date),
-          }
-        : prev,
-    );
   };
 
   const saveDatesConfig = async () => {
@@ -1314,13 +1281,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                     >
                       <Calendar size={16} aria-hidden="true" />
                     </button>
-                    {datesState.pendingExcludedDate ? (
-                      <span className="course-editor-selected-date">
-                        Gewählt: <strong>{datesState.pendingExcludedDate}</strong>
-                      </span>
-                    ) : (
-                      <span className="course-editor-note">Noch kein Datum ausgewählt.</span>
-                    )}
+                    <span className="course-editor-note">Doppelklick auf einen Serientermin: als Ausnahme setzen/entfernen.</span>
                   </div>
                   {datesState.excludedDatePickerOpen && (
                     <div className="course-editor-calendar-block" role="group" aria-label="Kalender Ausnahmetermine">
@@ -1355,7 +1316,6 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                             cell.inCurrentMonth ? "" : "is-outside-month",
                             cell.isSeriesDate ? "is-series-date" : "",
                             cell.isExcluded ? "is-excluded-date" : "",
-                            cell.isSelected ? "is-selected-date" : "",
                           ]
                             .filter(Boolean)
                             .join(" ");
@@ -1366,13 +1326,19 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                               type="button"
                               className={cellClassName}
                               aria-label={`Datum ${cell.isoDate}`}
-                              onClick={() => selectExcludedDateFromCalendar(cell.isoDate)}
+                              onDoubleClick={() => toggleExcludedDateFromCalendar(cell.isoDate)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  toggleExcludedDateFromCalendar(cell.isoDate);
+                                }
+                              }}
                               disabled={!canPick || saving}
                               title={
                                 canPick
                                   ? cell.isExcluded
-                                    ? "Bereits ausgeschlossen"
-                                    : "Als Ausnahmetermin auswählbar"
+                                    ? "Doppelklick: Ausnahme entfernen"
+                                    : "Doppelklick: Ausnahme hinzufügen"
                                   : "Nur Serientermine im Zeitraum auswählbar"
                               }
                             >
@@ -1384,18 +1350,9 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                       <div className="course-editor-calendar-legend">
                         <span><em className="legend-dot series" /> Serientermin</span>
                         <span><em className="legend-dot excluded" /> ausgeschlossen</span>
-                        <span><em className="legend-dot selected" /> ausgewählt</span>
                       </div>
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="modal-action-btn course-editor-inline-action"
-                    onClick={addExcludedDate}
-                    disabled={saving || !datesState.pendingExcludedDate}
-                  >
-                    Hinzufügen
-                  </button>
                 </div>
 
                 <div className="course-editor-subsection">
@@ -1403,22 +1360,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                   {datesState.excludedDates.length === 0 ? (
                     <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
                   ) : (
-                    <ul className="course-editor-list">
-                      {datesState.excludedDates.map((entry) => (
-                        <li key={entry} className="course-editor-list-item">
-                          <span>{entry}</span>
-                          <button
-                            type="button"
-                            className="modal-action-btn"
-                            aria-label={`Ausnahmedatum entfernen ${entry}`}
-                            onClick={() => removeExcludedDate(entry)}
-                            disabled={saving}
-                          >
-                            Entfernen
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    <p className="course-editor-comma-list">{datesState.excludedDates.join(", ")}</p>
                   )}
                 </div>
 

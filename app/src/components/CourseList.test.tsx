@@ -569,11 +569,13 @@ describe("CourseList", () => {
     expect(screen.getByLabelText("Serienende")).toHaveValue("2026-01-31");
 
     await user.click(screen.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
-    await user.click(screen.getByRole("button", { name: /datum 2026-01-13/i }));
-    const addExcludedButton = screen.getByRole("button", { name: /^hinzufügen$/i });
-    expect(addExcludedButton).toBeEnabled();
-    await user.click(addExcludedButton);
-    expect(screen.getByText("2026-01-13")).toBeInTheDocument();
+    const excludedCell = screen.getByRole("button", { name: /datum 2026-01-13/i });
+    await user.dblClick(excludedCell);
+    expect(screen.getByText(/^2026-01-13$/)).toBeInTheDocument();
+    await user.dblClick(excludedCell);
+    expect(screen.getByText(/keine ausgeschlossenen termine/i)).toBeInTheDocument();
+    await user.dblClick(excludedCell);
+    expect(screen.getByText(/^2026-01-13$/)).toBeInTheDocument();
 
     const saveButtons = screen.getAllByRole("button", { name: /termine übernehmen/i });
     await user.click(saveButtons[saveButtons.length - 1]);

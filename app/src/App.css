@@ -361,11 +361,6 @@ a:focus-visible {
   min-width: 96px;
 }
 
-.course-editor-selected-date {
-  color: #374151;
-  font-size: 14px;
-}
-
 .course-editor-calendar-block {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
@@ -426,11 +421,6 @@ a:focus-visible {
   border-color: #fca5a5;
 }
 
-.course-editor-calendar-cell.is-selected-date {
-  outline: 2px solid #1d4ed8;
-  outline-offset: 1px;
-}
-
 .course-editor-calendar-legend {
   display: flex;
   flex-wrap: wrap;
@@ -457,8 +447,12 @@ a:focus-visible {
   background: #fca5a5;
 }
 
-.legend-dot.selected {
-  background: #1d4ed8;
+.course-editor-comma-list {
+  margin: 0;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .course-editor-list-title {
