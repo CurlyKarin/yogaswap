@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import CourseList from "./CourseList";
@@ -64,10 +64,17 @@ function formatDateForDisplay(isoDate: string): string {
 describe("CourseList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedGetCourses.mockReset();
+    mockedGetOverrides.mockReset();
+    mockedGetSwaps.mockReset();
     mockedCreateCourse.mockReset();
     mockedUpdateCourse.mockReset();
     mockedDeleteCourse.mockReset();
     mockedCanSeeCourse.mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("zeigt während des Ladens 'Loading...' an und rendert anschließend Kurse (mit zukünftigen Terminen)", async () => {
