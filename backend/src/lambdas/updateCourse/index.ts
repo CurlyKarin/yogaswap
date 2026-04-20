@@ -7,10 +7,14 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
+import { deriveVisibleDates } from "../shared/courseDates";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
+const COURSE_PLANNING_MODES = new Set(["bounded_series", "rolling_continuous"]);
+const COURSE_VISIBILITY_MODES = new Set(["fixed_window", "rolling_horizon"]);
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 type UpdateCourseBody = {
   name?: string;
@@ -18,6 +22,15 @@ type UpdateCourseBody = {
   time?: string;
   capacity?: number;
   status?: string;
+  planningMode?: string;
+  visibilityMode?: string;
+  seriesStartDate?: string;
+  seriesEndDate?: string;
+  visibleFrom?: string;
+  visibleUntil?: string;
+  visibilityHorizonWeeks?: number;
+  excludedDates?: string[];
+  includedDates?: string[];
 };
 
 function parseBody(event: APIGatewayProxyEvent): UpdateCourseBody | null {
@@ -29,6 +42,20 @@ function parseBody(event: APIGatewayProxyEvent): UpdateCourseBody | null {
   } catch {
     return null;
   }
+}
+
+function normalizeDateListInput(value: unknown): string[] | null {
+  if (value == null) return [];
+  if (!Array.isArray(value)) return null;
+  const normalized = value.map((entry) => (typeof entry === "string" ? entry.trim() : ""));
+  if (normalized.some((entry) => !ISO_DATE_ONLY.test(entry))) return null;
+  return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
+}
+
+function isValidDateRange(start?: string, end?: string): boolean {
+  if (!start || !end) return false;
+  if (!ISO_DATE_ONLY.test(start) || !ISO_DATE_ONLY.test(end)) return false;
+  return start <= end;
 }
 
 function isFutureOrTodayDateString(isoDate: string, now: Date): boolean {
@@ -132,6 +159,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     !Object.prototype.hasOwnProperty.call(body, "time") &&
     !Object.prototype.hasOwnProperty.call(body, "capacity") &&
     !Object.prototype.hasOwnProperty.call(body, "status")
+    && !Object.prototype.hasOwnProperty.call(body, "planningMode")
+    && !Object.prototype.hasOwnProperty.call(body, "visibilityMode")
+    && !Object.prototype.hasOwnProperty.call(body, "seriesStartDate")
+    && !Object.prototype.hasOwnProperty.call(body, "seriesEndDate")
+    && !Object.prototype.hasOwnProperty.call(body, "visibleFrom")
+    && !Object.prototype.hasOwnProperty.call(body, "visibleUntil")
+    && !Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")
+    && !Object.prototype.hasOwnProperty.call(body, "excludedDates")
+    && !Object.prototype.hasOwnProperty.call(body, "includedDates")
   ) {
     return { statusCode: 400, body: JSON.stringify({ error: "No updatable fields provided" }) };
   }
@@ -140,6 +176,22 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const weekday = typeof body.weekday === "string" ? body.weekday.trim() : undefined;
   const time = typeof body.time === "string" ? body.time.trim() : undefined;
   const status = typeof body.status === "string" ? body.status.trim() : undefined;
+  const planningMode = typeof body.planningMode === "string" ? body.planningMode.trim() : undefined;
+  const visibilityMode = typeof body.visibilityMode === "string" ? body.visibilityMode.trim() : undefined;
+  const seriesStartDate = typeof body.seriesStartDate === "string" ? body.seriesStartDate.trim() : undefined;
+  const seriesEndDate = typeof body.seriesEndDate === "string" ? body.seriesEndDate.trim() : undefined;
+  const visibleFrom = typeof body.visibleFrom === "string" ? body.visibleFrom.trim() : undefined;
+  const visibleUntil = typeof body.visibleUntil === "string" ? body.visibleUntil.trim() : undefined;
+  const visibilityHorizonWeeks =
+    Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks") && Number.isFinite(body.visibilityHorizonWeeks)
+      ? Number(body.visibilityHorizonWeeks)
+      : undefined;
+  const excludedDates = Object.prototype.hasOwnProperty.call(body, "excludedDates")
+    ? normalizeDateListInput(body.excludedDates)
+    : undefined;
+  const includedDates = Object.prototype.hasOwnProperty.call(body, "includedDates")
+    ? normalizeDateListInput(body.includedDates)
+    : undefined;
   const capacity =
     Object.prototype.hasOwnProperty.call(body, "capacity") && Number.isFinite(body.capacity)
       ? Number(body.capacity)
@@ -163,6 +215,36 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   if (Object.prototype.hasOwnProperty.call(body, "status")) {
     if (!status || !COURSE_STATUSES.has(status)) {
       return { statusCode: 400, body: JSON.stringify({ error: "Invalid status value" }) };
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "planningMode")) {
+    if (!planningMode || !COURSE_PLANNING_MODES.has(planningMode)) {
+      return { statusCode: 400, body: JSON.stringify({ error: "Invalid planningMode value" }) };
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "visibilityMode")) {
+    if (!visibilityMode || !COURSE_VISIBILITY_MODES.has(visibilityMode)) {
+      return { statusCode: 400, body: JSON.stringify({ error: "Invalid visibilityMode value" }) };
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "excludedDates") && !excludedDates) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "excludedDates must contain ISO dates (YYYY-MM-DD)" }),
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "includedDates") && !includedDates) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "includedDates must contain ISO dates (YYYY-MM-DD)" }),
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")) {
+    if (visibilityHorizonWeeks == null || !Number.isInteger(visibilityHorizonWeeks) || visibilityHorizonWeeks <= 0) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "visibilityHorizonWeeks must be a positive integer" }),
+      };
     }
   }
 
@@ -212,7 +294,29 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
 
       if (currentStatus === "active" && nextStatus === "inactive") {
-        const existingDates = item.dates?.L?.map((d) => d.S ?? "").filter(Boolean) ?? [];
+        const existingFallbackDates = item.dates?.L?.map((d) => d.S ?? "").filter(Boolean) ?? [];
+        const existingExcludedDates =
+          item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [];
+        const existingIncludedDates =
+          item.includedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [];
+        const derivedExistingDates = deriveVisibleDates({
+          planningMode: item.planningMode?.S,
+          visibilityMode: item.visibilityMode?.S,
+          weekday: item.weekday?.S ?? "",
+          seriesStartDate: item.seriesStartDate?.S,
+          seriesEndDate: item.seriesEndDate?.S,
+          visibleFrom: item.visibleFrom?.S,
+          visibleUntil: item.visibleUntil?.S,
+          visibilityHorizonWeeks: item.visibilityHorizonWeeks?.N
+            ? Number(item.visibilityHorizonWeeks.N)
+            : undefined,
+          excludedDates: existingExcludedDates,
+          includedDates: existingIncludedDates,
+          fallbackDates: existingFallbackDates,
+        });
+        const existingDates = Array.from(
+          new Set([...existingFallbackDates, ...derivedExistingDates]),
+        ).sort((a, b) => a.localeCompare(b));
         const canDeactivate = await canDeactivateCourse({
           tenantId,
           courseId,
@@ -240,23 +344,102 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       (item.capacity?.N ? Number.parseInt(item.capacity.N, 10) : 0);
     const nextId = item.id?.N ? Number.parseInt(item.id.N, 10) : Number.parseInt(courseId, 10);
     const nextParticipants = item.participants?.L ?? [];
-    const nextDates = item.dates?.L ?? [];
+    const nextPlanningMode = planningMode ?? item.planningMode?.S;
+    const nextVisibilityMode = visibilityMode ?? item.visibilityMode?.S;
+    const nextSeriesStartDate = seriesStartDate ?? item.seriesStartDate?.S;
+    const nextSeriesEndDate = seriesEndDate ?? item.seriesEndDate?.S;
+    const nextVisibleFrom = visibleFrom ?? item.visibleFrom?.S;
+    const nextVisibleUntil = visibleUntil ?? item.visibleUntil?.S;
+    const nextVisibilityHorizonWeeks =
+      visibilityHorizonWeeks ??
+      (item.visibilityHorizonWeeks?.N ? Number.parseInt(item.visibilityHorizonWeeks.N, 10) : undefined);
+    const nextExcludedDates =
+      excludedDates ?? (item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? []);
+    const nextIncludedDates =
+      includedDates ?? (item.includedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? []);
+
+    if (
+      (nextPlanningMode === "bounded_series" ||
+        Object.prototype.hasOwnProperty.call(body, "seriesStartDate") ||
+        Object.prototype.hasOwnProperty.call(body, "seriesEndDate")) &&
+      !isValidDateRange(nextSeriesStartDate, nextSeriesEndDate)
+    ) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: "seriesStartDate and seriesEndDate are required as ISO dates with start <= end",
+        }),
+      };
+    }
+    if (
+      (nextVisibilityMode === "fixed_window" ||
+        Object.prototype.hasOwnProperty.call(body, "visibleFrom") ||
+        Object.prototype.hasOwnProperty.call(body, "visibleUntil")) &&
+      !isValidDateRange(nextVisibleFrom, nextVisibleUntil)
+    ) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: "visibleFrom and visibleUntil are required as ISO dates with start <= end",
+        }),
+      };
+    }
+    if (
+      nextVisibilityMode === "rolling_horizon" &&
+      (!Number.isInteger(nextVisibilityHorizonWeeks) || (nextVisibilityHorizonWeeks ?? 0) <= 0)
+    ) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "rolling_horizon requires visibilityHorizonWeeks > 0" }),
+      };
+    }
+
+    const nextDates = deriveVisibleDates({
+      planningMode: nextPlanningMode,
+      visibilityMode: nextVisibilityMode,
+      weekday: nextWeekday,
+      seriesStartDate: nextSeriesStartDate,
+      seriesEndDate: nextSeriesEndDate,
+      visibleFrom: nextVisibleFrom,
+      visibleUntil: nextVisibleUntil,
+      visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
+      excludedDates: nextExcludedDates,
+      includedDates: nextIncludedDates,
+      fallbackDates: item.dates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [],
+    });
+
+    const updateItem: Record<string, any> = {
+      tenantId: { S: tenantId },
+      courseId: { S: courseId },
+      id: { N: String(Number.isFinite(nextId) ? nextId : 0) },
+      name: { S: nextName },
+      weekday: { S: nextWeekday },
+      time: { S: nextTime },
+      capacity: { N: String(nextCapacity) },
+      status: { S: nextStatus },
+      participants: { L: nextParticipants },
+      dates: { L: nextDates.map((entry) => ({ S: entry })) },
+    };
+    if (nextPlanningMode) updateItem.planningMode = { S: nextPlanningMode };
+    if (nextVisibilityMode) updateItem.visibilityMode = { S: nextVisibilityMode };
+    if (nextSeriesStartDate) updateItem.seriesStartDate = { S: nextSeriesStartDate };
+    if (nextSeriesEndDate) updateItem.seriesEndDate = { S: nextSeriesEndDate };
+    if (nextVisibleFrom) updateItem.visibleFrom = { S: nextVisibleFrom };
+    if (nextVisibleUntil) updateItem.visibleUntil = { S: nextVisibleUntil };
+    if (nextVisibilityHorizonWeeks != null) {
+      updateItem.visibilityHorizonWeeks = { N: String(nextVisibilityHorizonWeeks) };
+    }
+    if (nextExcludedDates.length > 0) {
+      updateItem.excludedDates = { L: nextExcludedDates.map((entry) => ({ S: entry })) };
+    }
+    if (nextIncludedDates.length > 0) {
+      updateItem.includedDates = { L: nextIncludedDates.map((entry) => ({ S: entry })) };
+    }
 
     await client.send(
       new PutItemCommand({
         TableName: coursesTable,
-        Item: {
-          tenantId: { S: tenantId },
-          courseId: { S: courseId },
-          id: { N: String(Number.isFinite(nextId) ? nextId : 0) },
-          name: { S: nextName },
-          weekday: { S: nextWeekday },
-          time: { S: nextTime },
-          capacity: { N: String(nextCapacity) },
-          status: { S: nextStatus },
-          participants: { L: nextParticipants },
-          dates: { L: nextDates },
-        },
+        Item: updateItem,
       }),
     );
 
@@ -270,8 +453,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         time: nextTime,
         capacity: nextCapacity,
         status: nextStatus,
+        planningMode: nextPlanningMode,
+        visibilityMode: nextVisibilityMode,
+        seriesStartDate: nextSeriesStartDate,
+        seriesEndDate: nextSeriesEndDate,
+        visibleFrom: nextVisibleFrom,
+        visibleUntil: nextVisibleUntil,
+        visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
+        excludedDates: nextExcludedDates,
+        includedDates: nextIncludedDates,
+        visibleDates: nextDates,
         participants: nextParticipants.map((p) => p.S).filter(Boolean),
-        dates: nextDates.map((d) => d.S).filter(Boolean),
+        dates: nextDates,
       }),
     };
   } catch (error) {

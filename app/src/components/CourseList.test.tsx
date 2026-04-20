@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import CourseList from "./CourseList";
@@ -55,13 +55,26 @@ const baseMembership: UserTenantMembership = {
   role: "participant",
 };
 
+function formatDateForDisplay(isoDate: string): string {
+  return new Intl.DateTimeFormat(navigator.language, { dateStyle: "medium", timeZone: "UTC" }).format(
+    new Date(`${isoDate}T12:00:00.000Z`),
+  );
+}
+
 describe("CourseList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedGetCourses.mockReset();
+    mockedGetOverrides.mockReset();
+    mockedGetSwaps.mockReset();
     mockedCreateCourse.mockReset();
     mockedUpdateCourse.mockReset();
     mockedDeleteCourse.mockReset();
     mockedCanSeeCourse.mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("zeigt während des Ladens 'Loading...' an und rendert anschließend Kurse (mit zukünftigen Terminen)", async () => {
@@ -279,6 +292,7 @@ describe("CourseList", () => {
     const user = userEvent.setup();
     const createButtons = screen.getAllByRole("button", { name: /kurs anlegen/i });
     await user.click(createButtons[createButtons.length - 1]);
+    expect(screen.getByText(/Kursblock: z\. B\. Quartal/i)).toBeInTheDocument();
     await user.type(screen.getByLabelText("Kursname"), "Neuer Kurs");
     await user.clear(screen.getByLabelText("Kapazität"));
     await user.type(screen.getByLabelText("Kapazität"), "12");
@@ -289,6 +303,8 @@ describe("CourseList", () => {
         expect.objectContaining({
           name: "Neuer Kurs",
           capacity: 12,
+          planningMode: "bounded_series",
+          visibilityMode: "fixed_window",
         }),
       );
     });
@@ -386,6 +402,7 @@ describe("CourseList", () => {
 
     const saveButton = screen.getByRole("button", { name: /^speichern$/i });
     expect(saveButton).toBeDisabled();
+    expect(screen.getByText(/Kursblock: z\. B\. Quartal/i)).toBeInTheDocument();
 
     const nameInput = screen.getByLabelText("Kursname bearbeiten");
     await user.clear(nameInput);
@@ -497,6 +514,7 @@ describe("CourseList", () => {
         time: "10:00",
         capacity: 10,
         status: "active",
+        planningMode: "rolling_continuous",
         participants: [],
         dates: ["2099-06-16"],
       },
@@ -511,15 +529,96 @@ describe("CourseList", () => {
     const user = userEvent.setup();
     await screen.findAllByText("Kurs A");
 
-    await user.click(screen.getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i })[0]);
+    const membersButtons = screen.getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i });
+    await user.click(membersButtons[membersButtons.length - 1]);
     expect(screen.getByLabelText("Kursmitglieder bearbeiten")).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await waitFor(() => {
       expect(screen.queryByLabelText("Kursmitglieder bearbeiten")).not.toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i })[0]);
+    const datesButtons = screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i });
+    await user.click(datesButtons[datesButtons.length - 1]);
     expect(screen.getByLabelText("Kurstermine bearbeiten")).toBeInTheDocument();
+    expect(screen.getByText(/Durchlaufend \(rollend\)/i)).toBeInTheDocument();
+  });
+
+  it("speichert Serienplanung mit excludedDates im Termine-Dialog", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Tue",
+        time: "10:00",
+        capacity: 10,
+        status: "draft",
+        planningMode: "bounded_series",
+        seriesStartDate: "2026-01-01",
+        seriesEndDate: "2026-01-31",
+        excludedDates: [],
+        participants: [],
+        dates: ["2026-01-06"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+    mockedUpdateCourse.mockResolvedValue(mockCourses[0]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+    const datesButtons = screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i });
+    await user.click(datesButtons[datesButtons.length - 1]);
+
+    expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-01"));
+    expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-31"));
+
+    await user.click(screen.getByRole("button", { name: /kalender für zeitraum öffnen/i }));
+    expect(screen.getByRole("button", { name: /kalender schließen/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /datum 2026-01-05/i }));
+    await user.click(screen.getByRole("button", { name: /datum 2026-01-26/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-05"));
+      expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-26"));
+    });
+    await user.click(screen.getByRole("button", { name: /kalender schließen/i }));
+    expect(screen.queryByRole("button", { name: /datum 2026-01-13/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
+    const excludedCell = screen.getByRole("button", { name: /ausnahme datum 2026-01-13/i });
+    await user.click(excludedCell);
+    expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
+    await user.click(excludedCell);
+    expect(screen.getByText(/keine ausgeschlossenen termine/i)).toBeInTheDocument();
+    await user.click(excludedCell);
+    expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /kalender schließen/i }));
+    expect(screen.queryByRole("button", { name: /ausnahme datum 2026-01-13/i })).not.toBeInTheDocument();
+
+    const saveButtons = screen.getAllByRole("button", { name: /termine übernehmen/i });
+    await user.click(saveButtons[saveButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(mockedUpdateCourse).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          planningMode: "bounded_series",
+          visibilityMode: "fixed_window",
+          seriesStartDate: "2026-01-05",
+          seriesEndDate: "2026-01-26",
+          excludedDates: ["2026-01-13"],
+        }),
+      );
+    });
   });
 });
 

@@ -50,6 +50,14 @@ function baseCourseItem(status = "draft") {
     status: { S: status },
     participants: { L: [{ S: "luna" }] },
     dates: { L: [] },
+    planningMode: { S: "bounded_series" },
+    visibilityMode: { S: "fixed_window" },
+    seriesStartDate: { S: "2026-01-01" },
+    seriesEndDate: { S: "2026-03-31" },
+    visibleFrom: { S: "2026-01-01" },
+    visibleUntil: { S: "2026-03-31" },
+    excludedDates: { L: [{ S: "2026-02-02" }] },
+    includedDates: { L: [{ S: "2026-02-04" }] },
   };
 }
 
@@ -181,5 +189,60 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).status).toBe("inactive");
     expect(QueryCommand).toHaveBeenCalled();
     expect(ScanCommand).toHaveBeenCalled();
+  });
+
+  test("updates scheduling model fields", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        planningMode: "rolling_continuous",
+        visibilityMode: "rolling_horizon",
+        visibilityHorizonWeeks: 10,
+        excludedDates: ["2026-04-06"],
+        includedDates: [],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          visibilityHorizonWeeks: { N: "10" },
+          excludedDates: { L: [{ S: "2026-04-06" }] },
+        }),
+      }),
+    );
+
+    const body = JSON.parse(result.body);
+    expect(body).toEqual(
+      expect.objectContaining({
+        planningMode: "rolling_continuous",
+        visibilityMode: "rolling_horizon",
+        visibilityHorizonWeeks: 10,
+        excludedDates: ["2026-04-06"],
+      }),
+    );
+  });
+
+  test("rejects invalid fixed window range on update", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") });
+
+    const result = await handler(
+      makeEvent({
+        visibilityMode: "fixed_window",
+        visibleFrom: "2026-03-31",
+        visibleUntil: "2026-01-01",
+      }),
+    );
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/visibleFrom and visibleUntil/);
   });
 });

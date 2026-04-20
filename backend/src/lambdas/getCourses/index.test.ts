@@ -26,6 +26,10 @@ describe("getCourses Lambda", () => {
     process.env = OLD_ENV;
   });
 
+  beforeEach(() => {
+    jest.useRealTimers();
+  });
+
   const makeEvent = (): APIGatewayProxyEvent => ({} as any);
 
   test("returns list of courses successfully", async () => {
@@ -60,6 +64,9 @@ describe("getCourses Lambda", () => {
         time: "10:00",
         capacity: 12,
         status: "draft",
+        excludedDates: [],
+        includedDates: [],
+        visibleDates: ["2025-10-01", "2025-10-08"],
         participants: ["Anna", "Ben"],
         dates: ["2025-10-01", "2025-10-08"],
       },
@@ -108,5 +115,48 @@ describe("getCourses Lambda", () => {
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(500);
     expect(JSON.parse(result.body).error).toBe("Failed to get courses");
+  });
+
+  test("derives visible dates from bounded series with fixed window and exclusions", async () => {
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        {
+          id: { N: "2" },
+          courseId: { S: "2" },
+          name: { S: "Flow" },
+          weekday: { S: "Mon" },
+          time: { S: "18:00" },
+          capacity: { N: "10" },
+          status: { S: "active" },
+          planningMode: { S: "bounded_series" },
+          visibilityMode: { S: "fixed_window" },
+          seriesStartDate: { S: "2026-01-01" },
+          seriesEndDate: { S: "2026-01-31" },
+          visibleFrom: { S: "2026-01-05" },
+          visibleUntil: { S: "2026-01-20" },
+          excludedDates: { L: [{ S: "2026-01-12" }] },
+          includedDates: { L: [{ S: "2026-01-14" }] },
+          participants: { L: [] },
+          dates: { L: [{ S: "2026-12-31" }] },
+        },
+      ],
+    });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+
+    expect(body[0]).toEqual(
+      expect.objectContaining({
+        id: 2,
+        courseId: "2",
+        planningMode: "bounded_series",
+        visibilityMode: "fixed_window",
+        excludedDates: ["2026-01-12"],
+        includedDates: ["2026-01-14"],
+        visibleDates: ["2026-01-05", "2026-01-14", "2026-01-19"],
+        dates: ["2026-01-05", "2026-01-14", "2026-01-19"],
+      }),
+    );
   });
 });
