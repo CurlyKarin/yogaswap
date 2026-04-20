@@ -529,5 +529,66 @@ describe("CourseList", () => {
     expect(screen.getByLabelText("Kurstermine bearbeiten")).toBeInTheDocument();
     expect(screen.getByText(/Durchlaufend \(rollend\)/i)).toBeInTheDocument();
   });
+
+  it("speichert Serienplanung mit excludedDates im Termine-Dialog", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Tue",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        planningMode: "bounded_series",
+        seriesStartDate: "2026-01-01",
+        seriesEndDate: "2026-01-31",
+        excludedDates: [],
+        participants: [],
+        dates: ["2026-01-06"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+    mockedUpdateCourse.mockResolvedValue(mockCourses[0]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+    const datesButtons = screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i });
+    await user.click(datesButtons[datesButtons.length - 1]);
+
+    expect(screen.getByLabelText("Serienstart")).toHaveValue("2026-01-01");
+    expect(screen.getByLabelText("Serienende")).toHaveValue("2026-01-31");
+
+    const excludedInput = screen.getByLabelText("Ausnahmetermin");
+    await user.clear(excludedInput);
+    await user.type(excludedInput, "2026-01-13");
+    await user.click(screen.getByRole("button", { name: /ausnahmedatum hinzufügen/i }));
+    expect(screen.getByText("2026-01-13")).toBeInTheDocument();
+
+    const saveButtons = screen.getAllByRole("button", { name: /termine übernehmen/i });
+    await user.click(saveButtons[saveButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(mockedUpdateCourse).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          planningMode: "bounded_series",
+          visibilityMode: "fixed_window",
+          seriesStartDate: "2026-01-01",
+          seriesEndDate: "2026-01-31",
+          excludedDates: ["2026-01-13"],
+        }),
+      );
+    });
+  });
 });
 

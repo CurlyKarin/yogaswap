@@ -328,6 +328,43 @@ a:focus-visible {
   line-height: 1.35;
 }
 
+.course-editor-field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #374151;
+  font-size: 14px;
+}
+
+.course-editor-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.course-editor-list-title {
+  color: #111827;
+  font-size: 14px;
+}
+
+.course-editor-list {
+  margin: 0;
+  padding-left: 1rem;
+  max-height: 160px;
+  overflow: auto;
+  color: #374151;
+  font-size: 14px;
+}
+
+.course-editor-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 /* Footer (Impressum / Datenschutz) */
 .app-footer {
   margin-top: 2rem;

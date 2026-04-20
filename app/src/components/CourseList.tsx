@@ -48,6 +48,16 @@ type CourseCreateState = {
   planningMode: CoursePlanningMode;
 };
 
+type CourseDatesEditorState = {
+  courseId: number;
+  weekday: string;
+  planningMode: CoursePlanningMode;
+  seriesStartDate: string;
+  seriesEndDate: string;
+  excludedDates: string[];
+  pendingExcludedDate: string;
+};
+
 const WEEKDAY_ORDER: Record<string, number> = {
   Mon: 1,
   Monday: 1,
@@ -130,6 +140,52 @@ function buildSchedulingFromMode(mode: CoursePlanningMode) {
   };
 }
 
+function normalizeIsoDate(value: string): string {
+  return value.trim();
+}
+
+function isValidIsoDateOnly(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function compareIsoDate(a: string, b: string): number {
+  return a.localeCompare(b);
+}
+
+function dedupeAndSortDates(values: string[]): string[] {
+  return Array.from(new Set(values.map(normalizeIsoDate).filter(isValidIsoDateOnly))).sort(compareIsoDate);
+}
+
+function buildDefaultSeriesWindow(): { start: string; end: string } {
+  const today = new Date();
+  return {
+    start: toIsoDateOnly(today),
+    end: toIsoDateOnly(addDays(today, 84)),
+  };
+}
+
+function generateSeriesPreviewDates(weekday: string, startDate: string, endDate: string, excludedDates: string[]): string[] {
+  if (!isValidIsoDateOnly(startDate) || !isValidIsoDateOnly(endDate) || compareIsoDate(startDate, endDate) > 0) {
+    return [];
+  }
+  const weekdayIndex = WEEKDAY_ORDER[weekday];
+  if (!weekdayIndex || weekdayIndex < 1 || weekdayIndex > 7) return [];
+  const jsWeekday = weekdayIndex % 7;
+  const excluded = new Set(dedupeAndSortDates(excludedDates));
+
+  const start = new Date(`${startDate}T12:00:00.000Z`);
+  const end = new Date(`${endDate}T12:00:00.000Z`);
+  const preview: string[] = [];
+  for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
+    if (cursor.getUTCDay() !== jsWeekday) continue;
+    const iso = toIsoDateOnly(cursor);
+    if (!excluded.has(iso)) {
+      preview.push(iso);
+    }
+  }
+  return preview;
+}
+
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
   "input:not([disabled])",
@@ -196,6 +252,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [membersTargetId, setMembersTargetId] = useState<number | null>(null);
   const [datesTargetId, setDatesTargetId] = useState<number | null>(null);
+  const [datesState, setDatesState] = useState<CourseDatesEditorState | null>(null);
   const createModalRef = useRef<HTMLDivElement | null>(null);
   const editModalRef = useRef<HTMLDivElement | null>(null);
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
@@ -326,8 +383,18 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     resetFormError();
   };
 
-  const openDatesModal = (courseId: number) => {
-    setDatesTargetId(courseId);
+  const openDatesModal = (course: Course) => {
+    const defaults = buildDefaultSeriesWindow();
+    setDatesTargetId(course.id);
+    setDatesState({
+      courseId: course.id,
+      weekday: course.weekday,
+      planningMode: course.planningMode ?? "bounded_series",
+      seriesStartDate: course.seriesStartDate ?? defaults.start,
+      seriesEndDate: course.seriesEndDate ?? defaults.end,
+      excludedDates: dedupeAndSortDates(course.excludedDates ?? []),
+      pendingExcludedDate: "",
+    });
     resetFormError();
   };
 
@@ -363,6 +430,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   const closeDatesModal = () => {
     if (saving) return;
     setDatesTargetId(null);
+    setDatesState(null);
   };
 
   const handleFocusTrap = (event: KeyboardEvent<HTMLDivElement>, modalRef: RefObject<HTMLDivElement | null>) => {
@@ -407,6 +475,26 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       editState.status !== editInitialState.status ||
       editState.planningMode !== editInitialState.planningMode);
   const canSubmitEdit = canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
+  const datesSeriesRangeValid =
+    !!datesState &&
+    isValidIsoDateOnly(datesState.seriesStartDate) &&
+    isValidIsoDateOnly(datesState.seriesEndDate) &&
+    compareIsoDate(datesState.seriesStartDate, datesState.seriesEndDate) <= 0;
+  const canSaveDatesConfig =
+    canManageCourses &&
+    !saving &&
+    !!datesState &&
+    datesState.planningMode === "bounded_series" &&
+    datesSeriesRangeValid;
+  const datesPreview = useMemo(() => {
+    if (!datesState) return [];
+    return generateSeriesPreviewDates(
+      datesState.weekday,
+      datesState.seriesStartDate,
+      datesState.seriesEndDate,
+      datesState.excludedDates,
+    );
+  }, [datesState]);
 
   useEffect(() => {
     const activeModal = createOpen
@@ -536,6 +624,70 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     }
   };
 
+  const addExcludedDate = () => {
+    if (!datesState) return;
+    const nextDate = normalizeIsoDate(datesState.pendingExcludedDate);
+    if (!isValidIsoDateOnly(nextDate)) {
+      setFormError("Bitte ein gültiges Ausnahmedatum auswählen.");
+      return;
+    }
+    setFormError(null);
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            excludedDates: dedupeAndSortDates([...prev.excludedDates, nextDate]),
+            pendingExcludedDate: "",
+          }
+        : prev,
+    );
+  };
+
+  const removeExcludedDate = (date: string) => {
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            excludedDates: prev.excludedDates.filter((entry) => entry !== date),
+          }
+        : prev,
+    );
+  };
+
+  const saveDatesConfig = async () => {
+    if (!datesState || !canManageCourses) return;
+    if (datesState.planningMode !== "bounded_series") {
+      setFormError("Terminverwaltung v1 unterstützt aktuell nur Serienplanung.");
+      return;
+    }
+    if (!datesSeriesRangeValid) {
+      setFormError("Bitte einen gültigen Zeitraum mit Start- und Enddatum wählen.");
+      return;
+    }
+
+    setSaving(true);
+    setFormError(null);
+    try {
+      await updateCourse(datesState.courseId, {
+        planningMode: "bounded_series",
+        visibilityMode: "fixed_window",
+        seriesStartDate: datesState.seriesStartDate,
+        seriesEndDate: datesState.seriesEndDate,
+        visibleFrom: datesState.seriesStartDate,
+        visibleUntil: datesState.seriesEndDate,
+        excludedDates: datesState.excludedDates,
+        includedDates: [],
+      });
+      closeDatesModal();
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to update course dates configuration", err);
+      setFormError(err instanceof Error ? err.message : "Terminkonfiguration konnte nicht gespeichert werden.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div role="status" aria-live="polite">
@@ -613,7 +765,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
                       title={canManageCourses ? "Termine bearbeiten" : "Nur Admin kann Termine bearbeiten"}
                       aria-label={`Termine bearbeiten ${course.name}`}
                       disabled={!canManageCourses || saving}
-                      onClick={() => openDatesModal(course.id)}
+                      onClick={() => openDatesModal(course)}
                     >
                       <CalendarDays size={14} aria-hidden="true" />
                     </button>
@@ -927,7 +1079,7 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         </div>
       )}
 
-      {datesTargetCourse && (
+      {datesTargetCourse && datesState && (
         <div
           className="modal-backdrop"
           role="dialog"
@@ -945,12 +1097,120 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
             <p className="course-editor-note">
               Planungsmodus: <strong>{planningModeLabel(datesTargetCourse.planningMode)}</strong>
             </p>
-            <p className="course-editor-note">
-              Hier folgt als Nächstes die Terminliste mit Absagen/Status pro Termin als erster MVP-Schritt.
-            </p>
+            {datesState.planningMode !== "bounded_series" ? (
+              <p className="course-editor-note">
+                Terminverwaltung v1 unterstützt aktuell nur Serienplanung. Bitte den Planungsmodus in den
+                Kurs-Einstellungen auf Serienplanung setzen.
+              </p>
+            ) : (
+              <div className="dialog-stack">
+                <label className="course-editor-field-label">
+                  Startdatum
+                  <input
+                    type="date"
+                    aria-label="Serienstart"
+                    value={datesState.seriesStartDate}
+                    onChange={(event) =>
+                      setDatesState((prev) =>
+                        prev ? { ...prev, seriesStartDate: normalizeIsoDate(event.target.value) } : prev,
+                      )
+                    }
+                    disabled={saving}
+                    className="dialog-field"
+                  />
+                </label>
+                <label className="course-editor-field-label">
+                  Enddatum
+                  <input
+                    type="date"
+                    aria-label="Serienende"
+                    value={datesState.seriesEndDate}
+                    onChange={(event) =>
+                      setDatesState((prev) =>
+                        prev ? { ...prev, seriesEndDate: normalizeIsoDate(event.target.value) } : prev,
+                      )
+                    }
+                    disabled={saving}
+                    className="dialog-field"
+                  />
+                </label>
+
+                <div className="course-editor-subsection">
+                  <label className="course-editor-field-label">
+                    Ausnahmetermin hinzufügen
+                    <input
+                      type="date"
+                      aria-label="Ausnahmetermin"
+                      value={datesState.pendingExcludedDate}
+                      onChange={(event) =>
+                        setDatesState((prev) =>
+                          prev ? { ...prev, pendingExcludedDate: normalizeIsoDate(event.target.value) } : prev,
+                        )
+                      }
+                      disabled={saving}
+                      className="dialog-field"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="modal-action-btn"
+                    onClick={addExcludedDate}
+                    disabled={saving || !datesState.pendingExcludedDate}
+                  >
+                    Ausnahmedatum hinzufügen
+                  </button>
+                </div>
+
+                <div className="course-editor-subsection">
+                  <strong className="course-editor-list-title">Ausgeschlossene Termine</strong>
+                  {datesState.excludedDates.length === 0 ? (
+                    <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
+                  ) : (
+                    <ul className="course-editor-list">
+                      {datesState.excludedDates.map((entry) => (
+                        <li key={entry} className="course-editor-list-item">
+                          <span>{entry}</span>
+                          <button
+                            type="button"
+                            className="modal-action-btn"
+                            aria-label={`Ausnahmedatum entfernen ${entry}`}
+                            onClick={() => removeExcludedDate(entry)}
+                            disabled={saving}
+                          >
+                            Entfernen
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="course-editor-subsection">
+                  <strong className="course-editor-list-title">Vorschau Termine ({datesPreview.length})</strong>
+                  {datesPreview.length === 0 ? (
+                    <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
+                  ) : (
+                    <ul className="course-editor-list">
+                      {datesPreview.map((entry) => (
+                        <li key={entry}>{entry}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+            {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
             <div className="modal-actions">
               <button type="button" className="modal-action-btn" onClick={closeDatesModal} disabled={saving}>
-                Schließen
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-primary modal-action-btn"
+                onClick={saveDatesConfig}
+                disabled={!canSaveDatesConfig}
+              >
+                {saving ? "Speichere..." : "Termine übernehmen"}
               </button>
             </div>
           </div>
