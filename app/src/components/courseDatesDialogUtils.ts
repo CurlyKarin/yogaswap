@@ -74,6 +74,7 @@ export function dedupeAndSortDates(values: string[]): string[] {
 
 export const DEFAULT_ROLLING_HORIZON_WEEKS = 10;
 export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = 5;
+const DEFAULT_ROLLING_EXCLUDE_SELECTION_WEEKS = 156; // ~3 Jahre für langfristige Planung
 
 function normalizeHorizonWeeks(value: number | undefined): number {
   if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_HORIZON_WEEKS;
@@ -82,6 +83,11 @@ function normalizeHorizonWeeks(value: number | undefined): number {
 
 function normalizeExcludeLockWeeks(value: number | undefined): number {
   if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
+  return Number(value);
+}
+
+function normalizeExcludeSelectionWeeks(value: number | undefined): number {
+  if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_EXCLUDE_SELECTION_WEEKS;
   return Number(value);
 }
 
@@ -224,6 +230,20 @@ export function getRollingExcludeLockRangeIso(
   start.setHours(12, 0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + normalizeExcludeLockWeeks(excludeLockWeeks) * 7);
+  return {
+    start: toIsoDateOnly(start),
+    end: toIsoDateOnly(end),
+  };
+}
+
+export function getRollingExcludeSelectionRangeIso(
+  excludeSelectionWeeks: number = DEFAULT_ROLLING_EXCLUDE_SELECTION_WEEKS,
+  now: Date = new Date(),
+): { start: string; end: string } {
+  const start = new Date(now);
+  start.setHours(12, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + normalizeExcludeSelectionWeeks(excludeSelectionWeeks) * 7);
   return {
     start: toIsoDateOnly(start),
     end: toIsoDateOnly(end),

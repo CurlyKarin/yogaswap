@@ -220,6 +220,33 @@ describe("CourseDatesDialog", () => {
     expect(allowedCell).not.toBeDisabled();
   });
 
+  it("erlaubt rolling excludedDates auch außerhalb des Sichtfensters", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 2,
+        })}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+
+    // Liegt deutlich außerhalb des 2-Wochen-Sichtfensters, muss aber auswählbar bleiben.
+    const farFutureCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-03-03/i });
+    expect(farFutureCell).not.toBeDisabled();
+  });
+
   it("ist bei aktivem Kurs read-only mit Kalenderansicht", async () => {
     mockedUpdateCourse.mockResolvedValue({});
     const onClose = vi.fn();

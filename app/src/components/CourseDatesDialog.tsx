@@ -14,6 +14,7 @@ import {
   formatMonthLabel,
   generatePreviewDates,
   getRollingExcludeLockRangeIso,
+  getRollingExcludeSelectionRangeIso,
   getRollingWindowRangeIso,
   isValidIsoDateOnly,
   parseIsoDateOnlyUtc,
@@ -166,21 +167,31 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     return formatMonthLabel(datesState.rangeCalendarMonth, displayLocale);
   }, [datesState, displayLocale]);
 
-  const excludedCalendarCells = useMemo(() => {
-    if (!datesState || !effectiveRange) return [];
-    return buildSeriesCalendarCells(
-      datesState.excludedCalendarMonth,
-      datesState.weekday,
-      effectiveRange.start,
-      effectiveRange.end,
-      datesState.excludedDates,
-    );
-  }, [datesState, effectiveRange]);
-
   const rollingExcludeLockRange = useMemo(() => {
     if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
     return getRollingExcludeLockRangeIso(DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS);
   }, [datesState]);
+
+  const rollingExcludeSelectionRange = useMemo(() => {
+    if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
+    return getRollingExcludeSelectionRangeIso();
+  }, [datesState]);
+
+  const excludedCalendarCells = useMemo(() => {
+    if (!datesState) return [];
+    const exclusionRange =
+      datesState.planningMode === "rolling_continuous"
+        ? rollingExcludeSelectionRange
+        : effectiveRange;
+    if (!exclusionRange) return [];
+    return buildSeriesCalendarCells(
+      datesState.excludedCalendarMonth,
+      datesState.weekday,
+      exclusionRange.start,
+      exclusionRange.end,
+      datesState.excludedDates,
+    );
+  }, [datesState, effectiveRange, rollingExcludeSelectionRange]);
 
   const excludedCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
@@ -330,7 +341,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
       if (!prev) return prev;
       const currentRange =
         prev.planningMode === "rolling_continuous"
-          ? getRollingWindowRangeIso(prev.visibilityHorizonWeeks)
+          ? getRollingExcludeSelectionRangeIso()
           : { start: prev.seriesStartDate, end: prev.seriesEndDate };
       const inSeriesRange =
         compareIsoDate(isoDate, currentRange.start) >= 0 && compareIsoDate(isoDate, currentRange.end) <= 0;
@@ -572,7 +583,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
               </button>
               <span className="course-editor-note">
                 {datesState.planningMode === "rolling_continuous"
-                  ? `Nur Termine außerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen sind als Ausnahme wählbar.`
+                  ? `Ausnahmen sind langfristig planbar; innerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen nur Absage.`
                   : "Nur Serientermine im Zeitraum sind wählbar."}
               </span>
             </div>
