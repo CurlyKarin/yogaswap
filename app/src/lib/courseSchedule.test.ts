@@ -33,4 +33,20 @@ describe("deriveVisibleDates", () => {
 
     expect(result).toEqual(["2026-01-05", "2026-01-12"]);
   });
+
+  it("uses UTC day boundary for rolling horizon near timezone edge", () => {
+    const result = deriveVisibleDates({
+      planningMode: "rolling_continuous",
+      visibilityMode: "rolling_horizon",
+      weekday: "Sun",
+      visibilityHorizonWeeks: 1,
+      excludedDates: [],
+      includedDates: [],
+      fallbackDates: [],
+      // Local Sunday, but already Monday in UTC.
+      now: new Date("2026-01-04T23:30:00-11:00"),
+    });
+
+    expect(result).toEqual(["2026-01-11"]);
+  });
 });
