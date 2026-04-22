@@ -5,6 +5,7 @@ export type CourseDatesEditorState = {
   courseId: number;
   weekday: string;
   planningMode: CoursePlanningMode;
+  visibilityHorizonWeeks: number;
   seriesStartDate: string;
   seriesEndDate: string;
   excludedDates: string[];
@@ -69,6 +70,13 @@ export function compareIsoDate(a: string, b: string): number {
 
 export function dedupeAndSortDates(values: string[]): string[] {
   return Array.from(new Set(values.filter(isValidIsoDateOnly))).sort(compareIsoDate);
+}
+
+export const DEFAULT_ROLLING_HORIZON_WEEKS = 10;
+
+function normalizeHorizonWeeks(value: number | undefined): number {
+  if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_HORIZON_WEEKS;
+  return Number(value);
 }
 
 function buildDefaultSeriesWindow(): { start: string; end: string } {
@@ -188,6 +196,45 @@ export function generateSeriesPreviewDates(
   });
 }
 
+export function getRollingWindowRangeIso(
+  visibilityHorizonWeeks: number,
+  now: Date = new Date(),
+): { start: string; end: string } {
+  const start = new Date(now);
+  start.setHours(12, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + normalizeHorizonWeeks(visibilityHorizonWeeks) * 7);
+  return {
+    start: toIsoDateOnly(start),
+    end: toIsoDateOnly(end),
+  };
+}
+
+export function generatePreviewDates(
+  state: Pick<
+    CourseDatesEditorState,
+    "planningMode" | "weekday" | "seriesStartDate" | "seriesEndDate" | "visibilityHorizonWeeks" | "excludedDates"
+  >,
+): string[] {
+  if (state.planningMode === "rolling_continuous") {
+    return deriveVisibleDates({
+      planningMode: "rolling_continuous",
+      visibilityMode: "rolling_horizon",
+      weekday: state.weekday,
+      visibilityHorizonWeeks: state.visibilityHorizonWeeks,
+      excludedDates: state.excludedDates,
+      includedDates: [],
+      fallbackDates: [],
+    });
+  }
+  return generateSeriesPreviewDates(
+    state.weekday,
+    state.seriesStartDate,
+    state.seriesEndDate,
+    state.excludedDates,
+  );
+}
+
 export function planningModeLabel(mode: CoursePlanningMode | undefined): string {
   if (mode === "rolling_continuous") return "Durchlaufend (rollend)";
   return "Kursblock (fixes Fenster)";
@@ -200,6 +247,7 @@ export function createDatesState(course: Course): CourseDatesEditorState {
     courseId: course.id,
     weekday: course.weekday,
     planningMode: course.planningMode ?? "bounded_series",
+    visibilityHorizonWeeks: normalizeHorizonWeeks(course.visibilityHorizonWeeks),
     seriesStartDate: initialStart,
     seriesEndDate: course.seriesEndDate ?? defaults.end,
     excludedDates: dedupeAndSortDates(course.excludedDates ?? []),

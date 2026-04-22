@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Course } from "shared/types";
 import CourseDatesDialog from "./CourseDatesDialog";
@@ -143,6 +143,49 @@ describe("CourseDatesDialog", () => {
     await user.click(tuesdayCell);
 
     expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
+  });
+
+  it("speichert durchlaufende Kurse mit rolling horizon", async () => {
+    mockedUpdateCourse.mockResolvedValue({});
+    const onClose = vi.fn();
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        canManageCourses
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    expect(dialogQueries.getByText(/durchlaufend \(rollend\)/i)).toBeInTheDocument();
+
+    const horizonInput = dialogQueries.getByLabelText(/sichtfenster wochen/i);
+    fireEvent.change(horizonInput, { target: { value: "12" } });
+
+    await user.click(dialogQueries.getByRole("button", { name: /termine übernehmen/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateCourse).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          planningMode: "rolling_continuous",
+          visibilityMode: "rolling_horizon",
+          visibilityHorizonWeeks: 12,
+          excludedDates: [],
+          includedDates: [],
+        }),
+      );
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onSaved).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("ist bei aktivem Kurs read-only mit Kalenderansicht", async () => {
