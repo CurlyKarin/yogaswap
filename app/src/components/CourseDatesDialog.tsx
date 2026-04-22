@@ -116,7 +116,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
   const rollingHorizonValid =
     !!datesState &&
     Number.isInteger(datesState.visibilityHorizonWeeks) &&
-    datesState.visibilityHorizonWeeks > 0;
+    datesState.visibilityHorizonWeeks >= DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
   const isActiveReadOnly =
     course?.status === "active" && datesState?.planningMode === "bounded_series";
 
@@ -274,7 +274,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
             ...prev,
             visibilityHorizonWeeks:
               Number.isInteger(numericValue) && numericValue > 0
-                ? numericValue
+                ? Math.max(numericValue, DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS)
                 : DEFAULT_ROLLING_HORIZON_WEEKS,
           }
         : prev,
@@ -378,7 +378,9 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
       }
     } else if (datesState.planningMode === "rolling_continuous") {
       if (!rollingHorizonValid) {
-        setFormError("Bitte eine gültige Anzahl Wochen für die Sichtbarkeit eingeben.");
+        setFormError(
+          `Bitte mindestens ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen für die Sichtbarkeit eingeben.`,
+        );
         return;
       }
     } else {
@@ -555,7 +557,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                 <input
                   id="rolling-horizon-weeks"
                   type="number"
-                  min={1}
+                  min={DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS}
                   step={1}
                   value={datesState.visibilityHorizonWeeks}
                   onChange={(event) => setRollingHorizonWeeks(event.target.value)}

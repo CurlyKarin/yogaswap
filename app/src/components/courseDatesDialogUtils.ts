@@ -78,7 +78,7 @@ const DEFAULT_ROLLING_EXCLUDE_SELECTION_WEEKS = 156; // ~3 Jahre für langfristi
 
 function normalizeHorizonWeeks(value: number | undefined): number {
   if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_HORIZON_WEEKS;
-  return Number(value);
+  return Math.max(Number(value), DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS);
 }
 
 function normalizeExcludeLockWeeks(value: number | undefined): number {

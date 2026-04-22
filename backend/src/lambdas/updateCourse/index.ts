@@ -16,6 +16,7 @@ const COURSE_VISIBILITY_MODES = new Set(["fixed_window", "rolling_horizon"]);
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const ROLLING_EXCLUDE_LOCK_WEEKS = 5;
+const MIN_ROLLING_HORIZON_WEEKS = ROLLING_EXCLUDE_LOCK_WEEKS;
 
 type UpdateCourseBody = {
   name?: string;
@@ -263,10 +264,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
   if (Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")) {
-    if (visibilityHorizonWeeks == null || !Number.isInteger(visibilityHorizonWeeks) || visibilityHorizonWeeks <= 0) {
+    if (
+      visibilityHorizonWeeks == null ||
+      !Number.isInteger(visibilityHorizonWeeks) ||
+      visibilityHorizonWeeks < MIN_ROLLING_HORIZON_WEEKS
+    ) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "visibilityHorizonWeeks must be a positive integer" }),
+        body: JSON.stringify({
+          error: `visibilityHorizonWeeks must be an integer >= ${MIN_ROLLING_HORIZON_WEEKS}`,
+        }),
       };
     }
   }
@@ -420,11 +427,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     if (
       nextVisibilityMode === "rolling_horizon" &&
-      (!Number.isInteger(nextVisibilityHorizonWeeks) || (nextVisibilityHorizonWeeks ?? 0) <= 0)
+      (!Number.isInteger(nextVisibilityHorizonWeeks) || (nextVisibilityHorizonWeeks ?? 0) < MIN_ROLLING_HORIZON_WEEKS)
     ) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "rolling_horizon requires visibilityHorizonWeeks > 0" }),
+        body: JSON.stringify({
+          error: `rolling_horizon requires visibilityHorizonWeeks >= ${MIN_ROLLING_HORIZON_WEEKS}`,
+        }),
       };
     }
 
