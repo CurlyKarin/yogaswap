@@ -38,17 +38,6 @@ export function sameInstant(a: Date | string, b: Date | string): boolean {
   return sameDayUTC(new Date(a), new Date(b));
 }
 
-// Falls das Datum die Uhrzeit enthalten soll:
-// export function sameInstant(a: Date | string, b: Date | string): boolean {
-//   const dateA = new Date(a);
-//   const dateB = new Date(b);
-//   if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-//     console.warn(`Ungültiges Datum in sameInstant: a=${a}, b=${b}`);
-//     return false;
-//   }
-//   return dateA.getTime() === dateB.getTime(); // Exakter Zeitstempel-Vergleich
-// }
-
 export function toDateKey(date: Date): string {
   if (isNaN(date.getTime())) return ""; // ungültiges Datum → kein Crash
   return date.toISOString().slice(0, 10); // "YYYY-MM-DD"

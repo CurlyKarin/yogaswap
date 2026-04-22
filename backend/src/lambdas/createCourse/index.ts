@@ -8,6 +8,8 @@ const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
 const COURSE_PLANNING_MODES = new Set(["bounded_series", "rolling_continuous"]);
 const COURSE_VISIBILITY_MODES = new Set(["fixed_window", "rolling_horizon"]);
+const ROLLING_EXCLUDE_LOCK_WEEKS = 5;
+const MIN_ROLLING_HORIZON_WEEKS = ROLLING_EXCLUDE_LOCK_WEEKS;
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -134,11 +136,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
   if (
     (visibilityMode === "rolling_horizon" || visibilityHorizonWeeks != null) &&
-    (!Number.isInteger(visibilityHorizonWeeks) || (visibilityHorizonWeeks ?? 0) <= 0)
+    (!Number.isInteger(visibilityHorizonWeeks) || (visibilityHorizonWeeks ?? 0) < MIN_ROLLING_HORIZON_WEEKS)
   ) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: "visibilityHorizonWeeks must be a positive integer" }),
+      body: JSON.stringify({
+        error: `visibilityHorizonWeeks must be an integer >= ${MIN_ROLLING_HORIZON_WEEKS}`,
+      }),
     };
   }
   if (!excludedDates || !includedDates) {

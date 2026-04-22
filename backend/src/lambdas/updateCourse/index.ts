@@ -15,6 +15,8 @@ const COURSE_PLANNING_MODES = new Set(["bounded_series", "rolling_continuous"]);
 const COURSE_VISIBILITY_MODES = new Set(["fixed_window", "rolling_horizon"]);
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const ROLLING_EXCLUDE_LOCK_WEEKS = 5;
+const MIN_ROLLING_HORIZON_WEEKS = ROLLING_EXCLUDE_LOCK_WEEKS;
 
 type UpdateCourseBody = {
   name?: string;
@@ -63,6 +65,28 @@ function isFutureOrTodayDateString(isoDate: string, now: Date): boolean {
   if (Number.isNaN(date.getTime())) return false;
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return date >= startOfToday;
+}
+
+function toIsoDateOnlyLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysLocal(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getRollingExcludeLockBounds(now: Date): { startIso: string; endIso: string } {
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = addDaysLocal(startOfToday, ROLLING_EXCLUDE_LOCK_WEEKS * 7);
+  return {
+    startIso: toIsoDateOnlyLocal(startOfToday),
+    endIso: toIsoDateOnlyLocal(end),
+  };
 }
 
 function hasAnyListEntries(item: Record<string, { L?: Array<{ S?: string }> }>): boolean {
@@ -240,10 +264,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
   if (Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")) {
-    if (visibilityHorizonWeeks == null || !Number.isInteger(visibilityHorizonWeeks) || visibilityHorizonWeeks <= 0) {
+    if (
+      visibilityHorizonWeeks == null ||
+      !Number.isInteger(visibilityHorizonWeeks) ||
+      visibilityHorizonWeeks < MIN_ROLLING_HORIZON_WEEKS
+    ) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "visibilityHorizonWeeks must be a positive integer" }),
+        body: JSON.stringify({
+          error: `visibilityHorizonWeeks must be an integer >= ${MIN_ROLLING_HORIZON_WEEKS}`,
+        }),
       };
     }
   }
@@ -282,10 +312,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const currentStatus = item.status?.S ?? "active";
     const nextStatus = status ?? currentStatus;
     if (status && nextStatus !== currentStatus) {
+      const currentPlanningMode = item.planningMode?.S ?? "bounded_series";
+      const requestedPlanningMode = planningMode ?? currentPlanningMode;
+      const hasParticipants = (item.participants?.L?.length ?? 0) > 0;
       const transitionAllowed =
         (currentStatus === "inactive" && nextStatus === "draft") ||
         (currentStatus === "draft" && nextStatus === "active") ||
-        (currentStatus === "active" && nextStatus === "inactive");
+        (currentStatus === "active" && nextStatus === "inactive") ||
+        (
+          currentStatus === "active" &&
+          nextStatus === "draft" &&
+          requestedPlanningMode === "rolling_continuous" &&
+          !hasParticipants
+        );
       if (!transitionAllowed) {
         return {
           statusCode: 400,
@@ -357,6 +396,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       excludedDates ?? (item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? []);
     const nextIncludedDates =
       includedDates ?? (item.includedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? []);
+    const currentExcludedDates =
+      item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [];
 
     if (
       (nextPlanningMode === "bounded_series" ||
@@ -386,12 +427,31 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     if (
       nextVisibilityMode === "rolling_horizon" &&
-      (!Number.isInteger(nextVisibilityHorizonWeeks) || (nextVisibilityHorizonWeeks ?? 0) <= 0)
+      (!Number.isInteger(nextVisibilityHorizonWeeks) || (nextVisibilityHorizonWeeks ?? 0) < MIN_ROLLING_HORIZON_WEEKS)
     ) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "rolling_horizon requires visibilityHorizonWeeks > 0" }),
+        body: JSON.stringify({
+          error: `rolling_horizon requires visibilityHorizonWeeks >= ${MIN_ROLLING_HORIZON_WEEKS}`,
+        }),
       };
+    }
+
+    if (nextPlanningMode === "rolling_continuous") {
+      const currentExcludedSet = new Set(currentExcludedDates);
+      const addedExcludedDates = nextExcludedDates.filter((entry) => !currentExcludedSet.has(entry));
+      const lockBounds = getRollingExcludeLockBounds(new Date());
+      const hasLockedExcludedDate = addedExcludedDates.some(
+        (entry) => entry >= lockBounds.startIso && entry <= lockBounds.endIso,
+      );
+      if (hasLockedExcludedDate) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({
+            error: `Termine innerhalb der nächsten ${ROLLING_EXCLUDE_LOCK_WEEKS} Wochen dürfen nicht ausgeschlossen werden. Bitte stattdessen absagen.`,
+          }),
+        };
+      }
     }
 
     const nextDates = deriveVisibleDates({

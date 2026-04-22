@@ -1,55 +1,33 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { Calendar } from "lucide-react";
-import type { Course, CoursePlanningMode } from "shared/types";
+import type { Course } from "shared/types";
 import { updateCourse } from "../api/courses";
+import {
+  DEFAULT_ROLLING_HORIZON_WEEKS,
+  DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS,
+  WEEKDAY_ORDER,
+  buildSeriesCalendarCells,
+  compareIsoDate,
+  createDatesState,
+  dedupeAndSortDates,
+  formatIsoDateForDisplay,
+  formatMonthLabel,
+  generatePreviewDates,
+  getRollingExcludeLockRangeIso,
+  getRollingExcludeSelectionRangeIso,
+  getRollingWindowRangeIso,
+  isValidIsoDateOnly,
+  parseIsoDateOnlyUtc,
+  planningModeLabel,
+  shiftMonthKey,
+  type CourseDatesEditorState,
+} from "./courseDatesDialogUtils";
 
 type CourseDatesDialogProps = {
   course: Course | null;
   canManageCourses: boolean;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
-};
-
-type CourseDatesEditorState = {
-  courseId: number;
-  weekday: string;
-  planningMode: CoursePlanningMode;
-  seriesStartDate: string;
-  seriesEndDate: string;
-  excludedDates: string[];
-  rangeCalendarMonth: string;
-  excludedCalendarMonth: string;
-  rangeDatePickerOpen: boolean;
-  excludedDatePickerOpen: boolean;
-  rangeSelectionTarget: "start" | "end";
-};
-
-type CalendarCell = {
-  isoDate: string;
-  dayOfMonth: number;
-  inCurrentMonth: boolean;
-  inSeriesRange: boolean;
-  isSeriesDate: boolean;
-  isExcluded: boolean;
-  isRangeStart: boolean;
-  isRangeEnd: boolean;
-};
-
-const WEEKDAY_ORDER: Record<string, number> = {
-  Mon: 1,
-  Monday: 1,
-  Tue: 2,
-  Tuesday: 2,
-  Wed: 3,
-  Wednesday: 3,
-  Thu: 4,
-  Thursday: 4,
-  Fri: 5,
-  Friday: 5,
-  Sat: 6,
-  Saturday: 6,
-  Sun: 7,
-  Sunday: 7,
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -72,176 +50,6 @@ function focusFirstElement(node: HTMLElement): void {
     return;
   }
   node.focus();
-}
-
-function toIsoDateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function addDaysUtc(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next;
-}
-
-function isValidIsoDateOnly(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function compareIsoDate(a: string, b: string): number {
-  return a.localeCompare(b);
-}
-
-function dedupeAndSortDates(values: string[]): string[] {
-  return Array.from(new Set(values.filter(isValidIsoDateOnly))).sort(compareIsoDate);
-}
-
-function buildDefaultSeriesWindow(): { start: string; end: string } {
-  const today = new Date();
-  return {
-    start: toIsoDateOnly(today),
-    end: toIsoDateOnly(addDays(today, 84)),
-  };
-}
-
-function parseIsoDateOnlyUtc(value: string): Date | null {
-  if (!isValidIsoDateOnly(value)) return null;
-  const parsed = new Date(`${value}T12:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return toIsoDateOnly(parsed) === value ? parsed : null;
-}
-
-function toMonthKey(date: Date): string {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function monthKeyFromIsoDate(value: string): string | null {
-  const parsed = parseIsoDateOnlyUtc(value);
-  if (!parsed) return null;
-  return toMonthKey(parsed);
-}
-
-function parseMonthKey(value: string): Date | null {
-  if (!/^\d{4}-\d{2}$/.test(value)) return null;
-  const parsed = new Date(`${value}-01T12:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
-
-function shiftMonthKey(value: string, monthDelta: number): string {
-  const parsed = parseMonthKey(value);
-  if (!parsed) return value;
-  parsed.setUTCMonth(parsed.getUTCMonth() + monthDelta);
-  return toMonthKey(parsed);
-}
-
-function formatMonthLabel(monthKey: string, locale?: string): string {
-  const parsed = parseMonthKey(monthKey);
-  if (!parsed) return monthKey;
-  return new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(parsed);
-}
-
-function formatIsoDateForDisplay(isoDate: string, locale?: string): string {
-  const parsed = parseIsoDateOnlyUtc(isoDate);
-  if (!parsed) return isoDate;
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(parsed);
-}
-
-function buildSeriesCalendarCells(
-  monthKey: string,
-  weekday: string,
-  rangeStartIso: string,
-  rangeEndIso: string,
-  excludedDates: string[],
-): CalendarCell[] {
-  const monthStart = parseMonthKey(monthKey);
-  const rangeStart = parseIsoDateOnlyUtc(rangeStartIso);
-  const rangeEnd = parseIsoDateOnlyUtc(rangeEndIso);
-  if (!monthStart || !rangeStart || !rangeEnd) return [];
-  const normalizedRangeStart = toIsoDateOnly(rangeStart);
-  const normalizedRangeEnd = toIsoDateOnly(rangeEnd);
-  if (compareIsoDate(normalizedRangeStart, normalizedRangeEnd) > 0) return [];
-
-  const weekdayIndex = WEEKDAY_ORDER[weekday];
-  if (!weekdayIndex || weekdayIndex < 1 || weekdayIndex > 7) return [];
-  const jsWeekday = weekdayIndex % 7;
-
-  monthStart.setUTCDate(1);
-  const offsetToMonday = (monthStart.getUTCDay() + 6) % 7;
-  const gridStart = addDaysUtc(monthStart, -offsetToMonday);
-  const currentMonth = toMonthKey(monthStart);
-  const excludedSet = new Set(dedupeAndSortDates(excludedDates));
-
-  const cells: CalendarCell[] = [];
-  for (let index = 0; index < 42; index += 1) {
-    const current = addDaysUtc(gridStart, index);
-    const isoDate = toIsoDateOnly(current);
-    const inSeriesRange =
-      compareIsoDate(isoDate, normalizedRangeStart) >= 0 && compareIsoDate(isoDate, normalizedRangeEnd) <= 0;
-    const isSeriesDate = inSeriesRange && current.getUTCDay() === jsWeekday;
-    cells.push({
-      isoDate,
-      dayOfMonth: current.getUTCDate(),
-      inCurrentMonth: toMonthKey(current) === currentMonth,
-      inSeriesRange,
-      isSeriesDate,
-      isExcluded: excludedSet.has(isoDate),
-      isRangeStart: isoDate === normalizedRangeStart,
-      isRangeEnd: isoDate === normalizedRangeEnd,
-    });
-  }
-  return cells;
-}
-
-function generateSeriesPreviewDates(weekday: string, startDate: string, endDate: string, excludedDates: string[]): string[] {
-  if (!isValidIsoDateOnly(startDate) || !isValidIsoDateOnly(endDate) || compareIsoDate(startDate, endDate) > 0) {
-    return [];
-  }
-  const weekdayIndex = WEEKDAY_ORDER[weekday];
-  if (!weekdayIndex || weekdayIndex < 1 || weekdayIndex > 7) return [];
-  const jsWeekday = weekdayIndex % 7;
-  const excluded = new Set(dedupeAndSortDates(excludedDates));
-
-  const start = new Date(`${startDate}T12:00:00.000Z`);
-  const end = new Date(`${endDate}T12:00:00.000Z`);
-  const preview: string[] = [];
-  for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
-    if (cursor.getUTCDay() !== jsWeekday) continue;
-    const iso = toIsoDateOnly(cursor);
-    if (!excluded.has(iso)) {
-      preview.push(iso);
-    }
-  }
-  return preview;
-}
-
-function planningModeLabel(mode: CoursePlanningMode | undefined): string {
-  if (mode === "rolling_continuous") return "Durchlaufend (rollend)";
-  return "Kursblock (fixes Fenster)";
-}
-
-function createDatesState(course: Course): CourseDatesEditorState {
-  const defaults = buildDefaultSeriesWindow();
-  const initialStart = course.seriesStartDate ?? defaults.start;
-  return {
-    courseId: course.id,
-    weekday: course.weekday,
-    planningMode: course.planningMode ?? "bounded_series",
-    seriesStartDate: initialStart,
-    seriesEndDate: course.seriesEndDate ?? defaults.end,
-    excludedDates: dedupeAndSortDates(course.excludedDates ?? []),
-    rangeCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
-    excludedCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
-    rangeDatePickerOpen: false,
-    excludedDatePickerOpen: false,
-    rangeSelectionTarget: "start",
-  };
 }
 
 export default function CourseDatesDialog({ course, canManageCourses, onClose, onSaved }: CourseDatesDialogProps) {
@@ -305,24 +113,26 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     isValidIsoDateOnly(datesState.seriesStartDate) &&
     isValidIsoDateOnly(datesState.seriesEndDate) &&
     compareIsoDate(datesState.seriesStartDate, datesState.seriesEndDate) <= 0;
-  const isActiveReadOnly = course?.status === "active";
+  const rollingHorizonValid =
+    !!datesState &&
+    Number.isInteger(datesState.visibilityHorizonWeeks) &&
+    datesState.visibilityHorizonWeeks >= DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
+  const isActiveReadOnly =
+    course?.status === "active" && datesState?.planningMode === "bounded_series";
 
   const canSaveDatesConfig =
     canManageCourses &&
     !isActiveReadOnly &&
     !saving &&
     !!datesState &&
-    datesState.planningMode === "bounded_series" &&
-    datesSeriesRangeValid;
+    (
+      (datesState.planningMode === "bounded_series" && datesSeriesRangeValid) ||
+      (datesState.planningMode === "rolling_continuous" && rollingHorizonValid)
+    );
 
   const datesPreview = useMemo(() => {
     if (!datesState) return [];
-    return generateSeriesPreviewDates(
-      datesState.weekday,
-      datesState.seriesStartDate,
-      datesState.seriesEndDate,
-      datesState.excludedDates,
-    );
+    return generatePreviewDates(datesState);
   }, [datesState]);
 
   const displayLocale =
@@ -330,32 +140,58 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
       ? navigator.language
       : "de-DE";
 
+  const effectiveRange = useMemo(() => {
+    if (!datesState) return null;
+    if (datesState.planningMode === "rolling_continuous") {
+      return getRollingWindowRangeIso(datesState.visibilityHorizonWeeks);
+    }
+    return {
+      start: datesState.seriesStartDate,
+      end: datesState.seriesEndDate,
+    };
+  }, [datesState]);
+
   const rangeCalendarCells = useMemo(() => {
-    if (!datesState) return [];
+    if (!datesState || !effectiveRange) return [];
     return buildSeriesCalendarCells(
       datesState.rangeCalendarMonth,
       datesState.weekday,
-      datesState.seriesStartDate,
-      datesState.seriesEndDate,
+      effectiveRange.start,
+      effectiveRange.end,
       datesState.excludedDates,
     );
-  }, [datesState]);
+  }, [datesState, effectiveRange]);
 
   const rangeCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
     return formatMonthLabel(datesState.rangeCalendarMonth, displayLocale);
   }, [datesState, displayLocale]);
 
+  const rollingExcludeLockRange = useMemo(() => {
+    if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
+    return getRollingExcludeLockRangeIso(DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS);
+  }, [datesState]);
+
+  const rollingExcludeSelectionRange = useMemo(() => {
+    if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
+    return getRollingExcludeSelectionRangeIso();
+  }, [datesState]);
+
   const excludedCalendarCells = useMemo(() => {
     if (!datesState) return [];
+    const exclusionRange =
+      datesState.planningMode === "rolling_continuous"
+        ? rollingExcludeSelectionRange
+        : effectiveRange;
+    if (!exclusionRange) return [];
     return buildSeriesCalendarCells(
       datesState.excludedCalendarMonth,
       datesState.weekday,
-      datesState.seriesStartDate,
-      datesState.seriesEndDate,
+      exclusionRange.start,
+      exclusionRange.end,
       datesState.excludedDates,
     );
-  }, [datesState]);
+  }, [datesState, effectiveRange, rollingExcludeSelectionRange]);
 
   const excludedCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
@@ -364,6 +200,12 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
 
   const formattedSeriesStart = datesState ? formatIsoDateForDisplay(datesState.seriesStartDate, displayLocale) : "";
   const formattedSeriesEnd = datesState ? formatIsoDateForDisplay(datesState.seriesEndDate, displayLocale) : "";
+  const formattedEffectiveRangeStart = effectiveRange
+    ? formatIsoDateForDisplay(effectiveRange.start, displayLocale)
+    : "";
+  const formattedEffectiveRangeEnd = effectiveRange
+    ? formatIsoDateForDisplay(effectiveRange.end, displayLocale)
+    : "";
   const formattedExcludedDates = useMemo(() => {
     if (!datesState) return [];
     return datesState.excludedDates.map((entry) => formatIsoDateForDisplay(entry, displayLocale));
@@ -423,6 +265,23 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     );
   };
 
+  const setRollingHorizonWeeks = (value: string) => {
+    if (saving || isActiveReadOnly) return;
+    const numericValue = Number.parseInt(value, 10);
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            visibilityHorizonWeeks:
+              Number.isInteger(numericValue) && numericValue > 0
+                ? Math.max(numericValue, DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS)
+                : DEFAULT_ROLLING_HORIZON_WEEKS,
+          }
+        : prev,
+    );
+    setFormError(null);
+  };
+
   const setSeriesRangeDate = (isoDate: string) => {
     if (saving || isActiveReadOnly) return;
     if (!isValidIsoDateOnly(isoDate)) return;
@@ -480,15 +339,25 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     if (saving || isActiveReadOnly) return;
     setDatesState((prev) => {
       if (!prev) return prev;
+      const currentRange =
+        prev.planningMode === "rolling_continuous"
+          ? getRollingExcludeSelectionRangeIso()
+          : { start: prev.seriesStartDate, end: prev.seriesEndDate };
       const inSeriesRange =
-        compareIsoDate(isoDate, prev.seriesStartDate) >= 0 && compareIsoDate(isoDate, prev.seriesEndDate) <= 0;
+        compareIsoDate(isoDate, currentRange.start) >= 0 && compareIsoDate(isoDate, currentRange.end) <= 0;
       const weekdayIndex = WEEKDAY_ORDER[prev.weekday];
       const date = parseIsoDateOnlyUtc(isoDate);
       const isSeriesWeekday =
         !!date && !!weekdayIndex && weekdayIndex >= 1 && weekdayIndex <= 7 && date.getUTCDay() === weekdayIndex % 7;
+      const rollingLocked =
+        prev.planningMode === "rolling_continuous" &&
+        !!rollingExcludeLockRange &&
+        compareIsoDate(isoDate, rollingExcludeLockRange.start) >= 0 &&
+        compareIsoDate(isoDate, rollingExcludeLockRange.end) <= 0;
       if (!inSeriesRange || !isSeriesWeekday) {
         return prev;
       }
+      if (rollingLocked) return prev;
       const hasExcludedDate = prev.excludedDates.includes(isoDate);
       return {
         ...prev,
@@ -502,28 +371,46 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
 
   const saveDatesConfig = async () => {
     if (!datesState || !canManageCourses || isActiveReadOnly) return;
-    if (datesState.planningMode !== "bounded_series") {
-      setFormError("Terminverwaltung v1 unterstützt aktuell nur Serienplanung.");
-      return;
-    }
-    if (!datesSeriesRangeValid) {
-      setFormError("Bitte einen gültigen Zeitraum mit Start- und Enddatum wählen.");
+    if (datesState.planningMode === "bounded_series") {
+      if (!datesSeriesRangeValid) {
+        setFormError("Bitte einen gültigen Zeitraum mit Start- und Enddatum wählen.");
+        return;
+      }
+    } else if (datesState.planningMode === "rolling_continuous") {
+      if (!rollingHorizonValid) {
+        setFormError(
+          `Bitte mindestens ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen für die Sichtbarkeit eingeben.`,
+        );
+        return;
+      }
+    } else {
+      setFormError("Unbekannter Planungsmodus.");
       return;
     }
 
     setSaving(true);
     setFormError(null);
     try {
-      await updateCourse(datesState.courseId, {
-        planningMode: "bounded_series",
-        visibilityMode: "fixed_window",
-        seriesStartDate: datesState.seriesStartDate,
-        seriesEndDate: datesState.seriesEndDate,
-        visibleFrom: datesState.seriesStartDate,
-        visibleUntil: datesState.seriesEndDate,
-        excludedDates: datesState.excludedDates,
-        includedDates: [],
-      });
+      if (datesState.planningMode === "rolling_continuous") {
+        await updateCourse(datesState.courseId, {
+          planningMode: "rolling_continuous",
+          visibilityMode: "rolling_horizon",
+          visibilityHorizonWeeks: datesState.visibilityHorizonWeeks,
+          excludedDates: datesState.excludedDates,
+          includedDates: [],
+        });
+      } else {
+        await updateCourse(datesState.courseId, {
+          planningMode: "bounded_series",
+          visibilityMode: "fixed_window",
+          seriesStartDate: datesState.seriesStartDate,
+          seriesEndDate: datesState.seriesEndDate,
+          visibleFrom: datesState.seriesStartDate,
+          visibleUntil: datesState.seriesEndDate,
+          excludedDates: datesState.excludedDates,
+          includedDates: [],
+        });
+      }
       onClose();
       await onSaved();
     } catch (err) {
@@ -559,13 +446,8 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
             Kurs ist aktiv. Terminplanung ist gesperrt. Änderungen erfolgen über Terminabsage.
           </p>
         )}
-        {datesState.planningMode !== "bounded_series" ? (
-          <p className="course-editor-note">
-            Terminverwaltung v1 unterstützt aktuell nur Serienplanung. Bitte den Planungsmodus in den
-            Kurs-Einstellungen auf Serienplanung setzen.
-          </p>
-        ) : (
-          <div className="dialog-stack">
+        <div className="dialog-stack">
+          {datesState.planningMode === "bounded_series" ? (
             <div className="course-editor-subsection">
               <strong className="course-editor-list-title">Zeitraum</strong>
               <p className="course-editor-note">
@@ -662,24 +544,53 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                 </div>
               )}
             </div>
-
+          ) : (
             <div className="course-editor-subsection">
-              <strong className="course-editor-list-title">Ausgeschlossene Termin</strong>
+              <strong className="course-editor-list-title">Sichtfenster</strong>
+              <p className="course-editor-note">
+                Von heute ({formattedEffectiveRangeStart}) bis {formattedEffectiveRangeEnd}
+              </p>
               <div className="course-editor-inline-row">
-                <button
-                  type="button"
-                  className="modal-action-btn course-editor-icon-btn"
-                  onClick={toggleExcludedDatePicker}
-                  disabled={saving}
-                  title={datesState.excludedDatePickerOpen ? "Kalender ausblenden" : "Kalender öffnen"}
-                  aria-label="Kalender für Ausnahmetermin öffnen"
-                >
-                  <Calendar size={16} aria-hidden="true" />
-                </button>
-                <span className="course-editor-note">Nur Serientermine im Zeitraum sind wählbar.</span>
+                <label htmlFor="rolling-horizon-weeks" className="course-editor-note">
+                  Sichtbarkeit in Wochen
+                </label>
+                <input
+                  id="rolling-horizon-weeks"
+                  type="number"
+                  min={DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS}
+                  step={1}
+                  value={datesState.visibilityHorizonWeeks}
+                  onChange={(event) => setRollingHorizonWeeks(event.target.value)}
+                  aria-label="Sichtfenster Wochen"
+                  disabled={saving || isActiveReadOnly}
+                  className="dialog-field"
+                  style={{ width: 96 }}
+                />
               </div>
+            </div>
+          )}
+
+          <div className="course-editor-subsection">
+            <strong className="course-editor-list-title">Ausgeschlossene Termin</strong>
+            <div className="course-editor-inline-row">
+              <button
+                type="button"
+                className="modal-action-btn course-editor-icon-btn"
+                onClick={toggleExcludedDatePicker}
+                disabled={saving}
+                title={datesState.excludedDatePickerOpen ? "Kalender ausblenden" : "Kalender öffnen"}
+                aria-label="Kalender für Ausnahmetermin öffnen"
+              >
+                <Calendar size={16} aria-hidden="true" />
+              </button>
+              <span className="course-editor-note">
+                {datesState.planningMode === "rolling_continuous"
+                  ? `Ausnahmen sind langfristig planbar; innerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen nur Absage.`
+                  : "Nur Serientermine im Zeitraum sind wählbar."}
+              </span>
+            </div>
               <p className="course-editor-mobile-hint">
-                Mobile: Tippen auf Serientermin setzt/entfernt eine Ausnahme.
+                Mobile: Tippen auf markierten Termin setzt/entfernt eine Ausnahme.
               </p>
               {datesState.excludedDatePickerOpen && (
                 <div className="course-editor-calendar-block" role="group" aria-label="Kalender Ausnahmetermine">
@@ -709,6 +620,11 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                   </div>
                   <div className="course-editor-calendar-grid">
                     {excludedCalendarCells.map((cell) => {
+                      const rollingLocked =
+                        datesState.planningMode === "rolling_continuous" &&
+                        !!rollingExcludeLockRange &&
+                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.start) >= 0 &&
+                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.end) <= 0;
                       const cellClassName = [
                         "course-editor-calendar-cell",
                         cell.inCurrentMonth ? "" : "is-outside-month",
@@ -730,11 +646,13 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                               toggleExcludedDateFromCalendar(cell.isoDate);
                             }
                           }}
-                          disabled={!cell.isSeriesDate || saving || isActiveReadOnly}
+                          disabled={!cell.isSeriesDate || saving || isActiveReadOnly || rollingLocked}
                           title={
                             isActiveReadOnly
                               ? "Nur Ansicht im aktiven Kurs"
-                              : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
+                              : rollingLocked
+                                ? `Innerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen nur Absage möglich`
+                                : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
                           }
                         >
                           {cell.dayOfMonth}
@@ -758,26 +676,25 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="course-editor-subsection">
-              {datesState.excludedDates.length === 0 ? (
-                <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
-              ) : (
-                <p className="course-editor-comma-list">{formattedExcludedDates.join(", ")}</p>
-              )}
-            </div>
-
-            <div className="course-editor-subsection">
-              <strong className="course-editor-list-title">Vorschau Termine ({datesPreview.length})</strong>
-              {datesPreview.length === 0 ? (
-                <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
-              ) : (
-                <p className="course-editor-comma-list">{formattedPreviewDates.join(", ")}</p>
-              )}
-            </div>
           </div>
-        )}
+
+          <div className="course-editor-subsection">
+            {datesState.excludedDates.length === 0 ? (
+              <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
+            ) : (
+              <p className="course-editor-comma-list">{formattedExcludedDates.join(", ")}</p>
+            )}
+          </div>
+
+          <div className="course-editor-subsection">
+            <strong className="course-editor-list-title">Vorschau Termine ({datesPreview.length})</strong>
+            {datesPreview.length === 0 ? (
+              <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
+            ) : (
+              <p className="course-editor-comma-list">{formattedPreviewDates.join(", ")}</p>
+            )}
+          </div>
+        </div>
         {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
         <div className="modal-actions">
           {isActiveReadOnly ? (

@@ -1,0 +1,19 @@
+---
+description: Short AI commit messages for this repo
+alwaysApply: true
+---
+
+# Commit Message Style
+
+- Write a short, descriptive subject line in English.
+- Target: a single line with max 72 characters (excluding Git hook branch prefix).
+- Avoid generic subjects like `update`, `changes`, `wip`, `auto`.
+- Use a verb plus concrete intent (why), not just a file list.
+- Optional body only when needed (1-3 short bullets).
+
+## Beispiele
+
+- Good: `Block excludedDates in rolling lock window`
+- Good: `Decouple exclusion selection from visibility window`
+- Bad: `update`
+- Bad: `fix stuff`

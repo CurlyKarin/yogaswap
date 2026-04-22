@@ -133,6 +133,25 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Invalid status transition/);
   });
 
+  test("allows active -> draft for rolling course without participants", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          visibilityHorizonWeeks: { N: "8" },
+          participants: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ status: "draft" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).status).toBe("draft");
+  });
+
   test("blocks active -> inactive when future dates exist", async () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -228,6 +247,29 @@ describe("updateCourse Lambda", () => {
         excludedDates: ["2026-04-06"],
       }),
     );
+  });
+
+  test("blocks adding excludedDates inside rolling lock window", async () => {
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 7);
+    const soonIso = soon.toISOString().slice(0, 10);
+
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") });
+
+    const result = await handler(
+      makeEvent({
+        planningMode: "rolling_continuous",
+        visibilityMode: "rolling_horizon",
+        visibilityHorizonWeeks: 10,
+        excludedDates: [soonIso],
+        includedDates: [],
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/dürfen nicht ausgeschlossen werden/i);
   });
 
   test("rejects invalid fixed window range on update", async () => {
