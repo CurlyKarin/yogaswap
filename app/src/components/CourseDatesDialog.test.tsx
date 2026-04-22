@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Course } from "shared/types";
@@ -39,6 +39,9 @@ function formatDateForDisplay(isoDate: string): string {
 describe("CourseDatesDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("rendert nichts ohne Kurs", () => {
@@ -188,6 +191,35 @@ describe("CourseDatesDialog", () => {
     });
   });
 
+  it("sperrt excludedDates im rolling Schutzfenster", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
+
+    const lockedCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-01-06/i });
+    expect(lockedCell).toBeDisabled();
+    expect(lockedCell).toHaveAttribute("title", expect.stringMatching(/nur absage möglich/i));
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    const allowedCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-02-10/i });
+    expect(allowedCell).not.toBeDisabled();
+  });
+
   it("ist bei aktivem Kurs read-only mit Kalenderansicht", async () => {
     mockedUpdateCourse.mockResolvedValue({});
     const onClose = vi.fn();
@@ -220,5 +252,35 @@ describe("CourseDatesDialog", () => {
     await user.click(dialogQueries.getByRole("button", { name: /^schließen$/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(mockedUpdateCourse).not.toHaveBeenCalled();
+  });
+
+  it("erlaubt bei aktivem rolling Kurs weiterhin ExcludedDates außerhalb Schutzfenster", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+
+    // Save action remains available for rolling active courses.
+    expect(dialogQueries.getByRole("button", { name: /termine übernehmen/i })).toBeInTheDocument();
+    expect(dialogQueries.queryByRole("button", { name: /^schließen$/i })).not.toBeInTheDocument();
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    const allowedCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-02-10/i });
+    expect(allowedCell).not.toBeDisabled();
   });
 });

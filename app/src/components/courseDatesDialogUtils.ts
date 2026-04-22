@@ -73,9 +73,15 @@ export function dedupeAndSortDates(values: string[]): string[] {
 }
 
 export const DEFAULT_ROLLING_HORIZON_WEEKS = 10;
+export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = 5;
 
 function normalizeHorizonWeeks(value: number | undefined): number {
   if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_HORIZON_WEEKS;
+  return Number(value);
+}
+
+function normalizeExcludeLockWeeks(value: number | undefined): number {
+  if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
   return Number(value);
 }
 
@@ -210,6 +216,20 @@ export function getRollingWindowRangeIso(
   };
 }
 
+export function getRollingExcludeLockRangeIso(
+  excludeLockWeeks: number = DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS,
+  now: Date = new Date(),
+): { start: string; end: string } {
+  const start = new Date(now);
+  start.setHours(12, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + normalizeExcludeLockWeeks(excludeLockWeeks) * 7);
+  return {
+    start: toIsoDateOnly(start),
+    end: toIsoDateOnly(end),
+  };
+}
+
 export function generatePreviewDates(
   state: Pick<
     CourseDatesEditorState,
@@ -242,7 +262,10 @@ export function planningModeLabel(mode: CoursePlanningMode | undefined): string 
 
 export function createDatesState(course: Course): CourseDatesEditorState {
   const defaults = buildDefaultSeriesWindow();
-  const initialStart = course.seriesStartDate ?? defaults.start;
+  const initialStart =
+    course.planningMode === "rolling_continuous"
+      ? defaults.start
+      : (course.seriesStartDate ?? defaults.start);
   return {
     courseId: course.id,
     weekday: course.weekday,

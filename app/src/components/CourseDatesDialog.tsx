@@ -4,6 +4,7 @@ import type { Course } from "shared/types";
 import { updateCourse } from "../api/courses";
 import {
   DEFAULT_ROLLING_HORIZON_WEEKS,
+  DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS,
   WEEKDAY_ORDER,
   buildSeriesCalendarCells,
   compareIsoDate,
@@ -12,6 +13,7 @@ import {
   formatIsoDateForDisplay,
   formatMonthLabel,
   generatePreviewDates,
+  getRollingExcludeLockRangeIso,
   getRollingWindowRangeIso,
   isValidIsoDateOnly,
   parseIsoDateOnlyUtc,
@@ -114,7 +116,8 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     !!datesState &&
     Number.isInteger(datesState.visibilityHorizonWeeks) &&
     datesState.visibilityHorizonWeeks > 0;
-  const isActiveReadOnly = course?.status === "active";
+  const isActiveReadOnly =
+    course?.status === "active" && datesState?.planningMode === "bounded_series";
 
   const canSaveDatesConfig =
     canManageCourses &&
@@ -173,6 +176,11 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
       datesState.excludedDates,
     );
   }, [datesState, effectiveRange]);
+
+  const rollingExcludeLockRange = useMemo(() => {
+    if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
+    return getRollingExcludeLockRangeIso(DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS);
+  }, [datesState]);
 
   const excludedCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
@@ -330,9 +338,15 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
       const date = parseIsoDateOnlyUtc(isoDate);
       const isSeriesWeekday =
         !!date && !!weekdayIndex && weekdayIndex >= 1 && weekdayIndex <= 7 && date.getUTCDay() === weekdayIndex % 7;
+      const rollingLocked =
+        prev.planningMode === "rolling_continuous" &&
+        !!rollingExcludeLockRange &&
+        compareIsoDate(isoDate, rollingExcludeLockRange.start) >= 0 &&
+        compareIsoDate(isoDate, rollingExcludeLockRange.end) <= 0;
       if (!inSeriesRange || !isSeriesWeekday) {
         return prev;
       }
+      if (rollingLocked) return prev;
       const hasExcludedDate = prev.excludedDates.includes(isoDate);
       return {
         ...prev,
@@ -558,7 +572,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
               </button>
               <span className="course-editor-note">
                 {datesState.planningMode === "rolling_continuous"
-                  ? "Nur Termine im rollenden Sichtfenster sind wählbar."
+                  ? `Nur Termine außerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen sind als Ausnahme wählbar.`
                   : "Nur Serientermine im Zeitraum sind wählbar."}
               </span>
             </div>
@@ -593,6 +607,11 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                   </div>
                   <div className="course-editor-calendar-grid">
                     {excludedCalendarCells.map((cell) => {
+                      const rollingLocked =
+                        datesState.planningMode === "rolling_continuous" &&
+                        !!rollingExcludeLockRange &&
+                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.start) >= 0 &&
+                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.end) <= 0;
                       const cellClassName = [
                         "course-editor-calendar-cell",
                         cell.inCurrentMonth ? "" : "is-outside-month",
@@ -614,11 +633,13 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                               toggleExcludedDateFromCalendar(cell.isoDate);
                             }
                           }}
-                          disabled={!cell.isSeriesDate || saving || isActiveReadOnly}
+                          disabled={!cell.isSeriesDate || saving || isActiveReadOnly || rollingLocked}
                           title={
                             isActiveReadOnly
                               ? "Nur Ansicht im aktiven Kurs"
-                              : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
+                              : rollingLocked
+                                ? `Innerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen nur Absage möglich`
+                                : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
                           }
                         >
                           {cell.dayOfMonth}
