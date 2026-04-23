@@ -1,4 +1,5 @@
 import type { KeyboardEvent, RefObject } from "react";
+import CourseModalFrame from "./CourseModalFrame";
 
 type CourseDeleteDialogProps = {
   open: boolean;
@@ -24,9 +25,7 @@ export default function CourseDeleteDialog({
   if (!open || !courseName) return null;
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Kurs löschen" onKeyDown={onKeyDown}>
-      <div className="modal modal-compact" ref={modalRef} tabIndex={-1}>
-        <h4>Kurs löschen</h4>
+    <CourseModalFrame ariaLabel="Kurs löschen" title="Kurs löschen" modalRef={modalRef} onKeyDown={onKeyDown}>
         <p style={{ marginTop: 0, color: "#4b5563" }}>
           Kurs <strong>{courseName}</strong> wirklich löschen?
         </p>
@@ -43,7 +42,6 @@ export default function CourseDeleteDialog({
             {saving ? "Lösche..." : "Löschen"}
           </button>
         </div>
-      </div>
-    </div>
+    </CourseModalFrame>
   );
 }

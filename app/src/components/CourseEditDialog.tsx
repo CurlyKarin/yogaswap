@@ -1,5 +1,6 @@
 import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
+import CourseModalFrame from "./CourseModalFrame";
 
 type CourseEditorState = {
   id: number;
@@ -51,9 +52,7 @@ export default function CourseEditDialog({
   if (!open || !state) return null;
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Kurs bearbeiten" onKeyDown={onKeyDown}>
-      <div className="modal modal-compact" ref={modalRef} tabIndex={-1}>
-        <h4>Kurs bearbeiten</h4>
+    <CourseModalFrame ariaLabel="Kurs bearbeiten" title="Kurs bearbeiten" modalRef={modalRef} onKeyDown={onKeyDown}>
         <p className="course-editor-note" style={{ marginTop: 0 }}>
           Stammdaten bearbeiten. Mitglieder und Termine werden im nächsten Schritt hier ergänzt.
         </p>
@@ -138,7 +137,6 @@ export default function CourseEditDialog({
             {saving ? "Speichere..." : "Speichern"}
           </button>
         </div>
-      </div>
-    </div>
+    </CourseModalFrame>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObjec
 import { Calendar } from "lucide-react";
 import type { Course } from "shared/types";
 import { updateCourse } from "../api/courses";
+import CourseModalFrame from "./CourseModalFrame";
 import {
   DEFAULT_ROLLING_HORIZON_WEEKS,
   DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS,
@@ -424,17 +425,14 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
   if (!course || !datesState) return null;
 
   return (
-    <div
-      className="modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Kurstermine bearbeiten"
+    <CourseModalFrame
+      ariaLabel="Kurstermine bearbeiten"
+      title="Termine verwalten"
+      modalRef={modalRef}
       onKeyDown={(event) => {
         handleFocusTrap(event, modalRef);
       }}
     >
-      <div className="modal modal-compact" ref={modalRef} tabIndex={-1}>
-        <h4>Termine verwalten</h4>
         <p className="course-editor-note">
           Kurs: <strong>{course.name}</strong>
         </p>
@@ -717,7 +715,6 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
             </>
           )}
         </div>
-      </div>
-    </div>
+    </CourseModalFrame>
   );
 }

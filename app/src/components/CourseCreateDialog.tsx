@@ -1,5 +1,6 @@
 import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
+import CourseModalFrame from "./CourseModalFrame";
 
 type CourseCreateState = {
   name: string;
@@ -50,9 +51,7 @@ export default function CourseCreateDialog({
   if (!open) return null;
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Kurs anlegen" onKeyDown={onKeyDown}>
-      <div className="modal modal-compact" ref={modalRef} tabIndex={-1}>
-        <h4>Kurs anlegen</h4>
+    <CourseModalFrame ariaLabel="Kurs anlegen" title="Kurs anlegen" modalRef={modalRef} onKeyDown={onKeyDown}>
         <p className="course-editor-note">
           Stammdaten jetzt anlegen. Mitglieder-Zuordnung und Terminplanung folgen als eigene Schritte.
         </p>
@@ -138,7 +137,6 @@ export default function CourseCreateDialog({
             {saving ? "Speichere..." : "Anlegen"}
           </button>
         </div>
-      </div>
-    </div>
+    </CourseModalFrame>
   );
 }

@@ -3,6 +3,7 @@ import CourseDatesDialog from "./CourseDatesDialog";
 import CourseCreateDialog from "./CourseCreateDialog";
 import CourseEditDialog from "./CourseEditDialog";
 import CourseDeleteDialog from "./CourseDeleteDialog";
+import CourseMembersDialog from "./CourseMembersDialog";
 import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState, useMemo, useCallback, useRef, type KeyboardEvent, type RefObject } from "react";
 import { Plus, Pencil, Trash2, Users, CalendarDays } from "lucide-react";
@@ -710,32 +711,16 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         onChange={(next) => setEditState(next)}
       />
 
-      {membersTargetCourse && (
-        <div
-          className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Kursmitglieder bearbeiten"
-          onKeyDown={(event) => {
-            handleFocusTrap(event, membersModalRef);
-          }}
-        >
-          <div className="modal modal-compact" ref={membersModalRef} tabIndex={-1}>
-            <h4>Mitglieder verwalten</h4>
-            <p className="course-editor-note">
-              Kurs: <strong>{membersTargetCourse.name}</strong>
-            </p>
-            <p className="course-editor-note">
-              Hier folgt als Nächstes die Zuordnung von Teilnehmern zu diesem Kurs (inkl. Kapazitätsprüfung).
-            </p>
-            <div className="modal-actions">
-              <button type="button" className="modal-action-btn" onClick={closeMembersModal} disabled={saving}>
-                Schließen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CourseMembersDialog
+        open={!!membersTargetCourse}
+        saving={saving}
+        courseName={membersTargetCourse?.name}
+        modalRef={membersModalRef}
+        onKeyDown={(event) => {
+          handleFocusTrap(event, membersModalRef);
+        }}
+        onClose={closeMembersModal}
+      />
 
       <CourseDatesDialog
         course={datesTargetCourse ?? null}
