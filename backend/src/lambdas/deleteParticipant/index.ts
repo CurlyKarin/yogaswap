@@ -2,6 +2,8 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import {
   DeleteItemCommand,
   GetItemCommand,
+  PutItemCommand,
+  QueryCommand,
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
@@ -21,12 +23,13 @@ export const handler = async (
   const participantsTable = process.env.PARTICIPANTS_TABLE;
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const tenantsTable = process.env.TENANTS_TABLE;
+  const coursesTable = process.env.COURSES_TABLE;
 
-  if (!participantsTable || !membershipsTable || !tenantsTable) {
+  if (!participantsTable || !membershipsTable || !tenantsTable || !coursesTable) {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: "PARTICIPANTS_TABLE, MEMBERSHIPS_TABLE or TENANTS_TABLE env var is not set",
+        error: "PARTICIPANTS_TABLE, MEMBERSHIPS_TABLE, TENANTS_TABLE or COURSES_TABLE env var is not set",
       }),
     };
   }
@@ -93,6 +96,35 @@ export const handler = async (
         },
       }),
     );
+
+    // Keep course rosters consistent: remove deleted participant from all courses in this tenant.
+    const coursesResp = await client.send(
+      new QueryCommand({
+        TableName: coursesTable,
+        KeyConditionExpression: "tenantId = :tenantId",
+        ExpressionAttributeValues: {
+          ":tenantId": { S: tenantId },
+        },
+      }),
+    );
+    const removedUserIdLower = userId.toLowerCase();
+    for (const courseItem of coursesResp.Items ?? []) {
+      const participantsList = courseItem.participants?.L ?? [];
+      const nextParticipants = participantsList.filter((entry) => {
+        const value = entry.S?.trim();
+        return !!value && value.toLowerCase() !== removedUserIdLower;
+      });
+      if (nextParticipants.length === participantsList.length) continue;
+      await client.send(
+        new PutItemCommand({
+          TableName: coursesTable,
+          Item: {
+            ...courseItem,
+            participants: { L: nextParticipants },
+          },
+        }),
+      );
+    }
 
     let profileDeleted = false;
     const hasAuthUserId = !!profile?.authUserId;
