@@ -2,7 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { GetItemCommand, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
-import { deriveVisibleDates } from "../shared/courseDates";
+import { deriveVisibleDates, pruneScheduleExceptions } from "../shared/courseDates";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -93,8 +93,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     typeof body.visibleUntil === "string" ? body.visibleUntil.trim() : undefined;
   const visibilityHorizonWeeks =
     Number.isFinite(body.visibilityHorizonWeeks) ? Number(body.visibilityHorizonWeeks) : undefined;
-  const excludedDates = normalizeDateListInput(body.excludedDates);
-  const includedDates = normalizeDateListInput(body.includedDates);
+  const excludedDatesInput = normalizeDateListInput(body.excludedDates);
+  const includedDatesInput = normalizeDateListInput(body.includedDates);
   const capacity = Number.isFinite(body.capacity) ? Number(body.capacity) : NaN;
 
   if (!name) {
@@ -145,7 +145,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     };
   }
-  if (!excludedDates || !includedDates) {
+  if (!excludedDatesInput || !includedDatesInput) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "excludedDates/includedDates must contain ISO dates (YYYY-MM-DD)" }),
@@ -167,6 +167,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (actorRole !== "admin") {
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
+
+    const prunedExceptions = pruneScheduleExceptions({
+      planningMode,
+      seriesStartDate,
+      seriesEndDate,
+      visibilityHorizonWeeks,
+      excludedDates: excludedDatesInput,
+      includedDates: includedDatesInput,
+    });
+    const excludedDates = prunedExceptions.excludedDates;
+    const includedDates = prunedExceptions.includedDates;
 
     const coursesResp = await client.send(
       new QueryCommand({
@@ -198,6 +209,24 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       includedDates,
       fallbackDates: [],
     });
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const hasFutureVisibleDates = visibleDates.some((entry) => entry >= todayIso);
+    const effectiveStatus =
+      status === "active" && planningMode === "bounded_series" && !hasFutureVisibleDates
+        ? "inactive"
+        : status;
+    if (effectiveStatus !== status) {
+      console.info(
+        JSON.stringify({
+          actor: "system",
+          timestamp: new Date().toISOString(),
+          courseId: nextCourseId,
+          reason: "empty_future_schedule",
+          previousStatus: status,
+          nextStatus: effectiveStatus,
+        }),
+      );
+    }
 
     const item: Record<string, any> = {
       tenantId: { S: tenantId },
@@ -207,7 +236,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       weekday: { S: weekday },
       time: { S: time },
       capacity: { N: String(capacity) },
-      status: { S: status },
+      status: { S: effectiveStatus },
       participants: { L: [] },
       dates: { L: visibleDates.map((entry) => ({ S: entry })) },
     };
@@ -244,7 +273,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         weekday,
         time,
         capacity,
-        status,
+        status: effectiveStatus,
         planningMode,
         visibilityMode,
         seriesStartDate,

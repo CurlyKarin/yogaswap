@@ -217,4 +217,44 @@ describe("createCourse Lambda", () => {
     expect(body.visibleDates).toContain("2026-02-04");
     expect(body.visibleDates).not.toContain("2026-02-02");
   });
+
+  test("prunes bounded exceptions and auto-downgrades active course without future dates", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        name: "Archiv Block",
+        weekday: "Mon",
+        time: "18:00",
+        capacity: 12,
+        status: "active",
+        planningMode: "bounded_series",
+        visibilityMode: "fixed_window",
+        seriesStartDate: "2020-01-01",
+        seriesEndDate: "2020-01-31",
+        visibleFrom: "2020-01-01",
+        visibleUntil: "2020-01-31",
+        excludedDates: ["2019-12-01", "2020-01-13", "2020-03-01"],
+        includedDates: ["2019-12-31", "2020-01-15", "2020-04-01"],
+      }),
+    );
+
+    expect(result.statusCode).toBe(201);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          status: { S: "inactive" },
+          excludedDates: { L: [{ S: "2020-01-13" }] },
+          includedDates: { L: [{ S: "2020-01-15" }] },
+        }),
+      }),
+    );
+    const body = JSON.parse(result.body);
+    expect(body.status).toBe("inactive");
+    expect(body.excludedDates).toEqual(["2020-01-13"]);
+    expect(body.includedDates).toEqual(["2020-01-15"]);
+  });
 });

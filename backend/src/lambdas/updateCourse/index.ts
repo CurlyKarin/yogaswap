@@ -7,7 +7,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
-import { deriveVisibleDates } from "../shared/courseDates";
+import { deriveVisibleDates, pruneScheduleExceptions } from "../shared/courseDates";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -392,10 +392,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextVisibilityHorizonWeeks =
       visibilityHorizonWeeks ??
       (item.visibilityHorizonWeeks?.N ? Number.parseInt(item.visibilityHorizonWeeks.N, 10) : undefined);
-    const nextExcludedDates =
+    const nextExcludedDatesRaw =
       excludedDates ?? (item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? []);
-    const nextIncludedDates =
+    const nextIncludedDatesRaw =
       includedDates ?? (item.includedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? []);
+    const prunedExceptions = pruneScheduleExceptions({
+      planningMode: nextPlanningMode,
+      seriesStartDate: nextSeriesStartDate,
+      seriesEndDate: nextSeriesEndDate,
+      visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
+      excludedDates: nextExcludedDatesRaw,
+      includedDates: nextIncludedDatesRaw,
+    });
+    const nextExcludedDates = prunedExceptions.excludedDates;
+    const nextIncludedDates = prunedExceptions.includedDates;
     const currentExcludedDates =
       item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [];
 
@@ -467,6 +477,41 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       includedDates: nextIncludedDates,
       fallbackDates: item.dates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [],
     });
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const hasFutureVisibleDates = nextDates.some((entry) => entry >= todayIso);
+    let effectiveStatus = nextStatus;
+    if (effectiveStatus === "active" && nextPlanningMode === "bounded_series" && !hasFutureVisibleDates) {
+      effectiveStatus = "inactive";
+      console.info(
+        JSON.stringify({
+          actor: "system",
+          timestamp: new Date().toISOString(),
+          courseId,
+          reason: "empty_future_schedule",
+          previousStatus: nextStatus,
+          nextStatus: effectiveStatus,
+        }),
+      );
+    }
+
+    if (
+      nextExcludedDates.length !== nextExcludedDatesRaw.length ||
+      nextIncludedDates.length !== nextIncludedDatesRaw.length
+    ) {
+      console.info(
+        JSON.stringify({
+          actor: actorUserId,
+          timestamp: new Date().toISOString(),
+          courseId,
+          reason: "schedule_exceptions_pruned",
+          planningMode: nextPlanningMode,
+          windowStart: prunedExceptions.windowStart,
+          windowEnd: prunedExceptions.windowEnd,
+          removedExcluded: nextExcludedDatesRaw.length - nextExcludedDates.length,
+          removedIncluded: nextIncludedDatesRaw.length - nextIncludedDates.length,
+        }),
+      );
+    }
 
     const updateItem: Record<string, any> = {
       tenantId: { S: tenantId },
@@ -476,7 +521,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       weekday: { S: nextWeekday },
       time: { S: nextTime },
       capacity: { N: String(nextCapacity) },
-      status: { S: nextStatus },
+      status: { S: effectiveStatus },
       participants: { L: nextParticipants },
       dates: { L: nextDates.map((entry) => ({ S: entry })) },
     };
@@ -512,7 +557,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         weekday: nextWeekday,
         time: nextTime,
         capacity: nextCapacity,
-        status: nextStatus,
+        status: effectiveStatus,
         planningMode: nextPlanningMode,
         visibilityMode: nextVisibilityMode,
         seriesStartDate: nextSeriesStartDate,
