@@ -81,6 +81,71 @@ export type DeriveVisibleDatesInput = {
   now?: Date;
 };
 
+type PruneScheduleExceptionsInput = {
+  planningMode?: string;
+  seriesStartDate?: string;
+  seriesEndDate?: string;
+  visibilityHorizonWeeks?: number;
+  excludedDates: string[];
+  includedDates: string[];
+  now?: Date;
+};
+
+type PruneScheduleExceptionsResult = {
+  excludedDates: string[];
+  includedDates: string[];
+  windowStart?: string;
+  windowEnd?: string;
+};
+
+const ROLLING_PRUNE_PAST_DAYS = 14;
+
+function inWindow(date: string, start: string, end: string): boolean {
+  return date >= start && date <= end;
+}
+
+export function pruneScheduleExceptions(input: PruneScheduleExceptionsInput): PruneScheduleExceptionsResult {
+  const now = input.now ?? new Date();
+  const normalizedExcluded = normalizeDateList(input.excludedDates);
+  const normalizedIncluded = normalizeDateList(input.includedDates);
+
+  if (input.planningMode === "bounded_series") {
+    const seriesStart = parseDateOnlyUtc(input.seriesStartDate);
+    const seriesEnd = parseDateOnlyUtc(input.seriesEndDate);
+    if (!seriesStart || !seriesEnd) {
+      return {
+        excludedDates: normalizedExcluded,
+        includedDates: normalizedIncluded,
+      };
+    }
+    const start = toDateOnlyUtc(seriesStart);
+    const end = toDateOnlyUtc(seriesEnd);
+    return {
+      excludedDates: normalizedExcluded.filter((entry) => inWindow(entry, start, end)),
+      includedDates: normalizedIncluded.filter((entry) => inWindow(entry, start, end)),
+      windowStart: start,
+      windowEnd: end,
+    };
+  }
+
+  if (input.planningMode === "rolling_continuous") {
+    const todayUtc = startOfTodayUtc(now);
+    const start = toDateOnlyUtc(addDaysUtc(todayUtc, -ROLLING_PRUNE_PAST_DAYS));
+    return {
+      // Rolling courses may be planned far in advance (holidays, public holidays).
+      // Therefore we only prune stale past exceptions and keep all future entries.
+      excludedDates: normalizedExcluded.filter((entry) => entry >= start),
+      includedDates: normalizedIncluded.filter((entry) => entry >= start),
+      windowStart: start,
+    };
+  }
+
+  return {
+    excludedDates: normalizedExcluded,
+    includedDates: normalizedIncluded,
+  };
+}
+
 export function deriveVisibleDates(input: DeriveVisibleDatesInput): string[] {
   const fallbackDates = normalizeDateList(input.fallbackDates);
   const planningMode = input.planningMode;

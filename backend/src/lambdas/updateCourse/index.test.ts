@@ -211,6 +211,10 @@ describe("updateCourse Lambda", () => {
   });
 
   test("updates scheduling model fields", async () => {
+    const allowed = new Date();
+    allowed.setDate(allowed.getDate() + 50);
+    const allowedIso = allowed.toISOString().slice(0, 10);
+
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
@@ -221,7 +225,7 @@ describe("updateCourse Lambda", () => {
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
         visibilityHorizonWeeks: 10,
-        excludedDates: ["2026-04-06"],
+        excludedDates: [allowedIso],
         includedDates: [],
       }),
     );
@@ -233,7 +237,7 @@ describe("updateCourse Lambda", () => {
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
           visibilityHorizonWeeks: { N: "10" },
-          excludedDates: { L: [{ S: "2026-04-06" }] },
+          excludedDates: { L: [{ S: allowedIso }] },
         }),
       }),
     );
@@ -244,7 +248,7 @@ describe("updateCourse Lambda", () => {
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
         visibilityHorizonWeeks: 10,
-        excludedDates: ["2026-04-06"],
+        excludedDates: [allowedIso],
       }),
     );
   });
@@ -286,5 +290,101 @@ describe("updateCourse Lambda", () => {
     );
     expect(result.statusCode).toBe(400);
     expect(JSON.parse(result.body).error).toMatch(/visibleFrom and visibleUntil/);
+  });
+
+  test("prunes out-of-window exceptions for bounded_series", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        excludedDates: ["2025-12-29", "2026-02-02", "2026-04-06"],
+        includedDates: ["2025-12-31", "2026-02-04", "2026-05-01"],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          excludedDates: { L: [{ S: "2026-02-02" }] },
+          includedDates: { L: [{ S: "2026-02-04" }] },
+        }),
+      }),
+    );
+    const body = JSON.parse(result.body);
+    expect(body.excludedDates).toEqual(["2026-02-02"]);
+    expect(body.includedDates).toEqual(["2026-02-04"]);
+  });
+
+  test("keeps far-future exceptions for rolling_continuous and prunes only stale past", async () => {
+    const farFuture = new Date();
+    farFuture.setDate(farFuture.getDate() + 240);
+    const farFutureIso = farFuture.toISOString().slice(0, 10);
+    const stalePast = new Date();
+    stalePast.setDate(stalePast.getDate() - 40);
+    const stalePastIso = stalePast.toISOString().slice(0, 10);
+
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("draft"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          visibilityHorizonWeeks: { N: "10" },
+          excludedDates: { L: [] },
+          includedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        planningMode: "rolling_continuous",
+        visibilityMode: "rolling_horizon",
+        visibilityHorizonWeeks: 10,
+        excludedDates: [stalePastIso, farFutureIso],
+        includedDates: [],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          excludedDates: { L: [{ S: farFutureIso }] },
+        }),
+      }),
+    );
+    expect(JSON.parse(result.body).excludedDates).toEqual([farFutureIso]);
+  });
+
+  test("auto-sets active bounded_series to inactive when no future visible dates remain", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          seriesStartDate: { S: "2020-01-01" },
+          seriesEndDate: { S: "2020-01-31" },
+          visibleFrom: { S: "2020-01-01" },
+          visibleUntil: { S: "2020-01-31" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ name: "Vergangener Kursblock" }));
+    expect(result.statusCode).toBe(200);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          status: { S: "inactive" },
+        }),
+      }),
+    );
+    expect(JSON.parse(result.body).status).toBe("inactive");
   });
 });
