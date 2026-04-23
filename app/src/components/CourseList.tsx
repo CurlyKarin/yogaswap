@@ -1,5 +1,8 @@
 import CourseCard from "./CourseCard";
 import CourseDatesDialog from "./CourseDatesDialog";
+import CourseCreateDialog from "./CourseCreateDialog";
+import CourseEditDialog from "./CourseEditDialog";
+import CourseDeleteDialog from "./CourseDeleteDialog";
 import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState, useMemo, useCallback, useRef, type KeyboardEvent, type RefObject } from "react";
 import { Plus, Pencil, Trash2, Users, CalendarDays } from "lucide-react";
@@ -403,6 +406,30 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       editState.planningMode !== editInitialState.planningMode);
   const canSubmitEdit = canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
 
+  const handleCreateDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    handleFocusTrap(event, createModalRef);
+    if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) {
+      event.preventDefault();
+      saveCreateCourse();
+    }
+  };
+
+  const handleEditDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    handleFocusTrap(event, editModalRef);
+    if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) {
+      event.preventDefault();
+      saveEditCourse();
+    }
+  };
+
+  const handleDeleteDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    handleFocusTrap(event, deleteModalRef);
+    if (event.key === "Enter") {
+      event.preventDefault();
+      confirmDeleteCourse();
+    }
+  };
+
   useEffect(() => {
     const activeModal = createOpen
       ? createModalRef.current
@@ -649,250 +676,39 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         })}
       </div>
 
-      {createOpen && (
-        <div
-          className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Kurs anlegen"
-          onKeyDown={(event) => {
-            handleFocusTrap(event, createModalRef);
-            if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) {
-              event.preventDefault();
-              saveCreateCourse();
-            }
-          }}
-        >
-          <div className="modal modal-compact" ref={createModalRef} tabIndex={-1}>
-            <h4>Kurs anlegen</h4>
-            <p className="course-editor-note">
-              Stammdaten jetzt anlegen. Mitglieder-Zuordnung und Terminplanung folgen als eigene Schritte.
-            </p>
-            <div className="dialog-stack">
-              <input
-                type="text"
-                aria-label="Kursname"
-                placeholder="Kursname"
-                value={createState.name}
-                onChange={(event) =>
-                  setCreateState((prev) => ({ ...prev, name: event.target.value }))
-                }
-                disabled={saving}
-                className="dialog-field"
-              />
-              <select
-                aria-label="Wochentag"
-                value={createState.weekday}
-                onChange={(event) =>
-                  setCreateState((prev) => ({ ...prev, weekday: event.target.value }))
-                }
-                disabled={saving}
-                className="dialog-field"
-              >
-                {WEEKDAY_OPTIONS.map((weekday) => (
-                  <option key={weekday.value} value={weekday.value}>
-                    {weekday.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="time"
-                aria-label="Uhrzeit"
-                value={createState.time}
-                onChange={(event) =>
-                  setCreateState((prev) => ({ ...prev, time: event.target.value }))
-                }
-                disabled={saving}
-                className="dialog-field"
-              />
-              <input
-                type="number"
-                aria-label="Kapazität"
-                min={0}
-                value={createState.capacity}
-                onChange={(event) =>
-                  setCreateState((prev) => ({ ...prev, capacity: event.target.value }))
-                }
-                disabled={saving}
-                className="dialog-field"
-              />
-              <select
-                aria-label="Status"
-                value={createState.status}
-                onChange={(event) =>
-                  setCreateState((prev) => ({ ...prev, status: event.target.value as CourseStatus }))
-                }
-                disabled={saving}
-                className="dialog-field"
-              >
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status.value} value={status.value}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Planungsmodus"
-                value={createState.planningMode}
-                onChange={(event) =>
-                  setCreateState((prev) => ({
-                    ...prev,
-                    planningMode: event.target.value as CoursePlanningMode,
-                  }))
-                }
-                disabled={saving}
-                className="dialog-field"
-              >
-                {PLANNING_MODE_OPTIONS.map((mode) => (
-                  <option key={mode.value} value={mode.value}>
-                    {mode.label}
-                  </option>
-                ))}
-              </select>
-              <p className="course-editor-inline-hint">{planningModeHint(createState.planningMode)}</p>
-              {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
-            </div>
-            <div className="modal-actions dialog-actions">
-              <button type="button" className="modal-action-btn" onClick={closeCreateModal} disabled={saving}>
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                className="btn-primary modal-action-btn"
-                onClick={saveCreateCourse}
-                disabled={!canSubmitCreate}
-              >
-                {saving ? "Speichere..." : "Anlegen"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CourseCreateDialog
+        open={createOpen}
+        saving={saving}
+        formError={formError}
+        state={createState}
+        canSubmit={canSubmitCreate}
+        modalRef={createModalRef}
+        weekdayOptions={WEEKDAY_OPTIONS}
+        statusOptions={STATUS_OPTIONS}
+        planningModeOptions={PLANNING_MODE_OPTIONS}
+        planningModeHint={planningModeHint}
+        onKeyDown={handleCreateDialogKeyDown}
+        onClose={closeCreateModal}
+        onSave={saveCreateCourse}
+        onChange={setCreateState}
+      />
 
-      {editOpen && editState && (
-        <div
-          className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Kurs bearbeiten"
-          onKeyDown={(event) => {
-            handleFocusTrap(event, editModalRef);
-            if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) {
-              event.preventDefault();
-              saveEditCourse();
-            }
-          }}
-        >
-          <div className="modal modal-compact" ref={editModalRef} tabIndex={-1}>
-            <h4>Kurs bearbeiten</h4>
-            <p className="course-editor-note" style={{ marginTop: 0 }}>
-              Stammdaten bearbeiten. Mitglieder und Termine werden im nächsten Schritt hier ergänzt.
-            </p>
-            <div className="dialog-stack">
-              <input
-                type="text"
-                aria-label="Kursname bearbeiten"
-                value={editState.name}
-                onChange={(event) =>
-                  setEditState((prev) => (prev ? { ...prev, name: event.target.value } : prev))
-                }
-                disabled={saving}
-                className="dialog-field"
-              />
-              <select
-                aria-label="Wochentag bearbeiten"
-                value={editState.weekday}
-                onChange={(event) =>
-                  setEditState((prev) => (prev ? { ...prev, weekday: event.target.value } : prev))
-                }
-                disabled={saving}
-                className="dialog-field"
-              >
-                {WEEKDAY_OPTIONS.map((weekday) => (
-                  <option key={weekday.value} value={weekday.value}>
-                    {weekday.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="time"
-                aria-label="Uhrzeit bearbeiten"
-                value={editState.time}
-                onChange={(event) =>
-                  setEditState((prev) => (prev ? { ...prev, time: event.target.value } : prev))
-                }
-                disabled={saving}
-                className="dialog-field"
-              />
-              <input
-                type="number"
-                aria-label="Kapazität bearbeiten"
-                min={0}
-                value={editState.capacity}
-                onChange={(event) =>
-                  setEditState((prev) => (prev ? { ...prev, capacity: event.target.value } : prev))
-                }
-                disabled={saving}
-                className="dialog-field"
-              />
-              <select
-                aria-label="Status bearbeiten"
-                value={editState.status}
-                onChange={(event) =>
-                  setEditState((prev) =>
-                    prev ? { ...prev, status: event.target.value as CourseStatus } : prev,
-                  )
-                }
-                disabled={saving}
-                className="dialog-field"
-              >
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status.value} value={status.value}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Planungsmodus bearbeiten"
-                value={editState.planningMode}
-                onChange={(event) =>
-                  setEditState((prev) =>
-                    prev ? { ...prev, planningMode: event.target.value as CoursePlanningMode } : prev,
-                  )
-                }
-                disabled={saving}
-                className="dialog-field"
-              >
-                {PLANNING_MODE_OPTIONS.map((mode) => (
-                  <option key={mode.value} value={mode.value}>
-                    {mode.label}
-                  </option>
-                ))}
-              </select>
-              <p className="course-editor-inline-hint">{planningModeHint(editState.planningMode)}</p>
-              {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
-            </div>
-            <div className="modal-actions dialog-actions">
-              <button
-                type="button"
-                className="modal-action-btn"
-                onClick={closeEditModal}
-                disabled={saving}
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                className="btn-primary modal-action-btn"
-                onClick={saveEditCourse}
-                disabled={!canSubmitEdit}
-              >
-                {saving ? "Speichere..." : "Speichern"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CourseEditDialog
+        open={editOpen}
+        saving={saving}
+        formError={formError}
+        state={editState}
+        canSubmit={canSubmitEdit}
+        modalRef={editModalRef}
+        weekdayOptions={WEEKDAY_OPTIONS}
+        statusOptions={STATUS_OPTIONS}
+        planningModeOptions={PLANNING_MODE_OPTIONS}
+        planningModeHint={planningModeHint}
+        onKeyDown={handleEditDialogKeyDown}
+        onClose={closeEditModal}
+        onSave={saveEditCourse}
+        onChange={(next) => setEditState(next)}
+      />
 
       {membersTargetCourse && (
         <div
@@ -928,51 +744,16 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
         onSaved={fetchData}
       />
 
-      {deleteOpen && deleteTargetCourse && (
-        <div
-          className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Kurs löschen"
-          onKeyDown={(event) => {
-            handleFocusTrap(event, deleteModalRef);
-            if (event.key === "Enter") {
-              event.preventDefault();
-              confirmDeleteCourse();
-            }
-          }}
-        >
-          <div className="modal modal-compact" ref={deleteModalRef} tabIndex={-1}>
-            <h4>Kurs löschen</h4>
-            <p style={{ marginTop: 0, color: "#4b5563" }}>
-              Kurs <strong>{deleteTargetCourse.name}</strong> wirklich löschen?
-            </p>
-            <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
-              Löschen ist nur möglich, wenn der Kurs inaktiv ist und keine offenen Termin-/Tauschbezüge
-              mehr bestehen.
-            </p>
-            {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="modal-action-btn"
-                onClick={closeDeleteModal}
-                disabled={saving}
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                className="btn-primary modal-action-btn"
-                onClick={confirmDeleteCourse}
-                disabled={saving}
-              >
-                {saving ? "Lösche..." : "Löschen"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CourseDeleteDialog
+        open={deleteOpen}
+        saving={saving}
+        formError={formError}
+        courseName={deleteTargetCourse?.name}
+        modalRef={deleteModalRef}
+        onKeyDown={handleDeleteDialogKeyDown}
+        onClose={closeDeleteModal}
+        onConfirmDelete={confirmDeleteCourse}
+      />
     </>
   );
 }
