@@ -1,8 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import CourseMembersDialog from "./CourseMembersDialog";
+import { getParticipants } from "../api/participants";
+
+vi.mock("../api/participants");
+const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
+
+afterEach(() => {
+  cleanup();
+});
+
+beforeEach(() => {
+  mockedGetParticipants.mockReset();
+});
 
 describe("CourseMembersDialog", () => {
   it("renders nothing when closed", () => {
@@ -10,10 +23,14 @@ describe("CourseMembersDialog", () => {
       <CourseMembersDialog
         open={false}
         saving={false}
+        courseId={1}
         courseName="Yoga Flow"
+        capacity={10}
+        initialParticipants={[]}
         modalRef={createRef<HTMLDivElement>()}
         onKeyDown={vi.fn()}
         onClose={vi.fn()}
+        onSaveParticipants={vi.fn()}
       />,
     );
 
@@ -22,21 +39,103 @@ describe("CourseMembersDialog", () => {
 
   it("renders course info and calls close handler", async () => {
     const onClose = vi.fn();
+    mockedGetParticipants.mockResolvedValue([]);
     render(
       <CourseMembersDialog
         open
         saving={false}
+        courseId={1}
         courseName="Yoga Flow"
+        capacity={10}
+        initialParticipants={[]}
         modalRef={createRef<HTMLDivElement>()}
         onKeyDown={vi.fn()}
         onClose={onClose}
+        onSaveParticipants={vi.fn()}
       />,
     );
 
     expect(screen.getByRole("dialog", { name: "Kursmitglieder bearbeiten" })).toBeInTheDocument();
     expect(screen.getByText("Yoga Flow")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Schließen" }));
+    await userEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows selecting participants and saving", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        saving={false}
+        courseId={7}
+        courseName="Yoga Flow"
+        capacity={10}
+        initialParticipants={["alice"]}
+        modalRef={createRef<HTMLDivElement>()}
+        onKeyDown={vi.fn()}
+        onClose={vi.fn()}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    await screen.findByRole("checkbox", { name: /bob - invited/i });
+    await userEvent.click(screen.getByRole("checkbox", { name: /bob - invited/i }));
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(7, ["alice", "bob"]);
+  });
+
+  it("prevents selecting above capacity and shows selected list", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        saving={false}
+        courseId={7}
+        courseName="Yoga Flow"
+        capacity={1}
+        initialParticipants={["alice"]}
+        modalRef={createRef<HTMLDivElement>()}
+        onKeyDown={vi.fn()}
+        onClose={vi.fn()}
+        onSaveParticipants={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(/ausgewählte teilnehmer/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /bob - invited/i })).toBeDisabled();
+    expect(screen.getByText(/kapazität erreicht/i)).toBeInTheDocument();
+  });
+
+  it("removes selected participant on second click", async () => {
+    mockedGetParticipants.mockResolvedValue([{ userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" }]);
+    render(
+      <CourseMembersDialog
+        open
+        saving={false}
+        courseId={7}
+        courseName="Yoga Flow"
+        capacity={5}
+        initialParticipants={["alice"]}
+        modalRef={createRef<HTMLDivElement>()}
+        onKeyDown={vi.fn()}
+        onClose={vi.fn()}
+        onSaveParticipants={vi.fn()}
+      />,
+    );
+
+    const chip = await screen.findByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
+    await userEvent.click(chip);
+    expect(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i }));
+    expect(screen.getByText(/noch keine teilnehmer ausgewählt/i)).toBeInTheDocument();
   });
 });

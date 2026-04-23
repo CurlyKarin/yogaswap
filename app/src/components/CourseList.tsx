@@ -557,6 +557,22 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
     }
   };
 
+  const saveCourseMembers = async (courseId: number, participants: string[]) => {
+    if (!canManageCourses) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      await updateCourse(courseId, { participants });
+      closeMembersModal();
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to update course members", err);
+      setFormError(err instanceof Error ? err.message : "Mitglieder konnten nicht gespeichert werden.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -714,12 +730,17 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       <CourseMembersDialog
         open={!!membersTargetCourse}
         saving={saving}
+        courseId={membersTargetCourse?.id}
         courseName={membersTargetCourse?.name}
+        capacity={membersTargetCourse?.capacity ?? 0}
+        initialParticipants={membersTargetCourse?.participants ?? []}
+        formError={formError}
         modalRef={membersModalRef}
         onKeyDown={(event) => {
           handleFocusTrap(event, membersModalRef);
         }}
         onClose={closeMembersModal}
+        onSaveParticipants={saveCourseMembers}
       />
 
       <CourseDatesDialog

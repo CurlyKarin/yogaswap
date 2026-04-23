@@ -22,6 +22,7 @@ export type CreateCourseRequest = {
   visibilityHorizonWeeks?: number;
   excludedDates?: string[];
   includedDates?: string[];
+  participants?: string[];
 };
 
 export type UpdateCourseRequest = Partial<CreateCourseRequest>;
