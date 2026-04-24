@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import CourseMembersDialog from "./CourseMembersDialog";
@@ -83,8 +83,10 @@ describe("CourseMembersDialog", () => {
       />,
     );
 
-    await screen.findByRole("checkbox", { name: /bob - invited/i });
-    await userEvent.click(screen.getByRole("checkbox", { name: /bob - invited/i }));
+    const listbox = await screen.findByRole("listbox", { name: /teilnehmerliste/i });
+    listbox.focus();
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    fireEvent.keyDown(listbox, { key: " " });
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
     expect(onSaveParticipants).toHaveBeenCalledWith(7, ["alice", "bob"]);
   });
@@ -111,7 +113,11 @@ describe("CourseMembersDialog", () => {
 
     expect(await screen.findByText(/ausgewählte teilnehmer/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /bob - invited/i })).toBeDisabled();
+    const bobOption = screen.getByRole("option", { name: /bob - invited/i });
+    await userEvent.click(bobOption);
+    await userEvent.click(bobOption);
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
     expect(screen.getByText(/kapazität erreicht/i)).toBeInTheDocument();
   });
 
@@ -137,5 +143,63 @@ describe("CourseMembersDialog", () => {
     expect(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i }));
     expect(screen.getByText(/noch keine teilnehmer ausgewählt/i)).toBeInTheDocument();
+  });
+
+  it("clears armed remove state when clicking outside chip", async () => {
+    mockedGetParticipants.mockResolvedValue([{ userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" }]);
+    render(
+      <CourseMembersDialog
+        open
+        saving={false}
+        courseId={7}
+        courseName="Yoga Flow"
+        capacity={5}
+        initialParticipants={["alice"]}
+        modalRef={createRef<HTMLDivElement>()}
+        onKeyDown={vi.fn()}
+        onClose={vi.fn()}
+        onSaveParticipants={vi.fn()}
+      />,
+    );
+
+    const chip = await screen.findByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
+    await userEvent.click(chip);
+    expect(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /abbrechen/i }));
+    expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
+  });
+
+  it("clears armed remove state when focus moves away from chip", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        saving={false}
+        courseId={7}
+        courseName="Yoga Flow"
+        capacity={5}
+        initialParticipants={["alice", "bob"]}
+        modalRef={createRef<HTMLDivElement>()}
+        onKeyDown={vi.fn()}
+        onClose={vi.fn()}
+        onSaveParticipants={vi.fn()}
+      />,
+    );
+
+    await screen.findByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
+    const aliceChip = screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
+    const searchInput = screen.getByRole("textbox", { name: /mitglieder suchen/i });
+
+    await userEvent.click(aliceChip);
+    expect(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i })).toBeInTheDocument();
+
+    searchInput.focus();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
+    });
   });
 });

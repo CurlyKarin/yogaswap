@@ -438,13 +438,11 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
       ? editModalRef.current
       : deleteOpen
       ? deleteModalRef.current
-      : membersTargetId
-      ? membersModalRef.current
       : null;
     if (!activeModal) return;
 
     focusFirstElement(activeModal);
-  }, [createOpen, editOpen, deleteOpen, membersTargetId, datesTargetId]);
+  }, [createOpen, editOpen, deleteOpen]);
 
   useEffect(() => {
     if (!createOpen && !editOpen && !deleteOpen && !membersTargetId && !datesTargetId) return;

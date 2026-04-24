@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { Calendar } from "lucide-react";
 import type { Course } from "shared/types";
 import { updateCourse } from "../api/courses";
@@ -69,11 +69,14 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     setFormError(null);
   }, [course]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!course) return;
+    if (!datesState) return;
     if (!modalRef.current) return;
+    const active = document.activeElement as Node | null;
+    if (active && modalRef.current.contains(active)) return;
     focusFirstElement(modalRef.current);
-  }, [course]);
+  }, [course, datesState]);
 
   useEffect(() => {
     if (!course) return;
