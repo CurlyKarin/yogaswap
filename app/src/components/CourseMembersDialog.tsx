@@ -325,7 +325,7 @@ export default function CourseMembersDialog({
           {selectedParticipantProfiles.length === 0 ? (
             <p className="course-editor-note">Noch keine Teilnehmer ausgewählt.</p>
           ) : (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <div className="course-members-chip-row">
               {selectedParticipantProfiles.map((entry) => (
                 <button
                   key={entry.userId}
@@ -333,7 +333,9 @@ export default function CourseMembersDialog({
                   data-removal-chip="true"
                   data-removal-kind="selected"
                   data-removal-user-id={entry.userId.toLowerCase()}
-                  className="course-editor-inline-action"
+                  className={`chip course-members-chip ${
+                    armedRemovalUserId?.toLowerCase() === entry.userId.toLowerCase() ? "is-armed" : ""
+                  }`}
                   tabIndex={-1}
                   onClick={() => handleSelectedChipClick(entry.userId)}
                   onDoubleClick={() => toggleParticipant(entry.userId)}
@@ -343,41 +345,13 @@ export default function CourseMembersDialog({
                       ? `Teilnehmer jetzt entfernen ${entry.userId}`
                       : `Teilnehmer zum Entfernen markieren ${entry.userId}`
                   }
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 999,
-                    padding: "1px 6px",
-                    background:
-                      armedRemovalUserId?.toLowerCase() === entry.userId.toLowerCase() ? "#fee2e2" : "#f9fafb",
-                    color: "#111827",
-                    fontSize: 13,
-                    lineHeight: 1.1,
-                    width: "auto",
-                    minWidth: 0,
-                    flex: "0 0 auto",
-                    cursor: saving ? "not-allowed" : "pointer",
-                  }}
                 >
                   <span>
                     {entry.userId}
                     {entry.exists ? "" : " (nicht mehr vorhanden)"}
                   </span>
                   {armedRemovalUserId?.toLowerCase() === entry.userId.toLowerCase() && (
-                    <span
-                      style={{
-                        color: "#b91c1c",
-                        fontSize: 14,
-                        fontWeight: 700,
-                        lineHeight: 1,
-                        width: 14,
-                        textAlign: "center",
-                      }}
-                    >
-                      ×
-                    </span>
+                    <span className="course-members-chip-remove">×</span>
                   )}
                 </button>
               ))}
@@ -392,7 +366,7 @@ export default function CourseMembersDialog({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           disabled={saving}
-          className="dialog-field"
+          className="dialog-field course-members-search-field"
         />
         <p className="course-editor-note" style={{ marginTop: -4 }}>
           Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Zuordnen.
@@ -482,7 +456,7 @@ export default function CourseMembersDialog({
             <p className="course-editor-note" style={{ marginBottom: 4 }}>
               Nicht mehr vorhandene Zuordnungen:
             </p>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <div className="course-members-chip-row">
               {staleAssignments.map((entry) => (
                 <button
                   key={entry}
@@ -490,7 +464,9 @@ export default function CourseMembersDialog({
                   data-removal-chip="true"
                   data-removal-kind="stale"
                   data-removal-user-id={entry.toLowerCase()}
-                  className="course-editor-inline-action"
+                  className={`chip course-members-chip course-members-chip-stale ${
+                    armedStaleRemovalUserId?.toLowerCase() === entry.toLowerCase() ? "is-armed" : ""
+                  }`}
                   tabIndex={-1}
                   onClick={() => handleStaleChipClick(entry)}
                   onDoubleClick={() => removeStaleParticipant(entry)}
@@ -500,37 +476,10 @@ export default function CourseMembersDialog({
                       ? `Veraltete Zuordnung jetzt entfernen ${entry}`
                       : `Veraltete Zuordnung zum Entfernen markieren ${entry}`
                   }
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    border: "1px solid #fca5a5",
-                    borderRadius: 999,
-                    padding: "1px 6px",
-                    background: "#fff1f2",
-                    color: "#881337",
-                    fontSize: 13,
-                    lineHeight: 1.1,
-                    width: "auto",
-                    minWidth: 0,
-                    flex: "0 0 auto",
-                    cursor: saving ? "not-allowed" : "pointer",
-                  }}
                 >
                   <span>{entry}</span>
                   {armedStaleRemovalUserId?.toLowerCase() === entry.toLowerCase() && (
-                    <span
-                      style={{
-                        color: "#b91c1c",
-                        fontSize: 14,
-                        fontWeight: 700,
-                        lineHeight: 1,
-                        width: 14,
-                        textAlign: "center",
-                      }}
-                    >
-                      ×
-                    </span>
+                    <span className="course-members-chip-remove">×</span>
                   )}
                 </button>
               ))}
