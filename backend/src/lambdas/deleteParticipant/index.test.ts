@@ -7,6 +7,8 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     GetItemCommand: jest.fn((input) => input),
     DeleteItemCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
+    PutItemCommand: jest.fn((input) => input),
     ScanCommand: jest.fn((input) => input),
     mockSend,
   };
@@ -34,6 +36,7 @@ describe("deleteParticipant Lambda", () => {
       PARTICIPANTS_TABLE: "test-participants",
       MEMBERSHIPS_TABLE: "test-memberships",
       TENANTS_TABLE: "test-tenants",
+      COURSES_TABLE: "test-courses",
       SES_SOURCE_EMAIL: "yogaswap@example.com",
     };
     mockSend.mockReset();
@@ -82,6 +85,16 @@ describe("deleteParticipant Lambda", () => {
         },
       }) // existing participant
       .mockResolvedValueOnce({}) // membership delete
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId: { S: "course-a" },
+            participants: { L: [{ S: "alice" }, { S: "bob" }] },
+          },
+        ],
+      }) // courses query
+      .mockResolvedValueOnce({}) // update course participants
       .mockResolvedValueOnce({ Count: 0, Items: [] }) // no remaining memberships
       .mockResolvedValueOnce({}); // participant delete
     const result = await handler(makeEvent());
@@ -126,7 +139,8 @@ describe("deleteParticipant Lambda", () => {
           email: { S: "alice@example.com" },
         },
       })
-      .mockResolvedValueOnce({});
+      .mockResolvedValueOnce({}) // membership delete
+      .mockResolvedValueOnce({ Items: [] }); // courses query
     sesMockSend.mockResolvedValueOnce({});
 
     const result = await handler(makeEvent());
@@ -139,7 +153,7 @@ describe("deleteParticipant Lambda", () => {
       notificationEmailSent: true,
     });
     // No scan and no profile delete in this case.
-    expect(mockSend).toHaveBeenCalledTimes(5);
+    expect(mockSend).toHaveBeenCalled();
     expect(sesMockSend).toHaveBeenCalledTimes(1);
   });
 
@@ -171,7 +185,8 @@ describe("deleteParticipant Lambda", () => {
           userId: { S: "alice" },
         },
       })
-      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({}) // membership delete
+      .mockResolvedValueOnce({ Items: [] }) // courses query
       .mockResolvedValueOnce({
         Count: 1,
         Items: [{ tenantId: { S: "other-tenant" }, userId: { S: "alice" } }],

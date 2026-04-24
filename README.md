@@ -41,6 +41,39 @@ Bei der Ausarbeitung habe ich AI bewusst als Sparringspartner genutzt, um Entsch
 
 ---
 
+## 👥 #130 Scope A: Kursmitglieder verwalten
+
+Dieser Abschnitt dokumentiert den aktuellen Stand von **Issue #130, Scope A** (Kurs-Teilnehmerliste + Fremdverwaltung).
+
+### Funktionsumfang (Scope A)
+
+- **Kurs-Mitgliederdialog**: In der Kursverwaltung kann ein Dialog zum Zuordnen/Entfernen von Teilnehmenden pro Kurs geöffnet werden.
+- **Suche & Auswahl**: Teilnehmende können per Suche (Nickname/E-Mail) gefiltert und über die Liste zugeordnet werden.
+- **Kapazitätsgrenze**: Die Kurskapazität wird beim Zuordnen respektiert; Überbelegung wird verhindert.
+- **Ausgewählte Teilnehmer**: Aktuelle Zuordnungen sind sichtbar und können direkt im Dialog entfernt werden.
+- **Stale-Zuordnungen**: Nicht mehr vorhandene Nutzerzuordnungen werden gekennzeichnet und können bereinigt werden.
+
+### Tastatur- und Fokusverhalten
+
+- Der Dialog startet mit Fokus im **Suchfeld**.
+- Die Teilnehmerliste ist als **ein Tab-Stop** umgesetzt.
+- Innerhalb der Liste:
+  - `Pfeil hoch/runter` bewegt die aktive Zeile.
+  - `Leertaste` oder `Enter` schaltet die aktive Zuordnung um.
+- Der Fokus bleibt beim Tabben im Dialog (Focus Trap).
+
+### Datenkonsistenz Backend
+
+- `updateCourse` unterstützt das Speichern der `participants`-Liste.
+- Beim Löschen eines Teilnehmers wird dieser serverseitig aus allen Kurszuordnungen des Tenants entfernt.
+
+### Hinweis zu Scope-Abgrenzung
+
+- Scope A deckt die Grundfunktion für Fremdverwaltung und Zuordnungs-CRUD ab.
+- Erweiterungen wie weitergehende Historie/Auditing oder UX-Polish außerhalb des Dialog-Scopes sind nicht Teil von Scope A.
+
+---
+
 ## 📋 Projektübersicht
 
 YogaSwap ist eine vollständige Serverless-Webanwendung bestehend aus:

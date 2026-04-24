@@ -227,12 +227,13 @@ locals {
     "delete_participant" = {
       name             = "delete-participant"
       file_name        = "deleteParticipant.zip"
-      table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:Scan"]
+      table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn, module.courses_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:Scan", "dynamodb:Query", "dynamodb:PutItem"]
       tables = {
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "TENANTS_TABLE"      = module.tenants_table.table_name
+        "COURSES_TABLE"      = module.courses_table.table_name
       }
       s3_actions   = []
       s3_resources = []

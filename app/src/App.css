@@ -275,6 +275,10 @@ a:focus-visible {
   text-align: left;
   position: relative;
 }
+.modal:focus {
+  outline: 3px solid #93c5fd;
+  outline-offset: 1px;
+}
 .modal.modal-compact {
   max-width: 520px;
 }
@@ -365,6 +369,54 @@ a:focus-visible {
   background: #1d4ed8;
   border-color: #1d4ed8;
   color: #fff;
+}
+
+.course-members-listbox {
+  outline: none;
+}
+
+.course-members-listbox.is-focused {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.course-members-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.course-members-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.course-members-chip.is-armed {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.course-members-chip-stale {
+  background: #fff1f2;
+  border-color: #fda4af;
+  color: #881337;
+}
+
+.course-members-chip-remove {
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  width: 14px;
+  text-align: center;
+}
+
+.course-members-search-field {
+  margin-top: 6px;
 }
 
 .course-editor-range-controls {

@@ -292,6 +292,28 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/visibleFrom and visibleUntil/);
   });
 
+  test("updates course participants list", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        participants: ["alice", "bob"],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          participants: { L: [{ S: "alice" }, { S: "bob" }] },
+        }),
+      }),
+    );
+    expect(JSON.parse(result.body).participants).toEqual(["alice", "bob"]);
+  });
+
   test("prunes out-of-window exceptions for bounded_series", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })

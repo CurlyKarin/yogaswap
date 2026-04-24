@@ -33,6 +33,7 @@ type UpdateCourseBody = {
   visibilityHorizonWeeks?: number;
   excludedDates?: string[];
   includedDates?: string[];
+  participants?: string[];
 };
 
 function parseBody(event: APIGatewayProxyEvent): UpdateCourseBody | null {
@@ -51,6 +52,15 @@ function normalizeDateListInput(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const normalized = value.map((entry) => (typeof entry === "string" ? entry.trim() : ""));
   if (normalized.some((entry) => !ISO_DATE_ONLY.test(entry))) return null;
+  return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeParticipantListInput(value: unknown): string[] | null {
+  if (value == null) return [];
+  if (!Array.isArray(value)) return null;
+  const normalized = value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter((entry) => entry.length > 0);
   return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
 }
 
@@ -192,6 +202,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     && !Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")
     && !Object.prototype.hasOwnProperty.call(body, "excludedDates")
     && !Object.prototype.hasOwnProperty.call(body, "includedDates")
+    && !Object.prototype.hasOwnProperty.call(body, "participants")
   ) {
     return { statusCode: 400, body: JSON.stringify({ error: "No updatable fields provided" }) };
   }
@@ -215,6 +226,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     : undefined;
   const includedDates = Object.prototype.hasOwnProperty.call(body, "includedDates")
     ? normalizeDateListInput(body.includedDates)
+    : undefined;
+  const participants = Object.prototype.hasOwnProperty.call(body, "participants")
+    ? normalizeParticipantListInput(body.participants)
     : undefined;
   const capacity =
     Object.prototype.hasOwnProperty.call(body, "capacity") && Number.isFinite(body.capacity)
@@ -261,6 +275,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "includedDates must contain ISO dates (YYYY-MM-DD)" }),
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "participants") && !participants) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "participants must be an array of non-empty strings" }),
     };
   }
   if (Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")) {
@@ -382,7 +402,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       capacity ??
       (item.capacity?.N ? Number.parseInt(item.capacity.N, 10) : 0);
     const nextId = item.id?.N ? Number.parseInt(item.id.N, 10) : Number.parseInt(courseId, 10);
-    const nextParticipants = item.participants?.L ?? [];
+    const nextParticipants = participants
+      ? participants.map((entry) => ({ S: entry }))
+      : (item.participants?.L ?? []);
     const nextPlanningMode = planningMode ?? item.planningMode?.S;
     const nextVisibilityMode = visibilityMode ?? item.visibilityMode?.S;
     const nextSeriesStartDate = seriesStartDate ?? item.seriesStartDate?.S;

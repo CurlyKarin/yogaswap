@@ -6,12 +6,14 @@ import CourseList from "./CourseList";
 import { createCourse, deleteCourse, getCourses, updateCourse } from "../api/courses";
 import { getOverrides } from "../api/overrides";
 import { getSwaps } from "../api/swaps";
+import { getParticipants } from "../api/participants";
 import type { User, Tenant, UserTenantMembership, Course } from "shared/types";
 import { canSeeCourse } from "shared/permissions";
 
 vi.mock("../api/courses");
 vi.mock("../api/overrides");
 vi.mock("../api/swaps");
+vi.mock("../api/participants");
 vi.mock("./useCourseSwaps", () => {
   return {
     useCourseSwaps: () => ({
@@ -31,6 +33,7 @@ const mockedUpdateCourse = updateCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedDeleteCourse = deleteCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedGetOverrides = getOverrides as unknown as ReturnType<typeof vi.fn>;
 const mockedGetSwaps = getSwaps as unknown as ReturnType<typeof vi.fn>;
+const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
 const mockedCanSeeCourse = canSeeCourse as unknown as ReturnType<typeof vi.fn>;
 
 vi.mock("shared/permissions", () => ({
@@ -70,6 +73,8 @@ describe("CourseList", () => {
     mockedCreateCourse.mockReset();
     mockedUpdateCourse.mockReset();
     mockedDeleteCourse.mockReset();
+    mockedGetParticipants.mockReset();
+    mockedGetParticipants.mockResolvedValue([]);
     mockedCanSeeCourse.mockImplementation(() => true);
   });
 
