@@ -216,6 +216,25 @@ function MainApp() {
         </div>
       )}
 
+      {actingForUserIdState && (
+        <div className="delegation-banner" role="status" aria-live="polite">
+          <span>
+            Vertretung aktiv: Du handelst im Auftrag von <strong>{actingForUserIdState}</strong>.
+          </span>
+          <button
+            type="button"
+            className="modal-action-btn"
+            onClick={() => {
+              setActingForUserIdState(null);
+              setPendingActingForUserId(null);
+              setActingForUserId(null);
+            }}
+          >
+            Vertretung beenden
+          </button>
+        </div>
+      )}
+
       {!effectiveUser ? (
         <Login onLogin={handleLogin} />
       ) : (

@@ -419,6 +419,20 @@ a:focus-visible {
   margin-top: 6px;
 }
 
+.delegation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 auto 12px;
+  padding: 10px 12px;
+  width: min(980px, 94vw);
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #7c2d12;
+}
+
 .course-editor-range-controls {
   display: flex;
   gap: 8px;
