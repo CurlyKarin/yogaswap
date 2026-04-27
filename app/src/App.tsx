@@ -18,7 +18,7 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { getTenantContext } from "./api/tenantContext";
 import { canInviteParticipants, canManageParticipants } from "shared/permissions";
 import { getParticipants, type ParticipantWithStatus } from "./api/participants";
-import { setActingForUserId } from "./api/delegation";
+import { setActingForUserId, setActorUserId } from "./api/delegation";
 
 // Checkmark Haupt-App als Komponente
 function MainApp() {
@@ -48,6 +48,7 @@ function MainApp() {
           };
 
           saveCurrentUser(user);  // Checkmark Speichern für später!
+          setActorUserId(user.nickname);
           setCurrentUser(user);
           console.log('User aus Cognito-Session geladen:', user);
           return;
@@ -62,6 +63,7 @@ function MainApp() {
         clearCurrentUser();
       }
       setCurrentUser(null);
+      setActorUserId(null);
     };
 
     initAuth();
@@ -131,6 +133,7 @@ function MainApp() {
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {
     saveCurrentUser(loggedInUser);
+    setActorUserId(loggedInUser.nickname);
     setCurrentUser(loggedInUser);
   };
 
@@ -138,6 +141,7 @@ function MainApp() {
   const handleLogout = async () => {
     await logout();
     setActingForUserId(null);
+    setActorUserId(null);
     setActingForUserIdState(null);
     setPendingActingForUserId(null);
     clearCurrentUser();

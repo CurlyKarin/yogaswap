@@ -73,6 +73,16 @@ describe("getTenantContext (lambda shared)", () => {
     expect(ctx.tenantId).toBe(DEFAULT_TENANT_ID);
   });
 
+  it("verwendet x-actor-user-id Header vor Query-Param user", () => {
+    const event = makeEvent({
+      headers: { "x-actor-user-id": "actor-header" },
+      queryStringParameters: { user: "query-user" },
+    });
+
+    const ctx = getTenantContext(event);
+    expect(ctx.userId).toBe("actor-header");
+  });
+
   it("setzt userId auf undefined, wenn kein User ermittelt werden kann", () => {
     const event = makeEvent();
 

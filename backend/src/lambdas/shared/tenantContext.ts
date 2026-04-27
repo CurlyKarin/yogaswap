@@ -17,6 +17,8 @@ export function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
   const userIdRaw =
     nicknameFromJwt ??
     event.requestContext?.authorizer?.principalId ??
+    event.headers?.["x-actor-user-id"] ??
+    event.headers?.["X-Actor-User-Id"] ??
     event.queryStringParameters?.user ??
     null;
   const userId =
