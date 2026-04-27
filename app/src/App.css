@@ -78,6 +78,16 @@ body {
   align-items: center;
 }
 
+.header-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-action-btn {
+  white-space: nowrap;
+}
+
 /* Grid der Kurskacheln */
 .grid {
   display: grid;
@@ -426,7 +436,9 @@ a:focus-visible {
   gap: 12px;
   margin: 0 auto 12px;
   padding: 10px 12px;
-  width: min(980px, 94vw);
+  width: 100%;
+  max-width: 980px;
+  box-sizing: border-box;
   border: 1px solid #f59e0b;
   border-radius: 8px;
   background: #fffbeb;
@@ -721,6 +733,34 @@ a:focus-visible {
   .userbox {
     justify-content: space-between;
     flex-wrap: wrap;
+    width: 100%;
+  }
+  .header-action-group {
+    gap: 0;
+  }
+  .header-action-group .header-action-btn {
+    border-radius: 0;
+  }
+  .header-action-group .header-action-btn:first-child {
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+  }
+  .header-action-group .header-action-btn:last-child {
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+  }
+  .header-action-group .header-action-btn + .header-action-btn {
+    border-left-width: 0;
+  }
+  .delegation-banner {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+  }
+  .delegation-banner .modal-action-btn {
+    width: 100%;
+    min-width: 0;
   }
   .main-section-admin {
     margin-top: 1rem;

@@ -172,7 +172,11 @@ function toEditorState(course: Course): CourseEditorState {
   };
 }
 
-export default function CourseList({ currentUser, tenant, membership }: Props) {
+export default function CourseList({
+  currentUser,
+  tenant,
+  membership,
+}: Props) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -605,18 +609,20 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            disabled={!canManageCourses || saving}
-            title={canManageCourses ? "Neuen Kurs anlegen" : "Nur Admin kann Kurse anlegen"}
-            aria-label="Kurs anlegen"
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <Plus size={16} aria-hidden="true" />
-              Kurs
-            </span>
-          </button>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <button
+              type="button"
+              onClick={openCreateModal}
+              disabled={!canManageCourses || saving}
+              title={canManageCourses ? "Neuen Kurs anlegen" : "Nur Admin kann Kurse anlegen"}
+              aria-label="Kurs anlegen"
+            >
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <Plus size={16} aria-hidden="true" />
+                Kurs
+              </span>
+            </button>
+          </div>
         </div>
       )}
 

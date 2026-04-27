@@ -1,5 +1,5 @@
 // app/src/App.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import "./App.css";
 import Login from "./components/Login";
@@ -10,6 +10,7 @@ import ForgotPassword from "./components/ForgotPassword";
 import Impressum from "./components/Impressum";
 import Datenschutz from "./components/Datenschutz";
 import OpenSourceLicenses from "./components/OpenSourceLicenses";
+import DelegationPickerDialog from "./components/DelegationPickerDialog";
 import { Link } from "react-router-dom";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
 import { User, UserRole, Tenant, UserTenantMembership } from "shared/types";
@@ -30,6 +31,8 @@ function MainApp() {
   const [delegationCandidates, setDelegationCandidates] = useState<ParticipantWithStatus[]>([]);
   const [actingForUserIdState, setActingForUserIdState] = useState<string | null>(null);
   const [pendingActingForUserId, setPendingActingForUserId] = useState<string | null>(null);
+  const [delegationPickerOpen, setDelegationPickerOpen] = useState(false);
+  const [delegationSearch, setDelegationSearch] = useState("");
   const { logout, isLoading, error } = useAppAuth();
 
   // App.tsx
@@ -158,6 +161,12 @@ function MainApp() {
     setPendingActingForUserId(nextUserId);
   };
 
+  const filteredDelegationCandidates = useMemo(() => {
+    const search = delegationSearch.trim().toLowerCase();
+    if (!search) return delegationCandidates;
+    return delegationCandidates.filter((entry) => entry.userId.toLowerCase().includes(search));
+  }, [delegationCandidates, delegationSearch]);
+
   const confirmDelegation = () => {
     if (!pendingActingForUserId) return;
     setActingForUserIdState(pendingActingForUserId);
@@ -186,26 +195,24 @@ function MainApp() {
         {currentUser && (
           <div className="userbox">
             <span>Hi, {currentUser.nickname}</span>
-            {canDelegate && (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <span className="muted small" style={{ whiteSpace: "nowrap" }}>Vertretung</span>
-                <select
-                  aria-label="Vertretungsmodus auswählen"
-                  value={pendingActingForUserId ?? actingForUserIdState ?? ""}
-                  onChange={(event) => handleDelegationChange(event.target.value)}
+            <div className="header-action-group">
+              <button className="header-action-btn" onClick={handleLogout} disabled={isLoading}>
+                {isLoading ? "..." : "Logout"}
+              </button>
+              {canDelegate && (
+                <button
+                  type="button"
+                  className="header-action-btn"
+                  onClick={() => {
+                    setDelegationSearch("");
+                    setDelegationPickerOpen(true);
+                  }}
+                  aria-label="Vertretung"
                 >
-                  <option value="">Aus</option>
-                  {delegationCandidates.map((entry) => (
-                    <option key={entry.userId} value={entry.userId}>
-                      {entry.status === "active" ? "🟢" : entry.status === "invited" ? "🟡" : "⚪"} {entry.userId}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <button onClick={handleLogout} disabled={isLoading}>
-              {isLoading ? "..." : "Logout"}
-            </button>
+                  Vertretung
+                </button>
+              )}
+            </div>
           </div>
         )}
       </header>
@@ -275,6 +282,18 @@ function MainApp() {
           </div>
         </div>
       )}
+
+      <DelegationPickerDialog
+        open={delegationPickerOpen}
+        search={delegationSearch}
+        candidates={filteredDelegationCandidates}
+        onSearchChange={setDelegationSearch}
+        onSelectUser={(userId) => {
+          handleDelegationChange(userId);
+          setDelegationPickerOpen(false);
+        }}
+        onClose={() => setDelegationPickerOpen(false)}
+      />
 
       <footer className="app-footer">
         <span className="copyright">© {new Date().getFullYear()} Karin Schrader</span>

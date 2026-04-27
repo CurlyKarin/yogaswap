@@ -113,11 +113,8 @@ describe("App delegation mode", () => {
       expect(screen.getByText(/hi, admin/i)).toBeInTheDocument();
     });
 
-    const delegationSelect = await screen.findByLabelText(/vertretungsmodus auswählen/i);
-    await waitFor(() => {
-      expect(screen.getByRole("option", { name: /maya/i })).toBeInTheDocument();
-    });
-    await userEvent.selectOptions(delegationSelect, "maya");
+    await userEvent.click(await screen.findByRole("button", { name: /^vertretung$/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /maya/i }));
 
     expect(screen.getByRole("dialog", { name: /vertretung bestätigen/i })).toBeInTheDocument();
 
@@ -166,11 +163,8 @@ describe("App delegation mode", () => {
       expect(screen.getByText(/hi, admin/i)).toBeInTheDocument();
     });
 
-    const delegationSelect = await screen.findByLabelText(/vertretungsmodus auswählen/i);
-    await waitFor(() => {
-      expect(screen.getByRole("option", { name: /maya/i })).toBeInTheDocument();
-    });
-    await userEvent.selectOptions(delegationSelect, "maya");
+    await userEvent.click(await screen.findByRole("button", { name: /^vertretung$/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /maya/i }));
     await userEvent.click(screen.getByRole("button", { name: /bestätigen/i }));
     expect(getActingForUserId()).toBe("maya");
 
