@@ -2,12 +2,21 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
+import { ensureDelegatedActionAllowed } from "../shared/delegation";
 
 const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const { tenantId, userId } = getTenantContext(event);
-  console.log("updateSwap tenant context", { tenantId, userId });
+  const { tenantId, userId, actingForUserId } = getTenantContext(event);
+  console.log("updateSwap tenant context", { tenantId, userId, actingForUserId });
+  const delegationCheck = ensureDelegatedActionAllowed({
+    action: "update_swap",
+    actorUserId: userId,
+    actingForUserId,
+  });
+  if (!delegationCheck.ok) {
+    return { statusCode: delegationCheck.statusCode, body: JSON.stringify({ error: delegationCheck.error }) };
+  }
   const swapId = event.pathParameters?.swapId;
   const user = event.queryStringParameters?.user;
   if (!swapId || !user) {

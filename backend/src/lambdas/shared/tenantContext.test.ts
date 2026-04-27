@@ -28,6 +28,7 @@ describe("getTenantContext (lambda shared)", () => {
     expect(ctx).toEqual({
       tenantId: "tenant-1",
       userId: "alice",
+      actingForUserId: undefined,
     });
   });
 
@@ -107,6 +108,22 @@ describe("getTenantContext (lambda shared)", () => {
     const ctx = getTenantContext(event);
 
     expect(ctx.tenantId).toBe(DEFAULT_TENANT_ID);
+  });
+
+  it("liest actingForUserId aus Header und Query-Param", () => {
+    const byHeader = getTenantContext(
+      makeEvent({
+        headers: { "x-acting-for-user-id": "target-header" },
+      }),
+    );
+    expect(byHeader.actingForUserId).toBe("target-header");
+
+    const byQuery = getTenantContext(
+      makeEvent({
+        queryStringParameters: { actingForUserId: "target-query" } as any,
+      }),
+    );
+    expect(byQuery.actingForUserId).toBe("target-query");
   });
 });
 

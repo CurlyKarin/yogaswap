@@ -1,5 +1,6 @@
 import axios from "axios";
 import { CourseDateOverride, Swap } from "shared/types";
+import { delegationHeaders } from "./delegation";
 
 type ApiSwap = Omit<Swap, "fromCourseId" | "toCourseId"> & {
   fromCourseId: string;
@@ -43,7 +44,12 @@ export async function getSwaps(user: string, fromDate?: string, fromCourseId?: n
 export async function createSwap(swap: Swap): Promise<void> {
   try {
     console.log('Create Swap Call:', swap);
-    await axios.post('/swaps', swap);
+    const headers = delegationHeaders();
+    if (headers) {
+      await axios.post('/swaps', swap, { headers });
+    } else {
+      await axios.post('/swaps', swap);
+    }
   } catch (error) {
     console.error('Fehler beim Erstellen des Swaps:', error);
     throw error;
@@ -54,7 +60,12 @@ export async function updateSwap(swap: Swap, status: Swap['status']): Promise<vo
   try {
     const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
     console.log('Update Swap Call:', { swapId, user: swap.user, status });
-    await axios.put(`/swaps/${swapId}`, { status }, { params: { user: swap.user } });
+    const headers = delegationHeaders();
+    if (headers) {
+      await axios.put(`/swaps/${swapId}`, { status }, { params: { user: swap.user }, headers });
+    } else {
+      await axios.put(`/swaps/${swapId}`, { status }, { params: { user: swap.user } });
+    }
   } catch (error) {
     console.error('Fehler beim Updaten des Swaps:', error);
     throw error;
@@ -65,7 +76,12 @@ export async function deleteSwap(swap: Swap): Promise<void> {
   try {
     const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
     console.log('Delete Swap Call:', { swapId, user: swap.user });
-    await axios.delete(`/swaps/${swapId}`, { params: { user: swap.user } });
+    const headers = delegationHeaders();
+    if (headers) {
+      await axios.delete(`/swaps/${swapId}`, { params: { user: swap.user }, headers });
+    } else {
+      await axios.delete(`/swaps/${swapId}`, { params: { user: swap.user } });
+    }
   } catch (error) {
     console.error('Fehler beim Löschen des Swaps:', error);
     throw error;

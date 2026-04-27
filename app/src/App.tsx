@@ -16,7 +16,9 @@ import { User, UserRole, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { getTenantContext } from "./api/tenantContext";
-import { canInviteParticipants } from "shared/permissions";
+import { canInviteParticipants, canManageParticipants } from "shared/permissions";
+import { getParticipants, type ParticipantWithStatus } from "./api/participants";
+import { setActingForUserId } from "./api/delegation";
 
 // Checkmark Haupt-App als Komponente
 function MainApp() {
@@ -24,6 +26,10 @@ function MainApp() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [membership, setMembership] = useState<UserTenantMembership | null>(null);
   const [canInvite, setCanInvite] = useState(false);
+  const [canDelegate, setCanDelegate] = useState(false);
+  const [delegationCandidates, setDelegationCandidates] = useState<ParticipantWithStatus[]>([]);
+  const [actingForUserIdState, setActingForUserIdState] = useState<string | null>(null);
+  const [pendingActingForUserId, setPendingActingForUserId] = useState<string | null>(null);
   const { logout, isLoading, error } = useAppAuth();
 
   // App.tsx
@@ -80,9 +86,13 @@ function MainApp() {
           setCanInvite(
             canInviteParticipants(ctx.membership, ctx.tenant?.settings),
           );
+          setCanDelegate(
+            canManageParticipants(ctx.membership, ctx.tenant?.settings),
+          );
         } else {
           // Fallback: Admins ohne Membership dürfen weiterhin einladen
           setCanInvite(currentUser.role === "admin");
+          setCanDelegate(currentUser.role === "admin");
         }
       } catch (err) {
         console.error("Fehler beim Laden des Tenant-Kontexts:", err);
@@ -90,11 +100,33 @@ function MainApp() {
         setMembership(null);
         // Im Fehlerfall ebenfalls auf Admin-Rolle zurückfallen
         setCanInvite(currentUser.role === "admin");
+        setCanDelegate(currentUser.role === "admin");
       }
     };
 
     loadTenantContext();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser || !canDelegate) {
+      setDelegationCandidates([]);
+      setPendingActingForUserId(null);
+      setActingForUserIdState(null);
+      setActingForUserId(null);
+      return;
+    }
+
+    const loadCandidates = async () => {
+      try {
+        const participants = await getParticipants({ includeOrphaned: false });
+        setDelegationCandidates(participants);
+      } catch (err) {
+        console.error("Fehler beim Laden der Vertretungs-Kandidaten:", err);
+        setDelegationCandidates([]);
+      }
+    };
+    loadCandidates();
+  }, [currentUser, canDelegate]);
 
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {
@@ -105,9 +137,43 @@ function MainApp() {
   // Logout-Handler
   const handleLogout = async () => {
     await logout();
+    setActingForUserId(null);
+    setActingForUserIdState(null);
+    setPendingActingForUserId(null);
     clearCurrentUser();
     setCurrentUser(null);
   };
+
+  const handleDelegationChange = (nextUserId: string) => {
+    if (!nextUserId) {
+      setActingForUserIdState(null);
+      setPendingActingForUserId(null);
+      setActingForUserId(null);
+      return;
+    }
+    setPendingActingForUserId(nextUserId);
+  };
+
+  const confirmDelegation = () => {
+    if (!pendingActingForUserId) return;
+    setActingForUserIdState(pendingActingForUserId);
+    setActingForUserId(pendingActingForUserId);
+    setPendingActingForUserId(null);
+  };
+
+  const cancelDelegationConfirm = () => {
+    setPendingActingForUserId(null);
+  };
+
+  const effectiveUser: User | null = currentUser
+    ? actingForUserIdState
+      ? {
+          ...currentUser,
+          nickname: actingForUserIdState,
+          role: "participant",
+        }
+      : currentUser
+    : null;
 
   return (
     <div className="app-container">
@@ -116,6 +182,23 @@ function MainApp() {
         {currentUser && (
           <div className="userbox">
             <span>Hi, {currentUser.nickname}</span>
+            {canDelegate && (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span className="muted small" style={{ whiteSpace: "nowrap" }}>Vertretung</span>
+                <select
+                  aria-label="Vertretungsmodus auswählen"
+                  value={pendingActingForUserId ?? actingForUserIdState ?? ""}
+                  onChange={(event) => handleDelegationChange(event.target.value)}
+                >
+                  <option value="">Aus</option>
+                  {delegationCandidates.map((entry) => (
+                    <option key={entry.userId} value={entry.userId}>
+                      {entry.status === "active" ? "🟢" : entry.status === "invited" ? "🟡" : "⚪"} {entry.userId}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button onClick={handleLogout} disabled={isLoading}>
               {isLoading ? "..." : "Logout"}
             </button>
@@ -129,7 +212,7 @@ function MainApp() {
         </div>
       )}
 
-      {!currentUser ? (
+      {!effectiveUser ? (
         <Login onLogin={handleLogin} />
       ) : (
         <section className="main-section main-section-courses">
@@ -137,7 +220,7 @@ function MainApp() {
             Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
           </p>
           <CourseList
-            currentUser={currentUser}
+            currentUser={effectiveUser}
             tenant={tenant ?? undefined}
             membership={membership ?? undefined}
           />
@@ -148,6 +231,26 @@ function MainApp() {
         <section className="main-section main-section-admin">
           <AdminPanel canEditRoles={(membership?.role ?? currentUser.role) === "admin"} />
         </section>
+      )}
+
+      {pendingActingForUserId && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Vertretung bestätigen">
+          <div className="modal modal-compact">
+            <h4>Vertretung übernehmen</h4>
+            <p className="course-editor-note">
+              Du handelst im Auftrag von <strong>{pendingActingForUserId}</strong>.
+            </p>
+            <p className="course-editor-note">Bitte bestätigen, dass du für diese Person Aktionen durchführen darfst.</p>
+            <div className="modal-actions">
+              <button type="button" className="modal-action-btn" onClick={cancelDelegationConfirm}>
+                Abbrechen
+              </button>
+              <button type="button" className="btn-primary modal-action-btn" onClick={confirmDelegation}>
+                Bestätigen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <footer className="app-footer">

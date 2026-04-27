@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { CourseDateOverride } from 'shared/types';
+import { delegationHeaders } from './delegation';
 
 export async function getOverrides(sinceDate?: string): Promise<CourseDateOverride[]> {
   try {
@@ -15,7 +16,12 @@ export async function getOverrides(sinceDate?: string): Promise<CourseDateOverri
 
 export async function updateOverride(courseId: number, date: string, updates: Partial<CourseDateOverride>): Promise<void> {
   try {
-    await axios.put(`/course-overrides/${courseId}/${date}`, updates);
+    const headers = delegationHeaders();
+    if (headers) {
+      await axios.put(`/course-overrides/${courseId}/${date}`, updates, { headers });
+    } else {
+      await axios.put(`/course-overrides/${courseId}/${date}`, updates);
+    }
     console.log('API Overrides Response (updates):', updates);
   } catch (error) {
     console.error('Fehler beim Updaten des Overrides', error);
@@ -24,7 +30,12 @@ export async function updateOverride(courseId: number, date: string, updates: Pa
 
 export async function deleteOverride(courseId: number, date: string): Promise<void> {
   try {
-    await axios.delete(`/course-overrides/${courseId}/${date}`);
+    const headers = delegationHeaders();
+    if (headers) {
+      await axios.delete(`/course-overrides/${courseId}/${date}`, { headers });
+    } else {
+      await axios.delete(`/course-overrides/${courseId}/${date}`);
+    }
     console.log('API Overrides Response (delete):', { courseId, date });
   } catch (error) {
     console.error('Fehler beim Löschen des Overrides', error);
@@ -33,7 +44,12 @@ export async function deleteOverride(courseId: number, date: string): Promise<vo
 
 export async function createOverride(newOverride: CourseDateOverride): Promise<void> {
   try {
-    await axios.post('/course-overrides', newOverride);
+    const headers = delegationHeaders();
+    if (headers) {
+      await axios.post('/course-overrides', newOverride, { headers });
+    } else {
+      await axios.post('/course-overrides', newOverride);
+    }
     console.log('API Overrides Response (newOverride):', newOverride);
   } catch (error) {
     console.error('Fehler beim Anlegen des Overrides', error);

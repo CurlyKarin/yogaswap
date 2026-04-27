@@ -2,12 +2,21 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
+import { ensureDelegatedActionAllowed } from '../shared/delegation';
 
 const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const { tenantId, userId } = getTenantContext(event);
-  console.log('createOverride tenant context', { tenantId, userId });
+  const { tenantId, userId, actingForUserId } = getTenantContext(event);
+  console.log('createOverride tenant context', { tenantId, userId, actingForUserId });
+  const delegationCheck = ensureDelegatedActionAllowed({
+    action: "create_override",
+    actorUserId: userId,
+    actingForUserId,
+  });
+  if (!delegationCheck.ok) {
+    return { statusCode: delegationCheck.statusCode, body: JSON.stringify({ error: delegationCheck.error }) };
+  }
   const tableName = process.env.OVERRIDES_TABLE;
   const override = JSON.parse(event.body || '{}');
 

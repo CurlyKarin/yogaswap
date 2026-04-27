@@ -5,6 +5,7 @@ export const DEFAULT_TENANT_ID = "default-tenant";
 export type TenantContext = {
   tenantId: string;
   userId?: string | null;
+  actingForUserId?: string | null;
 };
 
 export function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
@@ -23,6 +24,16 @@ export function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
       ? userIdRaw.trim()
       : null;
 
+  const actingForRaw =
+    (event.headers?.["x-acting-for-user-id"] as string | undefined) ??
+    (event.headers?.["X-Acting-For-User-Id"] as string | undefined) ??
+    event.queryStringParameters?.actingForUserId ??
+    null;
+  const actingForUserId =
+    typeof actingForRaw === "string" && actingForRaw.trim()
+      ? actingForRaw.trim()
+      : null;
+
   const headers = event.headers || {};
   const tenantId =
     (headers["x-tenant-id"] as string | undefined) ??
@@ -32,6 +43,7 @@ export function getTenantContext(event: APIGatewayProxyEvent): TenantContext {
   return {
     tenantId,
     userId: userId ?? undefined,
+    actingForUserId: actingForUserId ?? undefined,
   };
 }
 
