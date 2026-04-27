@@ -8,6 +8,7 @@ import {
   processPromotions,
 } from "./swaps";
 import axios from "axios";
+import { setActingForUserId } from "./delegation";
 import type { Swap } from "shared/types";
 
 vi.mock("axios");
@@ -62,6 +63,7 @@ describe("getSwaps", () => {
 describe("createSwap", () => {
   beforeEach(() => {
     vi.mocked(axios.post).mockReset();
+    setActingForUserId(null);
   });
 
   it("ruft POST /swaps mit Swap-Body auf", async () => {
@@ -70,6 +72,15 @@ describe("createSwap", () => {
     await createSwap(sampleSwap);
 
     expect(axios.post).toHaveBeenCalledWith("/swaps", sampleSwap);
+  });
+
+  it("sendet Delegation-Header beim Anlegen wenn actingFor gesetzt ist", async () => {
+    vi.mocked(axios.post).mockResolvedValueOnce({});
+    setActingForUserId("maya");
+    await createSwap(sampleSwap);
+    expect(axios.post).toHaveBeenCalledWith("/swaps", sampleSwap, {
+      headers: { "x-acting-for-user-id": "maya" },
+    });
   });
 
   it("wirft bei Fehler den Fehler weiter", async () => {
@@ -82,6 +93,7 @@ describe("createSwap", () => {
 describe("updateSwap", () => {
   beforeEach(() => {
     vi.mocked(axios.put).mockReset();
+    setActingForUserId(null);
   });
 
   it("ruft PUT /swaps/:swapId mit status und user-Param auf", async () => {
@@ -97,6 +109,17 @@ describe("updateSwap", () => {
     );
   });
 
+  it("sendet Delegation-Header beim Update wenn actingFor gesetzt ist", async () => {
+    vi.mocked(axios.put).mockResolvedValueOnce({});
+    setActingForUserId("maya");
+    await updateSwap(sampleSwap, "pending");
+    expect(axios.put).toHaveBeenCalledWith(
+      "/swaps/2025-06-16_1_2025-06-17_2",
+      { status: "pending" },
+      { params: { user: "alice" }, headers: { "x-acting-for-user-id": "maya" } },
+    );
+  });
+
   it("wirft bei Fehler den Fehler weiter", async () => {
     vi.mocked(axios.put).mockRejectedValueOnce(new Error("Not found"));
 
@@ -107,6 +130,7 @@ describe("updateSwap", () => {
 describe("deleteSwap", () => {
   beforeEach(() => {
     vi.mocked(axios.delete).mockReset();
+    setActingForUserId(null);
   });
 
   it("ruft DELETE /swaps/:swapId mit user-Param auf", async () => {
@@ -116,6 +140,16 @@ describe("deleteSwap", () => {
 
     expect(axios.delete).toHaveBeenCalledWith("/swaps/2025-06-16_1_2025-06-17_2", {
       params: { user: "alice" },
+    });
+  });
+
+  it("sendet Delegation-Header beim Löschen wenn actingFor gesetzt ist", async () => {
+    vi.mocked(axios.delete).mockResolvedValueOnce({});
+    setActingForUserId("maya");
+    await deleteSwap(sampleSwap);
+    expect(axios.delete).toHaveBeenCalledWith("/swaps/2025-06-16_1_2025-06-17_2", {
+      params: { user: "alice" },
+      headers: { "x-acting-for-user-id": "maya" },
     });
   });
 

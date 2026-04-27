@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getOverrides, updateOverride, deleteOverride, createOverride } from "./overrides";
+import { setActingForUserId } from "./delegation";
 import axios from "axios";
 import type { CourseDateOverride } from "shared/types";
 
@@ -54,6 +55,7 @@ describe("getOverrides", () => {
 describe("updateOverride", () => {
   beforeEach(() => {
     vi.mocked(axios.put).mockReset();
+    setActingForUserId(null);
   });
 
   it("ruft PUT /course-overrides/:courseId/:date mit updates auf", async () => {
@@ -65,11 +67,24 @@ describe("updateOverride", () => {
       participants: ["alice", "bob"],
     });
   });
+
+  it("sendet Delegation-Header wenn actingFor gesetzt ist", async () => {
+    vi.mocked(axios.put).mockResolvedValueOnce({});
+    setActingForUserId("maya");
+    await updateOverride(1, "2025-06-16", { participants: ["alice", "bob"] });
+
+    expect(axios.put).toHaveBeenCalledWith(
+      "/course-overrides/1/2025-06-16",
+      { participants: ["alice", "bob"] },
+      { headers: { "x-acting-for-user-id": "maya" } },
+    );
+  });
 });
 
 describe("deleteOverride", () => {
   beforeEach(() => {
     vi.mocked(axios.delete).mockReset();
+    setActingForUserId(null);
   });
 
   it("ruft DELETE /course-overrides/:courseId/:date auf", async () => {
@@ -79,11 +94,22 @@ describe("deleteOverride", () => {
 
     expect(axios.delete).toHaveBeenCalledWith("/course-overrides/1/2025-06-16");
   });
+
+  it("sendet Delegation-Header beim Löschen wenn actingFor gesetzt ist", async () => {
+    vi.mocked(axios.delete).mockResolvedValueOnce({});
+    setActingForUserId("maya");
+    await deleteOverride(1, "2025-06-16");
+
+    expect(axios.delete).toHaveBeenCalledWith("/course-overrides/1/2025-06-16", {
+      headers: { "x-acting-for-user-id": "maya" },
+    });
+  });
 });
 
 describe("createOverride", () => {
   beforeEach(() => {
     vi.mocked(axios.post).mockReset();
+    setActingForUserId(null);
   });
 
   it("ruft POST /course-overrides mit newOverride-Body auf", async () => {
@@ -99,5 +125,21 @@ describe("createOverride", () => {
     await createOverride(newOverride);
 
     expect(axios.post).toHaveBeenCalledWith("/course-overrides", newOverride);
+  });
+
+  it("sendet Delegation-Header beim Anlegen wenn actingFor gesetzt ist", async () => {
+    vi.mocked(axios.post).mockResolvedValueOnce({});
+    setActingForUserId("maya");
+    const newOverride: CourseDateOverride = {
+      courseId: 1,
+      date: "2025-06-16",
+      participants: ["alice"],
+      waitlist: ["bob"],
+    };
+
+    await createOverride(newOverride);
+    expect(axios.post).toHaveBeenCalledWith("/course-overrides", newOverride, {
+      headers: { "x-acting-for-user-id": "maya" },
+    });
   });
 });
