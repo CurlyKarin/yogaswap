@@ -120,22 +120,22 @@ export default function DelegationPickerDialog({
       onKeyDown={onKeyDown}
     >
       <p className="course-editor-note">Wähle ein Mitglied aus.</p>
-      <div className="dialog-search-block">
-        <input
-          id="delegation-search"
-          className="dialog-field dialog-search-field"
-          type="search"
-          aria-label="Vertretung suchen"
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Teilnehmer suchen (Nickname oder E-Mail)"
-          autoFocus
-        />
-        <p className="course-editor-note dialog-search-hint">
-          Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Auswählen.
-        </p>
-      </div>
       <div className="dialog-stack">
+        <div className="dialog-search-block">
+          <input
+            id="delegation-search"
+            className="dialog-field dialog-search-field"
+            type="search"
+            aria-label="Vertretung suchen"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Teilnehmer suchen (Nickname oder E-Mail)"
+            autoFocus
+          />
+          <p id="delegation-list-hint" className="course-editor-note dialog-search-hint dialog-search-hint-mobile-a11y">
+            Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Auswählen.
+          </p>
+        </div>
         {candidates.length === 0 ? (
           <p className="course-editor-note" style={{ marginBottom: 0 }}>
             Keine passenden Teilnehmer gefunden.
@@ -146,6 +146,7 @@ export default function DelegationPickerDialog({
             style={{ maxHeight: 220, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8 }}
             role="listbox"
             aria-label="Vertretungsteilnehmerliste"
+            aria-describedby="delegation-list-hint"
             aria-activedescendant={
               candidates[activeListIndex] ? `delegation-option-${candidates[activeListIndex].userId.toLowerCase()}` : undefined
             }

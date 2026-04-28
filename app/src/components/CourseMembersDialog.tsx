@@ -364,7 +364,7 @@ export default function CourseMembersDialog({
             disabled={saving}
             className="dialog-field dialog-search-field"
           />
-          <p className="course-editor-note dialog-search-hint">
+          <p id="course-members-list-hint" className="course-editor-note dialog-search-hint dialog-search-hint-mobile-a11y">
             Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Zuordnen.
           </p>
         </div>
@@ -378,6 +378,7 @@ export default function CourseMembersDialog({
             style={{ maxHeight: 280, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8 }}
             role="listbox"
             aria-label="Teilnehmerliste"
+            aria-describedby="course-members-list-hint"
             aria-activedescendant={
               filteredParticipants[activeListIndex]
                 ? `participant-option-${filteredParticipants[activeListIndex].userId.toLowerCase()}`
