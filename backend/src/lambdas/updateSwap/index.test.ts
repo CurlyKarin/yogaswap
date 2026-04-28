@@ -104,6 +104,12 @@ describe("updateSwap Lambda", () => {
       ":status": { S: "approved" },
       ":fromStatus": { S: "2025-10-01_1_approved" },
       ":toStatus": { S: "2025-10-02_2_approved" },
+      ":actorUserId": { S: "luna" },
+      ":actingForUserId": { NULL: true },
+    });
+    expect(sentArg.ExpressionAttributeNames).toMatchObject({
+      "#actorUserId": "actorUserId",
+      "#actingForUserId": "actingForUserId",
     });
   });
 

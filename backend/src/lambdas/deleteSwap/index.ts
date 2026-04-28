@@ -27,6 +27,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   const user_swapId = `${user}#${swapId}`;
+  console.log("deleteSwap audit", {
+    tenantId,
+    actorUserId: userId ?? null,
+    actingForUserId: actingForUserId ?? null,
+    swapId,
+    user,
+  });
   const command = new DeleteItemCommand({
     TableName: process.env.SWAPS_TABLE,
     Key: {

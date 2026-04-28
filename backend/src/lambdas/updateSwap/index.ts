@@ -66,14 +66,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       tenantId: { S: tenantId },
       user_swapId: { S: user_swapId },
     },
-    UpdateExpression: "SET #status = :status, fromDate_fromCourseId_status = :fromStatus, toDate_toCourseId_status = :toStatus",
+    UpdateExpression:
+      "SET #status = :status, fromDate_fromCourseId_status = :fromStatus, toDate_toCourseId_status = :toStatus, #actorUserId = :actorUserId, #actingForUserId = :actingForUserId",
     ExpressionAttributeNames: {
       "#status": "status",
+      "#actorUserId": "actorUserId",
+      "#actingForUserId": "actingForUserId",
     },
     ExpressionAttributeValues: {
       ":status": { S: status },
       ":fromStatus": { S: `${fromDate}_${fromCourseId}_${status}` },
       ":toStatus": { S: `${toDate}_${toCourseId}_${status}` },
+      ":actorUserId": userId ? { S: userId } : { NULL: true },
+      ":actingForUserId": actingForUserId ? { S: actingForUserId } : { NULL: true },
     },
   });
 

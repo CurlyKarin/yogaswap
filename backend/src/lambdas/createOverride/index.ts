@@ -47,6 +47,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       participants: { L: participants.map((p: string) => ({ S: p })) },
       swapped: { L: swapped.map((s: string) => ({ S: s })) },
       waitlist: { L: waitlist.map((w: string) => ({ S: w })) },
+      actorUserId: userId ? { S: userId } : { NULL: true },
+      actingForUserId: actingForUserId ? { S: actingForUserId } : { NULL: true },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));

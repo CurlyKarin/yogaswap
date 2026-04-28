@@ -40,6 +40,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       fromDate_fromCourseId_status: { S: `${swap.fromDate}_${swap.fromCourseId}_${swap.status}` },
       toDate_toCourseId_status: { S: `${swap.toDate}_${swap.toCourseId}_${swap.status}` },
       tenantId_user: { S: tenantId_user },
+      actorUserId: userId ? { S: userId } : { NULL: true },
+      actingForUserId: actingForUserId ? { S: actingForUserId } : { NULL: true },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));

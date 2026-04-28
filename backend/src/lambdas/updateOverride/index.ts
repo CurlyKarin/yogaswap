@@ -63,6 +63,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 400, body: JSON.stringify({ error: 'No fields to update' }) };
     }
 
+    updateExpression += ' #actorUserId = :actorUserId, #actingForUserId = :actingForUserId,';
+    expressionAttributeNames['#actorUserId'] = 'actorUserId';
+    expressionAttributeNames['#actingForUserId'] = 'actingForUserId';
+    expressionAttributeValues[':actorUserId'] = userId ? { S: userId } : { NULL: true };
+    expressionAttributeValues[':actingForUserId'] = actingForUserId ? { S: actingForUserId } : { NULL: true };
+
     updateExpression = updateExpression.slice(0, -1); // Entferne letztes Komma
 
     const courseId_date = `${courseId}_${date}`;

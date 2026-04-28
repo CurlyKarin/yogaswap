@@ -66,6 +66,8 @@ describe('createSwap Lambda', () => {
           toCourseId: { S: 'c2' },
           status: { S: 'pending' },
           tenantId_user: { S: 'default-tenant#Nia' },
+          actorUserId: { NULL: true },
+          actingForUserId: { NULL: true },
         }),
       })
     );
