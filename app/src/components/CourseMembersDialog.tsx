@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CourseModalFrame from "./CourseModalFrame";
 import type { ParticipantWithStatus } from "../api/participants";
 import { getParticipants } from "../api/participants";
+import { getStatusPresentation } from "../lib/participants";
 
 type CourseMembersDialogProps = {
   open: boolean;
@@ -401,6 +402,7 @@ export default function CourseMembersDialog({
               const checked = selectedParticipants.some((value) => value.toLowerCase() === entry.userId.toLowerCase());
               const atCapacity = selectedParticipants.length >= capacity;
               const isActive = index === activeListIndex;
+              const status = getStatusPresentation(entry.status);
               return (
                 <div
                   key={entry.userId}
@@ -411,7 +413,7 @@ export default function CourseMembersDialog({
                     display: "flex",
                     gap: 8,
                     alignItems: "center",
-                    padding: "4px 0",
+                    padding: "6px 8px",
                     cursor: "pointer",
                     borderRadius: 4,
                     background: isActive ? "#eff6ff" : "transparent",
@@ -422,6 +424,7 @@ export default function CourseMembersDialog({
                     pointerPrimedSelectionRef.current = document.activeElement !== listBoxRef.current;
                   }}
                   onClick={() => handleParticipantOptionClick(index, entry.userId)}
+                  title={entry.email ? `${entry.userId} (${entry.email})` : entry.userId}
                 >
                   <div
                     ref={(element) => {
@@ -429,19 +432,17 @@ export default function CourseMembersDialog({
                     }}
                     aria-hidden="true"
                     style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 3,
-                      border: "1px solid #9ca3af",
-                      background: checked ? "#2563eb" : "#fff",
-                      boxShadow: checked ? "inset 0 0 0 2px #fff" : "none",
-                      flex: "0 0 16px",
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: status.color,
+                      flex: "0 0 8px",
                     }}
                   />
                   <span>
                     <strong>{entry.userId}</strong>
-                    {entry.email ? ` (${entry.email})` : ""}
-                    {` - ${entry.status}`}
+                    {checked ? " (zugeordnet)" : ""}
+                    {` - ${status.label}`}
                   </span>
                 </div>
               );

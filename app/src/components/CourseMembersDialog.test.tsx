@@ -113,7 +113,7 @@ describe("CourseMembersDialog", () => {
 
     expect(await screen.findByText(/ausgewählte teilnehmer/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
-    const bobOption = screen.getByRole("option", { name: /bob - invited/i });
+    const bobOption = screen.getByRole("option", { name: /bob - eingeladen/i });
     await userEvent.click(bobOption);
     await userEvent.click(bobOption);
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));

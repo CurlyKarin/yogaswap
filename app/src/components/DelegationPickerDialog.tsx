@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ParticipantWithStatus } from "../api/participants";
 import CourseModalFrame from "./CourseModalFrame";
+import { getStatusPresentation } from "../lib/participants";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -13,19 +14,6 @@ const FOCUSABLE_SELECTOR = [
 
 function getFocusableElements(node: HTMLElement): HTMLElement[] {
   return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-}
-
-function getStatusPresentation(status: ParticipantWithStatus["status"]): {
-  color: string;
-  label: string;
-} {
-  if (status === "active") {
-    return { color: "#16a34a", label: "registriert" };
-  }
-  if (status === "invited") {
-    return { color: "#facc15", label: "eingeladen" };
-  }
-  return { color: "#fb923c", label: "ohne Login" };
 }
 
 type DelegationPickerDialogProps = {
