@@ -244,7 +244,9 @@ function MainApp() {
       {!effectiveUser ? (
         <Login onLogin={handleLogin} />
       ) : (
-        <section className="main-section main-section-courses">
+        <section
+          className={`main-section main-section-courses${actingForUserIdState ? " is-delegation-active" : ""}`}
+        >
           <p className="muted" style={{ textAlign: "center", marginBottom: 16 }}>
             Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
           </p>
@@ -252,11 +254,12 @@ function MainApp() {
             currentUser={effectiveUser}
             tenant={tenant ?? undefined}
             membership={membership ?? undefined}
+            forceParticipantView={Boolean(actingForUserIdState)}
           />
         </section>
       )}
 
-      {currentUser && canInvite && (
+      {currentUser && canInvite && !actingForUserIdState && (
         <section className="main-section main-section-admin">
           <AdminPanel canEditRoles={(membership?.role ?? currentUser.role) === "admin"} />
         </section>

@@ -460,6 +460,11 @@ a:focus-visible {
   color: #7c2d12;
 }
 
+.main-section-courses.is-delegation-active .course-card {
+  background: #fffcf2;
+  border-color: #f6d9a8;
+}
+
 .course-editor-range-controls {
   display: flex;
   gap: 8px;

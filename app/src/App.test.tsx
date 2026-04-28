@@ -5,12 +5,17 @@ import { MemoryRouter } from "react-router-dom";
 import App from "./App";
 import { getActingForUserId, setActingForUserId, setActorUserId } from "./api/delegation";
 
+const courseListMock = vi.fn<(props: unknown) => void>();
+
 vi.mock("./components/Login", () => ({
   default: () => <div>Login Mock</div>,
 }));
 
 vi.mock("./components/CourseList", () => ({
-  default: () => <div>CourseList Mock</div>,
+  default: (props: unknown) => {
+    courseListMock(props);
+    return <div>CourseList Mock</div>;
+  },
 }));
 
 vi.mock("./components/AdminPanel", () => ({
@@ -72,6 +77,7 @@ describe("App delegation mode", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    courseListMock.mockClear();
     setActingForUserId(null);
     setActorUserId(null);
   });
@@ -122,6 +128,10 @@ describe("App delegation mode", () => {
 
     expect(screen.getByText(/vertretung aktiv:/i)).toBeInTheDocument();
     expect(screen.getByText(/du handelst im auftrag von/i)).toBeInTheDocument();
+    expect(screen.queryByText(/AdminPanel Mock/i)).not.toBeInTheDocument();
+    expect(courseListMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ forceParticipantView: true }),
+    );
 
     await userEvent.click(screen.getByRole("button", { name: /vertretung beenden/i }));
     expect(screen.queryByText(/vertretung aktiv:/i)).not.toBeInTheDocument();

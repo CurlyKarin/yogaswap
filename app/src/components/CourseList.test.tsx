@@ -370,6 +370,55 @@ describe("CourseList", () => {
     ).toBe(true);
   });
 
+  it("blendet Kursverwaltung im Vertretungsmodus aus (auch für Admin)", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+      userId: "admin",
+    };
+    const delegatedUser: User = {
+      ...baseUser,
+      nickname: "maya",
+      role: "participant",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        participants: ["maya"],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(
+      <CourseList
+        currentUser={delegatedUser}
+        tenant={baseTenant}
+        membership={adminMembership}
+        forceParticipantView
+      />,
+    );
+
+    await screen.findAllByText("Kurs A");
+    expect(screen.queryByText(/Kurse verwalten/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /kurs anlegen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /mitglieder bearbeiten kurs a/i })).not.toBeInTheDocument();
+
+    expect(mockedCanSeeCourse).toHaveBeenCalled();
+    const firstMembershipArg = mockedCanSeeCourse.mock.calls[0][0] as UserTenantMembership;
+    expect(firstMembershipArg.role).toBe("participant");
+    expect(firstMembershipArg.userId).toBe("maya");
+  });
+
   it("aktiviert Speichern im Edit-Dialog erst nach Änderungen", async () => {
     const adminMembership: UserTenantMembership = {
       ...baseMembership,

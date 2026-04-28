@@ -32,6 +32,7 @@ type Props = {
   currentUser: User;
   tenant?: Tenant;
   membership?: UserTenantMembership;
+  forceParticipantView?: boolean;
 };
 
 type CourseEditorState = {
@@ -176,6 +177,7 @@ export default function CourseList({
   currentUser,
   tenant,
   membership,
+  forceParticipantView = false,
 }: Props) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
@@ -205,8 +207,18 @@ export default function CourseList({
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
   const membersModalRef = useRef<HTMLDivElement | null>(null);
 
-  const isAdmin = membership?.role === "admin";
-  const isInstructor = membership?.role === "instructor";
+  const effectiveMembership = useMemo<UserTenantMembership | undefined>(() => {
+    if (!membership) return undefined;
+    if (!forceParticipantView) return membership;
+    return {
+      ...membership,
+      role: "participant",
+      userId: currentUser.nickname,
+    };
+  }, [membership, forceParticipantView, currentUser.nickname]);
+
+  const isAdmin = effectiveMembership?.role === "admin";
+  const isInstructor = effectiveMembership?.role === "instructor";
   const canSeeCourseManagement = isAdmin || isInstructor;
   const canManageCourses = isAdmin;
 
@@ -272,16 +284,16 @@ export default function CourseList({
   }, [currentUser?.nickname]);
 
   const visibleCourses = useMemo(() => {
-    if (!tenant?.settings || !membership) {
+    if (!tenant?.settings || !effectiveMembership) {
       return courses;
     }
     return courses.filter((course) =>
-      canSeeCourse(membership, tenant.settings, course, {
+      canSeeCourse(effectiveMembership, tenant.settings, course, {
         isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
         isBookedByUser: course.participants.some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
       }),
     );
-  }, [courses, tenant?.settings, membership, currentUser.nickname]);
+  }, [courses, tenant?.settings, effectiveMembership, currentUser.nickname]);
 
   const coursesWithUpcoming = visibleCourses.filter((c) => getCourseDates(c).length > 0);
   const coursesToRender = canSeeCourseManagement ? visibleCourses : coursesWithUpcoming;
