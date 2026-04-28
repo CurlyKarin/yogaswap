@@ -359,19 +359,21 @@ export default function CourseMembersDialog({
             </div>
           )}
         </div>
-        <input
-          ref={searchInputRef}
-          type="text"
-          aria-label="Mitglieder suchen"
-          placeholder="Mitglieder suchen (Nickname oder E-Mail)"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          disabled={saving}
-          className="dialog-field course-members-search-field"
-        />
-        <p className="course-editor-note" style={{ marginTop: -4 }}>
-          Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Zuordnen.
-        </p>
+        <div className="dialog-search-block">
+          <input
+            ref={searchInputRef}
+            type="text"
+            aria-label="Mitglieder suchen"
+            placeholder="Mitglieder suchen (Nickname oder E-Mail)"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            disabled={saving}
+            className="dialog-field dialog-search-field"
+          />
+          <p className="course-editor-note dialog-search-hint">
+            Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Zuordnen.
+          </p>
+        </div>
         {loadingParticipants ? (
           <p className="course-editor-note">Mitglieder laden...</p>
         ) : filteredParticipants.length === 0 ? (
@@ -416,7 +418,8 @@ export default function CourseMembersDialog({
                     padding: "6px 8px",
                     cursor: "pointer",
                     borderRadius: 4,
-                    background: isActive ? "#eff6ff" : "transparent",
+                    background: checked ? "#ecfdf5" : isActive ? "#eff6ff" : "transparent",
+                    border: checked ? "1px solid #86efac" : "1px solid transparent",
                     opacity: !checked && atCapacity ? 0.6 : 1,
                   }}
                   onMouseEnter={() => setActiveListIndex(index)}
@@ -439,9 +442,23 @@ export default function CourseMembersDialog({
                       flex: "0 0 8px",
                     }}
                   />
-                  <span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <strong>{entry.userId}</strong>
-                    {checked ? " (zugeordnet)" : ""}
+                    {checked && (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 12,
+                          color: "#166534",
+                          fontWeight: 600,
+                        }}
+                        aria-label="zugeordnet"
+                      >
+                        ✓ zugeordnet
+                      </span>
+                    )}
                     {` - ${status.label}`}
                   </span>
                 </div>
