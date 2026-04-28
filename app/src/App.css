@@ -736,21 +736,7 @@ a:focus-visible {
     width: 100%;
   }
   .header-action-group {
-    gap: 0;
-  }
-  .header-action-group .header-action-btn {
-    border-radius: 0;
-  }
-  .header-action-group .header-action-btn:first-child {
-    border-top-left-radius: 8px;
-    border-bottom-left-radius: 8px;
-  }
-  .header-action-group .header-action-btn:last-child {
-    border-top-right-radius: 8px;
-    border-bottom-right-radius: 8px;
-  }
-  .header-action-group .header-action-btn + .header-action-btn {
-    border-left-width: 0;
+    gap: 4px;
   }
   .delegation-banner {
     flex-direction: column;
