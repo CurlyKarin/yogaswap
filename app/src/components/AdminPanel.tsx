@@ -956,6 +956,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
             aria-label="Teilnehmer suchen"
             value={participantsSearch}
             onChange={(e) => setParticipantsSearch(e.target.value)}
+            className="dialog-field dialog-search-field"
             style={{ width: "100%", maxWidth: 360 }}
           />
         </div>
