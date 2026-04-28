@@ -2,15 +2,22 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
+import { getDelegationErrorResponse } from "../shared/delegation";
 
 const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const { tenantId, userId } = getTenantContext(event);
+  const { tenantId, userId, actingForUserId } = getTenantContext(event);
+  const delegationErrorResponse = getDelegationErrorResponse({
+    action: "delete_swap",
+    actorUserId: userId,
+    actingForUserId,
+  });
+  if (delegationErrorResponse) return delegationErrorResponse;
   const swapId = event.pathParameters?.swapId;
   const user = event.queryStringParameters?.user;
   console.log('DeleteSwap params:', { swapId, user });
-  console.log('deleteSwap tenant context:', { tenantId, userId });
+  console.log('deleteSwap tenant context:', { tenantId, userId, actingForUserId });
   
   if (!swapId || !user) {
     return {
@@ -20,6 +27,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   const user_swapId = `${user}#${swapId}`;
+  console.log("deleteSwap audit", {
+    tenantId,
+    actorUserId: userId ?? null,
+    actingForUserId: actingForUserId ?? null,
+    swapId,
+    user,
+  });
   const command = new DeleteItemCommand({
     TableName: process.env.SWAPS_TABLE,
     Key: {

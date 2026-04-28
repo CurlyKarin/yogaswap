@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  canManageParticipantStatusInDelegation,
   canInviteParticipants,
   canManageParticipants,
+  canStartDelegationForCourse,
   canSeeAllCourses,
   canSeeCourse,
 } from "shared/permissions";
@@ -203,6 +205,74 @@ describe("permissions", () => {
           isBookedByUser: false,
         }),
       ).toBe(true);
+    });
+  });
+
+  describe("canStartDelegationForCourse", () => {
+    const courseWithInstructors: Pick<Course, "instructors"> = { instructors: ["instructor-user"] };
+    const courseWithoutInstructors: Pick<Course, "instructors"> = { instructors: [] };
+
+    it("erlaubt Admin immer", () => {
+      expect(
+        canStartDelegationForCourse(adminMembership, restrictiveSettings, {
+          course: courseWithInstructors,
+          isActorAssignedInstructor: false,
+        }),
+      ).toBe(true);
+    });
+
+    it("erlaubt Instructor nur bei Kurszuordnung, wenn Instructorliste gesetzt ist", () => {
+      expect(
+        canStartDelegationForCourse(instructorMembership, defaultSettings, {
+          course: courseWithInstructors,
+          isActorAssignedInstructor: true,
+        }),
+      ).toBe(true);
+
+      expect(
+        canStartDelegationForCourse(instructorMembership, defaultSettings, {
+          course: courseWithInstructors,
+          isActorAssignedInstructor: false,
+        }),
+      ).toBe(false);
+    });
+
+    it("erlaubt Instructor ohne Kurszuordnung per Default in Kursen ohne Instructorliste", () => {
+      expect(
+        canStartDelegationForCourse(instructorMembership, defaultSettings, {
+          course: courseWithoutInstructors,
+          isActorAssignedInstructor: false,
+        }),
+      ).toBe(true);
+    });
+
+    it("respektiert Restriktions-Setting fuer Kurse ohne Instructorliste", () => {
+      expect(
+        canStartDelegationForCourse(
+          instructorMembership,
+          { ...defaultSettings, instructorCanManageDelegationWithoutCourseAssignment: false },
+          {
+            course: courseWithoutInstructors,
+            isActorAssignedInstructor: false,
+          },
+        ),
+      ).toBe(false);
+    });
+  });
+
+  describe("canManageParticipantStatusInDelegation", () => {
+    it("erlaubt no_login und invited immer", () => {
+      expect(canManageParticipantStatusInDelegation("no_login", undefined)).toBe(true);
+      expect(canManageParticipantStatusInDelegation("invited", undefined)).toBe(true);
+    });
+
+    it("erlaubt active standardmaessig, kann aber per Setting deaktiviert werden", () => {
+      expect(canManageParticipantStatusInDelegation("active", undefined)).toBe(true);
+      expect(
+        canManageParticipantStatusInDelegation("active", {
+          delegationCanManageActiveParticipants: false,
+        }),
+      ).toBe(false);
     });
   });
 });

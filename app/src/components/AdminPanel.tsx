@@ -9,6 +9,7 @@ import {
   type ParticipantWithStatus,
 } from "../api/participants";
 import type { UserRole } from "shared/types";
+import { getStatusPresentation } from "../lib/participants";
 
 const ROLE_LABELS_DE: Record<UserRole, string> = {
   admin: "Admin",
@@ -20,19 +21,6 @@ const ROLE_OPTIONS: UserRole[] = ["participant", "instructor", "admin"];
 function getRoleLabel(role: UserRole | undefined): string {
   if (!role) return "-";
   return ROLE_LABELS_DE[role] ?? role;
-}
-
-function getStatusPresentation(status: ParticipantWithStatus["status"]): {
-  color: string;
-  label: string;
-} {
-  if (status === "active") {
-    return { color: "#16a34a", label: "registriert" };
-  }
-  if (status === "invited") {
-    return { color: "#ca8a04", label: "eingeladen" };
-  }
-  return { color: "#6b7280", label: "ohne Login" };
 }
 
 type AdminPanelProps = {
@@ -968,6 +956,7 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
             aria-label="Teilnehmer suchen"
             value={participantsSearch}
             onChange={(e) => setParticipantsSearch(e.target.value)}
+            className="dialog-field dialog-search-field"
             style={{ width: "100%", maxWidth: 360 }}
           />
         </div>

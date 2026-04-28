@@ -2,12 +2,19 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
+import { getDelegationErrorResponse } from '../shared/delegation';
 
 const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const { tenantId, userId } = getTenantContext(event);
-  console.log('createOverride tenant context', { tenantId, userId });
+  const { tenantId, userId, actingForUserId } = getTenantContext(event);
+  console.log('createOverride tenant context', { tenantId, userId, actingForUserId });
+  const delegationErrorResponse = getDelegationErrorResponse({
+    action: "create_override",
+    actorUserId: userId,
+    actingForUserId,
+  });
+  if (delegationErrorResponse) return delegationErrorResponse;
   const tableName = process.env.OVERRIDES_TABLE;
   const override = JSON.parse(event.body || '{}');
 
@@ -40,6 +47,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       participants: { L: participants.map((p: string) => ({ S: p })) },
       swapped: { L: swapped.map((s: string) => ({ S: s })) },
       waitlist: { L: waitlist.map((w: string) => ({ S: w })) },
+      actorUserId: userId ? { S: userId } : { NULL: true },
+      actingForUserId: actingForUserId ? { S: actingForUserId } : { NULL: true },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));

@@ -1,5 +1,6 @@
 import type {
   Course,
+  ParticipantStatus,
   TenantSettings,
   UserTenantMembership,
 } from "./types";
@@ -47,6 +48,56 @@ export function canManageParticipants(
     return settings?.instructorCanManageParticipants ?? true;
   }
   return false;
+}
+
+/**
+ * Darf ein Actor den Vertretungsmodus fuer einen Kurs starten?
+ *
+ * Regeln (MVP-kompatibel):
+ * - Admin: immer ja
+ * - Instructor:
+ *   - braucht grundsaetzlich Teilnehmerverwaltungsrecht
+ *   - wenn der Kurs Instructor-Zuordnungen hat: nur, wenn selbst zugeordnet
+ *   - wenn der Kurs keine Instructor-Zuordnungen hat: durch Setting steuerbar
+ *     (Default `true`, um aktuelles Verhalten nicht zu brechen)
+ * - Participant: nie
+ */
+export function canStartDelegationForCourse(
+  membership: UserTenantMembership,
+  settings: TenantSettings | undefined,
+  context: {
+    course: Pick<Course, "instructors">;
+    isActorAssignedInstructor: boolean;
+  },
+): boolean {
+  if (membership.role === "admin") return true;
+  if (membership.role !== "instructor") return false;
+  if (!canManageParticipants(membership, settings)) return false;
+
+  const hasExplicitCourseInstructors = (context.course.instructors?.length ?? 0) > 0;
+  if (hasExplicitCourseInstructors) {
+    return context.isActorAssignedInstructor;
+  }
+
+  return settings?.instructorCanManageDelegationWithoutCourseAssignment ?? true;
+}
+
+/**
+ * Darf ein Teilnehmerstatus im Vertretungsmodus verwaltet werden?
+ *
+ * Aktuelles Zielbild:
+ * - no_login / invited: immer erlaubt
+ * - active (registriert): per Setting steuerbar, Default aktuell `true`
+ */
+export function canManageParticipantStatusInDelegation(
+  participantStatus: ParticipantStatus,
+  settings: TenantSettings | undefined,
+): boolean {
+  if (participantStatus === "no_login" || participantStatus === "invited") {
+    return true;
+  }
+
+  return settings?.delegationCanManageActiveParticipants ?? true;
 }
 
 /**

@@ -43,6 +43,8 @@ describe('createOverride Lambda', () => {
         participants: { L: [{ S: 'Luna' }] },
         swapped: { L: [] },
         waitlist: { L: [] },
+        actorUserId: { NULL: true },
+        actingForUserId: { NULL: true },
       },
     });
   });

@@ -2,12 +2,19 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
+import { getDelegationErrorResponse } from '../shared/delegation';
 
 const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const { tenantId, userId } = getTenantContext(event);
-  console.log('updateOverride tenant context', { tenantId, userId });
+  const { tenantId, userId, actingForUserId } = getTenantContext(event);
+  console.log('updateOverride tenant context', { tenantId, userId, actingForUserId });
+  const delegationErrorResponse = getDelegationErrorResponse({
+    action: "update_override",
+    actorUserId: userId,
+    actingForUserId,
+  });
+  if (delegationErrorResponse) return delegationErrorResponse;
   const tableName = process.env.OVERRIDES_TABLE;
   const courseId = event.pathParameters?.courseId;
   const date = event.pathParameters?.date;
@@ -55,6 +62,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (updateExpression === 'SET') {
       return { statusCode: 400, body: JSON.stringify({ error: 'No fields to update' }) };
     }
+
+    updateExpression += ' #actorUserId = :actorUserId, #actingForUserId = :actingForUserId,';
+    expressionAttributeNames['#actorUserId'] = 'actorUserId';
+    expressionAttributeNames['#actingForUserId'] = 'actingForUserId';
+    expressionAttributeValues[':actorUserId'] = userId ? { S: userId } : { NULL: true };
+    expressionAttributeValues[':actingForUserId'] = actingForUserId ? { S: actingForUserId } : { NULL: true };
 
     updateExpression = updateExpression.slice(0, -1); // Entferne letztes Komma
 

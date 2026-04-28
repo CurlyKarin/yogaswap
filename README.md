@@ -74,6 +74,43 @@ Dieser Abschnitt dokumentiert den aktuellen Stand von **Issue #130, Scope A** (K
 
 ---
 
+## 🤝 #139 Vertretungsmodus (Assisted Enrollment)
+
+Dieser Abschnitt dokumentiert den aktuellen MVP-Stand von **Issue #139**.
+
+### Zweck
+
+- Admins und berechtigte Kursleitungen können Aktionen **im Auftrag** eines Teilnehmers ausführen.
+- Der Modus ist für organisatorische Unterstützung gedacht (z. B. Terminabsage/Tausch bei Verhinderung) und gilt sowohl für Teilnehmer ohne Login als auch für bereits registrierte Teilnehmer.
+
+### Frontend-Verhalten
+
+- Einstieg über den Button **`Vertretung`** im Header.
+- Auswahl einer Person über den Vertretungsdialog (inkl. Suche nach Nickname/E-Mail und Statusanzeige).
+- Vor Aktivierung erscheint ein Bestätigungsdialog: „Ich handle im Auftrag von …“.
+- Bei aktiver Vertretung wird ein sichtbarer Banner angezeigt.
+- Vertretung kann aktiv beendet werden und wird bei Logout automatisch zurückgesetzt.
+
+### Sichtbarkeit im aktiven Vertretungsmodus
+
+- Es wird nur die Perspektive des vertretenen Users gezeigt.
+- AdminPanel ist ausgeblendet.
+- Kursverwaltungsaktionen (Kurs anlegen/bearbeiten/löschen, Mitglieder/Termine verwalten) sind ausgeblendet.
+
+### Backend-Absicherung (MVP)
+
+- Delegierte Aktionen sind serverseitig per Allowlist abgesichert.
+- Betroffene Aktionen führen Audit-Informationen:
+  - **Audit-Felder** in Create/Update (`actorUserId`, `actingForUserId`)
+  - **Audit-Logs** bei Delete (actor/actingFor + Zielobjekt)
+
+### Scope-Hinweis
+
+- Der Vertretungsmodus ist im MVP funktional umgesetzt.
+- Fachliches Policy-Hardening der Rechte-Matrix folgt in **#141**.
+
+---
+
 ## 📋 Projektübersicht
 
 YogaSwap ist eine vollständige Serverless-Webanwendung bestehend aus:

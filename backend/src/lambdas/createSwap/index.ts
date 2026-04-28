@@ -2,12 +2,19 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
+import { getDelegationErrorResponse } from '../shared/delegation';
 
 const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const { tenantId, userId } = getTenantContext(event);
-  console.log('createSwap tenant context', { tenantId, userId });
+  const { tenantId, userId, actingForUserId } = getTenantContext(event);
+  console.log('createSwap tenant context', { tenantId, userId, actingForUserId });
+  const delegationErrorResponse = getDelegationErrorResponse({
+    action: "create_swap",
+    actorUserId: userId,
+    actingForUserId,
+  });
+  if (delegationErrorResponse) return delegationErrorResponse;
 
   const tableName = process.env.SWAPS_TABLE;
 
@@ -33,6 +40,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       fromDate_fromCourseId_status: { S: `${swap.fromDate}_${swap.fromCourseId}_${swap.status}` },
       toDate_toCourseId_status: { S: `${swap.toDate}_${swap.toCourseId}_${swap.status}` },
       tenantId_user: { S: tenantId_user },
+      actorUserId: userId ? { S: userId } : { NULL: true },
+      actingForUserId: actingForUserId ? { S: actingForUserId } : { NULL: true },
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));

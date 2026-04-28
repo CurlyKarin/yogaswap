@@ -46,14 +46,20 @@ describe('updateOverride Lambda', () => {
       tenantId: { S: 'default-tenant' },
       courseId_date: { S: '1_2025-10-01' },
     });
-    expect(call.UpdateExpression).toBe('SET #participants = :participants, #swapped = :swapped');
+    expect(call.UpdateExpression).toBe(
+      'SET #participants = :participants, #swapped = :swapped, #actorUserId = :actorUserId, #actingForUserId = :actingForUserId',
+    );
     expect(call.ExpressionAttributeNames).toEqual({
       '#participants': 'participants',
       '#swapped': 'swapped',
+      '#actorUserId': 'actorUserId',
+      '#actingForUserId': 'actingForUserId',
     });
     expect(call.ExpressionAttributeValues).toEqual({
       ':participants': { L: [{ S: 'Luna' }, { S: 'Kai' }] },
       ':swapped': { L: [{ S: 'Luna' }] },
+      ':actorUserId': { NULL: true },
+      ':actingForUserId': { NULL: true },
     });
   });
 

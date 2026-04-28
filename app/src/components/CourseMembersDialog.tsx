@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CourseModalFrame from "./CourseModalFrame";
 import type { ParticipantWithStatus } from "../api/participants";
 import { getParticipants } from "../api/participants";
+import { filterParticipantsBySearch, getStatusPresentation } from "../lib/participants";
 
 type CourseMembersDialogProps = {
   open: boolean;
@@ -161,13 +162,7 @@ export default function CourseMembersDialog({
   );
 
   const filteredParticipants = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return availableParticipants;
-    return availableParticipants.filter((entry) => {
-      const byUserId = entry.userId.toLowerCase().includes(needle);
-      const byEmail = (entry.email ?? "").toLowerCase().includes(needle);
-      return byUserId || byEmail;
-    });
+    return filterParticipantsBySearch(availableParticipants, search);
   }, [availableParticipants, search]);
 
   const selectedParticipantProfiles = useMemo(() => {
@@ -358,19 +353,21 @@ export default function CourseMembersDialog({
             </div>
           )}
         </div>
-        <input
-          ref={searchInputRef}
-          type="text"
-          aria-label="Mitglieder suchen"
-          placeholder="Mitglieder suchen (Nickname oder E-Mail)"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          disabled={saving}
-          className="dialog-field course-members-search-field"
-        />
-        <p className="course-editor-note" style={{ marginTop: -4 }}>
-          Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Zuordnen.
-        </p>
+        <div className="dialog-search-block">
+          <input
+            ref={searchInputRef}
+            type="search"
+            aria-label="Mitglieder suchen"
+            placeholder="Mitglieder suchen (Nickname oder E-Mail)"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            disabled={saving}
+            className="dialog-field dialog-search-field"
+          />
+          <p id="course-members-list-hint" className="course-editor-note dialog-search-hint dialog-search-hint-mobile-a11y">
+            Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Zuordnen.
+          </p>
+        </div>
         {loadingParticipants ? (
           <p className="course-editor-note">Mitglieder laden...</p>
         ) : filteredParticipants.length === 0 ? (
@@ -381,6 +378,7 @@ export default function CourseMembersDialog({
             style={{ maxHeight: 280, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8 }}
             role="listbox"
             aria-label="Teilnehmerliste"
+            aria-describedby="course-members-list-hint"
             aria-activedescendant={
               filteredParticipants[activeListIndex]
                 ? `participant-option-${filteredParticipants[activeListIndex].userId.toLowerCase()}`
@@ -401,6 +399,7 @@ export default function CourseMembersDialog({
               const checked = selectedParticipants.some((value) => value.toLowerCase() === entry.userId.toLowerCase());
               const atCapacity = selectedParticipants.length >= capacity;
               const isActive = index === activeListIndex;
+              const status = getStatusPresentation(entry.status);
               return (
                 <div
                   key={entry.userId}
@@ -411,10 +410,11 @@ export default function CourseMembersDialog({
                     display: "flex",
                     gap: 8,
                     alignItems: "center",
-                    padding: "4px 0",
+                    padding: "6px 8px",
                     cursor: "pointer",
                     borderRadius: 4,
-                    background: isActive ? "#eff6ff" : "transparent",
+                    background: checked ? "#ecfdf5" : isActive ? "#eff6ff" : "transparent",
+                    border: checked ? "1px solid #86efac" : "1px solid transparent",
                     opacity: !checked && atCapacity ? 0.6 : 1,
                   }}
                   onMouseEnter={() => setActiveListIndex(index)}
@@ -422,6 +422,7 @@ export default function CourseMembersDialog({
                     pointerPrimedSelectionRef.current = document.activeElement !== listBoxRef.current;
                   }}
                   onClick={() => handleParticipantOptionClick(index, entry.userId)}
+                  title={entry.email ? `${entry.userId} (${entry.email})` : entry.userId}
                 >
                   <div
                     ref={(element) => {
@@ -429,19 +430,31 @@ export default function CourseMembersDialog({
                     }}
                     aria-hidden="true"
                     style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 3,
-                      border: "1px solid #9ca3af",
-                      background: checked ? "#2563eb" : "#fff",
-                      boxShadow: checked ? "inset 0 0 0 2px #fff" : "none",
-                      flex: "0 0 16px",
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: status.color,
+                      flex: "0 0 8px",
                     }}
                   />
-                  <span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <strong>{entry.userId}</strong>
-                    {entry.email ? ` (${entry.email})` : ""}
-                    {` - ${entry.status}`}
+                    {checked && (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 12,
+                          color: "#166534",
+                          fontWeight: 600,
+                        }}
+                        aria-label="zugeordnet"
+                      >
+                        ✓ zugeordnet
+                      </span>
+                    )}
+                    {` - ${status.label}`}
                   </span>
                 </div>
               );

@@ -28,6 +28,7 @@ describe("getTenantContext (lambda shared)", () => {
     expect(ctx).toEqual({
       tenantId: "tenant-1",
       userId: "alice",
+      actingForUserId: undefined,
     });
   });
 
@@ -72,6 +73,16 @@ describe("getTenantContext (lambda shared)", () => {
     expect(ctx.tenantId).toBe(DEFAULT_TENANT_ID);
   });
 
+  it("verwendet x-actor-user-id Header vor Query-Param user", () => {
+    const event = makeEvent({
+      headers: { "x-actor-user-id": "actor-header" },
+      queryStringParameters: { user: "query-user" },
+    });
+
+    const ctx = getTenantContext(event);
+    expect(ctx.userId).toBe("actor-header");
+  });
+
   it("setzt userId auf undefined, wenn kein User ermittelt werden kann", () => {
     const event = makeEvent();
 
@@ -107,6 +118,22 @@ describe("getTenantContext (lambda shared)", () => {
     const ctx = getTenantContext(event);
 
     expect(ctx.tenantId).toBe(DEFAULT_TENANT_ID);
+  });
+
+  it("liest actingForUserId aus Header und Query-Param", () => {
+    const byHeader = getTenantContext(
+      makeEvent({
+        headers: { "x-acting-for-user-id": "target-header" },
+      }),
+    );
+    expect(byHeader.actingForUserId).toBe("target-header");
+
+    const byQuery = getTenantContext(
+      makeEvent({
+        queryStringParameters: { actingForUserId: "target-query" } as any,
+      }),
+    );
+    expect(byQuery.actingForUserId).toBe("target-query");
   });
 });
 

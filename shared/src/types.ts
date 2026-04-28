@@ -121,6 +121,21 @@ export interface TenantSettings {
    * Default für undefined: true (MVP-freundlich), kann tenant-spezifisch deaktiviert werden.
    */
   instructorCanManageParticipants?: boolean;
+  /**
+   * Darf Instructor-Delegation in Kursen ohne explizite Instructor-Zuordnung
+   * genutzt werden?
+   *
+   * Default (wenn undefined): true, um aktuelles Verhalten nicht zu brechen.
+   * Nach Rollout kann dies auf false gestellt werden.
+   */
+  instructorCanManageDelegationWithoutCourseAssignment?: boolean;
+  /**
+   * Duerfen registrierte/aktive Teilnehmer im Vertretungsmodus verwaltet werden?
+   *
+   * Default (wenn undefined): true (MVP).
+   * Geplante Nachschaerfung nach Rollout via Tenant-Policy.
+   */
+  delegationCanManageActiveParticipants?: boolean;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

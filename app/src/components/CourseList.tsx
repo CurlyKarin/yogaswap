@@ -32,6 +32,7 @@ type Props = {
   currentUser: User;
   tenant?: Tenant;
   membership?: UserTenantMembership;
+  forceParticipantView?: boolean;
 };
 
 type CourseEditorState = {
@@ -172,7 +173,12 @@ function toEditorState(course: Course): CourseEditorState {
   };
 }
 
-export default function CourseList({ currentUser, tenant, membership }: Props) {
+export default function CourseList({
+  currentUser,
+  tenant,
+  membership,
+  forceParticipantView = false,
+}: Props) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -201,8 +207,18 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
   const membersModalRef = useRef<HTMLDivElement | null>(null);
 
-  const isAdmin = membership?.role === "admin";
-  const isInstructor = membership?.role === "instructor";
+  const effectiveMembership = useMemo<UserTenantMembership | undefined>(() => {
+    if (!membership) return undefined;
+    if (!forceParticipantView) return membership;
+    return {
+      ...membership,
+      role: "participant",
+      userId: currentUser.nickname,
+    };
+  }, [membership, forceParticipantView, currentUser.nickname]);
+
+  const isAdmin = effectiveMembership?.role === "admin";
+  const isInstructor = effectiveMembership?.role === "instructor";
   const canSeeCourseManagement = isAdmin || isInstructor;
   const canManageCourses = isAdmin;
 
@@ -268,16 +284,16 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
   }, [currentUser?.nickname]);
 
   const visibleCourses = useMemo(() => {
-    if (!tenant?.settings || !membership) {
+    if (!tenant?.settings || !effectiveMembership) {
       return courses;
     }
     return courses.filter((course) =>
-      canSeeCourse(membership, tenant.settings, course, {
+      canSeeCourse(effectiveMembership, tenant.settings, course, {
         isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
         isBookedByUser: course.participants.some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
       }),
     );
-  }, [courses, tenant?.settings, membership, currentUser.nickname]);
+  }, [courses, tenant?.settings, effectiveMembership, currentUser.nickname]);
 
   const coursesWithUpcoming = visibleCourses.filter((c) => getCourseDates(c).length > 0);
   const coursesToRender = canSeeCourseManagement ? visibleCourses : coursesWithUpcoming;
@@ -605,18 +621,20 @@ export default function CourseList({ currentUser, tenant, membership }: Props) {
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            disabled={!canManageCourses || saving}
-            title={canManageCourses ? "Neuen Kurs anlegen" : "Nur Admin kann Kurse anlegen"}
-            aria-label="Kurs anlegen"
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <Plus size={16} aria-hidden="true" />
-              Kurs
-            </span>
-          </button>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <button
+              type="button"
+              onClick={openCreateModal}
+              disabled={!canManageCourses || saving}
+              title={canManageCourses ? "Neuen Kurs anlegen" : "Nur Admin kann Kurse anlegen"}
+              aria-label="Kurs anlegen"
+            >
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <Plus size={16} aria-hidden="true" />
+                Kurs
+              </span>
+            </button>
+          </div>
         </div>
       )}
 

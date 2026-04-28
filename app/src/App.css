@@ -16,6 +16,11 @@ body {
   max-width: 1120px; /* mehr Platz fuer Admin-Tabelle auf Desktop */
   width: 100%;
   box-sizing: border-box;
+  --delegation-accent-border: #f59e0b;
+  --delegation-accent-bg: #fffbeb;
+  --delegation-accent-text: #7c2d12;
+  --delegation-card-bg: #fffcf2;
+  --delegation-card-border: #f6d9a8;
 }
 
 .main-section {
@@ -76,6 +81,16 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.header-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-action-btn {
+  white-space: nowrap;
 }
 
 /* Grid der Kurskacheln */
@@ -288,7 +303,7 @@ a:focus-visible {
 .dialog-stack {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 14px;
   width: 100%;
 }
 .modal-actions.dialog-actions {
@@ -323,6 +338,18 @@ a:focus-visible {
   color: #4b5563;
   font-size: 14px;
   line-height: 1.4;
+}
+
+.dialog-search-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.dialog-search-hint {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .course-editor-inline-hint {
@@ -415,8 +442,34 @@ a:focus-visible {
   text-align: center;
 }
 
-.course-members-search-field {
-  margin-top: 6px;
+.dialog-search-field {
+  margin-top: 0;
+  padding-left: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 10px center;
+  background-size: 14px 14px;
+}
+
+.delegation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 auto 12px;
+  padding: 10px 12px;
+  width: 100%;
+  max-width: 980px;
+  box-sizing: border-box;
+  border: 1px solid var(--delegation-accent-border);
+  border-radius: 8px;
+  background: var(--delegation-accent-bg);
+  color: var(--delegation-accent-text);
+}
+
+.main-section-courses.is-delegation-active .course-card {
+  background: var(--delegation-card-bg);
+  border-color: var(--delegation-card-border);
 }
 
 .course-editor-range-controls {
@@ -707,6 +760,31 @@ a:focus-visible {
   .userbox {
     justify-content: space-between;
     flex-wrap: wrap;
+    width: 100%;
+  }
+  .header-action-group {
+    gap: 4px;
+  }
+  .delegation-banner {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+  }
+  .delegation-banner .modal-action-btn {
+    width: 100%;
+    min-width: 0;
+  }
+  .dialog-search-hint-mobile-a11y {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
   .main-section-admin {
     margin-top: 1rem;

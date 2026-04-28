@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getEffectiveParticipants } from "./participants";
+import { getEffectiveParticipants, getStatusPresentation } from "./participants";
 import type { Course, CourseDateOverride } from "shared/types";
 
 const baseCourse: Course = {
@@ -64,5 +64,28 @@ describe("getEffectiveParticipants", () => {
       },
     ];
     expect(getEffectiveParticipants(baseCourse, overrides, "2025-06-16")).toEqual([]);
+  });
+});
+
+describe("getStatusPresentation", () => {
+  it("liefert registriert in grün für active", () => {
+    expect(getStatusPresentation("active")).toEqual({
+      color: "#16a34a",
+      label: "registriert",
+    });
+  });
+
+  it("liefert eingeladen in gelb für invited", () => {
+    expect(getStatusPresentation("invited")).toEqual({
+      color: "#facc15",
+      label: "eingeladen",
+    });
+  });
+
+  it("liefert ohne Login in orange für no_login", () => {
+    expect(getStatusPresentation("no_login")).toEqual({
+      color: "#fb923c",
+      label: "ohne Login",
+    });
   });
 });
