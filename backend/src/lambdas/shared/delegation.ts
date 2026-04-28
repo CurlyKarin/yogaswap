@@ -1,3 +1,5 @@
+import type { APIGatewayProxyResult } from "aws-lambda";
+
 export type DelegatedAction =
   | "create_override"
   | "update_override"
@@ -37,4 +39,18 @@ export function ensureDelegatedActionAllowed(params: {
   }
 
   return { ok: true };
+}
+
+export function getDelegationErrorResponse(params: {
+  action: DelegatedAction;
+  actorUserId?: string | null;
+  actingForUserId?: string | null;
+}): APIGatewayProxyResult | null {
+  const result = ensureDelegatedActionAllowed(params);
+  if (result.ok) return null;
+
+  return {
+    statusCode: result.statusCode,
+    body: JSON.stringify({ error: result.error }),
+  };
 }

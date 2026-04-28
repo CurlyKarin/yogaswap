@@ -2,20 +2,18 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
-import { ensureDelegatedActionAllowed } from "../shared/delegation";
+import { getDelegationErrorResponse } from "../shared/delegation";
 
 const client = dynamoClient;
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const { tenantId, userId, actingForUserId } = getTenantContext(event);
-  const delegationCheck = ensureDelegatedActionAllowed({
+  const delegationErrorResponse = getDelegationErrorResponse({
     action: "delete_swap",
     actorUserId: userId,
     actingForUserId,
   });
-  if (!delegationCheck.ok) {
-    return { statusCode: delegationCheck.statusCode, body: JSON.stringify({ error: delegationCheck.error }) };
-  }
+  if (delegationErrorResponse) return delegationErrorResponse;
   const swapId = event.pathParameters?.swapId;
   const user = event.queryStringParameters?.user;
   console.log('DeleteSwap params:', { swapId, user });

@@ -1,4 +1,4 @@
-import { ensureDelegatedActionAllowed } from "./delegation";
+import { ensureDelegatedActionAllowed, getDelegationErrorResponse } from "./delegation";
 
 describe("ensureDelegatedActionAllowed", () => {
   it("erlaubt reguläre Aktionen ohne actingFor", () => {
@@ -30,5 +30,26 @@ describe("ensureDelegatedActionAllowed", () => {
     if (!result.ok) {
       expect(result.statusCode).toBe(400);
     }
+  });
+});
+
+describe("getDelegationErrorResponse", () => {
+  it("gibt null zurueck wenn Delegation erlaubt ist", () => {
+    const response = getDelegationErrorResponse({
+      action: "create_swap",
+      actorUserId: "admin",
+    });
+    expect(response).toBeNull();
+  });
+
+  it("gibt standardisierte Fehlerantwort zurueck wenn Delegation blockiert wird", () => {
+    const response = getDelegationErrorResponse({
+      action: "create_swap",
+      actingForUserId: "target",
+    });
+    expect(response).toEqual({
+      statusCode: 403,
+      body: JSON.stringify({ error: "Delegation requires authenticated actor user." }),
+    });
   });
 });
