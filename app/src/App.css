@@ -16,6 +16,11 @@ body {
   max-width: 1120px; /* mehr Platz fuer Admin-Tabelle auf Desktop */
   width: 100%;
   box-sizing: border-box;
+  --delegation-accent-border: #f59e0b;
+  --delegation-accent-bg: #fffbeb;
+  --delegation-accent-text: #7c2d12;
+  --delegation-card-bg: #fffcf2;
+  --delegation-card-border: #f6d9a8;
 }
 
 .main-section {
@@ -454,15 +459,15 @@ a:focus-visible {
   width: 100%;
   max-width: 980px;
   box-sizing: border-box;
-  border: 1px solid #f59e0b;
+  border: 1px solid var(--delegation-accent-border);
   border-radius: 8px;
-  background: #fffbeb;
-  color: #7c2d12;
+  background: var(--delegation-accent-bg);
+  color: var(--delegation-accent-text);
 }
 
 .main-section-courses.is-delegation-active .course-card {
-  background: #fffcf2;
-  border-color: #f6d9a8;
+  background: var(--delegation-card-bg);
+  border-color: var(--delegation-card-border);
 }
 
 .course-editor-range-controls {
