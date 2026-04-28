@@ -192,7 +192,7 @@ describe("CourseMembersDialog", () => {
 
     await screen.findByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
     const aliceChip = screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
-    const searchInput = screen.getByRole("textbox", { name: /mitglieder suchen/i });
+    const searchInput = screen.getByLabelText(/mitglieder suchen/i);
 
     await userEvent.click(aliceChip);
     expect(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i })).toBeInTheDocument();

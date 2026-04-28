@@ -26,3 +26,16 @@ export function getStatusPresentation(
   }
   return { color: "#fb923c", label: "ohne Login" };
 }
+
+export function filterParticipantsBySearch<T extends { userId: string; email?: string }>(
+  participants: T[],
+  search: string,
+): T[] {
+  const needle = search.trim().toLowerCase();
+  if (!needle) return participants;
+  return participants.filter((entry) => {
+    const byUserId = entry.userId.toLowerCase().includes(needle);
+    const byEmail = (entry.email ?? "").toLowerCase().includes(needle);
+    return byUserId || byEmail;
+  });
+}

@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CourseModalFrame from "./CourseModalFrame";
 import type { ParticipantWithStatus } from "../api/participants";
 import { getParticipants } from "../api/participants";
-import { getStatusPresentation } from "../lib/participants";
+import { filterParticipantsBySearch, getStatusPresentation } from "../lib/participants";
 
 type CourseMembersDialogProps = {
   open: boolean;
@@ -162,13 +162,7 @@ export default function CourseMembersDialog({
   );
 
   const filteredParticipants = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return availableParticipants;
-    return availableParticipants.filter((entry) => {
-      const byUserId = entry.userId.toLowerCase().includes(needle);
-      const byEmail = (entry.email ?? "").toLowerCase().includes(needle);
-      return byUserId || byEmail;
-    });
+    return filterParticipantsBySearch(availableParticipants, search);
   }, [availableParticipants, search]);
 
   const selectedParticipantProfiles = useMemo(() => {
@@ -362,7 +356,7 @@ export default function CourseMembersDialog({
         <div className="dialog-search-block">
           <input
             ref={searchInputRef}
-            type="text"
+            type="search"
             aria-label="Mitglieder suchen"
             placeholder="Mitglieder suchen (Nickname oder E-Mail)"
             value={search}

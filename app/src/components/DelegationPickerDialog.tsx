@@ -121,18 +121,16 @@ export default function DelegationPickerDialog({
     >
       <p className="course-editor-note">Wähle ein Mitglied aus.</p>
       <div className="dialog-search-block">
-        <label className="course-editor-field-label" htmlFor="delegation-search">
-          Suche
-          <input
-            id="delegation-search"
-            className="dialog-field dialog-search-field"
-            type="text"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Teilnehmer suchen"
-            autoFocus
-          />
-        </label>
+        <input
+          id="delegation-search"
+          className="dialog-field dialog-search-field"
+          type="search"
+          aria-label="Vertretung suchen"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Teilnehmer suchen (Nickname oder E-Mail)"
+          autoFocus
+        />
         <p className="course-editor-note dialog-search-hint">
           Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Auswählen.
         </p>

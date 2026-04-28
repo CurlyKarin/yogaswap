@@ -20,6 +20,7 @@ import { getTenantContext } from "./api/tenantContext";
 import { canInviteParticipants, canManageParticipants } from "shared/permissions";
 import { getParticipants, type ParticipantWithStatus } from "./api/participants";
 import { setActingForUserId, setActorUserId } from "./api/delegation";
+import { filterParticipantsBySearch } from "./lib/participants";
 
 // Checkmark Haupt-App als Komponente
 function MainApp() {
@@ -162,9 +163,7 @@ function MainApp() {
   };
 
   const filteredDelegationCandidates = useMemo(() => {
-    const search = delegationSearch.trim().toLowerCase();
-    if (!search) return delegationCandidates;
-    return delegationCandidates.filter((entry) => entry.userId.toLowerCase().includes(search));
+    return filterParticipantsBySearch(delegationCandidates, delegationSearch);
   }, [delegationCandidates, delegationSearch]);
 
   const confirmDelegation = () => {
