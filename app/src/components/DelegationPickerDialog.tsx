@@ -15,6 +15,19 @@ function getFocusableElements(node: HTMLElement): HTMLElement[] {
   return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
 }
 
+function getStatusPresentation(status: ParticipantWithStatus["status"]): {
+  color: string;
+  label: string;
+} {
+  if (status === "active") {
+    return { color: "#16a34a", label: "registriert" };
+  }
+  if (status === "invited") {
+    return { color: "#facc15", label: "eingeladen" };
+  }
+  return { color: "#fb923c", label: "ohne Login" };
+}
+
 type DelegationPickerDialogProps = {
   open: boolean;
   search: string;
@@ -118,7 +131,7 @@ export default function DelegationPickerDialog({
       modalRef={modalRef}
       onKeyDown={onKeyDown}
     >
-      <p className="course-editor-note">Wähle ein Mitglied oder setze auf Aus.</p>
+      <p className="course-editor-note">Wähle ein Mitglied aus.</p>
       <label className="course-editor-field-label" htmlFor="delegation-search">
         Suche
         <input
@@ -160,7 +173,7 @@ export default function DelegationPickerDialog({
             className={listHasFocus ? "course-members-listbox is-focused" : "course-members-listbox"}
           >
             {candidates.map((entry, index) => {
-              const indicator = entry.status === "active" ? "🟢" : entry.status === "invited" ? "🟡" : "⚪";
+              const status = getStatusPresentation(entry.status);
               const isActive = index === activeListIndex;
               return (
                 <div
@@ -179,6 +192,7 @@ export default function DelegationPickerDialog({
                   }}
                   onMouseEnter={() => setActiveListIndex(index)}
                   onClick={() => handleListOptionClick(index, entry.userId)}
+                  title={entry.email ? `${entry.userId} (${entry.email})` : entry.userId}
                 >
                   <div
                     ref={(element) => {
@@ -189,11 +203,14 @@ export default function DelegationPickerDialog({
                       width: 8,
                       height: 8,
                       borderRadius: "50%",
-                      background: entry.status === "active" ? "#16a34a" : entry.status === "invited" ? "#f59e0b" : "#9ca3af",
+                      background: status.color,
                       flex: "0 0 8px",
                     }}
                   />
-                  <span>{indicator} {entry.userId}</span>
+                  <span>
+                    <strong>{entry.userId}</strong>
+                    {` - ${status.label}`}
+                  </span>
                 </div>
               );
             })}
