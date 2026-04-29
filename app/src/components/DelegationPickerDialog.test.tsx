@@ -95,6 +95,31 @@ describe("DelegationPickerDialog", () => {
     expect(onSelectUser).toHaveBeenCalledWith("luca");
   });
 
+  it("keeps active option within list bounds on arrow navigation", () => {
+    render(
+      <DelegationPickerDialog
+        open
+        search=""
+        candidates={[
+          { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+          { userId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
+        ]}
+        onSearchChange={vi.fn()}
+        onSelectUser={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const listbox = screen.getByRole("listbox", { name: /vertretungsteilnehmerliste/i });
+    listbox.focus();
+    fireEvent.keyDown(listbox, { key: "ArrowUp" });
+    expect(listbox).toHaveAttribute("aria-activedescendant", "delegation-option-maya");
+
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    expect(listbox).toHaveAttribute("aria-activedescendant", "delegation-option-luca");
+  });
+
   it("closes on Escape and selects on click", async () => {
     const onClose = vi.fn();
     const onSelectUser = vi.fn();
