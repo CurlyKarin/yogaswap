@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
 import { getActingForUserId, setActingForUserId, setActorUserId } from "./api/delegation";
+import { canManageParticipants } from "shared/permissions";
 
 const courseListMock = vi.fn<(props: unknown) => void>();
 
@@ -78,6 +79,7 @@ describe("App delegation mode", () => {
     cleanup();
     vi.clearAllMocks();
     courseListMock.mockClear();
+    vi.mocked(canManageParticipants).mockReturnValue(true);
     setActingForUserId(null);
     setActorUserId(null);
   });
@@ -180,5 +182,137 @@ describe("App delegation mode", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /logout/i }));
     expect(getActingForUserId()).toBeNull();
+  });
+
+  it("does not show delegation entry when user cannot delegate", async () => {
+    const { fetchAuthSession } = await import("aws-amplify/auth");
+    const { getTenantContext } = await import("./api/tenantContext");
+    const { canManageParticipants } = await import("shared/permissions");
+
+    vi.mocked(fetchAuthSession).mockResolvedValue({
+      tokens: {
+        idToken: {
+          payload: {
+            nickname: "admin",
+            email: "admin@example.com",
+            "custom:role": "admin",
+          },
+        },
+      },
+    } as unknown as never);
+
+    vi.mocked(getTenantContext).mockResolvedValue({
+      tenant: { tenantId: "default-tenant", name: "Default" },
+      membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+    } as unknown as never);
+
+    vi.mocked(canManageParticipants).mockReturnValue(false);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/hi, admin/i)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("button", { name: /^vertretung$/i })).not.toBeInTheDocument();
+  });
+
+  it("allows cancelling delegation confirmation without activating mode", async () => {
+    const { fetchAuthSession } = await import("aws-amplify/auth");
+    const { getTenantContext } = await import("./api/tenantContext");
+    const { getParticipants } = await import("./api/participants");
+
+    vi.mocked(fetchAuthSession).mockResolvedValue({
+      tokens: {
+        idToken: {
+          payload: {
+            nickname: "admin",
+            email: "admin@example.com",
+            "custom:role": "admin",
+          },
+        },
+      },
+    } as unknown as never);
+
+    vi.mocked(getTenantContext).mockResolvedValue({
+      tenant: { tenantId: "default-tenant", name: "Default" },
+      membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+    } as unknown as never);
+
+    vi.mocked(getParticipants).mockResolvedValue([
+      { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+    ] as unknown as never);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/hi, admin/i)).toBeInTheDocument();
+    });
+
+    await userEvent.click(await screen.findByRole("button", { name: /^vertretung$/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /maya/i }));
+    await userEvent.click(screen.getByRole("button", { name: /abbrechen/i }));
+
+    expect(screen.queryByText(/vertretung aktiv:/i)).not.toBeInTheDocument();
+    expect(getActingForUserId()).toBeNull();
+  });
+
+  it("supports switching delegation from one participant to another", async () => {
+    const { fetchAuthSession } = await import("aws-amplify/auth");
+    const { getTenantContext } = await import("./api/tenantContext");
+    const { getParticipants } = await import("./api/participants");
+
+    vi.mocked(fetchAuthSession).mockResolvedValue({
+      tokens: {
+        idToken: {
+          payload: {
+            nickname: "admin",
+            email: "admin@example.com",
+            "custom:role": "admin",
+          },
+        },
+      },
+    } as unknown as never);
+
+    vi.mocked(getTenantContext).mockResolvedValue({
+      tenant: { tenantId: "default-tenant", name: "Default" },
+      membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+    } as unknown as never);
+
+    vi.mocked(getParticipants).mockResolvedValue([
+      { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
+    ] as unknown as never);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/hi, admin/i)).toBeInTheDocument();
+    });
+
+    await userEvent.click(await screen.findByRole("button", { name: /^vertretung$/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /maya/i }));
+    await userEvent.click(screen.getByRole("button", { name: /bestätigen/i }));
+    expect(screen.getByText(/im auftrag von/i)).toHaveTextContent(/maya/i);
+    expect(getActingForUserId()).toBe("maya");
+
+    await userEvent.click(screen.getByRole("button", { name: /^vertretung$/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /luca/i }));
+    await userEvent.click(screen.getByRole("button", { name: /bestätigen/i }));
+
+    expect(screen.getByText(/im auftrag von/i)).toHaveTextContent(/luca/i);
+    expect(getActingForUserId()).toBe("luca");
   });
 });

@@ -202,4 +202,29 @@ describe("CourseMembersDialog", () => {
       expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
     });
   });
+
+  it("keeps listbox connected to keyboard hint via aria-describedby", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        saving={false}
+        courseId={7}
+        courseName="Yoga Flow"
+        capacity={5}
+        initialParticipants={[]}
+        modalRef={createRef<HTMLDivElement>()}
+        onKeyDown={vi.fn()}
+        onClose={vi.fn()}
+        onSaveParticipants={vi.fn()}
+      />,
+    );
+
+    const listbox = await screen.findByRole("listbox", { name: /teilnehmerliste/i });
+    const hint = screen.getByText(/tastatur: tab zur liste/i);
+    expect(listbox).toHaveAttribute("aria-describedby", "course-members-list-hint");
+    expect(hint).toHaveAttribute("id", "course-members-list-hint");
+  });
 });
