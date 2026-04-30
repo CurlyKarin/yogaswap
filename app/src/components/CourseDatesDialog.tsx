@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { Calendar } from "lucide-react";
-import type { Course } from "shared/types";
-import { updateCourse } from "../api/courses";
+import type { Course, CourseDateOverride, Swap } from "shared/types";
+import { cancelCourseDate, updateCourse } from "../api/courses";
 import CourseModalFrame from "./CourseModalFrame";
 import {
   DEFAULT_ROLLING_HORIZON_WEEKS,
@@ -26,6 +26,8 @@ import {
 
 type CourseDatesDialogProps = {
   course: Course | null;
+  overrides: CourseDateOverride[];
+  swaps: Swap[];
   canManageCourses: boolean;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
@@ -53,10 +55,25 @@ function focusFirstElement(node: HTMLElement): void {
   node.focus();
 }
 
-export default function CourseDatesDialog({ course, canManageCourses, onClose, onSaved }: CourseDatesDialogProps) {
+function dedupeAndSortUsers(values: string[]): string[] {
+  return Array.from(new Set(values.filter((entry) => entry.trim().length > 0))).sort((a, b) => a.localeCompare(b));
+}
+
+export default function CourseDatesDialog({
+  course,
+  overrides,
+  swaps,
+  canManageCourses,
+  onClose,
+  onSaved,
+}: CourseDatesDialogProps) {
   const [datesState, setDatesState] = useState<CourseDatesEditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedCancellationDate, setSelectedCancellationDate] = useState<string | null>(null);
+  const [impactDialogOpen, setImpactDialogOpen] = useState(false);
+  const [rollbackOutgoingSwaps, setRollbackOutgoingSwaps] = useState(true);
+  const [notifyAlreadyCancelledParticipants, setNotifyAlreadyCancelledParticipants] = useState(true);
   const modalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -65,8 +82,16 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
       setFormError(null);
       return;
     }
-    setDatesState(createDatesState(course));
+    const nextState = createDatesState(course);
+    if (course.status === "active" && nextState.planningMode === "bounded_series") {
+      nextState.rangeDatePickerOpen = true;
+    }
+    setDatesState(nextState);
     setFormError(null);
+    setSelectedCancellationDate(null);
+    setImpactDialogOpen(false);
+    setRollbackOutgoingSwaps(true);
+    setNotifyAlreadyCancelledParticipants(true);
   }, [course]);
 
   useLayoutEffect(() => {
@@ -123,6 +148,7 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     datesState.visibilityHorizonWeeks >= DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
   const isActiveReadOnly =
     course?.status === "active" && datesState?.planningMode === "bounded_series";
+  const isActiveCancellationMode = isActiveReadOnly;
 
   const canSaveDatesConfig =
     canManageCourses &&
@@ -137,6 +163,11 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
   const datesPreview = useMemo(() => {
     if (!datesState) return [];
     return generatePreviewDates(datesState);
+  }, [datesState]);
+
+  const fullSeriesDatesForActive = useMemo(() => {
+    if (!datesState || datesState.planningMode !== "bounded_series") return [];
+    return generatePreviewDates({ ...datesState, excludedDates: [] });
   }, [datesState]);
 
   const displayLocale =
@@ -218,6 +249,38 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     () => datesPreview.map((entry) => formatIsoDateForDisplay(entry, displayLocale)),
     [datesPreview, displayLocale],
   );
+  const formattedFullSeriesDates = useMemo(
+    () => fullSeriesDatesForActive.map((entry) => formatIsoDateForDisplay(entry, displayLocale)),
+    [fullSeriesDatesForActive, displayLocale],
+  );
+
+  const cancellationImpact = useMemo(() => {
+    if (!course || !selectedCancellationDate) return null;
+    const overrideForDate =
+      overrides.find((entry) => entry.courseId === course.id && entry.date === selectedCancellationDate) ?? null;
+    const bookedParticipants = [...(overrideForDate?.participants ?? course.participants)];
+    const swappedInParticipants = [...(overrideForDate?.swapped ?? [])];
+    const waitlistParticipants = [...(overrideForDate?.waitlist ?? [])];
+    const bookedSet = new Set(bookedParticipants);
+    const alreadyCancelledParticipants = course.participants.filter((userId) => !bookedSet.has(userId));
+    const cancelledSet = new Set(alreadyCancelledParticipants);
+    const outgoingSwapsFromCancelledParticipants = swaps
+      .filter(
+        (swap) =>
+          swap.fromCourseId === course.id &&
+          swap.fromDate === selectedCancellationDate &&
+          swap.status === "pending" &&
+          cancelledSet.has(swap.user),
+      )
+      .map((swap) => swap.user);
+    return {
+      bookedParticipants,
+      swappedInParticipants,
+      waitlistParticipants,
+      alreadyCancelledParticipants,
+      outgoingSwapsFromCancelledParticipants: dedupeAndSortUsers(outgoingSwapsFromCancelledParticipants),
+    };
+  }, [course, overrides, selectedCancellationDate, swaps]);
 
   const toggleRangeDatePicker = () => {
     if (saving) return;
@@ -373,6 +436,53 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
     setFormError(null);
   };
 
+  const toggleCancellationDate = (isoDate: string) => {
+    if (saving) return;
+    if (!fullSeriesDatesForActive.includes(isoDate)) return;
+    if (datesState?.excludedDates.includes(isoDate)) return;
+    setSelectedCancellationDate((prev) => (prev === isoDate ? null : isoDate));
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            rangeDatePickerOpen: false,
+          }
+        : prev,
+    );
+    setFormError(null);
+  };
+
+  const openImpactDialog = () => {
+    if (!selectedCancellationDate || !cancellationImpact) return;
+    setImpactDialogOpen(true);
+  };
+
+  const closeImpactDialog = () => {
+    if (saving) return;
+    setImpactDialogOpen(false);
+  };
+
+  const submitCancellation = async () => {
+    if (!course || !selectedCancellationDate) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      await cancelCourseDate(course.id, selectedCancellationDate, {
+        rollbackOutgoingSwapsFromCancelledParticipants: rollbackOutgoingSwaps,
+        notifyAlreadyCancelledParticipants,
+      });
+      setImpactDialogOpen(false);
+      setSelectedCancellationDate(null);
+      onClose();
+      await onSaved();
+    } catch (err) {
+      console.error("Failed to cancel course date", err);
+      setFormError(err instanceof Error ? err.message : "Termin konnte nicht abgesagt werden.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveDatesConfig = async () => {
     if (!datesState || !canManageCourses || isActiveReadOnly) return;
     if (datesState.planningMode === "bounded_series") {
@@ -444,11 +554,127 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
         </p>
         {isActiveReadOnly && (
           <p className="course-editor-note">
-            Kurs ist aktiv. Terminplanung ist gesperrt. Änderungen erfolgen über Terminabsage.
+            Kurs ist aktiv. Terminplanung ist gesperrt.
           </p>
         )}
         <div className="dialog-stack">
-          {datesState.planningMode === "bounded_series" ? (
+          <div className="course-editor-subsection">
+            <strong className="course-editor-list-title">
+              Vorschau Termine ({isActiveCancellationMode ? fullSeriesDatesForActive.length : datesPreview.length})
+            </strong>
+            {(isActiveCancellationMode ? fullSeriesDatesForActive.length : datesPreview.length) === 0 ? (
+              <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
+            ) : (
+              <p className="course-editor-comma-list">
+                {(isActiveCancellationMode ? formattedFullSeriesDates : formattedPreviewDates).join(", ")}
+              </p>
+            )}
+          </div>
+
+          {isActiveCancellationMode ? (
+            <div className="course-editor-subsection">
+              <strong className="course-editor-list-title">Terminkalender zur Übersicht und Absage</strong>
+              <p className="course-editor-note">
+                Es werden alle geplanten Serientermine angezeigt. Ausgeschlossene Termine sind markiert und nicht
+                auswählbar.
+              </p>
+              <div className="course-editor-inline-row">
+                <button
+                  type="button"
+                  className="modal-action-btn course-editor-icon-btn"
+                  onClick={toggleRangeDatePicker}
+                  disabled={saving}
+                  title={datesState.rangeDatePickerOpen ? "Kalender ausblenden" : "Kalender öffnen"}
+                  aria-label="Kalender für Terminabsage öffnen"
+                >
+                  <Calendar size={16} aria-hidden="true" />
+                </button>
+                <span className="course-editor-note">Wähle genau einen Termin zur Absage.</span>
+              </div>
+              {datesState.rangeDatePickerOpen && (
+                <div className="course-editor-calendar-block" role="group" aria-label="Kalender Terminabsage">
+                  <div className="course-editor-calendar-nav">
+                    <button
+                      type="button"
+                      className="modal-action-btn course-editor-inline-action"
+                      onClick={() => shiftRangeCalendarMonth(-1)}
+                      disabled={saving}
+                    >
+                      Vorheriger Monat
+                    </button>
+                    <strong>{rangeCalendarMonthLabel}</strong>
+                    <button
+                      type="button"
+                      className="modal-action-btn course-editor-inline-action"
+                      onClick={() => shiftRangeCalendarMonth(1)}
+                      disabled={saving}
+                    >
+                      Nächster Monat
+                    </button>
+                  </div>
+                  <div className="course-editor-calendar-weekdays" aria-hidden="true">
+                    {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((label) => (
+                      <span key={label}>{label}</span>
+                    ))}
+                  </div>
+                  <div className="course-editor-calendar-grid">
+                    {rangeCalendarCells.map((cell) => {
+                      const isCancelledDate = datesState.excludedDates.includes(cell.isoDate);
+                      const isSelectable = cell.isSeriesDate && !isCancelledDate;
+                      const isSelected = selectedCancellationDate === cell.isoDate;
+                      const cellClassName = [
+                        "course-editor-calendar-cell",
+                        cell.inCurrentMonth ? "" : "is-outside-month",
+                        cell.isSeriesDate ? "is-series-date" : "",
+                        isCancelledDate ? "is-excluded-date" : "",
+                        isSelected ? "is-range-start" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ");
+                      return (
+                        <button
+                          key={`cancel-${cell.isoDate}`}
+                          type="button"
+                          className={cellClassName}
+                          aria-label={`Absage Datum ${cell.isoDate}`}
+                          onClick={() => toggleCancellationDate(cell.isoDate)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              toggleCancellationDate(cell.isoDate);
+                            }
+                          }}
+                          disabled={!isSelectable || saving}
+                          title={
+                            isCancelledDate
+                              ? "Termin ist bereits ausgeschlossen"
+                              : isSelectable
+                                ? "Termin für Absage auswählen"
+                                : "Nur Serientermine auswählbar"
+                          }
+                        >
+                          {cell.dayOfMonth}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="course-editor-calendar-legend">
+                    <span><em className="legend-dot series" /> geplanter Termin</span>
+                    <span><em className="legend-dot excluded" /> ausgeschlossen</span>
+                    <span><em className="legend-dot boundary" /> ausgewählt</span>
+                  </div>
+                </div>
+              )}
+              <p className="course-editor-note">
+                Ausgewählter Termin:{" "}
+                <strong>
+                  {selectedCancellationDate
+                    ? formatIsoDateForDisplay(selectedCancellationDate, displayLocale)
+                    : "Keiner ausgewählt"}
+                </strong>
+              </p>
+            </div>
+          ) : datesState.planningMode === "bounded_series" ? (
             <div className="course-editor-subsection">
               <strong className="course-editor-list-title">Zeitraum</strong>
               <p className="course-editor-note">
@@ -571,7 +797,8 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
             </div>
           )}
 
-          <div className="course-editor-subsection">
+          {!isActiveCancellationMode && (
+            <div className="course-editor-subsection">
             <strong className="course-editor-list-title">Ausgeschlossene Termin</strong>
             <div className="course-editor-inline-row">
               <button
@@ -677,31 +904,77 @@ export default function CourseDatesDialog({ course, canManageCourses, onClose, o
                   </div>
                 </div>
               )}
-          </div>
+            </div>
+          )}
 
-          <div className="course-editor-subsection">
-            {datesState.excludedDates.length === 0 ? (
-              <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
-            ) : (
-              <p className="course-editor-comma-list">{formattedExcludedDates.join(", ")}</p>
-            )}
-          </div>
+          {!isActiveCancellationMode && (
+            <div className="course-editor-subsection">
+              {datesState.excludedDates.length === 0 ? (
+                <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
+              ) : (
+                <p className="course-editor-comma-list">{formattedExcludedDates.join(", ")}</p>
+              )}
+            </div>
+          )}
 
-          <div className="course-editor-subsection">
-            <strong className="course-editor-list-title">Vorschau Termine ({datesPreview.length})</strong>
-            {datesPreview.length === 0 ? (
-              <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
-            ) : (
-              <p className="course-editor-comma-list">{formattedPreviewDates.join(", ")}</p>
-            )}
-          </div>
         </div>
         {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
+        {isActiveCancellationMode && impactDialogOpen && cancellationImpact && (
+          <div className="course-editor-subsection" role="group" aria-label="Auswirkungsprüfung Terminabsage">
+            <strong className="course-editor-list-title">
+              Auswirkungen für {selectedCancellationDate ? formatIsoDateForDisplay(selectedCancellationDate, displayLocale) : ""}
+            </strong>
+            <p className="course-editor-note">Bitte prüfe die betroffenen Gruppen vor dem Absagen.</p>
+            <p className="course-editor-note">
+              Gebucht: <strong>{cancellationImpact.bookedParticipants.length}</strong>
+              {" | "}Reingetauscht: <strong>{cancellationImpact.swappedInParticipants.length}</strong>
+              {" | "}Warteliste: <strong>{cancellationImpact.waitlistParticipants.length}</strong>
+              {" | "}Bereits abgesagt: <strong>{cancellationImpact.alreadyCancelledParticipants.length}</strong>
+            </p>
+            <label className="course-editor-note" style={{ display: "block" }}>
+              <input
+                type="checkbox"
+                checked={rollbackOutgoingSwaps}
+                onChange={(event) => setRollbackOutgoingSwaps(event.target.checked)}
+                disabled={saving}
+              />{" "}
+              Ausgehende Tauschanfragen bereits abgesagter Teilnehmer für diesen Ursprungstermin zurückrollen
+              ({cancellationImpact.outgoingSwapsFromCancelledParticipants.length})
+            </label>
+            <label className="course-editor-note" style={{ display: "block" }}>
+              <input
+                type="checkbox"
+                checked={notifyAlreadyCancelledParticipants}
+                onChange={(event) => setNotifyAlreadyCancelledParticipants(event.target.checked)}
+                disabled={saving}
+              />{" "}
+              Bereits abgesagte Teilnehmer zusätzlich informieren
+            </label>
+            <div className="modal-actions">
+              <button type="button" className="modal-action-btn" onClick={closeImpactDialog} disabled={saving}>
+                Zurück
+              </button>
+              <button type="button" className="btn-primary modal-action-btn" onClick={submitCancellation} disabled={saving}>
+                {saving ? "Sende..." : "Termin jetzt absagen"}
+              </button>
+            </div>
+          </div>
+        )}
         <div className="modal-actions">
-          {isActiveReadOnly ? (
-            <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>
-              Schließen
-            </button>
+          {isActiveCancellationMode ? (
+            <>
+              <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-primary modal-action-btn"
+                onClick={openImpactDialog}
+                disabled={!selectedCancellationDate || saving || impactDialogOpen || !cancellationImpact}
+              >
+                Absage überprüfen
+              </button>
+            </>
           ) : (
             <>
               <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>

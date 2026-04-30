@@ -163,6 +163,31 @@ locals {
       s3_actions   = []
       s3_resources = []
     },
+    "cancel_course_date" = {
+      name             = "cancel-course-date"
+      file_name        = "cancelCourseDate.zip"
+      table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn, module.participants_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Scan"]
+      tables = {
+        "COURSES_TABLE"      = module.courses_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "OVERRIDES_TABLE"    = module.course_overrides_table.table_name
+        "SWAPS_TABLE"        = module.swaps_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+      additional_policies = [
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail"]
+          Resource = "*"
+        }
+      ]
+      environment = {
+        SES_SOURCE_EMAIL = var.ses_source_email
+      }
+    },
     "delete_course" = {
       name             = "delete-course"
       file_name        = "deleteCourse.zip"
@@ -404,6 +429,7 @@ locals {
     "GET /courses"                               = "get_courses"
     "POST /courses"                              = "create_course"
     "PUT /courses/{courseId}"                    = "update_course"
+    "POST /courses/{courseId}/dates/{date}/cancel" = "cancel_course_date"
     "DELETE /courses/{courseId}"                 = "delete_course"
     "GET /participants"                          = "get_participants"
     "POST /participants"                         = "create_participants"
@@ -437,6 +463,7 @@ module "yogaswap_api" {
     "POST /participants/{userId}/password-reset",
     "POST /courses",
     "PUT /courses/{courseId}",
+    "POST /courses/{courseId}/dates/{date}/cancel",
     "DELETE /courses/{courseId}",
     "GET /tenant-context",
   ]

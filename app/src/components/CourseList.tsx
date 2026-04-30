@@ -761,6 +761,8 @@ export default function CourseList({
 
       <CourseDatesDialog
         course={datesTargetCourse ?? null}
+        overrides={filteredOverrides}
+        swaps={swaps}
         canManageCourses={canManageCourses}
         onClose={closeDatesModal}
         onSaved={fetchData}

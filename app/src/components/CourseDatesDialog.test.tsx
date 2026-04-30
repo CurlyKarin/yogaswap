@@ -3,13 +3,15 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import type { Course } from "shared/types";
 import CourseDatesDialog from "./CourseDatesDialog";
-import { updateCourse } from "../api/courses";
+import { cancelCourseDate, updateCourse } from "../api/courses";
 
 vi.mock("../api/courses", () => ({
   updateCourse: vi.fn(),
+  cancelCourseDate: vi.fn(),
 }));
 
 const mockedUpdateCourse = updateCourse as unknown as ReturnType<typeof vi.fn>;
+const mockedCancelCourseDate = cancelCourseDate as unknown as ReturnType<typeof vi.fn>;
 
 function makeCourse(overrides: Partial<Course> = {}): Course {
   return {
@@ -48,6 +50,8 @@ describe("CourseDatesDialog", () => {
     render(
       <CourseDatesDialog
         course={null}
+        overrides={[]}
+        swaps={[]}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -62,6 +66,8 @@ describe("CourseDatesDialog", () => {
     render(
       <CourseDatesDialog
         course={makeCourse()}
+        overrides={[]}
+        swaps={[]}
         canManageCourses
         onClose={onClose}
         onSaved={vi.fn()}
@@ -80,6 +86,8 @@ describe("CourseDatesDialog", () => {
     render(
       <CourseDatesDialog
         course={makeCourse()}
+        overrides={[]}
+        swaps={[]}
         canManageCourses
         onClose={onClose}
         onSaved={onSaved}
@@ -125,6 +133,8 @@ describe("CourseDatesDialog", () => {
     render(
       <CourseDatesDialog
         course={makeCourse()}
+        overrides={[]}
+        swaps={[]}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -158,6 +168,8 @@ describe("CourseDatesDialog", () => {
           planningMode: "rolling_continuous",
           visibilityHorizonWeeks: 10,
         })}
+        overrides={[]}
+        swaps={[]}
         canManageCourses
         onClose={onClose}
         onSaved={onSaved}
@@ -200,6 +212,8 @@ describe("CourseDatesDialog", () => {
           planningMode: "rolling_continuous",
           visibilityHorizonWeeks: 10,
         })}
+        overrides={[]}
+        swaps={[]}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -229,6 +243,8 @@ describe("CourseDatesDialog", () => {
           planningMode: "rolling_continuous",
           visibilityHorizonWeeks: 2,
         })}
+        overrides={[]}
+        swaps={[]}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -247,12 +263,31 @@ describe("CourseDatesDialog", () => {
     expect(farFutureCell).not.toBeDisabled();
   });
 
-  it("ist bei aktivem Kurs read-only mit Kalenderansicht", async () => {
-    mockedUpdateCourse.mockResolvedValue({});
+  it("zeigt bei aktivem Kursblock nur den Absage-Flow", async () => {
+    mockedCancelCourseDate.mockResolvedValue({ success: true, courseId: 1, date: "2026-01-06" });
     const onClose = vi.fn();
     render(
       <CourseDatesDialog
-        course={makeCourse({ status: "active" })}
+        course={makeCourse({ status: "active", participants: ["luna", "maya"] })}
+        overrides={[
+          {
+            courseId: 1,
+            date: "2026-01-06",
+            participants: ["luna"],
+            swapped: ["nora"],
+            waitlist: ["maya"],
+          },
+        ]}
+        swaps={[
+          {
+            user: "maya",
+            fromCourseId: 1,
+            fromDate: "2026-01-06",
+            toCourseId: 2,
+            toDate: "2026-01-09",
+            status: "pending",
+          },
+        ]}
         canManageCourses
         onClose={onClose}
         onSaved={vi.fn()}
@@ -266,18 +301,37 @@ describe("CourseDatesDialog", () => {
 
     expect(dialogQueries.getByText(/kurs ist aktiv\. terminplanung ist gesperrt/i)).toBeInTheDocument();
     expect(dialogQueries.queryByRole("button", { name: /termine übernehmen/i })).not.toBeInTheDocument();
-    expect(dialogQueries.getByRole("button", { name: /^schließen$/i })).toBeInTheDocument();
+    expect(dialogQueries.queryByRole("button", { name: /kalender für ausnahmetermin öffnen/i })).not.toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeDisabled();
+    expect(dialogQueries.getByRole("button", { name: /^abbrechen$/i })).toBeInTheDocument();
+    expect(dialogQueries.getByText(/ausgewählter termin:/i)).toBeInTheDocument();
+    expect(dialogQueries.getByText(/keiner ausgewählt/i)).toBeInTheDocument();
 
-    await user.click(dialogQueries.getByRole("button", { name: /kalender für zeitraum öffnen/i }));
-    const rangeDateButton = dialogQueries.getByRole("button", { name: /datum 2026-01-06/i });
-    expect(rangeDateButton).toBeDisabled();
+    expect(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i })).toBeInTheDocument();
+    await user.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+    expect(dialogQueries.queryByRole("button", { name: /absage datum 2026-01-06/i })).not.toBeInTheDocument();
+    await user.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+    await user.click(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i }));
+    expect(dialogQueries.queryByRole("button", { name: /absage datum 2026-01-06/i })).not.toBeInTheDocument();
+    expect(dialogQueries.getByText(formatDateForDisplay("2026-01-06"))).toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeEnabled();
+    await user.click(dialogQueries.getByRole("button", { name: /absage überprüfen/i }));
+    expect(dialogQueries.getByRole("group", { name: /auswirkungsprüfung terminabsage/i })).toBeInTheDocument();
+    await user.click(dialogQueries.getByRole("button", { name: /termin jetzt absagen/i }));
 
-    await user.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
-    const excludedDateButton = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-01-13/i });
-    expect(excludedDateButton).toBeDisabled();
+    await waitFor(() => {
+      expect(mockedCancelCourseDate).toHaveBeenCalledWith(
+        1,
+        "2026-01-06",
+        expect.objectContaining({
+          rollbackOutgoingSwapsFromCancelledParticipants: true,
+          notifyAlreadyCancelledParticipants: true,
+        }),
+      );
+    });
 
-    await user.click(dialogQueries.getByRole("button", { name: /^schließen$/i }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await user.click(dialogQueries.getByRole("button", { name: /^abbrechen$/i }));
+    expect(onClose).toHaveBeenCalled();
     expect(mockedUpdateCourse).not.toHaveBeenCalled();
   });
 
@@ -291,6 +345,8 @@ describe("CourseDatesDialog", () => {
           planningMode: "rolling_continuous",
           visibilityHorizonWeeks: 10,
         })}
+        overrides={[]}
+        swaps={[]}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
