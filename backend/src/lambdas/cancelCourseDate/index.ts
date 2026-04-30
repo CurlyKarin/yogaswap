@@ -319,7 +319,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             email,
           });
         } catch (mailError) {
-          mailFailedCount += 1;
           console.warn("cancelCourseDate mail warning", { tenantId, userId, date, error: mailError });
         }
       }
