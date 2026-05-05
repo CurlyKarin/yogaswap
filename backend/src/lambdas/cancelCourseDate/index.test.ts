@@ -38,7 +38,23 @@ function makeEvent(): APIGatewayProxyEvent {
       notifyAlreadyCancelledParticipants: true,
     }),
     headers: {},
-    pathParameters: { courseId: "1", date: "2026-01-06" },
+    pathParameters: { courseId: "1", date: "2099-01-06" },
+    requestContext: {
+      authorizer: {
+        jwt: { claims: { nickname: "admin1" } },
+      },
+    } as unknown as APIGatewayProxyEvent["requestContext"],
+  } as unknown) as APIGatewayProxyEvent;
+}
+
+function makeEventNoRollback(): APIGatewayProxyEvent {
+  return ({
+    body: JSON.stringify({
+      rollbackOutgoingSwapsFromCancelledParticipants: false,
+      notifyAlreadyCancelledParticipants: true,
+    }),
+    headers: {},
+    pathParameters: { courseId: "1", date: "2099-01-06" },
     requestContext: {
       authorizer: {
         jwt: { claims: { nickname: "admin1" } },
@@ -52,6 +68,7 @@ describe("cancelCourseDate Lambda", () => {
 
   beforeEach(() => {
     jest.resetModules();
+    jest.clearAllMocks();
     process.env = {
       ...OLD_ENV,
       COURSES_TABLE: "test-courses",
@@ -97,9 +114,9 @@ describe("cancelCourseDate Lambda", () => {
             user_swapId: { S: "maya#2026-01-06_1_2026-01-09_2" },
             user: { S: "maya" },
             fromCourseId: { S: "1" },
-            fromDate: { S: "2026-01-06" },
+            fromDate: { S: "2099-01-06" },
             toCourseId: { S: "2" },
-            toDate: { S: "2026-01-09" },
+            toDate: { S: "2099-01-09" },
             status: { S: "pending" },
           },
         ],
@@ -121,6 +138,7 @@ describe("cancelCourseDate Lambda", () => {
         swappedInParticipants: ["nora"],
         waitlistParticipants: ["maya"],
         alreadyCancelledParticipants: ["maya"],
+        outgoingSwapsFromCancelledParticipants: ["maya"],
       }),
     );
 
@@ -128,6 +146,54 @@ describe("cancelCourseDate Lambda", () => {
     expect(DeleteItemCommand).toHaveBeenCalledTimes(1);
     expect(PutItemCommand).toHaveBeenCalledTimes(2);
     expect(GetItemCommand).toHaveBeenCalled();
+    expect(sesSend).toHaveBeenCalledTimes(3);
+  });
+
+  test("keeps outgoing pending swaps from already-cancelled participants when rollback is false", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          participants: { L: [{ S: "luna" }, { S: "maya" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "1_2099-01-06" },
+          participants: { L: [{ S: "luna" }] },
+          swapped: { L: [{ S: "nora" }] },
+          waitlist: { L: [{ S: "maya" }] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            user_swapId: { S: "maya#2099-01-06_1_2099-01-09_2" },
+            user: { S: "maya" },
+            fromCourseId: { S: "1" },
+            fromDate: { S: "2099-01-06" },
+            toCourseId: { S: "2" },
+            toDate: { S: "2099-01-09" },
+            status: { S: "pending" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: { email: { S: "luna@example.com" } } })
+      .mockResolvedValueOnce({ Item: { email: { S: "nora@example.com" } } })
+      .mockResolvedValueOnce({ Item: { email: { S: "maya@example.com" } } });
+
+    const result = await handler(makeEventNoRollback());
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).not.toHaveBeenCalled();
+    expect(PutItemCommand).toHaveBeenCalledTimes(2);
     expect(sesSend).toHaveBeenCalledTimes(3);
   });
 });

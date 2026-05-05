@@ -72,7 +72,7 @@ export default function CourseDatesDialog({
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedCancellationDate, setSelectedCancellationDate] = useState<string | null>(null);
   const [impactDialogOpen, setImpactDialogOpen] = useState(false);
-  const [rollbackOutgoingSwaps, setRollbackOutgoingSwaps] = useState(true);
+  const [rollbackOutgoingSwaps, setRollbackOutgoingSwaps] = useState(false);
   const [notifyAlreadyCancelledParticipants, setNotifyAlreadyCancelledParticipants] = useState(true);
   const modalRef = useRef<HTMLDivElement | null>(null);
 
@@ -90,7 +90,7 @@ export default function CourseDatesDialog({
     setFormError(null);
     setSelectedCancellationDate(null);
     setImpactDialogOpen(false);
-    setRollbackOutgoingSwaps(true);
+    setRollbackOutgoingSwaps(false);
     setNotifyAlreadyCancelledParticipants(true);
   }, [course]);
 

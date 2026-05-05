@@ -185,7 +185,8 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = var.ses_source_email
+        SES_SOURCE_EMAIL         = var.ses_source_email
+        STUDIO_NOTIFICATION_EMAILS = var.studio_notification_emails
       }
     },
     "delete_course" = {

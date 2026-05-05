@@ -36,6 +36,19 @@ function dedupeUsers(values: string[]): string[] {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 }
 
+function parseCsvEmails(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function isIsoDateInFuture(isoDate: string): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  return isoDate > today;
+}
+
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const coursesTable = process.env.COURSES_TABLE;
   const overridesTable = process.env.OVERRIDES_TABLE;
@@ -43,6 +56,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const participantsTable = process.env.PARTICIPANTS_TABLE;
   const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "";
+  const studioNotificationEmails = parseCsvEmails(process.env.STUDIO_NOTIFICATION_EMAILS);
   if (!coursesTable || !overridesTable || !swapsTable || !membershipsTable) {
     return {
       statusCode: 500,
@@ -62,7 +76,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   const body = parseBody(event);
-  const rollbackOutgoing = body.rollbackOutgoingSwapsFromCancelledParticipants !== false;
+  const rollbackOutgoing = body.rollbackOutgoingSwapsFromCancelledParticipants === true;
   const notifyAlreadyCancelled = body.notifyAlreadyCancelledParticipants !== false;
 
   try {
@@ -161,6 +175,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         (item) =>
           item.fromCourseId?.S === courseId &&
           item.fromDate?.S === date &&
+          item.toDate?.S &&
+          isIsoDateInFuture(item.toDate.S) &&
           item.user?.S &&
           alreadyCancelledSet.has(item.user.S) &&
           item.status?.S === "pending",
@@ -171,7 +187,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       if (item.toCourseId?.S === courseId && item.toDate?.S === date) return true;
       if (item.fromCourseId?.S === courseId && item.fromDate?.S === date) {
         const swapUser = item.user?.S ?? "";
+        if (item.status?.S !== "pending") return false;
         if (!alreadyCancelledSet.has(swapUser)) return true;
+        const toDate = item.toDate?.S ?? "";
+        if (!toDate || !isIsoDateInFuture(toDate)) return false;
         return rollbackOutgoing;
       }
       return false;
@@ -258,11 +277,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       sesConfigured: Boolean(sesSourceEmail),
     });
 
+    let mailSentCount = 0;
+    let mailSkippedNoProfileCount = 0;
+    let mailSkippedNoEmailCount = 0;
+    let mailFailedCount = 0;
     if (participantsTable && sesSourceEmail && notifyUsers.size > 0) {
-      let mailSentCount = 0;
-      let mailSkippedNoProfileCount = 0;
-      let mailSkippedNoEmailCount = 0;
-      let mailFailedCount = 0;
       for (const userId of notifyUsers) {
         const participantResp = await client.send(
           new GetItemCommand({
@@ -342,6 +361,85 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           : !sesSourceEmail
             ? "ses_source_email_missing"
             : "no_recipients",
+      });
+    }
+
+    if (studioNotificationEmails.length > 0 && sesSourceEmail) {
+      const activeSwapsWithOriginOnCancelledDate = relatedSwaps
+        .filter((item) => item.fromCourseId?.S === courseId && item.fromDate?.S === date && item.status?.S === "active")
+        .map((item) => ({
+          userId: item.user?.S ?? "",
+          toCourseId: item.toCourseId?.S ?? "",
+          toDate: item.toDate?.S ?? "",
+        }));
+      const pendingSwapsWithOriginOnCancelledDate = relatedSwaps
+        .filter((item) => item.fromCourseId?.S === courseId && item.fromDate?.S === date && item.status?.S === "pending")
+        .map((item) => ({
+          userId: item.user?.S ?? "",
+          toCourseId: item.toCourseId?.S ?? "",
+          toDate: item.toDate?.S ?? "",
+        }));
+      const pendingSwapsToCancelledDateWithOtherOrigin = relatedSwaps
+        .filter((item) => item.toCourseId?.S === courseId && item.toDate?.S === date && item.status?.S === "pending")
+        .map((item) => ({
+          userId: item.user?.S ?? "",
+          fromCourseId: item.fromCourseId?.S ?? "",
+          fromDate: item.fromDate?.S ?? "",
+          fromOriginCancelled: alreadyCancelledSet.has(item.user?.S ?? ""),
+        }));
+      const cancelledWithoutSwap = alreadyCancelledParticipants.filter(
+        (userId) =>
+          !outgoingSwapsFromCancelledParticipants.includes(userId) &&
+          !activeSwapsWithOriginOnCancelledDate.some((swap) => swap.userId === userId),
+      );
+
+      const reportHtml = `
+        <h3>Terminabsage Report</h3>
+        <p>Kurs: <strong>${courseName}</strong> (${courseId})</p>
+        <p>Termin: <strong>${date}</strong></p>
+        <p>Actor: <strong>${actorUserId}</strong></p>
+        <p>Regulär betroffen: ${dedupeUsers(bookedParticipants).join(", ") || "-"}</p>
+        <p>Reingetauscht betroffen: ${dedupeUsers(swappedInParticipants).join(", ") || "-"}</p>
+        <p>Aktive Swaps (Ursprung abgesagter Termin): ${activeSwapsWithOriginOnCancelledDate.map((s) => `${s.userId} -> ${s.toCourseId}/${s.toDate}`).join("; ") || "-"}</p>
+        <p>Abgesagt ohne Swap: ${dedupeUsers(cancelledWithoutSwap).join(", ") || "-"}</p>
+        <p>Abgesagt mit pending Swaps: ${dedupeUsers(outgoingSwapsFromCancelledParticipants).join(", ") || "-"}</p>
+        <p>Pending Swaps mit anderem Ursprung (Ziel abgesagter Termin): ${pendingSwapsToCancelledDateWithOtherOrigin.map((s) => `${s.userId} <- ${s.fromCourseId}/${s.fromDate} (originCancelled=${s.fromOriginCancelled})`).join("; ") || "-"}</p>
+        <p>Pending Swaps mit Ursprung abgesagter Termin: ${pendingSwapsWithOriginOnCancelledDate.map((s) => `${s.userId} -> ${s.toCourseId}/${s.toDate}`).join("; ") || "-"}</p>
+        <hr />
+        <p>Mail Summary: sent=${mailSentCount}, skippedNoProfile=${mailSkippedNoProfileCount}, skippedNoEmail=${mailSkippedNoEmailCount}, failed=${mailFailedCount}</p>
+      `;
+      try {
+        await ses.send(
+          new SendEmailCommand({
+            Source: sesSourceEmail,
+            Destination: { ToAddresses: studioNotificationEmails },
+            Message: {
+              Subject: { Data: `Studio-Report Terminabsage: ${courseName} (${date})` },
+              Body: { Html: { Data: reportHtml } },
+            },
+          }),
+        );
+        console.info("cancelCourseDate studio report sent", {
+          tenantId,
+          courseId,
+          date,
+          recipients: studioNotificationEmails,
+        });
+      } catch (reportError) {
+        console.warn("cancelCourseDate studio report mail warning", {
+          tenantId,
+          courseId,
+          date,
+          recipients: studioNotificationEmails,
+          error: reportError,
+        });
+      }
+    } else {
+      console.info("cancelCourseDate studio report skipped", {
+        tenantId,
+        courseId,
+        date,
+        reason: studioNotificationEmails.length === 0 ? "no_report_recipients" : "ses_source_email_missing",
       });
     }
 

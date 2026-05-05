@@ -17,6 +17,12 @@ variable "ses_source_email" {
   default     = "yogaswap@example.com"
 }
 
+variable "studio_notification_emails" {
+  description = "Comma-separated Empfänger für Studio-Benachrichtigungen (z. B. Terminabsagen)"
+  type        = string
+  default     = ""
+}
+
 variable "cloudfront_aliases" {
   description = "CloudFront Alternate Domain Names (CNAMEs), z.B. [\"app.yogaswap.de\"]"
   type        = list(string)
