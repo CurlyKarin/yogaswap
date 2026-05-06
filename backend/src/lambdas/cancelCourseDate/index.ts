@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { dynamoClient } from "../shared/dynamoClient";
+import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
@@ -55,7 +56,12 @@ async function resolveParticipantEmail(
   participantsTable: string,
   tenantId: string,
   requestedUserId: string,
-): Promise<{ email?: string; resolvedUserId?: string }> {
+): Promise<{
+  email?: string;
+  resolvedUserId?: string;
+  status?: "no_login" | "invited" | "active";
+  lookupSource?: "exact" | "normalized";
+}> {
   const exactProfileResp = await client.send(
     new GetItemCommand({
       TableName: participantsTable,
@@ -67,8 +73,20 @@ async function resolveParticipantEmail(
     }),
   );
   const exactEmail = exactProfileResp.Item?.email?.S?.trim();
+  const exactStatus = exactProfileResp.Item
+    ? deriveParticipantStatus({
+        authUserId: exactProfileResp.Item.authUserId?.S,
+        inviteSentAt: exactProfileResp.Item.inviteSentAt?.S,
+        inviteCompletedAt: exactProfileResp.Item.inviteCompletedAt?.S,
+      })
+    : undefined;
   if (exactProfileResp.Item && exactEmail) {
-    return { email: exactEmail, resolvedUserId: requestedUserId };
+    return {
+      email: exactEmail,
+      resolvedUserId: requestedUserId,
+      status: exactStatus,
+      lookupSource: "exact",
+    };
   }
 
   let normalizedLookupResp;
@@ -97,8 +115,20 @@ async function resolveParticipantEmail(
   const normalizedItem = normalizedLookupResp.Items?.[0];
   const normalizedEmail = normalizedItem?.email?.S?.trim();
   const normalizedUserId = normalizedItem?.userId?.S?.trim();
+  const normalizedStatus = normalizedItem
+    ? deriveParticipantStatus({
+        authUserId: normalizedItem.authUserId?.S,
+        inviteSentAt: normalizedItem.inviteSentAt?.S,
+        inviteCompletedAt: normalizedItem.inviteCompletedAt?.S,
+      })
+    : undefined;
   if (normalizedItem && normalizedEmail) {
-    return { email: normalizedEmail, resolvedUserId: normalizedUserId || requestedUserId };
+    return {
+      email: normalizedEmail,
+      resolvedUserId: normalizedUserId || requestedUserId,
+      status: normalizedStatus,
+      lookupSource: "normalized",
+    };
   }
 
   return {};
@@ -335,11 +365,26 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     let mailSentCount = 0;
     let mailSkippedNoProfileCount = 0;
     let mailSkippedNoEmailCount = 0;
+    let mailSkippedInvitedCount = 0;
     let mailFailedCount = 0;
     let normalizedLookupUsedCount = 0;
     if (participantsTable && sesSourceEmail && notifyUsers.size > 0) {
       for (const userId of notifyUsers) {
-        const { email, resolvedUserId } = await resolveParticipantEmail(participantsTable, tenantId, userId);
+        const { email, resolvedUserId, status, lookupSource } = await resolveParticipantEmail(
+          participantsTable,
+          tenantId,
+          userId,
+        );
+        console.info("cancelCourseDate participant notification candidate", {
+          tenantId,
+          courseId,
+          date,
+          requestedUserId: userId,
+          resolvedUserId: resolvedUserId ?? null,
+          participantStatus: status ?? null,
+          lookupSource: lookupSource ?? null,
+          hasEmail: Boolean(email),
+        });
         if (!email) {
           mailSkippedNoProfileCount += 1;
           console.warn("cancelCourseDate skip mail: participant profile missing", {
@@ -347,6 +392,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             courseId,
             date,
             userId,
+          });
+          continue;
+        }
+        if (status === "invited") {
+          mailSkippedInvitedCount += 1;
+          console.info("cancelCourseDate skip mail: participant invited only", {
+            tenantId,
+            courseId,
+            date,
+            requestedUserId: userId,
+            resolvedUserId: resolvedUserId ?? userId,
           });
           continue;
         }
@@ -394,6 +450,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         mailSentCount,
         mailSkippedNoProfileCount,
         mailSkippedNoEmailCount,
+        mailSkippedInvitedCount,
         mailFailedCount,
         requestedRecipients: notifyUserList.length,
         normalizedLookupUsedCount,
@@ -453,7 +510,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         <p>Pending Swaps mit anderem Ursprung (Ziel abgesagter Termin): ${pendingSwapsToCancelledDateWithOtherOrigin.map((s) => `${s.userId} <- ${s.fromCourseId}/${s.fromDate} (originCancelled=${s.fromOriginCancelled})`).join("; ") || "-"}</p>
         <p>Pending Swaps mit Ursprung abgesagter Termin: ${pendingSwapsWithOriginOnCancelledDate.map((s) => `${s.userId} -> ${s.toCourseId}/${s.toDate}`).join("; ") || "-"}</p>
         <hr />
-        <p>Mail Summary: sent=${mailSentCount}, skippedNoProfile=${mailSkippedNoProfileCount}, skippedNoEmail=${mailSkippedNoEmailCount}, failed=${mailFailedCount}</p>
+        <p>Mail Summary: sent=${mailSentCount}, skippedNoProfile=${mailSkippedNoProfileCount}, skippedNoEmail=${mailSkippedNoEmailCount}, skippedInvited=${mailSkippedInvitedCount}, failed=${mailFailedCount}</p>
       `;
       try {
         await ses.send(

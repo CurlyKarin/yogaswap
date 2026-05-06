@@ -242,5 +242,42 @@ describe("cancelCourseDate Lambda", () => {
     expect(QueryCommand).toHaveBeenCalledTimes(1);
     expect(sesSend).toHaveBeenCalledTimes(1); // user mail
   });
+
+  test("does not send cancellation mails to invited-only participants", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          participants: { L: [{ S: "Aria" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "1_2099-01-06" },
+          participants: { L: [{ S: "Aria" }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "aria@example.com" },
+          inviteSentAt: { S: "2026-05-01T10:00:00.000Z" },
+        },
+      });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    expect(GetItemCommand).toHaveBeenCalled();
+    expect(sesSend).not.toHaveBeenCalled();
+  });
 });
 
