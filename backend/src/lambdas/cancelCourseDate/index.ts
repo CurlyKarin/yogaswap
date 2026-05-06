@@ -83,7 +83,6 @@ async function resolveParticipantEmail(
           ":userIdNormalized": { S: requestedUserId.toLowerCase() },
         },
         Limit: 1,
-        ConsistentRead: true,
       }),
     );
   } catch (error) {
@@ -337,6 +336,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     let mailSkippedNoProfileCount = 0;
     let mailSkippedNoEmailCount = 0;
     let mailFailedCount = 0;
+    let normalizedLookupUsedCount = 0;
     if (participantsTable && sesSourceEmail && notifyUsers.size > 0) {
       for (const userId of notifyUsers) {
         const { email, resolvedUserId } = await resolveParticipantEmail(participantsTable, tenantId, userId);
@@ -351,6 +351,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           continue;
         }
         if (resolvedUserId && resolvedUserId !== userId) {
+          normalizedLookupUsedCount += 1;
           console.info("cancelCourseDate participant email resolved via normalized lookup", {
             tenantId,
             courseId,
@@ -395,6 +396,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         mailSkippedNoEmailCount,
         mailFailedCount,
         requestedRecipients: notifyUserList.length,
+        normalizedLookupUsedCount,
       });
     } else {
       console.info("cancelCourseDate mail skipped entirely", {
