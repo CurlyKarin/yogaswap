@@ -167,7 +167,7 @@ locals {
       name             = "cancel-course-date"
       file_name        = "cancelCourseDate.zip"
       table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn, module.participants_table.table_arn]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Scan"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Scan", "dynamodb:Query"]
       tables = {
         "COURSES_TABLE"      = module.courses_table.table_name
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name

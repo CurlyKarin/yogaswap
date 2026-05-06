@@ -3,6 +3,7 @@ import {
   DeleteItemCommand,
   GetItemCommand,
   PutItemCommand,
+  QueryCommand,
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
 import { handler } from "./index";
@@ -14,6 +15,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
     DeleteItemCommand: jest.fn((input) => input),
     GetItemCommand: jest.fn((input) => input),
     PutItemCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
     ScanCommand: jest.fn((input) => input),
     mockSend,
   };
@@ -146,6 +148,7 @@ describe("cancelCourseDate Lambda", () => {
     expect(DeleteItemCommand).toHaveBeenCalledTimes(1);
     expect(PutItemCommand).toHaveBeenCalledTimes(2);
     expect(GetItemCommand).toHaveBeenCalled();
+    expect(QueryCommand).not.toHaveBeenCalled();
     expect(sesSend).toHaveBeenCalledTimes(3);
   });
 
@@ -195,6 +198,49 @@ describe("cancelCourseDate Lambda", () => {
     expect(DeleteItemCommand).not.toHaveBeenCalled();
     expect(PutItemCommand).toHaveBeenCalledTimes(2);
     expect(sesSend).toHaveBeenCalledTimes(3);
+  });
+
+  test("resolves participant profile case-insensitively via normalized lookup", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          participants: { L: [{ S: "Rue" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "1_2099-01-06" },
+          participants: { L: [{ S: "Rue" }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            userId: { S: "rue" },
+            userIdNormalized: { S: "rue" },
+            email: { S: "rue@example.com" },
+          },
+        ],
+      });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    expect(GetItemCommand).toHaveBeenCalled();
+    expect(QueryCommand).toHaveBeenCalledTimes(1);
+    expect(sesSend).toHaveBeenCalledTimes(1); // user mail
   });
 });
 

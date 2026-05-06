@@ -3,6 +3,7 @@ import {
   DeleteItemCommand,
   GetItemCommand,
   PutItemCommand,
+  QueryCommand,
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
@@ -11,6 +12,7 @@ import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
 const ses = new SESClient({});
+const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 
 type CancelBody = {
   rollbackOutgoingSwapsFromCancelledParticipants?: boolean;
@@ -47,6 +49,60 @@ function parseCsvEmails(raw: string | undefined): string[] {
 function isIsoDateInFuture(isoDate: string): boolean {
   const today = new Date().toISOString().slice(0, 10);
   return isoDate > today;
+}
+
+async function resolveParticipantEmail(
+  participantsTable: string,
+  tenantId: string,
+  requestedUserId: string,
+): Promise<{ email?: string; resolvedUserId?: string }> {
+  const exactProfileResp = await client.send(
+    new GetItemCommand({
+      TableName: participantsTable,
+      Key: {
+        tenantId: { S: tenantId },
+        userId: { S: requestedUserId },
+      },
+      ConsistentRead: true,
+    }),
+  );
+  const exactEmail = exactProfileResp.Item?.email?.S?.trim();
+  if (exactProfileResp.Item && exactEmail) {
+    return { email: exactEmail, resolvedUserId: requestedUserId };
+  }
+
+  let normalizedLookupResp;
+  try {
+    normalizedLookupResp = await client.send(
+      new QueryCommand({
+        TableName: participantsTable,
+        IndexName: PARTICIPANTS_NORMALIZED_INDEX,
+        KeyConditionExpression: "tenantId = :tenantId AND userIdNormalized = :userIdNormalized",
+        ExpressionAttributeValues: {
+          ":tenantId": { S: tenantId },
+          ":userIdNormalized": { S: requestedUserId.toLowerCase() },
+        },
+        Limit: 1,
+        ConsistentRead: true,
+      }),
+    );
+  } catch (error) {
+    console.warn("cancelCourseDate normalized participant lookup failed", {
+      tenantId,
+      requestedUserId,
+      indexName: PARTICIPANTS_NORMALIZED_INDEX,
+      error,
+    });
+    return {};
+  }
+  const normalizedItem = normalizedLookupResp.Items?.[0];
+  const normalizedEmail = normalizedItem?.email?.S?.trim();
+  const normalizedUserId = normalizedItem?.userId?.S?.trim();
+  if (normalizedItem && normalizedEmail) {
+    return { email: normalizedEmail, resolvedUserId: normalizedUserId || requestedUserId };
+  }
+
+  return {};
 }
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -283,17 +339,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     let mailFailedCount = 0;
     if (participantsTable && sesSourceEmail && notifyUsers.size > 0) {
       for (const userId of notifyUsers) {
-        const participantResp = await client.send(
-          new GetItemCommand({
-            TableName: participantsTable,
-            Key: {
-              tenantId: { S: tenantId },
-              userId: { S: userId },
-            },
-            ConsistentRead: true,
-          }),
-        );
-        if (!participantResp.Item) {
+        const { email, resolvedUserId } = await resolveParticipantEmail(participantsTable, tenantId, userId);
+        if (!email) {
           mailSkippedNoProfileCount += 1;
           console.warn("cancelCourseDate skip mail: participant profile missing", {
             tenantId,
@@ -303,16 +350,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           });
           continue;
         }
-        const email = participantResp.Item?.email?.S?.trim();
-        if (!email) {
-          mailSkippedNoEmailCount += 1;
-          console.warn("cancelCourseDate skip mail: missing email", {
+        if (resolvedUserId && resolvedUserId !== userId) {
+          console.info("cancelCourseDate participant email resolved via normalized lookup", {
             tenantId,
             courseId,
             date,
-            userId,
+            requestedUserId: userId,
+            resolvedUserId,
           });
-          continue;
         }
         try {
           await ses.send(
