@@ -347,7 +347,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     );
 
-    const notifyUsers = new Set([...bookedParticipants, ...swappedInParticipants]);
+    const notifyUsers = new Set([...bookedParticipants, ...swappedInParticipants, ...waitlistParticipants]);
     if (notifyAlreadyCancelled) {
       alreadyCancelledParticipants.forEach((userId) => notifyUsers.add(userId));
     }

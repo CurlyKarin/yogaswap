@@ -279,5 +279,37 @@ describe("cancelCourseDate Lambda", () => {
     expect(GetItemCommand).toHaveBeenCalled();
     expect(sesSend).not.toHaveBeenCalled();
   });
+
+  test("sends cancellation mail to waitlist participants on cancelled date", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          participants: { L: [{ S: "luna" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "1_2099-01-06" },
+          participants: { L: [{ S: "luna" }] },
+          swapped: { L: [] },
+          waitlist: { L: [{ S: "zoe" }] },
+        },
+      })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: { email: { S: "luna@example.com" } } })
+      .mockResolvedValueOnce({ Item: { email: { S: "zoe@example.com" } } });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    expect(sesSend).toHaveBeenCalledTimes(2);
+  });
 });
 
