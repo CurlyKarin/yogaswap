@@ -473,6 +473,8 @@ describe("cancelCourseDate Lambda", () => {
 
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
+    const payload = JSON.parse(result.body);
+    expect(payload.operationWarnings).toContain("participant_lookup_failed");
     expect(sesSend).toHaveBeenCalledTimes(1); // only studio report mail
   });
 });

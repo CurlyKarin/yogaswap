@@ -19,6 +19,11 @@ type CancelBody = {
   rollbackOutgoingSwapsFromCancelledParticipants?: boolean;
   notifyAlreadyCancelledParticipants?: boolean;
 };
+type CancelCourseDateWarningCode =
+  | "waitlist_cleanup_failed"
+  | "participant_lookup_failed"
+  | "participant_mail_failed"
+  | "studio_report_failed";
 
 function parseBody(event: APIGatewayProxyEvent): CancelBody {
   if (!event.body) return {};
@@ -291,6 +296,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     });
 
     let deletedSwapsCount = 0;
+    const warningCodes = new Set<CancelCourseDateWarningCode>();
     const waitlistCleanupByOverride = new Map<string, Set<string>>();
     for (const swapItem of toDeleteSwaps) {
       if (!swapItem.user_swapId?.S) {
@@ -359,6 +365,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           }),
         );
       } catch (waitlistCleanupError) {
+        warningCodes.add("waitlist_cleanup_failed");
         console.warn("cancelCourseDate waitlist cleanup warning", {
           tenantId,
           courseId,
@@ -444,6 +451,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           status = lookupResult.status;
           lookupSource = lookupResult.lookupSource;
         } catch (lookupError) {
+          warningCodes.add("participant_lookup_failed");
           mailSkippedNoProfileCount += 1;
           console.warn("cancelCourseDate participant lookup warning", {
             tenantId,
@@ -520,6 +528,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             email,
           });
         } catch (mailError) {
+          warningCodes.add("participant_mail_failed");
           mailFailedCount += 1;
           console.warn("cancelCourseDate mail warning", { tenantId, userId, date, error: mailError });
         }
@@ -616,6 +625,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           recipients: studioNotificationEmails,
         });
       } catch (reportError) {
+        warningCodes.add("studio_report_failed");
         console.warn("cancelCourseDate studio report mail warning", {
           tenantId,
           courseId,
@@ -639,6 +649,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         success: true,
         courseId: Number(courseId),
         date,
+        operationWarnings: Array.from(warningCodes),
         affected: {
           bookedParticipants,
           swappedInParticipants,
