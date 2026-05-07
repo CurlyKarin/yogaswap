@@ -36,6 +36,7 @@ export type CancelCourseDateResponse = {
   success: boolean;
   courseId: number;
   date: string;
+  operationWarnings?: string[];
   affected?: {
     bookedParticipants: string[];
     swappedInParticipants: string[];

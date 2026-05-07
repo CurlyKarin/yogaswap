@@ -23,6 +23,7 @@ import {
   shiftMonthKey,
   type CourseDatesEditorState,
 } from "./courseDatesDialogUtils";
+import { resolveWarningMessages } from "../i18n";
 
 type CourseDatesDialogProps = {
   course: Course | null;
@@ -70,6 +71,7 @@ export default function CourseDatesDialog({
   const [datesState, setDatesState] = useState<CourseDatesEditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formNotices, setFormNotices] = useState<string[]>([]);
   const [selectedCancellationDate, setSelectedCancellationDate] = useState<string | null>(null);
   const [impactDialogOpen, setImpactDialogOpen] = useState(false);
   const [rollbackOutgoingSwaps, setRollbackOutgoingSwaps] = useState(false);
@@ -80,6 +82,7 @@ export default function CourseDatesDialog({
     if (!course) {
       setDatesState(null);
       setFormError(null);
+      setFormNotices([]);
       return;
     }
     const nextState = createDatesState(course);
@@ -88,6 +91,7 @@ export default function CourseDatesDialog({
     }
     setDatesState(nextState);
     setFormError(null);
+    setFormNotices([]);
     setSelectedCancellationDate(null);
     setImpactDialogOpen(false);
     setRollbackOutgoingSwaps(false);
@@ -347,6 +351,7 @@ export default function CourseDatesDialog({
         : prev,
     );
     setFormError(null);
+    setFormNotices([]);
   };
 
   const setSeriesRangeDate = (isoDate: string) => {
@@ -376,6 +381,7 @@ export default function CourseDatesDialog({
       };
     });
     setFormError(null);
+    setFormNotices([]);
   };
 
   const shiftRangeCalendarMonth = (monthDelta: number) => {
@@ -466,15 +472,25 @@ export default function CourseDatesDialog({
     if (!course || !selectedCancellationDate) return;
     setSaving(true);
     setFormError(null);
+    setFormNotices([]);
     try {
-      await cancelCourseDate(course.id, selectedCancellationDate, {
+      const response = await cancelCourseDate(course.id, selectedCancellationDate, {
         rollbackOutgoingSwapsFromCancelledParticipants: rollbackOutgoingSwaps,
         notifyAlreadyCancelledParticipants,
       });
       setImpactDialogOpen(false);
       setSelectedCancellationDate(null);
-      onClose();
       await onSaved();
+      if (response.operationWarnings && response.operationWarnings.length > 0) {
+        const localizedWarnings = resolveWarningMessages(response.operationWarnings, displayLocale);
+        setFormNotices(
+          localizedWarnings.length > 0
+            ? localizedWarnings
+            : ["Termin wurde abgesagt, aber es gab Hinweise bei Nebenoperationen."],
+        );
+        return;
+      }
+      onClose();
     } catch (err) {
       console.error("Failed to cancel course date", err);
       setFormError(err instanceof Error ? err.message : "Termin konnte nicht abgesagt werden.");
@@ -504,6 +520,7 @@ export default function CourseDatesDialog({
 
     setSaving(true);
     setFormError(null);
+    setFormNotices([]);
     try {
       if (datesState.planningMode === "rolling_continuous") {
         await updateCourse(datesState.courseId, {
@@ -918,6 +935,18 @@ export default function CourseDatesDialog({
           )}
 
         </div>
+        {formNotices.length > 0 && (
+          <div style={{ color: "#8a6d1d", margin: 0 }}>
+            <p style={{ margin: 0 }}>
+              Termin wurde abgesagt, aber es gab Hinweise bei Nebenoperationen:
+            </p>
+            <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+              {formNotices.map((notice) => (
+                <li key={notice}>{notice}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
         {isActiveCancellationMode && impactDialogOpen && cancellationImpact && (
           <div className="course-editor-subsection" role="group" aria-label="Auswirkungsprüfung Terminabsage">

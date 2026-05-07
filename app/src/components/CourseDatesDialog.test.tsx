@@ -366,4 +366,54 @@ describe("CourseDatesDialog", () => {
     const allowedCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-02-10/i });
     expect(allowedCell).not.toBeDisabled();
   });
+
+  it("zeigt Hinweis statt Fehler bei teilweisem Erfolg mit operationWarnings", async () => {
+    mockedCancelCourseDate.mockResolvedValue({
+      success: true,
+      courseId: 1,
+      date: "2026-01-06",
+      operationWarnings: ["participant_lookup_failed"],
+    });
+    const onClose = vi.fn();
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    render(
+      <CourseDatesDialog
+        course={makeCourse({ status: "active", participants: ["luna"] })}
+        overrides={[
+          {
+            courseId: 1,
+            date: "2026-01-06",
+            participants: ["luna"],
+            swapped: [],
+            waitlist: [],
+          },
+        ]}
+        swaps={[]}
+        canManageCourses
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    await user.click(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i }));
+    await user.click(dialogQueries.getByRole("button", { name: /absage überprüfen/i }));
+    await user.click(dialogQueries.getByRole("button", { name: /termin jetzt absagen/i }));
+
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(onClose).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/termin wurde abgesagt, aber es gab hinweise bei nebenoperationen/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /einzelne teilnehmerprofile konnten fuer den mailversand nicht geladen werden|some participant profiles could not be loaded for mail delivery/i,
+        ),
+      ).toBeInTheDocument();
+    });
+  });
 });
