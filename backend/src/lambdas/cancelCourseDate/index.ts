@@ -291,6 +291,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     });
 
     let deletedSwapsCount = 0;
+    const waitlistCleanupByOverride = new Map<string, Set<string>>();
     for (const swapItem of toDeleteSwaps) {
       if (!swapItem.user_swapId?.S) {
         console.warn("cancelCourseDate skip swap delete without key", {
@@ -311,12 +312,70 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }),
       );
       deletedSwapsCount += 1;
+      const swapStatus = swapItem.status?.S ?? "";
+      const targetCourseId = swapItem.toCourseId?.S ?? "";
+      const targetDate = swapItem.toDate?.S ?? "";
+      const swapUser = swapItem.user?.S ?? "";
+      if (
+        swapStatus === "pending" &&
+        targetCourseId &&
+        targetDate &&
+        swapUser
+      ) {
+        const targetOverrideKey = `${targetCourseId}_${targetDate}`;
+        const existingUsers = waitlistCleanupByOverride.get(targetOverrideKey) ?? new Set<string>();
+        existingUsers.add(swapUser);
+        waitlistCleanupByOverride.set(targetOverrideKey, existingUsers);
+      }
+    }
+    let waitlistCleanupOverridesTouched = 0;
+    let waitlistCleanupUsersRemoved = 0;
+    for (const [targetOverrideKey, usersToRemove] of waitlistCleanupByOverride.entries()) {
+      try {
+        const targetOverrideResp = await client.send(
+          new GetItemCommand({
+            TableName: overridesTable,
+            Key: {
+              tenantId: { S: tenantId },
+              courseId_date: { S: targetOverrideKey },
+            },
+            ConsistentRead: true,
+          }),
+        );
+        if (!targetOverrideResp.Item) continue;
+        const waitlistBefore = asStringList(targetOverrideResp.Item.waitlist);
+        const waitlistAfter = waitlistBefore.filter((userId) => !usersToRemove.has(userId));
+        if (waitlistAfter.length === waitlistBefore.length) continue;
+        waitlistCleanupOverridesTouched += 1;
+        waitlistCleanupUsersRemoved += waitlistBefore.length - waitlistAfter.length;
+        await client.send(
+          new PutItemCommand({
+            TableName: overridesTable,
+            Item: {
+              ...targetOverrideResp.Item,
+              waitlist: { L: waitlistAfter.map((userId) => ({ S: userId })) },
+              actorUserId: { S: actorUserId },
+            },
+          }),
+        );
+      } catch (waitlistCleanupError) {
+        console.warn("cancelCourseDate waitlist cleanup warning", {
+          tenantId,
+          courseId,
+          date,
+          targetOverrideKey,
+          usersToRemove: Array.from(usersToRemove),
+          error: waitlistCleanupError,
+        });
+      }
     }
     console.info("cancelCourseDate swap cleanup done", {
       tenantId,
       courseId,
       date,
       deletedSwapsCount,
+      waitlistCleanupOverridesTouched,
+      waitlistCleanupUsersRemoved,
     });
 
     const excludedDates = new Set(asStringList(courseResp.Item.excludedDates));
@@ -370,11 +429,32 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     let normalizedLookupUsedCount = 0;
     if (participantsTable && sesSourceEmail && notifyUsers.size > 0) {
       for (const userId of notifyUsers) {
-        const { email, resolvedUserId, status, lookupSource } = await resolveParticipantEmail(
-          participantsTable,
-          tenantId,
-          userId,
-        );
+        let email: string | undefined;
+        let resolvedUserId: string | undefined;
+        let status: "no_login" | "invited" | "active" | undefined;
+        let lookupSource: "exact" | "normalized" | undefined;
+        try {
+          const lookupResult = await resolveParticipantEmail(
+            participantsTable,
+            tenantId,
+            userId,
+          );
+          email = lookupResult.email;
+          resolvedUserId = lookupResult.resolvedUserId;
+          status = lookupResult.status;
+          lookupSource = lookupResult.lookupSource;
+        } catch (lookupError) {
+          mailSkippedNoProfileCount += 1;
+          console.warn("cancelCourseDate participant lookup warning", {
+            tenantId,
+            courseId,
+            date,
+            requestedUserId: userId,
+            error: lookupError,
+          });
+          continue;
+        }
+        const recipientName = (resolvedUserId || userId || "Teilnehmer").trim();
         console.info("cancelCourseDate participant notification candidate", {
           tenantId,
           courseId,
@@ -425,7 +505,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 Subject: { Data: `Terminabsage: ${courseName} (${date})` },
                 Body: {
                   Html: {
-                    Data: `<p>Der Termin <strong>${date}</strong> im Kurs <strong>${courseName}</strong> wurde abgesagt.</p>`,
+                    Data: `<p>Hallo ${recipientName},</p><p>der Termin <strong>${date}</strong> im Kurs <strong>${courseName}</strong> wurde abgesagt.</p>`,
                   },
                 },
               },
@@ -496,6 +576,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           !outgoingSwapsFromCancelledParticipants.includes(userId) &&
           !activeSwapsWithOriginOnCancelledDate.some((swap) => swap.userId === userId),
       );
+      const cancelledWithActiveSwap = alreadyCancelledParticipants.filter((userId) =>
+        activeSwapsWithOriginOnCancelledDate.some((swap) => swap.userId === userId),
+      );
 
       const reportHtml = `
         <h3>Terminabsage Report</h3>
@@ -504,7 +587,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         <p>Actor: <strong>${actorUserId}</strong></p>
         <p>Regulär betroffen: ${dedupeUsers(bookedParticipants).join(", ") || "-"}</p>
         <p>Reingetauscht betroffen: ${dedupeUsers(swappedInParticipants).join(", ") || "-"}</p>
+        <p>Warteliste betroffen: ${dedupeUsers(waitlistParticipants).join(", ") || "-"}</p>
         <p>Aktive Swaps (Ursprung abgesagter Termin): ${activeSwapsWithOriginOnCancelledDate.map((s) => `${s.userId} -> ${s.toCourseId}/${s.toDate}`).join("; ") || "-"}</p>
+        <p>Abgesagt mit aktivem Swap: ${dedupeUsers(cancelledWithActiveSwap).join(", ") || "-"}</p>
         <p>Abgesagt ohne Swap: ${dedupeUsers(cancelledWithoutSwap).join(", ") || "-"}</p>
         <p>Abgesagt mit pending Swaps: ${dedupeUsers(outgoingSwapsFromCancelledParticipants).join(", ") || "-"}</p>
         <p>Pending Swaps mit anderem Ursprung (Ziel abgesagter Termin): ${pendingSwapsToCancelledDateWithOtherOrigin.map((s) => `${s.userId} <- ${s.fromCourseId}/${s.fromDate} (originCancelled=${s.fromOriginCancelled})`).join("; ") || "-"}</p>

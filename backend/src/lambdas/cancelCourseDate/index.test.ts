@@ -126,6 +126,7 @@ describe("cancelCourseDate Lambda", () => {
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ Item: { email: { S: "luna@example.com" } } })
       .mockResolvedValueOnce({ Item: { email: { S: "nora@example.com" } } })
       .mockResolvedValueOnce({ Item: { email: { S: "maya@example.com" } } });
@@ -310,6 +311,169 @@ describe("cancelCourseDate Lambda", () => {
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
     expect(sesSend).toHaveBeenCalledTimes(2);
+  });
+
+  test("studio report includes waitlist and cancelled users with active swaps", async () => {
+    process.env.STUDIO_NOTIFICATION_EMAILS = "studio@example.com";
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "4" },
+          name: { S: "YogaMi" },
+          participants: { L: [{ S: "Luna" }, { S: "Skye" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "4_2026-05-13" },
+          participants: { L: [{ S: "kai" }, { S: "Skye" }] },
+          swapped: { L: [{ S: "kai" }] },
+          waitlist: { L: [{ S: "Maya" }] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            user_swapId: { S: "Luna#2026-05-13_4_2026-05-14_5" },
+            user: { S: "Luna" },
+            fromCourseId: { S: "4" },
+            fromDate: { S: "2026-05-13" },
+            toCourseId: { S: "5" },
+            toDate: { S: "2026-05-14" },
+            status: { S: "active" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: { email: { S: "kai@example.com" } } })
+      .mockResolvedValueOnce({ Item: { email: { S: "skye@example.com" } } })
+      .mockResolvedValueOnce({ Item: { email: { S: "maya@example.com" } } })
+      .mockResolvedValueOnce({ Item: { email: { S: "luna@example.com" } } });
+
+    const event = ({
+      body: JSON.stringify({
+        rollbackOutgoingSwapsFromCancelledParticipants: true,
+        notifyAlreadyCancelledParticipants: true,
+      }),
+      headers: {},
+      pathParameters: { courseId: "4", date: "2026-05-13" },
+      requestContext: {
+        authorizer: {
+          jwt: { claims: { nickname: "admin" } },
+        },
+      },
+    } as unknown) as APIGatewayProxyEvent;
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+
+    const reportCall = sesSend.mock.calls[sesSend.mock.calls.length - 1]?.[0];
+    const reportHtml = reportCall?.Message?.Body?.Html?.Data ?? "";
+    expect(reportHtml).toContain("Warteliste betroffen: Maya");
+    expect(reportHtml).toContain("Abgesagt mit aktivem Swap: Luna");
+  });
+
+  test("removes users from target override waitlist when deleting pending outgoing swaps", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          participants: { L: [{ S: "luna" }, { S: "maya" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "1_2099-01-06" },
+          participants: { L: [{ S: "luna" }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            user_swapId: { S: "luna#2099-01-06_1_2099-01-09_2" },
+            user: { S: "luna" },
+            fromCourseId: { S: "1" },
+            fromDate: { S: "2099-01-06" },
+            toCourseId: { S: "2" },
+            toDate: { S: "2099-01-09" },
+            status: { S: "pending" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "2_2099-01-09" },
+          courseId: { S: "2" },
+          date: { S: "2099-01-09" },
+          participants: { L: [{ S: "zoe" }] },
+          swapped: { L: [] },
+          waitlist: { L: [{ S: "luna" }, { S: "mia" }] },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: { email: { S: "luna@example.com" } } })
+      .mockResolvedValueOnce({ Item: { email: { S: "maya@example.com" } } });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+
+    const putCalls = (PutItemCommand as unknown as jest.Mock).mock.calls.map((call) => call[0]);
+    const targetOverrideUpdate = putCalls.find(
+      (input) => input?.TableName === "test-overrides" && input?.Item?.courseId_date?.S === "2_2099-01-09",
+    );
+    expect(targetOverrideUpdate).toBeDefined();
+    expect(targetOverrideUpdate.Item.waitlist.L).toEqual([{ S: "mia" }]);
+  });
+
+  test("continues successfully when participant lookup fails for one recipient", async () => {
+    process.env.STUDIO_NOTIFICATION_EMAILS = "studio@example.com";
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          participants: { L: [{ S: "luna" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: "1_2099-01-06" },
+          participants: { L: [{ S: "luna" }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error("participants lookup transient error"))
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    expect(sesSend).toHaveBeenCalledTimes(1); // only studio report mail
   });
 });
 
