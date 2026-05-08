@@ -60,6 +60,11 @@ function dedupeAndSortUsers(values: string[]): string[] {
   return Array.from(new Set(values.filter((entry) => entry.trim().length > 0))).sort((a, b) => a.localeCompare(b));
 }
 
+function isIsoDateInFuture(isoDate: string): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  return isoDate > today;
+}
+
 export default function CourseDatesDialog({
   course,
   overrides,
@@ -265,16 +270,28 @@ export default function CourseDatesDialog({
     const bookedParticipants = [...(overrideForDate?.participants ?? course.participants)];
     const swappedInParticipants = [...(overrideForDate?.swapped ?? [])];
     const waitlistParticipants = [...(overrideForDate?.waitlist ?? [])];
-    const bookedSet = new Set(bookedParticipants);
-    const alreadyCancelledParticipants = course.participants.filter((userId) => !bookedSet.has(userId));
-    const cancelledSet = new Set(alreadyCancelledParticipants);
+    const bookedSetNormalized = new Set(bookedParticipants.map((userId) => userId.toLowerCase()));
+    const alreadyCancelledParticipants = course.participants.filter(
+      (userId) => !bookedSetNormalized.has(userId.toLowerCase()),
+    );
+    const cancelledSetNormalized = new Set(alreadyCancelledParticipants.map((userId) => userId.toLowerCase()));
+    const successfulSwapsFromCancelledParticipants = swaps
+      .filter(
+        (swap) =>
+          swap.fromCourseId === course.id &&
+          swap.fromDate === selectedCancellationDate &&
+          swap.status === "active" &&
+          isIsoDateInFuture(swap.toDate) &&
+          cancelledSetNormalized.has(swap.user.toLowerCase()),
+      )
+      .map((swap) => swap.user);
     const outgoingSwapsFromCancelledParticipants = swaps
       .filter(
         (swap) =>
           swap.fromCourseId === course.id &&
           swap.fromDate === selectedCancellationDate &&
           swap.status === "pending" &&
-          cancelledSet.has(swap.user),
+          cancelledSetNormalized.has(swap.user.toLowerCase()),
       )
       .map((swap) => swap.user);
     const pendingSwapsWithOriginOnCancelledDate = swaps.filter(
@@ -288,6 +305,7 @@ export default function CourseDatesDialog({
       swappedInParticipants,
       waitlistParticipants,
       alreadyCancelledParticipants,
+      successfulSwapsFromCancelledParticipants: dedupeAndSortUsers(successfulSwapsFromCancelledParticipants),
       outgoingSwapsFromCancelledParticipants: dedupeAndSortUsers(outgoingSwapsFromCancelledParticipants),
       pendingSwapsWithOriginCount: pendingSwapsWithOriginOnCancelledDate.length,
     };
@@ -975,7 +993,7 @@ export default function CourseDatesDialog({
                 disabled={saving}
               />{" "}
               Erfolgreiche Tauschs in andere Termine zurückrollen
-              ({cancellationImpact.outgoingSwapsFromCancelledParticipants.length})
+              ({cancellationImpact.successfulSwapsFromCancelledParticipants.length})
             </label>
             <p className="course-editor-note" style={{ marginTop: 0 }}>
               Nur relevant für zukünftige, bereits erfolgreiche Tauschs von bereits abgemeldeten Teilnehmern.

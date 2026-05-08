@@ -416,4 +416,57 @@ describe("CourseDatesDialog", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("berechnet Swap-Zähler case-insensitiv", async () => {
+    mockedCancelCourseDate.mockResolvedValue({ success: true, courseId: 1, date: "2026-01-06" });
+    render(
+      <CourseDatesDialog
+        course={makeCourse({ status: "active", participants: ["Luna"] })}
+        overrides={[
+          {
+            courseId: 1,
+            date: "2026-01-06",
+            participants: [],
+            swapped: [],
+            waitlist: [],
+          },
+        ]}
+        swaps={[
+          {
+            user: "luna",
+            fromCourseId: 1,
+            fromDate: "2026-01-06",
+            toCourseId: 2,
+            toDate: "2099-01-09",
+            status: "active",
+          },
+          {
+            user: "luna",
+            fromCourseId: 1,
+            fromDate: "2026-01-06",
+            toCourseId: 3,
+            toDate: "2099-01-10",
+            status: "pending",
+          },
+        ]}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    await user.click(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i }));
+    await user.click(dialogQueries.getByRole("button", { name: /absage überprüfen/i }));
+
+    expect(
+      dialogQueries.getByText(/erfolgreiche tauschs in andere termine zurückrollen\s*\(1\)/i),
+    ).toBeInTheDocument();
+    expect(
+      dialogQueries.getByText(/tauschanfragen auf wartelisten in andere termine zurückrollen\s*\(1\)/i),
+    ).toBeInTheDocument();
+  });
 });
