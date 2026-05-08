@@ -18,6 +18,7 @@ import {
   UserTenantMembership,
 } from "shared/types";
 import { getSwaps } from "../api/swaps";
+import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
 import { getCourseDates } from "../lib/dates";
 import {
@@ -173,6 +174,18 @@ function toEditorState(course: Course): CourseEditorState {
   };
 }
 
+function dedupeSwaps(values: Swap[]): Swap[] {
+  const seen = new Set<string>();
+  const result: Swap[] = [];
+  for (const swap of values) {
+    const key = `${swap.user}#${swap.fromCourseId}#${swap.fromDate}#${swap.toCourseId}#${swap.toDate}#${swap.status}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(swap);
+  }
+  return result;
+}
+
 export default function CourseList({
   currentUser,
   tenant,
@@ -228,10 +241,16 @@ export default function CourseList({
         user: currentUser.nickname,
       });
       setLoading(true);
+      const swapsPromise = canSeeCourseManagement
+        ? Promise.all([getSwapsByStatus("pending"), getSwapsByStatus("active")]).then(([pending, active]) =>
+            dedupeSwaps([...pending, ...active]),
+          )
+        : getSwaps(currentUser.nickname);
+
       const [courseData, overrideData, swapsData] = await Promise.all([
         getCourses(),
         getOverrides(),
-        getSwaps(currentUser.nickname),
+        swapsPromise,
       ]);
 
       console.log("Data fetched:", {
@@ -250,7 +269,7 @@ export default function CourseList({
     } finally {
       setLoading(false);
     }
-  }, [currentUser.nickname]);
+  }, [canSeeCourseManagement, currentUser.nickname]);
 
   useEffect(() => {
     fetchData();
