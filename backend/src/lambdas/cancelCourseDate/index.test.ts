@@ -375,8 +375,8 @@ describe("cancelCourseDate Lambda", () => {
 
     const reportCall = sesSend.mock.calls[sesSend.mock.calls.length - 1]?.[0];
     const reportHtml = reportCall?.Message?.Body?.Html?.Data ?? "";
-    expect(reportHtml).toContain("Warteliste betroffen: Maya");
-    expect(reportHtml).toContain("Abgesagt mit aktivem Swap: Luna");
+    expect(reportHtml).toContain("Warteliste am abgesagten Termin: Maya");
+    expect(reportHtml).toContain("Bereits abgemeldet mit aktivem Swap: Luna");
   });
 
   test("removes users from target override waitlist when deleting pending outgoing swaps", async () => {

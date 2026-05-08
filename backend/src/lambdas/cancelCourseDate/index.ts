@@ -16,6 +16,8 @@ const ses = new SESClient({});
 const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 
 type CancelBody = {
+  rollbackSuccessfulSwapsFromCancelledParticipants?: boolean;
+  rollbackPendingWaitlistSwapsFromOriginDate?: boolean;
   rollbackOutgoingSwapsFromCancelledParticipants?: boolean;
   notifyAlreadyCancelledParticipants?: boolean;
 };
@@ -166,8 +168,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   const body = parseBody(event);
-  const rollbackOutgoing = body.rollbackOutgoingSwapsFromCancelledParticipants === true;
-  const notifyAlreadyCancelled = body.notifyAlreadyCancelledParticipants !== false;
+  const rollbackSuccessfulSwaps =
+    body.rollbackSuccessfulSwapsFromCancelledParticipants ??
+    (body.rollbackOutgoingSwapsFromCancelledParticipants === true);
+  const rollbackPendingWaitlistSwaps =
+    body.rollbackPendingWaitlistSwapsFromOriginDate ??
+    body.rollbackOutgoingSwapsFromCancelledParticipants ??
+    true;
 
   try {
     console.info("cancelCourseDate start", {
@@ -175,8 +182,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       actorUserId,
       courseId,
       date,
-      rollbackOutgoing,
-      notifyAlreadyCancelled,
+      rollbackSuccessfulSwaps,
+      rollbackPendingWaitlistSwaps,
     });
 
     const actorMembershipResp = await client.send(
@@ -277,11 +284,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       if (item.toCourseId?.S === courseId && item.toDate?.S === date) return true;
       if (item.fromCourseId?.S === courseId && item.fromDate?.S === date) {
         const swapUser = item.user?.S ?? "";
-        if (item.status?.S !== "pending") return false;
-        if (!alreadyCancelledSet.has(swapUser)) return true;
+        if (item.status?.S === "pending") {
+          return rollbackPendingWaitlistSwaps;
+        }
+        if (item.status?.S !== "active") return false;
+        if (!alreadyCancelledSet.has(swapUser)) return false;
         const toDate = item.toDate?.S ?? "";
         if (!toDate || !isIsoDateInFuture(toDate)) return false;
-        return rollbackOutgoing;
+        return rollbackSuccessfulSwaps;
       }
       return false;
     });
@@ -413,10 +423,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     );
 
-    const notifyUsers = new Set([...bookedParticipants, ...swappedInParticipants, ...waitlistParticipants]);
-    if (notifyAlreadyCancelled) {
-      alreadyCancelledParticipants.forEach((userId) => notifyUsers.add(userId));
-    }
+    const notifyUsers = new Set([
+      ...bookedParticipants,
+      ...swappedInParticipants,
+      ...waitlistParticipants,
+      ...alreadyCancelledParticipants,
+    ]);
     const notifyUserList = dedupeUsers(Array.from(notifyUsers));
     console.info("cancelCourseDate notification plan", {
       tenantId,
@@ -595,13 +607,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         <p>Kurs: <strong>${courseName}</strong> (${courseId})</p>
         <p>Termin: <strong>${date}</strong></p>
         <p>Actor: <strong>${actorUserId}</strong></p>
-        <p>Regulär betroffen: ${dedupeUsers(bookedParticipants).join(", ") || "-"}</p>
-        <p>Reingetauscht betroffen: ${dedupeUsers(swappedInParticipants).join(", ") || "-"}</p>
-        <p>Warteliste betroffen: ${dedupeUsers(waitlistParticipants).join(", ") || "-"}</p>
+        <p>Regulär geplant: ${dedupeUsers(bookedParticipants).join(", ") || "-"}</p>
+        <p>Davon reingetauscht: ${dedupeUsers(swappedInParticipants).join(", ") || "-"}</p>
+        <p>Warteliste am abgesagten Termin: ${dedupeUsers(waitlistParticipants).join(", ") || "-"}</p>
         <p>Aktive Swaps (Ursprung abgesagter Termin): ${activeSwapsWithOriginOnCancelledDate.map((s) => `${s.userId} -> ${s.toCourseId}/${s.toDate}`).join("; ") || "-"}</p>
-        <p>Abgesagt mit aktivem Swap: ${dedupeUsers(cancelledWithActiveSwap).join(", ") || "-"}</p>
-        <p>Abgesagt ohne Swap: ${dedupeUsers(cancelledWithoutSwap).join(", ") || "-"}</p>
-        <p>Abgesagt mit pending Swaps: ${dedupeUsers(outgoingSwapsFromCancelledParticipants).join(", ") || "-"}</p>
+        <p>Bereits abgemeldet mit aktivem Swap: ${dedupeUsers(cancelledWithActiveSwap).join(", ") || "-"}</p>
+        <p>Bereits abgemeldet ohne Swap: ${dedupeUsers(cancelledWithoutSwap).join(", ") || "-"}</p>
+        <p>Bereits abgemeldet mit pending Swap: ${dedupeUsers(outgoingSwapsFromCancelledParticipants).join(", ") || "-"}</p>
+        <p>Rollback erfolgreiche Tauschs: ${rollbackSuccessfulSwaps ? "ja" : "nein"}</p>
+        <p>Rollback pending Wartelisten-Tauschs: ${rollbackPendingWaitlistSwaps ? "ja" : "nein"}</p>
         <p>Pending Swaps mit anderem Ursprung (Ziel abgesagter Termin): ${pendingSwapsToCancelledDateWithOtherOrigin.map((s) => `${s.userId} <- ${s.fromCourseId}/${s.fromDate} (originCancelled=${s.fromOriginCancelled})`).join("; ") || "-"}</p>
         <p>Pending Swaps mit Ursprung abgesagter Termin: ${pendingSwapsWithOriginOnCancelledDate.map((s) => `${s.userId} -> ${s.toCourseId}/${s.toDate}`).join("; ") || "-"}</p>
         <hr />
