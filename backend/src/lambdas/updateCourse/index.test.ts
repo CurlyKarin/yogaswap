@@ -409,4 +409,67 @@ describe("updateCourse Lambda", () => {
     );
     expect(JSON.parse(result.body).status).toBe("inactive");
   });
+
+  test("syncs added participants into relevant future overrides for active courses", async () => {
+    const futureDateIso = "2099-01-06";
+    const pastDateIso = "2020-01-01";
+
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [{ S: "luna" }] },
+          time: { S: "18:00" },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course update
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_date: { S: `1_${futureDateIso}` },
+            courseId: { S: "1" },
+            date: { S: futureDateIso },
+            participants: { L: [{ S: "luna" }] },
+            swapped: { L: [] },
+            waitlist: { L: [] },
+          },
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_date: { S: `1_${pastDateIso}` },
+            courseId: { S: "1" },
+            date: { S: pastDateIso },
+            participants: { L: [{ S: "luna" }] },
+            swapped: { L: [] },
+            waitlist: { L: [] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}); // future override update
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna", "maya"],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(QueryCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-overrides",
+      }),
+    );
+
+    const overrideWrites = (PutItemCommand as unknown as jest.Mock).mock.calls
+      .map((call) => call[0])
+      .filter((input) => input?.TableName === "test-overrides");
+    expect(overrideWrites).toHaveLength(1);
+    expect(overrideWrites[0].Item.courseId_date.S).toBe(`1_${futureDateIso}`);
+    expect(overrideWrites[0].Item.participants.L).toEqual([{ S: "luna" }, { S: "maya" }]);
+  });
 });

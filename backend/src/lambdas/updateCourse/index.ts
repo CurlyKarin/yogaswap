@@ -17,6 +17,7 @@ const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const ROLLING_EXCLUDE_LOCK_WEEKS = 5;
 const MIN_ROLLING_HORIZON_WEEKS = ROLLING_EXCLUDE_LOCK_WEEKS;
+const OVERRIDE_SYNC_TIME_BUFFER_MINUTES = 30;
 
 type UpdateCourseBody = {
   name?: string;
@@ -75,6 +76,18 @@ function isFutureOrTodayDateString(isoDate: string, now: Date): boolean {
   if (Number.isNaN(date.getTime())) return false;
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return date >= startOfToday;
+}
+
+function isCourseInFutureWithBuffer(courseDate: string, courseTime: string, now: Date): boolean {
+  try {
+    const [year, month, day] = courseDate.split("-").map(Number);
+    const [hours, minutes] = courseTime.split(":").map(Number);
+    const courseStart = new Date(year, month - 1, day, hours, minutes);
+    const bufferTime = new Date(now.getTime() + OVERRIDE_SYNC_TIME_BUFFER_MINUTES * 60 * 1000);
+    return courseStart >= bufferTime;
+  } catch {
+    return false;
+  }
 }
 
 function toIsoDateOnlyLocal(date: Date): string {
@@ -569,6 +582,53 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         Item: updateItem,
       }),
     );
+
+    if (participants && effectiveStatus === "active") {
+      const previousParticipants =
+        item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+      const previousParticipantsSet = new Set(previousParticipants.map((entry) => entry.toLowerCase()));
+      const addedParticipants = participants.filter(
+        (entry) => !previousParticipantsSet.has(entry.toLowerCase()),
+      );
+      if (addedParticipants.length > 0) {
+        const overridesResp = await client.send(
+          new QueryCommand({
+            TableName: overridesTable,
+            KeyConditionExpression:
+              "tenantId = :tenantId AND begins_with(courseId_date, :coursePrefix)",
+            ExpressionAttributeValues: {
+              ":tenantId": { S: tenantId },
+              ":coursePrefix": { S: `${courseId}_` },
+            },
+          }),
+        );
+        const now = new Date();
+        for (const overrideItem of overridesResp.Items ?? []) {
+          const overrideDate = overrideItem.date?.S;
+          if (!overrideDate) continue;
+          if (!isCourseInFutureWithBuffer(overrideDate, nextTime, now)) continue;
+          const currentOverrideParticipants =
+            overrideItem.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+          const currentOverrideSet = new Set(currentOverrideParticipants.map((entry) => entry.toLowerCase()));
+          const participantsToAdd = addedParticipants.filter(
+            (entry) => !currentOverrideSet.has(entry.toLowerCase()),
+          );
+          if (participantsToAdd.length === 0) continue;
+          await client.send(
+            new PutItemCommand({
+              TableName: overridesTable,
+              Item: {
+                ...overrideItem,
+                participants: {
+                  L: [...currentOverrideParticipants, ...participantsToAdd].map((entry) => ({ S: entry })),
+                },
+                actorUserId: { S: actorUserId },
+              },
+            }),
+          );
+        }
+      }
+    }
 
     return {
       statusCode: 200,
