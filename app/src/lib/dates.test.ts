@@ -172,4 +172,43 @@ describe("getAvailableDates / getWaitlistDates", () => {
     );
     expect(Array.isArray(waitlist)).toBe(true);
   });
+
+  it("schließt inactive und draft Kurse aus Zielauswahl aus", () => {
+    const referenceDate = new Date("2025-06-15");
+    const activeCourse: Course = {
+      ...course,
+      id: 11,
+      name: "Aktiver Kurs",
+      status: "active",
+      participants: [],
+      dates: ["2025-06-16"],
+    };
+    const inactiveCourse: Course = {
+      ...course,
+      id: 12,
+      name: "Inaktiver Kurs",
+      status: "inactive",
+      participants: [],
+      dates: ["2025-06-16"],
+    };
+    const draftCourse: Course = {
+      ...course,
+      id: 13,
+      name: "Planungskurs",
+      status: "draft",
+      participants: [],
+      dates: ["2025-06-16"],
+    };
+
+    const available = getAvailableDates(
+      [activeCourse, inactiveCourse, draftCourse],
+      overrides,
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW
+    );
+
+    expect(available.map((entry) => entry.course.id)).toEqual([11]);
+  });
 });

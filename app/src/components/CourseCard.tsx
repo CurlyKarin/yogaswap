@@ -67,20 +67,37 @@ export default function CourseCard({
   const originallyParticipant = course.participants.some((p) => p.toLowerCase() === userNameLower);
   const hasCancelled = originallyParticipant && !isParticipant;
 
+  const pendingSwapsFromOrigin = useMemo(
+    () =>
+      swaps.filter(
+        (s) =>
+          s.user === userName &&
+          s.fromCourseId === course.id &&
+          s.fromDate === selectedDateKey &&
+          s.status === "pending"
+      ),
+    [swaps, userName, course.id, selectedDateKey]
+  );
+
+  const existingPendingTargetCourseIds = useMemo(
+    () => new Set(pendingSwapsFromOrigin.map((swap) => swap.toCourseId)),
+    [pendingSwapsFromOrigin]
+  );
+
   const availableSwapDates = useMemo(
     () =>
-      getAvailableDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
-        (a, b) => a.date.getTime() - b.date.getTime()
-      ),
-    [allCourses, overrides, currentUser, selectedDate]
+      getAvailableDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate))
+        .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
+        .sort((a, b) => a.date.getTime() - b.date.getTime()),
+    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds]
   );
 
   const waitlistDates = useMemo(
     () =>
-      getWaitlistDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate)).sort(
-        (a, b) => a.date.getTime() - b.date.getTime()
-      ),
-    [allCourses, overrides, currentUser, selectedDate]
+      getWaitlistDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate))
+        .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
+        .sort((a, b) => a.date.getTime() - b.date.getTime()),
+    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds]
   );
 
   const swapForThisTerm = useMemo(
@@ -111,18 +128,6 @@ export default function CourseCard({
           s.user === userName &&
           s.toCourseId === course.id &&
           s.toDate === selectedDateKey &&
-          s.status === "pending"
-      ),
-    [swaps, userName, course.id, selectedDateKey]
-  );
-
-  const pendingSwapsFromOrigin = useMemo(
-    () =>
-      swaps.filter(
-        (s) =>
-          s.user === userName &&
-          s.fromCourseId === course.id &&
-          s.fromDate === selectedDateKey &&
           s.status === "pending"
       ),
     [swaps, userName, course.id, selectedDateKey]

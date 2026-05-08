@@ -19,6 +19,7 @@ vi.mock("../lib/waitlist", () => ({
 }));
 
 const { createSwap, deleteSwap, processPromotions } = await import("../api/swaps");
+const { updateOverride } = await import("../api/overrides");
 
 const baseUser: User = {
   nickname: "alice",
@@ -216,6 +217,90 @@ describe("useCourseSwaps", () => {
     });
 
     expect(deleteSwap).toHaveBeenCalledTimes(1);
+    expect(processPromotions).toHaveBeenCalledTimes(1);
+  });
+
+  it("confirmSwap löst übrige pending Anfragen vom selben Ursprung auf", async () => {
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([
+        baseOverride,
+        {
+          courseId: 2,
+          date: "2099-06-17",
+          participants: ["bob"],
+          swapped: [],
+          waitlist: ["alice", "mia"],
+        },
+        {
+          courseId: 3,
+          date: "2099-06-18",
+          participants: ["nora"],
+          swapped: [],
+          waitlist: ["ALICE", "zoe"],
+        },
+      ]),
+    );
+    const setSwaps = vi.fn();
+    const targetCourse: Course = {
+      ...course,
+      id: 4,
+      name: "Yoga Ziel",
+      participants: [],
+      dates: ["2099-06-19"],
+    };
+    const pendingA: Swap = {
+      user: "alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 2,
+      toDate: "2099-06-17",
+      status: "pending",
+    };
+    const pendingB: Swap = {
+      user: "Alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 3,
+      toDate: "2099-06-18",
+      status: "pending",
+    };
+
+    (processPromotions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      swaps: [],
+      overrides: [],
+    });
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course, targetCourse],
+        [
+          baseOverride,
+          { courseId: 2, date: "2099-06-17", participants: ["bob"], swapped: [], waitlist: ["alice", "mia"] },
+          { courseId: 3, date: "2099-06-18", participants: ["nora"], swapped: [], waitlist: ["ALICE", "zoe"] },
+        ],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [pendingA, pendingB],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.confirmSwap(course, "2099-06-16", 4, "2099-06-19", baseUser.nickname);
+    });
+
+    expect(createSwap).toHaveBeenCalledTimes(1);
+    expect(deleteSwap).toHaveBeenCalledTimes(2);
+    expect(updateOverride).toHaveBeenCalledWith(2, "2099-06-17", { waitlist: ["mia"] });
+    expect(updateOverride).toHaveBeenCalledWith(3, "2099-06-18", { waitlist: ["zoe"] });
     expect(processPromotions).toHaveBeenCalledTimes(1);
   });
 });
