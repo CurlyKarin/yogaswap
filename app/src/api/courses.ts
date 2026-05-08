@@ -28,7 +28,11 @@ export type CreateCourseRequest = {
 export type UpdateCourseRequest = Partial<CreateCourseRequest>;
 
 export type CancelCourseDateRequest = {
+  rollbackSuccessfulSwapsFromCancelledParticipants?: boolean;
+  rollbackPendingWaitlistSwapsFromOriginDate?: boolean;
+  // backward compatible field kept for older clients/lambdas
   rollbackOutgoingSwapsFromCancelledParticipants?: boolean;
+  // deprecated; backend now always notifies already-cancelled participants
   notifyAlreadyCancelledParticipants?: boolean;
 };
 

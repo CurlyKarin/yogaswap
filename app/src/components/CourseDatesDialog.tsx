@@ -74,8 +74,8 @@ export default function CourseDatesDialog({
   const [formNotices, setFormNotices] = useState<string[]>([]);
   const [selectedCancellationDate, setSelectedCancellationDate] = useState<string | null>(null);
   const [impactDialogOpen, setImpactDialogOpen] = useState(false);
-  const [rollbackOutgoingSwaps, setRollbackOutgoingSwaps] = useState(false);
-  const [notifyAlreadyCancelledParticipants, setNotifyAlreadyCancelledParticipants] = useState(true);
+  const [rollbackSuccessfulSwaps, setRollbackSuccessfulSwaps] = useState(false);
+  const [rollbackPendingWaitlistSwaps, setRollbackPendingWaitlistSwaps] = useState(true);
   const modalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -94,8 +94,8 @@ export default function CourseDatesDialog({
     setFormNotices([]);
     setSelectedCancellationDate(null);
     setImpactDialogOpen(false);
-    setRollbackOutgoingSwaps(false);
-    setNotifyAlreadyCancelledParticipants(true);
+    setRollbackSuccessfulSwaps(false);
+    setRollbackPendingWaitlistSwaps(true);
   }, [course]);
 
   useLayoutEffect(() => {
@@ -277,12 +277,19 @@ export default function CourseDatesDialog({
           cancelledSet.has(swap.user),
       )
       .map((swap) => swap.user);
+    const pendingSwapsWithOriginOnCancelledDate = swaps.filter(
+      (swap) =>
+        swap.fromCourseId === course.id &&
+        swap.fromDate === selectedCancellationDate &&
+        swap.status === "pending",
+    );
     return {
       bookedParticipants,
       swappedInParticipants,
       waitlistParticipants,
       alreadyCancelledParticipants,
       outgoingSwapsFromCancelledParticipants: dedupeAndSortUsers(outgoingSwapsFromCancelledParticipants),
+      pendingSwapsWithOriginCount: pendingSwapsWithOriginOnCancelledDate.length,
     };
   }, [course, overrides, selectedCancellationDate, swaps]);
 
@@ -475,8 +482,8 @@ export default function CourseDatesDialog({
     setFormNotices([]);
     try {
       const response = await cancelCourseDate(course.id, selectedCancellationDate, {
-        rollbackOutgoingSwapsFromCancelledParticipants: rollbackOutgoingSwaps,
-        notifyAlreadyCancelledParticipants,
+        rollbackSuccessfulSwapsFromCancelledParticipants: rollbackSuccessfulSwaps,
+        rollbackPendingWaitlistSwapsFromOriginDate: rollbackPendingWaitlistSwaps,
       });
       setImpactDialogOpen(false);
       setSelectedCancellationDate(null);
@@ -963,22 +970,30 @@ export default function CourseDatesDialog({
             <label className="course-editor-note" style={{ display: "block" }}>
               <input
                 type="checkbox"
-                checked={rollbackOutgoingSwaps}
-                onChange={(event) => setRollbackOutgoingSwaps(event.target.checked)}
+                checked={rollbackSuccessfulSwaps}
+                onChange={(event) => setRollbackSuccessfulSwaps(event.target.checked)}
                 disabled={saving}
               />{" "}
-              Ausgehende Tauschanfragen bereits abgesagter Teilnehmer für diesen Ursprungstermin zurückrollen
+              Erfolgreiche Tauschs in andere Termine zurückrollen
               ({cancellationImpact.outgoingSwapsFromCancelledParticipants.length})
             </label>
+            <p className="course-editor-note" style={{ marginTop: 0 }}>
+              Nur relevant für zukünftige, bereits erfolgreiche Tauschs von bereits abgemeldeten Teilnehmern.
+            </p>
             <label className="course-editor-note" style={{ display: "block" }}>
               <input
                 type="checkbox"
-                checked={notifyAlreadyCancelledParticipants}
-                onChange={(event) => setNotifyAlreadyCancelledParticipants(event.target.checked)}
+                checked={rollbackPendingWaitlistSwaps}
+                onChange={(event) => setRollbackPendingWaitlistSwaps(event.target.checked)}
                 disabled={saving}
               />{" "}
-              Bereits abgesagte Teilnehmer zusätzlich informieren
+              Tauschanfragen auf Wartelisten in andere Termine zurückrollen
+              ({cancellationImpact.pendingSwapsWithOriginCount})
             </label>
+            <p className="course-editor-note" style={{ marginTop: 0 }}>
+              Bei Haken werden alle offenen Wartelisten-Tauschanfragen mit diesem Ursprungstermin zurückgerollt und
+              Ziel-Wartelisten bereinigt.
+            </p>
             <div className="modal-actions">
               <button type="button" className="modal-action-btn" onClick={closeImpactDialog} disabled={saving}>
                 Zurück

@@ -324,8 +324,8 @@ describe("CourseDatesDialog", () => {
         1,
         "2026-01-06",
         expect.objectContaining({
-          rollbackOutgoingSwapsFromCancelledParticipants: false,
-          notifyAlreadyCancelledParticipants: true,
+          rollbackSuccessfulSwapsFromCancelledParticipants: false,
+          rollbackPendingWaitlistSwapsFromOriginDate: true,
         }),
       );
     });
