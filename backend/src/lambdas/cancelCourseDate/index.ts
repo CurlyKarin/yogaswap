@@ -664,6 +664,25 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         courseId: Number(courseId),
         date,
         operationWarnings: Array.from(warningCodes),
+        outcome: {
+          swaps: {
+            relatedCount: relatedSwaps.length,
+            deletedCount: deletedSwapsCount,
+          },
+          waitlistCleanup: {
+            overridesTouched: waitlistCleanupOverridesTouched,
+            usersRemoved: waitlistCleanupUsersRemoved,
+          },
+          notifications: {
+            plannedRecipientsCount: notifyUserList.length,
+            sentCount: mailSentCount,
+            skippedNoProfileCount: mailSkippedNoProfileCount,
+            skippedNoEmailCount: mailSkippedNoEmailCount,
+            skippedInvitedCount: mailSkippedInvitedCount,
+            failedCount: mailFailedCount,
+            normalizedLookupUsedCount,
+          },
+        },
         affected: {
           bookedParticipants,
           swappedInParticipants,

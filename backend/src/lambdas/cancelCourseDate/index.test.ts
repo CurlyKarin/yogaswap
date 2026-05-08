@@ -135,6 +135,22 @@ describe("cancelCourseDate Lambda", () => {
     expect(result.statusCode).toBe(200);
     const payload = JSON.parse(result.body);
     expect(payload.success).toBe(true);
+    expect(payload.outcome).toEqual(
+      expect.objectContaining({
+        swaps: expect.objectContaining({
+          relatedCount: 1,
+          deletedCount: 1,
+        }),
+        notifications: expect.objectContaining({
+          plannedRecipientsCount: 3,
+          sentCount: 3,
+          skippedNoProfileCount: 0,
+          skippedNoEmailCount: 0,
+          skippedInvitedCount: 0,
+          failedCount: 0,
+        }),
+      }),
+    );
     expect(payload.affected).toEqual(
       expect.objectContaining({
         bookedParticipants: ["luna"],
@@ -507,6 +523,78 @@ describe("cancelCourseDate Lambda", () => {
     expect(cancelledOverrideWrite.Item.participants.L).toEqual([]);
     expect(cancelledOverrideWrite.Item.swapped.L).toEqual([]);
     expect(cancelledOverrideWrite.Item.waitlist.L).toEqual([]);
+  });
+
+  test("is stable on repeated cancellation of the same date", async () => {
+    let excludedDatesState: string[] = [];
+    let cancelledOverrideState:
+      | {
+          tenantId: { S: string };
+          courseId_date: { S: string };
+          courseId: { S: string };
+          date: { S: string };
+          participants: { L: Array<{ S: string }> };
+          swapped: { L: Array<{ S: string }> };
+          waitlist: { L: Array<{ S: string }> };
+          actorUserId: { S: string };
+        }
+      | undefined;
+
+    mockSend.mockImplementation(async (commandInput: any) => {
+      if (commandInput?.TableName === "test-memberships" && commandInput?.Key?.userId?.S) {
+        return { Item: { role: { S: "admin" } } };
+      }
+      if (commandInput?.TableName === "test-courses" && commandInput?.Key?.courseId?.S) {
+        return {
+          Item: {
+            tenantId: { S: "default-tenant" },
+            courseId: { S: "1" },
+            name: { S: "Kurs A" },
+            participants: { L: [{ S: "luna" }] },
+            excludedDates: { L: excludedDatesState.map((d) => ({ S: d })) },
+          },
+        };
+      }
+      if (commandInput?.TableName === "test-overrides" && commandInput?.Key?.courseId_date?.S === "1_2099-01-06") {
+        return { Item: cancelledOverrideState };
+      }
+      if (commandInput?.TableName === "test-swaps" && commandInput?.FilterExpression) {
+        return { Items: [] };
+      }
+      if (
+        commandInput?.TableName === "test-courses" &&
+        commandInput?.Item?.excludedDates?.L
+      ) {
+        excludedDatesState = commandInput.Item.excludedDates.L.map((entry: any) => entry.S);
+        return {};
+      }
+      if (
+        commandInput?.TableName === "test-overrides" &&
+        commandInput?.Item?.courseId_date?.S === "1_2099-01-06"
+      ) {
+        cancelledOverrideState = commandInput.Item;
+        return {};
+      }
+      if (commandInput?.TableName === "test-participants" && commandInput?.Key?.userId?.S) {
+        return { Item: { email: { S: "luna@example.com" } } };
+      }
+      return {};
+    });
+
+    const firstResult = await handler(makeEvent());
+    const secondResult = await handler(makeEvent());
+    expect(firstResult.statusCode).toBe(200);
+    expect(secondResult.statusCode).toBe(200);
+
+    const secondPayload = JSON.parse(secondResult.body);
+    expect(secondPayload.success).toBe(true);
+    expect(secondPayload.operationWarnings).toEqual([]);
+    expect(secondPayload.outcome.swaps.deletedCount).toBe(0);
+    expect(secondPayload.outcome.notifications.sentCount).toBe(1);
+    expect(excludedDatesState).toEqual(["2099-01-06"]);
+    expect(cancelledOverrideState?.participants?.L ?? []).toEqual([]);
+    expect(cancelledOverrideState?.swapped?.L ?? []).toEqual([]);
+    expect(cancelledOverrideState?.waitlist?.L ?? []).toEqual([]);
   });
 });
 
