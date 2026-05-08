@@ -62,6 +62,8 @@ function collectCourseDates(
   windowEnd.setDate(windowEnd.getDate() + settings.maxOffsetDays);
 
   return allCourses.flatMap((course) => {
+    const courseStatus = course.status ?? "active";
+    if (courseStatus !== "active") return [];
     return course.dates
       .map((d) => {
         const date = new Date(d);

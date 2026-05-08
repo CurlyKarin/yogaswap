@@ -15,6 +15,7 @@ export function useCourseSwaps(
   currentUser: User,
   fetchData: () => Promise<void>
 ) {
+  const equalsIgnoreCase = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
   const requestSwapRef = useRef<(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => Promise<void>>(null!);
   // Filtere Overrides für aktuelle und zukünftige Termine
   // Fallback auf leeres Array, wenn overrides undefined oder kein Array ist
@@ -294,6 +295,41 @@ export function useCourseSwaps(
           status: 'active',
         };
         await createSwap(newSwap);
+
+        // Nach erfolgreichem Tausch alle übrigen pending Anfragen vom selben Ursprung auflösen.
+        const pendingFromSameOrigin = swaps.filter(
+          (s) =>
+            s.status === "pending" &&
+            equalsIgnoreCase(s.user, userName) &&
+            s.fromCourseId === fromCourse.id &&
+            s.fromDate === fromDateIso &&
+            !(s.toCourseId === toCourseId && s.toDate === toDateIso)
+        );
+        if (pendingFromSameOrigin.length > 0) {
+          await Promise.all(pendingFromSameOrigin.map((swap) => deleteSwap(swap)));
+
+          setOverrides((prev) =>
+            prev.map((override) => {
+              const affectedPending = pendingFromSameOrigin.filter(
+                (swap) => swap.toCourseId === override.courseId && swap.toDate === override.date
+              );
+              if (affectedPending.length === 0) return override;
+              const usersToRemove = new Set(
+                affectedPending.map((swap) => swap.user.toLowerCase())
+              );
+              const waitlistBefore = override.waitlist ?? [];
+              const waitlistAfter = waitlistBefore.filter(
+                (entry) => !usersToRemove.has(entry.toLowerCase())
+              );
+              if (waitlistAfter.length === waitlistBefore.length) return override;
+              updateOverride(override.courseId, override.date, { waitlist: waitlistAfter });
+              return {
+                ...override,
+                waitlist: waitlistAfter,
+              };
+            })
+          );
+        }
 
         console.log('Calling processPromotions for confirmSwap...');
         const response = await processPromotions();

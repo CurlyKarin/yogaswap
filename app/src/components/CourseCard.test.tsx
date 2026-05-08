@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import React from "react";
+import { afterEach } from "vitest";
 import CourseCard from "./CourseCard";
 import type { Course, CourseDateOverride, Swap, User } from "shared/types";
 
@@ -63,6 +64,10 @@ function renderCourseCard(overrides: Partial<React.ComponentProps<typeof CourseC
 }
 
 describe("CourseCard", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("zeigt Hinweis, wenn keine zukünftigen Termine vorhanden sind", () => {
     const courseWithoutFutureDates: Course = {
       ...baseCourse,
@@ -169,10 +174,8 @@ describe("CourseCard", () => {
 
     expect(screen.getByText(/Tauschanfrage starten/i)).toBeInTheDocument();
 
-    // Es gibt in diesem Szenario keine passenden Ersatztermine
-    expect(
-      screen.getByText(/Keine passenden Ersatztermine verfügbar/i),
-    ).toBeInTheDocument();
+    // Es gibt mindestens einen freien Ersatztermin
+    expect(screen.getByText(/Es stehen 1 freie Termin\(e\) zur Auswahl\./i)).toBeInTheDocument();
 
     // Button ist deaktiviert und bleibt es auch, da keine Auswahl möglich ist
     const confirmButton = screen.getByRole("button", { name: /Bestätigen/i });
@@ -181,6 +184,50 @@ describe("CourseCard", () => {
     fireEvent.click(confirmButton);
     expect(confirmSwap).not.toHaveBeenCalled();
     expect(requestSwap).not.toHaveBeenCalled();
+  });
+
+  it("blendet bereits angefragte Zielkurse in der Auswahl aus", () => {
+    const confirmSwap = vi.fn();
+    const requestSwap = vi.fn();
+    const existingPendingToCourse2: Swap = {
+      user: "alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 2,
+      toDate: "2099-06-20",
+      status: "pending",
+    };
+    const course2: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Abend",
+      participants: [],
+      dates: ["2099-06-20"],
+      status: "active",
+    };
+    const course3: Course = {
+      ...baseCourse,
+      id: 3,
+      name: "Yoga Morgen",
+      participants: [],
+      dates: ["2099-06-21"],
+      status: "active",
+    };
+
+    renderCourseCard({
+      confirmSwap,
+      requestSwap,
+      swaps: [existingPendingToCourse2],
+      allCourses: [baseCourse, course2, course3],
+      overrides: [baseOverride],
+    });
+
+    const swapButtons = screen.getAllByRole("button", { name: /Weitere Tauschanfrage/i });
+    fireEvent.click(swapButtons[swapButtons.length - 1]);
+
+    expect(screen.getByText(/Tauschanfrage starten/i)).toBeInTheDocument();
+    expect(document.querySelector('option[value^="2099-06-21T"]')).toBeInTheDocument();
+    expect(document.querySelector('option[value^="2099-06-20T"]')).not.toBeInTheDocument();
   });
 });
 
