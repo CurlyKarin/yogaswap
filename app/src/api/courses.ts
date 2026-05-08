@@ -27,6 +27,29 @@ export type CreateCourseRequest = {
 
 export type UpdateCourseRequest = Partial<CreateCourseRequest>;
 
+export type CancelCourseDateRequest = {
+  rollbackSuccessfulSwapsFromCancelledParticipants?: boolean;
+  rollbackPendingWaitlistSwapsFromOriginDate?: boolean;
+  // backward compatible field kept for older clients/lambdas
+  rollbackOutgoingSwapsFromCancelledParticipants?: boolean;
+  // deprecated; backend now always notifies already-cancelled participants
+  notifyAlreadyCancelledParticipants?: boolean;
+};
+
+export type CancelCourseDateResponse = {
+  success: boolean;
+  courseId: number;
+  date: string;
+  operationWarnings?: string[];
+  affected?: {
+    bookedParticipants: string[];
+    swappedInParticipants: string[];
+    waitlistParticipants: string[];
+    alreadyCancelledParticipants: string[];
+    outgoingSwapsFromCancelledParticipants: string[];
+  };
+};
+
 export type DeleteCourseResponse = {
   success: boolean;
   courseId: string;
@@ -112,6 +135,18 @@ export async function updateCourse(courseId: number | string, request: UpdateCou
 export async function deleteCourse(courseId: number | string): Promise<DeleteCourseResponse> {
   const response = await axios.delete<DeleteCourseResponse>(
     `/courses/${encodeURIComponent(String(courseId))}`,
+  );
+  return response.data;
+}
+
+export async function cancelCourseDate(
+  courseId: number | string,
+  date: string,
+  request: CancelCourseDateRequest,
+): Promise<CancelCourseDateResponse> {
+  const response = await axios.post<CancelCourseDateResponse>(
+    `/courses/${encodeURIComponent(String(courseId))}/dates/${encodeURIComponent(date)}/cancel`,
+    request,
   );
   return response.data;
 }

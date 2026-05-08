@@ -9,6 +9,28 @@ const client = dynamoClient;
 // Hardcodierter Zeitpuffer (in Minuten) vor Kursbeginn für Nachrücken
 const PROMOTION_TIME_BUFFER_MINUTES = 30;
 
+function normalized(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function includesUserCaseInsensitive(values: string[] | undefined, user: string): boolean {
+  if (!values) return false;
+  const target = normalized(user);
+  return values.some((entry) => normalized(entry) === target);
+}
+
+function removeUserCaseInsensitive(values: string[] | undefined, user: string): string[] {
+  if (!values) return [];
+  const target = normalized(user);
+  return values.filter((entry) => normalized(entry) !== target);
+}
+
+function addUserUniqueCaseInsensitive(values: string[] | undefined, user: string): string[] {
+  const base = values ?? [];
+  if (includesUserCaseInsensitive(base, user)) return base;
+  return [...base, user];
+}
+
 // Hilfsfunktion: Prüft, ob ein Kursbeginn mindestens PROMOTION_TIME_BUFFER_MINUTES in der Zukunft liegt
 function isCourseInFuture(courseDate: string, courseTime: string, now: Date): boolean {
   try {
@@ -215,7 +237,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
         // Wähle promotedUser: Priorisiere currentUser oder erste Person
         let promotedUser: string | undefined;
-        if (currentUser && override.waitlist?.includes(currentUser)) {
+        if (currentUser && includesUserCaseInsensitive(override.waitlist, currentUser)) {
           promotedUser = currentUser;
         } else {
           promotedUser = override.waitlist?.[0];
@@ -224,17 +246,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
         console.log('promotedUser:', promotedUser, 'override.courseId:', override.courseId, 'override.date:', override.date, 'override.waitlist:', override.waitlist);
         const correspondingSwap = pendingSwaps.find(
-          (s) => s.user === promotedUser && s.toCourseId === override.courseId && s.toDate === override.date
+          (s) =>
+            normalized(s.user) === normalized(promotedUser) &&
+            s.toCourseId === override.courseId &&
+            s.toDate === override.date
         );
         console.log('Find in pendingSwaps:', pendingSwaps, 'correspondingSwap:', correspondingSwap);
         if (!correspondingSwap) continue;
 
+        const promotedSwapUser = correspondingSwap.user;
         changed = true;
         promotedSwaps.push(correspondingSwap);
 
         // 5) Swap auf 'active' setzen
         const swapId = `${correspondingSwap.fromDate}_${correspondingSwap.fromCourseId}_${correspondingSwap.toDate}_${correspondingSwap.toCourseId}`;
-        const user_swapId = `${promotedUser}#${swapId}`;
+        const user_swapId = `${promotedSwapUser}#${swapId}`;
         const updateSwapCommand = new UpdateItemCommand({
           TableName: process.env.SWAPS_TABLE,
           Key: {
@@ -255,9 +281,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         console.log(`[processPromotions] Swap updated to active: ${swapId}`);
 
         // 6) Ziel-Override aktualisieren
-        const newParticipants = [...override.participants, promotedUser].filter((p, i, arr) => arr.indexOf(p) === i); // Entferne Duplikate
-        const newSwapped = [...(override.swapped || []), promotedUser].filter((p, i, arr) => arr.indexOf(p) === i);
-        const newWaitlist = override.waitlist?.filter((u) => u !== promotedUser) || [];
+        const newParticipants = addUserUniqueCaseInsensitive(override.participants, promotedSwapUser);
+        const newSwapped = addUserUniqueCaseInsensitive(override.swapped, promotedSwapUser);
+        const newWaitlist = removeUserCaseInsensitive(override.waitlist, promotedSwapUser);
         console.log('Updating target override:', {
           courseId: override.courseId,
           date: override.date,
@@ -276,11 +302,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           (o) => o.courseId === correspondingSwap.fromCourseId && o.date === correspondingSwap.fromDate
         );
         if (originOverride) {
-          const newOriginParticipants = originOverride.participants.includes(promotedUser)
-            ? originOverride.participants.filter((p) => p !== promotedUser)
-            : originOverride.participants;
-          const newOriginSwapped = (originOverride.swapped ?? []).filter((p) => p !== promotedUser);
-          const newOriginWaitlist = (originOverride.waitlist ?? []).filter((u) => u !== promotedUser);
+          const newOriginParticipants = removeUserCaseInsensitive(originOverride.participants, promotedSwapUser);
+          const newOriginSwapped = removeUserCaseInsensitive(originOverride.swapped, promotedSwapUser);
+          const newOriginWaitlist = removeUserCaseInsensitive(originOverride.waitlist, promotedSwapUser);
           console.log('Updating origin override:', {
             courseId: correspondingSwap.fromCourseId,
             date: correspondingSwap.fromDate,
@@ -295,11 +319,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           });
         } else {
           const originCourse = courses.find((c) => c.id === correspondingSwap.fromCourseId);
-          if (originCourse && originCourse.participants.includes(promotedUser)) {
+          if (originCourse && includesUserCaseInsensitive(originCourse.participants, promotedSwapUser)) {
             const newOriginOverride: CourseDateOverride = {
               courseId: correspondingSwap.fromCourseId,
               date: correspondingSwap.fromDate,
-              participants: originCourse.participants.filter((p) => p !== promotedUser),
+              participants: removeUserCaseInsensitive(originCourse.participants, promotedSwapUser),
               swapped: [],
               waitlist: [],
             };
@@ -311,14 +335,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         // 8) Andere pending Swaps des Users stornieren
         const pendingOriginSwaps = pendingSwaps.filter(
           (s) =>
-            s.user === promotedUser &&
+            normalized(s.user) === normalized(promotedSwapUser) &&
             s.fromCourseId === correspondingSwap.fromCourseId &&
             s.fromDate === correspondingSwap.fromDate &&
             (s.toCourseId !== correspondingSwap.toCourseId || s.toDate !== correspondingSwap.toDate)
         );
         for (const originSwap of pendingOriginSwaps) {
           const originSwapId = `${originSwap.fromDate}_${originSwap.fromCourseId}_${originSwap.toDate}_${originSwap.toCourseId}`;
-          const originUser_swapId = `${promotedUser}#${originSwapId}`;
+          const originUser_swapId = `${originSwap.user}#${originSwapId}`;
           const deleteCommand = new DeleteItemCommand({
             TableName: process.env.SWAPS_TABLE,
             Key: {
@@ -326,14 +350,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               user_swapId: { S: originUser_swapId },
             },
           });
-          console.log('Deleting swap:', { originSwapId, user: promotedUser });
+          console.log('Deleting swap:', { originSwapId, user: originSwap.user });
           await client.send(deleteCommand);
 
           const targetOriginOverride = allOverrides.find(
             (o) => o.courseId === originSwap.toCourseId && o.date === originSwap.toDate
           );
           if (targetOriginOverride) {
-            const newTargetWaitlist = (targetOriginOverride.waitlist || []).filter((u) => u !== promotedUser);
+            const newTargetWaitlist = removeUserCaseInsensitive(targetOriginOverride.waitlist, promotedSwapUser);
             console.log('Updating target waitlist for cancelled swap:', {
               courseId: originSwap.toCourseId,
               date: originSwap.toDate,
@@ -350,7 +374,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }
 
         console.log(
-          `[processPromotions] ${promotedUser} nachgerückt von ${correspondingSwap.fromCourseId}/${correspondingSwap.fromDate} → ${override.courseId}/${override.date}`
+          `[processPromotions] ${promotedSwapUser} nachgerückt von ${correspondingSwap.fromCourseId}/${correspondingSwap.fromDate} → ${override.courseId}/${override.date}`
         );
       }
 
