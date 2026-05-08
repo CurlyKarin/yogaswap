@@ -477,5 +477,36 @@ describe("cancelCourseDate Lambda", () => {
     expect(payload.operationWarnings).toContain("participant_lookup_failed");
     expect(sesSend).toHaveBeenCalledTimes(1); // only studio report mail
   });
+
+  test("always writes an empty override for the cancelled date", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          participants: { L: [{ S: "luna" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({ Item: undefined }) // no existing override for cancelled date
+      .mockResolvedValueOnce({ Items: [] }) // no related swaps
+      .mockResolvedValueOnce({}) // update course excludedDates
+      .mockResolvedValueOnce({}) // write cancelled-date override
+      .mockResolvedValueOnce({ Item: { email: { S: "luna@example.com" } } });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+
+    const putCalls = (PutItemCommand as unknown as jest.Mock).mock.calls.map((call) => call[0]);
+    const cancelledOverrideWrite = putCalls.find(
+      (input) => input?.TableName === "test-overrides" && input?.Item?.courseId_date?.S === "1_2099-01-06",
+    );
+    expect(cancelledOverrideWrite).toBeDefined();
+    expect(cancelledOverrideWrite.Item.participants.L).toEqual([]);
+    expect(cancelledOverrideWrite.Item.swapped.L).toEqual([]);
+    expect(cancelledOverrideWrite.Item.waitlist.L).toEqual([]);
+  });
 });
 
