@@ -470,6 +470,74 @@ describe("CourseDatesDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("bleibt bei Fehlern beim Ausschluss-Speichern offen und zeigt Fehlermeldung", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    mockedUpdateCourse.mockRejectedValue(new Error("Speichern fehlgeschlagen"));
+    const onClose = vi.fn();
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i }));
+    await vi.runAllTimersAsync();
+
+    expect(mockedUpdateCourse).toHaveBeenCalledTimes(1);
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(dialogQueries.getByText(/speichern fehlgeschlagen/i)).toBeInTheDocument();
+  });
+
+  it("wechselt den Primärbutton im aktiven rolling Modus zwischen Ausschluss und Absage", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
+    expect(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i })).toBeInTheDocument();
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: /vorheriger monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i }));
+    expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeInTheDocument();
+  });
+
   it("zeigt Hinweis statt Fehler bei teilweisem Erfolg mit operationWarnings", async () => {
     mockedCancelCourseDate.mockResolvedValue({
       success: true,
