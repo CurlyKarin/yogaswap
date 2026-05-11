@@ -203,7 +203,7 @@ describe("CourseDatesDialog", () => {
     });
   });
 
-  it("sperrt excludedDates im rolling Schutzfenster", async () => {
+  it("erlaubt im rolling Planungsmodus excludedDates auch im bisherigen Schutzfenster", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
     render(
@@ -225,13 +225,12 @@ describe("CourseDatesDialog", () => {
     const dialogQueries = within(dialog);
     fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
 
-    const lockedCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-01-06/i });
-    expect(lockedCell).toBeDisabled();
-    expect(lockedCell).toHaveAttribute("title", expect.stringMatching(/nur absage möglich/i));
+    const nearCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-01-06/i });
+    expect(nearCell).not.toBeDisabled();
 
     fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
-    const allowedCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-02-10/i });
-    expect(allowedCell).not.toBeDisabled();
+    const laterCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-02-10/i });
+    expect(laterCell).not.toBeDisabled();
   });
 
   it("erlaubt rolling excludedDates auch außerhalb des Sichtfensters", () => {
@@ -304,8 +303,8 @@ describe("CourseDatesDialog", () => {
     expect(dialogQueries.queryByRole("button", { name: /kalender für ausnahmetermin öffnen/i })).not.toBeInTheDocument();
     expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeDisabled();
     expect(dialogQueries.getByRole("button", { name: /^abbrechen$/i })).toBeInTheDocument();
-    expect(dialogQueries.getByText(/ausgewählter termin:/i)).toBeInTheDocument();
-    expect(dialogQueries.getByText(/keiner ausgewählt/i)).toBeInTheDocument();
+    expect(dialogQueries.getByText(/ausgewählte aktion:/i)).toBeInTheDocument();
+    expect(dialogQueries.getByText(/keine auswahl/i)).toBeInTheDocument();
 
     expect(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i })).toBeInTheDocument();
     await user.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
@@ -313,7 +312,7 @@ describe("CourseDatesDialog", () => {
     await user.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
     await user.click(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i }));
     expect(dialogQueries.queryByRole("button", { name: /absage datum 2026-01-06/i })).not.toBeInTheDocument();
-    expect(dialogQueries.getByText(formatDateForDisplay("2026-01-06"))).toBeInTheDocument();
+    expect(dialogQueries.getByText(new RegExp(`Absage\\s+·\\s+${formatDateForDisplay("2026-01-06")}`, "i"))).toBeInTheDocument();
     expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeEnabled();
     await user.click(dialogQueries.getByRole("button", { name: /absage überprüfen/i }));
     expect(dialogQueries.getByRole("group", { name: /auswirkungsprüfung terminabsage/i })).toBeInTheDocument();
@@ -335,7 +334,7 @@ describe("CourseDatesDialog", () => {
     expect(mockedUpdateCourse).not.toHaveBeenCalled();
   });
 
-  it("erlaubt bei aktivem rolling Kurs weiterhin ExcludedDates außerhalb Schutzfenster", async () => {
+  it("zeigt bei aktivem rolling Kurs nur einen Kalender mit dynamischer Aktion", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
     render(
@@ -357,14 +356,186 @@ describe("CourseDatesDialog", () => {
     const dialog = dialogs[dialogs.length - 1];
     const dialogQueries = within(dialog);
 
-    // Save action remains available for rolling active courses.
-    expect(dialogQueries.getByRole("button", { name: /termine übernehmen/i })).toBeInTheDocument();
-    expect(dialogQueries.queryByRole("button", { name: /^schließen$/i })).not.toBeInTheDocument();
+    expect(dialogQueries.queryByRole("button", { name: /termine übernehmen/i })).not.toBeInTheDocument();
+    expect(dialogQueries.queryByRole("button", { name: /kalender für ausnahmetermin öffnen/i })).not.toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeDisabled();
+  });
 
-    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
+  it("erlaubt im rolling Lockfenster weiterhin Absage für nicht ausgeschlossene Termine", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+          excludedDates: ["2026-01-13"],
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+
+    // Ausgeschlossener Termin ist weiterhin blockiert
+    const excludedCell = dialogQueries.getByRole("button", { name: /absage datum 2026-01-13/i });
+    expect(excludedCell).toBeDisabled();
+
+    // Passender Termin im Lockfenster bleibt für Absage auswählbar
+    const cancellableCell = dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i });
+    expect(cancellableCell).toBeEnabled();
+    expect(cancellableCell).toHaveAttribute("title", expect.stringMatching(/nur absage möglich|termin für absage auswählen/i));
+    fireEvent.click(cancellableCell);
+    expect(dialogQueries.getByText(new RegExp(`Absage\\s+·\\s+${formatDateForDisplay("2026-01-06")}`, "i"))).toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeEnabled();
+  });
+
+  it("lässt im aktiven rolling Kurs außerhalb Lockfenster Ausschluss über denselben Kalender zu", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+
+    const nearLocked = dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i });
+    expect(nearLocked).not.toBeDisabled();
+    expect(nearLocked).toHaveAttribute("title", expect.stringMatching(/nur absage möglich/i));
+
     fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
-    const allowedCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-02-10/i });
-    expect(allowedCell).not.toBeDisabled();
+    const farAllowed = dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i });
+    expect(farAllowed).not.toBeDisabled();
+    expect(farAllowed).toHaveAttribute("title", expect.stringMatching(/termin ausschließen/i));
+    fireEvent.click(farAllowed);
+    expect(dialogQueries.getByText(/Ausschlüsse in Bearbeitung/i)).toBeInTheDocument();
+    expect(dialogQueries.getByText(/hinzugefügt: 1, zurückgenommen: 0/i)).toBeInTheDocument();
+  });
+
+  it("schließt im aktiven rolling Kurs nach Ausschluss-Übernahme den Dialog", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    mockedUpdateCourse.mockResolvedValue({});
+    const onClose = vi.fn();
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i }));
+    await vi.runAllTimersAsync();
+
+    expect(mockedUpdateCourse).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("bleibt bei Fehlern beim Ausschluss-Speichern offen und zeigt Fehlermeldung", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    mockedUpdateCourse.mockRejectedValue(new Error("Speichern fehlgeschlagen"));
+    const onClose = vi.fn();
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i }));
+    await vi.runAllTimersAsync();
+
+    expect(mockedUpdateCourse).toHaveBeenCalledTimes(1);
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(dialogQueries.getByText(/speichern fehlgeschlagen/i)).toBeInTheDocument();
+  });
+
+  it("wechselt den Primärbutton im aktiven rolling Modus zwischen Ausschluss und Absage", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
+    expect(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i })).toBeInTheDocument();
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: /vorheriger monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i }));
+    expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeInTheDocument();
   });
 
   it("zeigt Hinweis statt Fehler bei teilweisem Erfolg mit operationWarnings", async () => {
