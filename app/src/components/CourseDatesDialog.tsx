@@ -670,6 +670,7 @@ export default function CourseDatesDialog({
       initialExcludedDatesRef.current = [...datesState.excludedDates];
       setActiveCalendarAction(null);
       await onSaved();
+      onClose();
     } catch (err) {
       console.error("Failed to update course dates configuration", err);
       setFormError(err instanceof Error ? err.message : "Terminkonfiguration konnte nicht gespeichert werden.");

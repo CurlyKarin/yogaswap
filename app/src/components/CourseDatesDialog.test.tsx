@@ -434,6 +434,42 @@ describe("CourseDatesDialog", () => {
     expect(dialogQueries.getByText(/hinzugefügt: 1, zurückgenommen: 0/i)).toBeInTheDocument();
   });
 
+  it("schließt im aktiven rolling Kurs nach Ausschluss-Übernahme den Dialog", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+    mockedUpdateCourse.mockResolvedValue({});
+    const onClose = vi.fn();
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "active",
+          planningMode: "rolling_continuous",
+          visibilityHorizonWeeks: 10,
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const dialogQueries = within(dialog);
+    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
+    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i }));
+    await vi.runAllTimersAsync();
+
+    expect(mockedUpdateCourse).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("zeigt Hinweis statt Fehler bei teilweisem Erfolg mit operationWarnings", async () => {
     mockedCancelCourseDate.mockResolvedValue({
       success: true,
