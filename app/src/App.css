@@ -537,6 +537,11 @@ a:focus-visible {
   background: #e0f2fe;
 }
 
+.course-editor-calendar-cell.is-locked-date {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
 .course-editor-calendar-cell.is-range-start,
 .course-editor-calendar-cell.is-range-end {
   background: #bfdbfe;
@@ -587,6 +592,10 @@ a:focus-visible {
 
 .legend-dot.boundary {
   background: #60a5fa;
+}
+
+.legend-dot.lock {
+  background: #f59e0b;
 }
 
 .course-editor-comma-list {

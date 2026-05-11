@@ -34,6 +34,10 @@ type CourseDatesDialogProps = {
   onSaved: () => Promise<void> | void;
 };
 
+type ActiveCalendarAction =
+  | { type: "cancel"; isoDate: string }
+  | { type: "exclude"; isoDate: string };
+
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
   "input:not([disabled])",
@@ -65,6 +69,8 @@ function isIsoDateInFuture(isoDate: string): boolean {
   return isoDate > today;
 }
 
+const ROLLING_MANAGEMENT_PREVIEW_WEEKS = 156;
+
 export default function CourseDatesDialog({
   course,
   overrides,
@@ -78,10 +84,12 @@ export default function CourseDatesDialog({
   const [formError, setFormError] = useState<string | null>(null);
   const [formNotices, setFormNotices] = useState<string[]>([]);
   const [selectedCancellationDate, setSelectedCancellationDate] = useState<string | null>(null);
+  const [activeCalendarAction, setActiveCalendarAction] = useState<ActiveCalendarAction | null>(null);
   const [impactDialogOpen, setImpactDialogOpen] = useState(false);
   const [rollbackSuccessfulSwaps, setRollbackSuccessfulSwaps] = useState(false);
   const [rollbackPendingWaitlistSwaps, setRollbackPendingWaitlistSwaps] = useState(true);
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const initialExcludedDatesRef = useRef<string[]>([]);
 
   useEffect(() => {
     if (!course) {
@@ -91,6 +99,7 @@ export default function CourseDatesDialog({
       return;
     }
     const nextState = createDatesState(course);
+    initialExcludedDatesRef.current = [...nextState.excludedDates];
     if (course.status === "active" && nextState.planningMode === "bounded_series") {
       nextState.rangeDatePickerOpen = true;
     }
@@ -98,6 +107,7 @@ export default function CourseDatesDialog({
     setFormError(null);
     setFormNotices([]);
     setSelectedCancellationDate(null);
+    setActiveCalendarAction(null);
     setImpactDialogOpen(false);
     setRollbackSuccessfulSwaps(false);
     setRollbackPendingWaitlistSwaps(true);
@@ -155,9 +165,11 @@ export default function CourseDatesDialog({
     !!datesState &&
     Number.isInteger(datesState.visibilityHorizonWeeks) &&
     datesState.visibilityHorizonWeeks >= DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
+  const isActiveCancellationMode = course?.status === "active";
+  const isRollingActiveMode = isActiveCancellationMode && datesState?.planningMode === "rolling_continuous";
   const isActiveReadOnly =
-    course?.status === "active" && datesState?.planningMode === "bounded_series";
-  const isActiveCancellationMode = isActiveReadOnly;
+    isActiveCancellationMode && datesState?.planningMode === "bounded_series";
+  const showExcludedDatesEditor = !isActiveCancellationMode;
 
   const canSaveDatesConfig =
     canManageCourses &&
@@ -171,13 +183,43 @@ export default function CourseDatesDialog({
 
   const datesPreview = useMemo(() => {
     if (!datesState) return [];
+    if (isRollingActiveMode) {
+      return generatePreviewDates({
+        ...datesState,
+        visibilityHorizonWeeks: ROLLING_MANAGEMENT_PREVIEW_WEEKS,
+      });
+    }
     return generatePreviewDates(datesState);
-  }, [datesState]);
+  }, [datesState, isRollingActiveMode]);
 
-  const fullSeriesDatesForActive = useMemo(() => {
-    if (!datesState || datesState.planningMode !== "bounded_series") return [];
+  const fullPlannedDatesForActiveCancellation = useMemo(() => {
+    if (!datesState || !isActiveCancellationMode) return [];
+    if (isRollingActiveMode) {
+      return generatePreviewDates({
+        ...datesState,
+        excludedDates: [],
+        visibilityHorizonWeeks: ROLLING_MANAGEMENT_PREVIEW_WEEKS,
+      });
+    }
     return generatePreviewDates({ ...datesState, excludedDates: [] });
-  }, [datesState]);
+  }, [datesState, isActiveCancellationMode, isRollingActiveMode]);
+
+  const activePreviewDates = useMemo(() => {
+    if (!datesState || !isActiveCancellationMode) return [];
+    return generatePreviewDates(datesState);
+  }, [datesState, isActiveCancellationMode]);
+  const rollingExcludeDraftSummary = useMemo(() => {
+    if (!datesState || !isRollingActiveMode) return null;
+    const initialExcludedSet = new Set(initialExcludedDatesRef.current);
+    const currentExcludedSet = new Set(datesState.excludedDates);
+    const addedDates = datesState.excludedDates.filter((entry) => !initialExcludedSet.has(entry));
+    const removedDates = initialExcludedDatesRef.current.filter((entry) => !currentExcludedSet.has(entry));
+    return {
+      addedDates,
+      removedDates,
+      hasChanges: addedDates.length > 0 || removedDates.length > 0,
+    };
+  }, [datesState, isRollingActiveMode]);
 
   const displayLocale =
     typeof navigator !== "undefined" && typeof navigator.language === "string" && navigator.language
@@ -195,31 +237,35 @@ export default function CourseDatesDialog({
     };
   }, [datesState]);
 
-  const rangeCalendarCells = useMemo(() => {
-    if (!datesState || !effectiveRange) return [];
-    return buildSeriesCalendarCells(
-      datesState.rangeCalendarMonth,
-      datesState.weekday,
-      effectiveRange.start,
-      effectiveRange.end,
-      datesState.excludedDates,
-    );
-  }, [datesState, effectiveRange]);
-
-  const rangeCalendarMonthLabel = useMemo(() => {
-    if (!datesState) return "";
-    return formatMonthLabel(datesState.rangeCalendarMonth, displayLocale);
-  }, [datesState, displayLocale]);
-
   const rollingExcludeLockRange = useMemo(() => {
-    if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
+    if (!datesState || datesState.planningMode !== "rolling_continuous" || !isActiveCancellationMode) return null;
     return getRollingExcludeLockRangeIso(DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS);
-  }, [datesState]);
+  }, [datesState, isActiveCancellationMode]);
 
   const rollingExcludeSelectionRange = useMemo(() => {
     if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
     return getRollingExcludeSelectionRangeIso();
   }, [datesState]);
+
+  const rangeCalendarCells = useMemo(() => {
+    if (!datesState || !effectiveRange) return [];
+    const calendarRange =
+      isRollingActiveMode && datesState.planningMode === "rolling_continuous" && rollingExcludeSelectionRange
+        ? rollingExcludeSelectionRange
+        : effectiveRange;
+    return buildSeriesCalendarCells(
+      datesState.rangeCalendarMonth,
+      datesState.weekday,
+      calendarRange.start,
+      calendarRange.end,
+      datesState.excludedDates,
+    );
+  }, [datesState, effectiveRange, isRollingActiveMode, rollingExcludeSelectionRange]);
+
+  const rangeCalendarMonthLabel = useMemo(() => {
+    if (!datesState) return "";
+    return formatMonthLabel(datesState.rangeCalendarMonth, displayLocale);
+  }, [datesState, displayLocale]);
 
   const excludedCalendarCells = useMemo(() => {
     if (!datesState) return [];
@@ -258,11 +304,6 @@ export default function CourseDatesDialog({
     () => datesPreview.map((entry) => formatIsoDateForDisplay(entry, displayLocale)),
     [datesPreview, displayLocale],
   );
-  const formattedFullSeriesDates = useMemo(
-    () => fullSeriesDatesForActive.map((entry) => formatIsoDateForDisplay(entry, displayLocale)),
-    [fullSeriesDatesForActive, displayLocale],
-  );
-
   const cancellationImpact = useMemo(() => {
     if (!course || !selectedCancellationDate) return null;
     const overrideForDate =
@@ -448,6 +489,7 @@ export default function CourseDatesDialog({
       const isSeriesWeekday =
         !!date && !!weekdayIndex && weekdayIndex >= 1 && weekdayIndex <= 7 && date.getUTCDay() === weekdayIndex % 7;
       const rollingLocked =
+        isActiveCancellationMode &&
         prev.planningMode === "rolling_continuous" &&
         !!rollingExcludeLockRange &&
         compareIsoDate(isoDate, rollingExcludeLockRange.start) >= 0 &&
@@ -469,21 +511,49 @@ export default function CourseDatesDialog({
 
   const toggleCancellationDate = (isoDate: string) => {
     if (saving) return;
-    if (!fullSeriesDatesForActive.includes(isoDate)) return;
-    if (datesState?.excludedDates.includes(isoDate)) return;
-    setSelectedCancellationDate((prev) => (prev === isoDate ? null : isoDate));
-    setDatesState((prev) =>
-      prev
-        ? {
-            ...prev,
-            rangeDatePickerOpen: false,
-          }
-        : prev,
-    );
+    if (!fullPlannedDatesForActiveCancellation.includes(isoDate)) return;
+    const rollingLocked =
+      datesState?.planningMode === "rolling_continuous" &&
+      !!rollingExcludeLockRange &&
+      compareIsoDate(isoDate, rollingExcludeLockRange.start) >= 0 &&
+      compareIsoDate(isoDate, rollingExcludeLockRange.end) <= 0;
+    const isExcluded = datesState?.excludedDates.includes(isoDate) ?? false;
+    if (rollingLocked || datesState?.planningMode === "bounded_series") {
+      if (isExcluded) return;
+      setSelectedCancellationDate((prev) => (prev === isoDate ? null : isoDate));
+      setActiveCalendarAction((prev) =>
+        prev?.type === "cancel" && prev.isoDate === isoDate ? null : { type: "cancel", isoDate },
+      );
+      setDatesState((prev) =>
+        prev
+          ? {
+              ...prev,
+              rangeDatePickerOpen: false,
+            }
+          : prev,
+      );
+    } else {
+      const currentState = datesState;
+      if (!currentState) return;
+      setSelectedCancellationDate(null);
+      const nextExcludedDates = isExcluded
+        ? currentState.excludedDates.filter((entry) => entry !== isoDate)
+        : dedupeAndSortDates([...currentState.excludedDates, isoDate]);
+      setDatesState((prev) =>
+        prev
+          ? {
+              ...prev,
+              excludedDates: nextExcludedDates,
+            }
+          : prev,
+      );
+      setActiveCalendarAction({ type: "exclude", isoDate });
+    }
     setFormError(null);
   };
 
   const openImpactDialog = () => {
+    if (activeCalendarAction?.type !== "cancel") return;
     if (!selectedCancellationDate || !cancellationImpact) return;
     setImpactDialogOpen(true);
   };
@@ -579,6 +649,35 @@ export default function CourseDatesDialog({
 
   if (!course || !datesState) return null;
 
+  const handleActivePrimaryAction = async () => {
+    if (!activeCalendarAction) return;
+    if (activeCalendarAction.type === "cancel") {
+      openImpactDialog();
+      return;
+    }
+    if (!datesState || !canManageCourses) return;
+    setSaving(true);
+    setFormError(null);
+    setFormNotices([]);
+    try {
+      await updateCourse(datesState.courseId, {
+        planningMode: "rolling_continuous",
+        visibilityMode: "rolling_horizon",
+        visibilityHorizonWeeks: datesState.visibilityHorizonWeeks,
+        excludedDates: datesState.excludedDates,
+        includedDates: [],
+      });
+      initialExcludedDatesRef.current = [...datesState.excludedDates];
+      setActiveCalendarAction(null);
+      await onSaved();
+    } catch (err) {
+      console.error("Failed to update course dates configuration", err);
+      setFormError(err instanceof Error ? err.message : "Terminkonfiguration konnte nicht gespeichert werden.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <CourseModalFrame
       ariaLabel="Kurstermine bearbeiten"
@@ -602,20 +701,52 @@ export default function CourseDatesDialog({
         <div className="dialog-stack">
           <div className="course-editor-subsection">
             <strong className="course-editor-list-title">
-              Vorschau Termine ({isActiveCancellationMode ? fullSeriesDatesForActive.length : datesPreview.length})
+              Vorschau Termine ({isActiveCancellationMode ? activePreviewDates.length : datesPreview.length})
             </strong>
-            {(isActiveCancellationMode ? fullSeriesDatesForActive.length : datesPreview.length) === 0 ? (
+            {(isActiveCancellationMode ? activePreviewDates.length : datesPreview.length) === 0 ? (
               <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
             ) : (
               <p className="course-editor-comma-list">
-                {(isActiveCancellationMode ? formattedFullSeriesDates : formattedPreviewDates).join(", ")}
+                {(isActiveCancellationMode
+                  ? activePreviewDates.map((entry) => formatIsoDateForDisplay(entry, displayLocale))
+                  : formattedPreviewDates).join(", ")}
               </p>
             )}
           </div>
 
+          {isRollingActiveMode && (
+            <div className="course-editor-subsection">
+              <strong className="course-editor-list-title">Sichtfenster</strong>
+              <p className="course-editor-note">
+                Von heute ({formattedEffectiveRangeStart}) bis {formattedEffectiveRangeEnd}
+              </p>
+              <div className="course-editor-inline-row">
+                <label htmlFor="rolling-horizon-weeks" className="course-editor-note">
+                  Sichtbarkeit in Wochen
+                </label>
+                <input
+                  id="rolling-horizon-weeks"
+                  type="number"
+                  min={DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS}
+                  step={1}
+                  value={datesState.visibilityHorizonWeeks}
+                  onChange={(event) => setRollingHorizonWeeks(event.target.value)}
+                  aria-label="Sichtfenster Wochen"
+                  disabled={saving}
+                  className="dialog-field"
+                  style={{ width: 96 }}
+                />
+              </div>
+            </div>
+          )}
+
           {isActiveCancellationMode ? (
             <div className="course-editor-subsection">
-              <strong className="course-editor-list-title">Terminkalender zur Übersicht und Absage</strong>
+              <strong className="course-editor-list-title">
+                {isRollingActiveMode
+                  ? "Terminkalender zur Übersicht, Absage und zum Ausschluss von Terminen"
+                  : "Terminkalender zur Übersicht und Absage"}
+              </strong>
               <p className="course-editor-note">
                 Es werden alle geplanten Serientermine angezeigt. Ausgeschlossene Termine sind markiert und nicht
                 auswählbar.
@@ -662,12 +793,21 @@ export default function CourseDatesDialog({
                   <div className="course-editor-calendar-grid">
                     {rangeCalendarCells.map((cell) => {
                       const isCancelledDate = datesState.excludedDates.includes(cell.isoDate);
-                      const isSelectable = cell.isSeriesDate && !isCancelledDate;
-                      const isSelected = selectedCancellationDate === cell.isoDate;
+                      const rollingLocked =
+                        datesState.planningMode === "rolling_continuous" &&
+                        !!rollingExcludeLockRange &&
+                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.start) >= 0 &&
+                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.end) <= 0;
+                      const isSelectable =
+                        cell.isSeriesDate &&
+                        (!isCancelledDate || (isRollingActiveMode && !rollingLocked));
+                      const isSelected = selectedCancellationDate === cell.isoDate || activeCalendarAction?.isoDate === cell.isoDate;
                       const cellClassName = [
                         "course-editor-calendar-cell",
                         cell.inCurrentMonth ? "" : "is-outside-month",
                         cell.isSeriesDate ? "is-series-date" : "",
+                        rollingLocked ? "is-locked-date" : "",
+                        isSelectable && !rollingLocked ? "is-in-range" : "",
                         isCancelledDate ? "is-excluded-date" : "",
                         isSelected ? "is-range-start" : "",
                       ]
@@ -689,9 +829,17 @@ export default function CourseDatesDialog({
                           disabled={!isSelectable || saving}
                           title={
                             isCancelledDate
-                              ? "Termin ist bereits ausgeschlossen"
+                              ? (
+                                  isRollingActiveMode && !rollingLocked
+                                    ? "Ausschluss rückgängig machen"
+                                    : "Termin ist bereits ausgeschlossen oder abgesagt"
+                                )
                               : isSelectable
-                                ? "Termin für Absage auswählen"
+                                ? (rollingLocked
+                                  ? "Nur Absage möglich"
+                                  : (datesState.planningMode === "rolling_continuous"
+                                    ? "Termin ausschließen"
+                                    : "Termin für Absage auswählen"))
                                 : "Nur Serientermine auswählbar"
                           }
                         >
@@ -702,17 +850,21 @@ export default function CourseDatesDialog({
                   </div>
                   <div className="course-editor-calendar-legend">
                     <span><em className="legend-dot series" /> geplanter Termin</span>
+                    <span><em className="legend-dot range" /> ausschließbar</span>
+                    {isRollingActiveMode && <span><em className="legend-dot lock" /> nur Absage (gesperrt für Ausschluss)</span>}
                     <span><em className="legend-dot excluded" /> ausgeschlossen</span>
                     <span><em className="legend-dot boundary" /> ausgewählt</span>
                   </div>
                 </div>
               )}
               <p className="course-editor-note">
-                Ausgewählter Termin:{" "}
+                Ausgewählte Aktion:{" "}
                 <strong>
-                  {selectedCancellationDate
-                    ? formatIsoDateForDisplay(selectedCancellationDate, displayLocale)
-                    : "Keiner ausgewählt"}
+                  {activeCalendarAction?.type === "cancel"
+                    ? `Absage · ${formatIsoDateForDisplay(activeCalendarAction.isoDate, displayLocale)}`
+                    : isRollingActiveMode && rollingExcludeDraftSummary?.hasChanges
+                      ? `Ausschlüsse in Bearbeitung · hinzugefügt: ${rollingExcludeDraftSummary.addedDates.length}, zurückgenommen: ${rollingExcludeDraftSummary.removedDates.length}`
+                      : "Keine Auswahl"}
                 </strong>
               </p>
             </div>
@@ -839,7 +991,7 @@ export default function CourseDatesDialog({
             </div>
           )}
 
-          {!isActiveCancellationMode && (
+          {showExcludedDatesEditor && (
             <div className="course-editor-subsection">
             <strong className="course-editor-list-title">Ausgeschlossene Termin</strong>
             <div className="course-editor-inline-row">
@@ -855,7 +1007,9 @@ export default function CourseDatesDialog({
               </button>
               <span className="course-editor-note">
                 {datesState.planningMode === "rolling_continuous"
-                  ? `Ausnahmen sind langfristig planbar; innerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen nur Absage.`
+                  ? isRollingActiveMode
+                    ? `Innerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen nur Absage; danach auch Ausschließen möglich.`
+                    : "Im Planungsmodus können alle Serientermine als Ausnahme gesetzt werden."
                   : "Nur Serientermine im Zeitraum sind wählbar."}
               </span>
             </div>
@@ -949,7 +1103,7 @@ export default function CourseDatesDialog({
             </div>
           )}
 
-          {!isActiveCancellationMode && (
+          {showExcludedDatesEditor && (
             <div className="course-editor-subsection">
               {datesState.excludedDates.length === 0 ? (
                 <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
@@ -1031,10 +1185,19 @@ export default function CourseDatesDialog({
               <button
                 type="button"
                 className="btn-primary modal-action-btn"
-                onClick={openImpactDialog}
-                disabled={!selectedCancellationDate || saving || impactDialogOpen || !cancellationImpact}
+                onClick={handleActivePrimaryAction}
+                disabled={
+                  !activeCalendarAction ||
+                  saving ||
+                  impactDialogOpen ||
+                  (activeCalendarAction.type === "cancel" && !cancellationImpact)
+                }
               >
-                Absage überprüfen
+                {saving
+                  ? "Speichere..."
+                  : activeCalendarAction?.type === "exclude"
+                    ? "Ausschluss übernehmen"
+                    : "Absage überprüfen"}
               </button>
             </>
           ) : (
