@@ -9,6 +9,7 @@ import {
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { dynamoClient } from "../shared/dynamoClient";
 import { deriveParticipantStatus } from "../shared/participantStatus";
+import { resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
@@ -156,9 +157,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 
-  const courseId = event.pathParameters?.courseId?.trim();
+  const rawCourseId = event.pathParameters?.courseId?.trim();
   const date = event.pathParameters?.date?.trim();
-  if (!courseId || !date) {
+  if (!rawCourseId || !date) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing courseId or date in path" }) };
   }
 
@@ -177,6 +178,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     true;
 
   try {
+    const resolvedPath = await resolveLegacyCourseIdFromPathSegment(
+      client,
+      coursesTable,
+      tenantId,
+      rawCourseId,
+    );
+    if (!resolvedPath.ok) {
+      return { statusCode: resolvedPath.statusCode, body: resolvedPath.body };
+    }
+    const courseId = resolvedPath.legacyCourseId;
+
     console.info("cancelCourseDate start", {
       tenantId,
       actorUserId,

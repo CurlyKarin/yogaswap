@@ -470,7 +470,7 @@ describe("CourseList", () => {
 
     await waitFor(() => {
       expect(mockedUpdateCourse).toHaveBeenCalledWith(
-        1,
+        "1",
         expect.objectContaining({
           name: "Kurs A Neu",
         }),
@@ -666,7 +666,7 @@ describe("CourseList", () => {
 
     await waitFor(() => {
       expect(mockedUpdateCourse).toHaveBeenCalledWith(
-        1,
+        "1",
         expect.objectContaining({
           planningMode: "bounded_series",
           visibilityMode: "fixed_window",

@@ -17,6 +17,7 @@ describe("getCourses", () => {
       data: [
         {
           id: 1,
+          courseUid: "550e8400-e29b-41d4-a716-446655440000",
           name: "Yoga Basics",
           weekday: "Mon",
           time: "18:30",
@@ -38,6 +39,7 @@ describe("getCourses", () => {
     expect(result[0]).toEqual(
       expect.objectContaining({
         id: 1,
+        courseUid: "550e8400-e29b-41d4-a716-446655440000",
         name: "Yoga Basics",
         weekday: "Mon",
         time: "18:30",
@@ -76,6 +78,7 @@ describe("getCourses", () => {
     vi.mocked(axios.post).mockResolvedValueOnce({
       data: {
         id: 3,
+        courseUid: "660e8400-e29b-41d4-a716-446655440001",
         name: "Core",
         weekday: "Wed",
         time: "19:00",
@@ -104,6 +107,7 @@ describe("getCourses", () => {
     expect(result).toEqual(
       expect.objectContaining({
         id: 3,
+        courseUid: "660e8400-e29b-41d4-a716-446655440001",
         name: "Core",
         weekday: "Wed",
         time: "19:00",
@@ -119,6 +123,7 @@ describe("getCourses", () => {
     vi.mocked(axios.put).mockResolvedValueOnce({
       data: {
         id: 1,
+        courseUid: "770e8400-e29b-41d4-a716-446655440002",
         name: "Yoga Flow",
         weekday: "Tue",
         time: "18:00",
@@ -137,6 +142,7 @@ describe("getCourses", () => {
     });
     expect(result.status).toBe("active");
     expect(result.capacity).toBe(16);
+    expect(result.courseUid).toBe("770e8400-e29b-41d4-a716-446655440002");
   });
 
   it("löscht Kurs", async () => {

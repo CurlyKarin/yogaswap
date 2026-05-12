@@ -24,6 +24,7 @@ import {
   type CourseDatesEditorState,
 } from "./courseDatesDialogUtils";
 import { resolveWarningMessages } from "../i18n";
+import { courseApiPathKey } from "../lib/courseUid";
 
 type CourseDatesDialogProps = {
   course: Course | null;
@@ -569,7 +570,7 @@ export default function CourseDatesDialog({
     setFormError(null);
     setFormNotices([]);
     try {
-      const response = await cancelCourseDate(course.id, selectedCancellationDate, {
+      const response = await cancelCourseDate(courseApiPathKey(course), selectedCancellationDate, {
         rollbackSuccessfulSwapsFromCancelledParticipants: rollbackSuccessfulSwaps,
         rollbackPendingWaitlistSwapsFromOriginDate: rollbackPendingWaitlistSwaps,
       });
@@ -595,7 +596,7 @@ export default function CourseDatesDialog({
   };
 
   const saveDatesConfig = async () => {
-    if (!datesState || !canManageCourses || isActiveReadOnly) return;
+    if (!course || !datesState || !canManageCourses || isActiveReadOnly) return;
     if (datesState.planningMode === "bounded_series") {
       if (!datesSeriesRangeValid) {
         setFormError("Bitte einen gültigen Zeitraum mit Start- und Enddatum wählen.");
@@ -618,7 +619,7 @@ export default function CourseDatesDialog({
     setFormNotices([]);
     try {
       if (datesState.planningMode === "rolling_continuous") {
-        await updateCourse(datesState.courseId, {
+        await updateCourse(courseApiPathKey(course), {
           planningMode: "rolling_continuous",
           visibilityMode: "rolling_horizon",
           visibilityHorizonWeeks: datesState.visibilityHorizonWeeks,
@@ -626,7 +627,7 @@ export default function CourseDatesDialog({
           includedDates: [],
         });
       } else {
-        await updateCourse(datesState.courseId, {
+        await updateCourse(courseApiPathKey(course), {
           planningMode: "bounded_series",
           visibilityMode: "fixed_window",
           seriesStartDate: datesState.seriesStartDate,
@@ -655,12 +656,12 @@ export default function CourseDatesDialog({
       openImpactDialog();
       return;
     }
-    if (!datesState || !canManageCourses) return;
+    if (!course || !datesState || !canManageCourses) return;
     setSaving(true);
     setFormError(null);
     setFormNotices([]);
     try {
-      await updateCourse(datesState.courseId, {
+      await updateCourse(courseApiPathKey(course), {
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
         visibilityHorizonWeeks: datesState.visibilityHorizonWeeks,

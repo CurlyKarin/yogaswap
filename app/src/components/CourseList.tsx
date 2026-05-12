@@ -28,6 +28,7 @@ import {
   updateCourse,
 } from "../api/courses";
 import { canSeeCourse } from "shared/permissions";
+import { courseApiPathKey } from "../lib/courseUid";
 
 type Props = {
   currentUser: User;
@@ -556,7 +557,12 @@ export default function CourseList({
     setSaving(true);
     setFormError(null);
     try {
-      await updateCourse(editState.id, {
+      const courseForEdit = visibleCourses.find((c) => c.id === editState.id);
+      if (!courseForEdit) {
+        setFormError("Kurs nicht gefunden.");
+        return;
+      }
+      await updateCourse(courseApiPathKey(courseForEdit), {
         name: trimmedName,
         weekday: editState.weekday,
         time: editState.time,
@@ -575,11 +581,11 @@ export default function CourseList({
   };
 
   const confirmDeleteCourse = async () => {
-    if (!canManageCourses || !deleteTargetId) return;
+    if (!canManageCourses || !deleteTargetCourse) return;
     setSaving(true);
     setFormError(null);
     try {
-      await deleteCourse(deleteTargetId);
+      await deleteCourse(courseApiPathKey(deleteTargetCourse));
       closeDeleteModal();
       await fetchData();
     } catch (err) {
@@ -592,10 +598,15 @@ export default function CourseList({
 
   const saveCourseMembers = async (courseId: number, participants: string[]) => {
     if (!canManageCourses) return;
+    const targetCourse = visibleCourses.find((c) => c.id === courseId);
+    if (!targetCourse) {
+      setFormError("Kurs nicht gefunden.");
+      return;
+    }
     setSaving(true);
     setFormError(null);
     try {
-      await updateCourse(courseId, { participants });
+      await updateCourse(courseApiPathKey(targetCourse), { participants });
       closeMembersModal();
       await fetchData();
     } catch (err) {

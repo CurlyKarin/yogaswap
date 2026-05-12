@@ -96,10 +96,11 @@ locals {
     "update_override" = {
       name             = "update-override"
       file_name        = "updateOverride.zip"
-      table_arns       = [module.course_overrides_table.table_arn]
-      dynamodb_actions = ["dynamodb:UpdateItem"]
+      table_arns       = [module.course_overrides_table.table_arn, module.courses_table.table_arn]
+      dynamodb_actions = ["dynamodb:UpdateItem", "dynamodb:Query"]
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+        "COURSES_TABLE"   = module.courses_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -107,10 +108,11 @@ locals {
     "delete_override" = {
       name             = "delete-override"
       file_name        = "deleteOverride.zip"
-      dynamodb_actions = ["dynamodb:DeleteItem"]
-      table_arns       = [module.course_overrides_table.table_arn]
+      dynamodb_actions = ["dynamodb:DeleteItem", "dynamodb:Query"]
+      table_arns       = [module.course_overrides_table.table_arn, module.courses_table.table_arn]
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+        "COURSES_TABLE"   = module.courses_table.table_name
       }
       s3_actions   = []
       s3_resources = []
