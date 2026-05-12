@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
+import { overrideCourseUidFields, swapCourseUidFields } from "../lib/courseUid";
 import { Swap, CourseDateOverride, Course, User } from "shared/types";
 import { createSwap, deleteSwap, processPromotions } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
@@ -100,6 +101,7 @@ export function useCourseSwaps(
                 participants: [...course.participants],
                 swapped: [],
                 waitlist: [],
+                ...overrideCourseUidFields(course),
               };
 
         const courseCapacity = course.capacity;
@@ -245,6 +247,7 @@ export function useCourseSwaps(
                   participants: fromCourse.participants.filter((p) => p.toLowerCase() !== userName.toLowerCase()),
                   swapped: [],
                   waitlist: [],
+                  ...overrideCourseUidFields(fromCourse),
                 };
           const originNextOverride: CourseDateOverride = {
             ...originOverride,
@@ -268,6 +271,7 @@ export function useCourseSwaps(
                   participants: [...targetCourse.participants],
                   swapped: [],
                   waitlist: [],
+                  ...overrideCourseUidFields(targetCourse),
                 };
           const newParticipants = targetOverride.participants.some(
             (p) => p.toLowerCase() === userName.toLowerCase()
@@ -293,6 +297,7 @@ export function useCourseSwaps(
           toCourseId,
           toDate: toDateIso,
           status: 'active',
+          ...swapCourseUidFields(fromCourse, targetCourse),
         };
         await createSwap(newSwap);
 
@@ -537,6 +542,7 @@ export function useCourseSwaps(
               participants: [...baseParticipants],  // alle bisherigen Teilnehmer
               swapped: [],
               waitlist: [userName], // neue Warteliste
+              ...overrideCourseUidFields(targetCourse),
             };
             updated.push(nextOverride);
             // Backend-Aufruf: Override erstellen
@@ -554,6 +560,7 @@ export function useCourseSwaps(
           toCourseId,
           toDate: toDateIso,
           status: 'pending',
+          ...swapCourseUidFields(fromCourse, targetCourse),
         };
         await createSwap(newSwap);
 
