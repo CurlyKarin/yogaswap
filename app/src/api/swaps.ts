@@ -2,10 +2,32 @@ import axios from "axios";
 import { CourseDateOverride, Swap } from "shared/types";
 import { delegationHeaders } from "./delegation";
 
-type ApiSwap = Omit<Swap, "fromCourseId" | "toCourseId"> & {
-  fromCourseId: string;
-  toCourseId: string;
+/** Rohdaten von GET /swaps und /swaps/status (Kurs-IDs oft als String). */
+type ApiSwapRow = {
+  user: string;
+  fromCourseId: string | number;
+  fromDate: string;
+  toCourseId: string | number;
+  toDate: string;
+  status: Swap["status"];
+  fromCourseUid?: string;
+  toCourseUid?: string;
 };
+
+function mapApiSwapRow(item: ApiSwapRow): Swap {
+  const fromUid = typeof item.fromCourseUid === "string" ? item.fromCourseUid.trim() : "";
+  const toUid = typeof item.toCourseUid === "string" ? item.toCourseUid.trim() : "";
+  return {
+    user: item.user,
+    fromCourseId: Number(item.fromCourseId),
+    fromDate: item.fromDate,
+    toCourseId: Number(item.toCourseId),
+    toDate: item.toDate,
+    status: item.status,
+    ...(fromUid ? { fromCourseUid: fromUid } : {}),
+    ...(toUid ? { toCourseUid: toUid } : {}),
+  };
+}
 
 export async function getSwaps(user: string, fromDate?: string, fromCourseId?: number, toDate?: string, toCourseId?: number, status?: string): Promise<Swap[]> {
   try {
@@ -17,24 +39,17 @@ export async function getSwaps(user: string, fromDate?: string, fromCourseId?: n
     if (status) params.status = status;
 
     console.log("getSwaps params:", params);
-    const response = await axios.get<ApiSwap[]>("/swaps", { params });
+    const response = await axios.get<ApiSwapRow[]>("/swaps", { params });
     let data = response.data;
     console.log("getSwaps initial response:", data);
     if (data.length === 0) {
       console.log("Retrying getSwaps...");
       await new Promise(resolve => setTimeout(resolve, 1000));
-      const retryResponse = await axios.get<ApiSwap[]>("/swaps", { params });
+      const retryResponse = await axios.get<ApiSwapRow[]>("/swaps", { params });
       data = retryResponse.data;
       console.log("getSwaps retry response:", data);
     }
-    return data.map((item) => ({
-      user: item.user,
-      fromCourseId: parseInt(item.fromCourseId),
-      fromDate: item.fromDate,
-      toCourseId: parseInt(item.toCourseId),
-      toDate: item.toDate,
-      status: item.status,
-    }));
+    return data.map(mapApiSwapRow);
   } catch (error) {
     console.error('Fehler beim Laden der Swaps:', error);
     return [];
@@ -91,9 +106,10 @@ export async function deleteSwap(swap: Swap): Promise<void> {
 export async function getSwapsByStatus(status: string): Promise<Swap[]> {
   try {
     console.log('getSwapsByStatus called with status:', status);
-    const response = await axios.get('/swaps/status', { params: { status } });
+    const response = await axios.get<ApiSwapRow[]>('/swaps/status', { params: { status } });
     console.log('getSwapsByStatus response:', response.data);
-    return response.data;
+    const data = Array.isArray(response.data) ? response.data : [];
+    return data.map(mapApiSwapRow);
   } catch (error) {
     console.error('Fehler beim Laden der Swaps by status:', error);
     return [];
@@ -108,8 +124,18 @@ export async function processPromotions(): Promise<{
   overrides: CourseDateOverride[];
 }> {
   try {
-    const response = await axios.post('/process-promotions', {});
-    return response.data;
+    const response = await axios.post<{
+      message: string;
+      iterations: number;
+      promoted: number;
+      swaps: ApiSwapRow[];
+      overrides: CourseDateOverride[];
+    }>('/process-promotions', {});
+    const body = response.data;
+    return {
+      ...body,
+      swaps: Array.isArray(body.swaps) ? body.swaps.map(mapApiSwapRow) : body.swaps,
+    };
   } catch (error) {
     console.error('Failed to process promotions:', error);
     throw error;

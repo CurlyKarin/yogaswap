@@ -51,6 +51,28 @@ describe("getSwaps", () => {
     expect(result[0].toCourseId).toBe(2);
   });
 
+  it("mappt fromCourseUid und toCourseUid aus der API", async () => {
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: [
+        {
+          user: "bob",
+          fromCourseId: "3",
+          fromCourseUid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+          fromDate: "2025-07-01",
+          toCourseId: "4",
+          toCourseUid: "ffffffff-gggg-hhhh-iiii-jjjjjjjjjjjj",
+          toDate: "2025-07-02",
+          status: "pending",
+        },
+      ],
+    });
+
+    const result = await getSwaps("bob");
+
+    expect(result[0].fromCourseUid).toBe("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    expect(result[0].toCourseUid).toBe("ffffffff-gggg-hhhh-iiii-jjjjjjjjjjjj");
+  });
+
   it("gibt leeres Array bei Fehler zurück", async () => {
     vi.mocked(axios.get).mockRejectedValueOnce(new Error("Network error"));
 
