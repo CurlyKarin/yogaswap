@@ -68,6 +68,7 @@ export const handler = async (
       return {
         id: Number(item.id?.N ?? item.courseId?.S ?? 0),
         courseId: item.courseId?.S,
+        ...(item.courseUid?.S ? { courseUid: item.courseUid.S } : {}),
         name: item.name.S!,
         weekday: item.weekday.S!,
         time: item.time.S!,

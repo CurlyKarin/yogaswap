@@ -38,6 +38,9 @@ function makeEvent(
   } as unknown) as APIGatewayProxyEvent;
 }
 
+const COURSE_UID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function baseCourseItem(status = "draft") {
   return {
     tenantId: { S: "default-tenant" },
@@ -107,6 +110,7 @@ describe("updateCourse Lambda", () => {
     expect(body).toEqual(
       expect.objectContaining({
         courseId: "1",
+        courseUid: expect.stringMatching(COURSE_UID_REGEX),
         name: "Morgenkurs",
         weekday: "Tue",
         time: "08:00",
@@ -118,6 +122,7 @@ describe("updateCourse Lambda", () => {
       expect.objectContaining({
         TableName: "test-courses",
         Item: expect.objectContaining({
+          courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           participants: { L: [{ S: "luna" }] },
         }),
       }),
@@ -234,6 +239,7 @@ describe("updateCourse Lambda", () => {
     expect(PutItemCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         Item: expect.objectContaining({
+          courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
           visibilityHorizonWeeks: { N: "10" },
@@ -307,6 +313,7 @@ describe("updateCourse Lambda", () => {
     expect(PutItemCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         Item: expect.objectContaining({
+          courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           participants: { L: [{ S: "alice" }, { S: "bob" }] },
         }),
       }),
@@ -331,6 +338,7 @@ describe("updateCourse Lambda", () => {
     expect(PutItemCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         Item: expect.objectContaining({
+          courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           excludedDates: { L: [{ S: "2026-02-02" }] },
           includedDates: { L: [{ S: "2026-02-04" }] },
         }),
@@ -377,6 +385,7 @@ describe("updateCourse Lambda", () => {
     expect(PutItemCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         Item: expect.objectContaining({
+          courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           excludedDates: { L: [{ S: farFutureIso }] },
         }),
       }),
@@ -403,6 +412,7 @@ describe("updateCourse Lambda", () => {
     expect(PutItemCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         Item: expect.objectContaining({
+          courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           status: { S: "inactive" },
         }),
       }),
@@ -470,6 +480,7 @@ describe("updateCourse Lambda", () => {
       .filter((input) => input?.TableName === "test-overrides");
     expect(overrideWrites).toHaveLength(1);
     expect(overrideWrites[0].Item.courseId_date.S).toBe(`1_${futureDateIso}`);
+    expect(overrideWrites[0].Item.courseUid.S).toMatch(COURSE_UID_REGEX);
     expect(overrideWrites[0].Item.participants.L).toEqual([{ S: "luna" }, { S: "maya" }]);
   });
 });

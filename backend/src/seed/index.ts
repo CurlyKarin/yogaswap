@@ -19,6 +19,7 @@ import { DynamoDBClient, PutItemCommand, DescribeTableCommand, ResourceNotFoundE
 import { swaps } from "./swaps";
 import { courseDateOverrides } from "./overrides";
 import { courses } from "./courses";
+import { generateCourseUid } from "../lambdas/shared/courseUid";
 
 import path from "node:path";
 import fs from "node:fs";
@@ -261,6 +262,7 @@ async function seedCourses(tableName: string, items: any[]) {
     const dynamoItem: Record<string, any> = {
       tenantId: { S: DEFAULT_TENANT_ID },
       courseId: { S: courseId },
+      courseUid: { S: generateCourseUid() },
       id: { N: item.id.toString() },
       name: { S: item.name },
       weekday: { S: item.weekday },

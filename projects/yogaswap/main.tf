@@ -39,10 +39,11 @@ locals {
     "create_swap" = {
       name             = "create-swap"
       file_name        = "createSwap.zip"
-      table_arns       = [module.swaps_table.table_arn]
-      dynamodb_actions = ["dynamodb:PutItem"]
+      table_arns       = [module.swaps_table.table_arn, module.courses_table.table_arn]
+      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem"]
       tables = {
-        "SWAPS_TABLE" = module.swaps_table.table_name
+        "SWAPS_TABLE"   = module.swaps_table.table_name
+        "COURSES_TABLE" = module.courses_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -83,10 +84,11 @@ locals {
     "create_override" = {
       name             = "create-override"
       file_name        = "createOverride.zip"
-      table_arns       = [module.course_overrides_table.table_arn]
-      dynamodb_actions = ["dynamodb:PutItem"]
+      table_arns       = [module.course_overrides_table.table_arn, module.courses_table.table_arn]
+      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem"]
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+        "COURSES_TABLE"   = module.courses_table.table_name
       }
       s3_actions   = []
       s3_resources = []

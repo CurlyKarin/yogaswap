@@ -3,6 +3,7 @@ import { PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
+import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
 
 const client = dynamoClient;
 
@@ -16,9 +17,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   });
   if (delegationErrorResponse) return delegationErrorResponse;
   const tableName = process.env.OVERRIDES_TABLE;
+  const coursesTable = process.env.COURSES_TABLE;
   const override = JSON.parse(event.body || '{}');
 
   try {
+    if (!coursesTable) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'COURSES_TABLE env var is not set' }) };
+    }
     if (!override.courseId || !override.date) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing courseId or date' }) };
     }
@@ -39,16 +44,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const courseId_date = `${override.courseId}_${override.date}`;
+    const legacyCourseId = override.courseId.toString();
+    const courseUid = await fetchCourseUidByLegacyCourseId(client, coursesTable, tenantId, legacyCourseId);
+
     const dynamoItem = {
       tenantId: { S: tenantId },
       courseId_date: { S: courseId_date },
-      courseId: { S: override.courseId.toString() },
+      courseId: { S: legacyCourseId },
       date: { S: override.date },
       participants: { L: participants.map((p: string) => ({ S: p })) },
       swapped: { L: swapped.map((s: string) => ({ S: s })) },
       waitlist: { L: waitlist.map((w: string) => ({ S: w })) },
       actorUserId: userId ? { S: userId } : { NULL: true },
       actingForUserId: actingForUserId ? { S: actingForUserId } : { NULL: true },
+      ...(courseUid ? { courseUid: { S: courseUid } } : {}),
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));
