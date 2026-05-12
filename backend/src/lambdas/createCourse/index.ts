@@ -3,6 +3,7 @@ import { GetItemCommand, PutItemCommand, QueryCommand } from "@aws-sdk/client-dy
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import { deriveVisibleDates, pruneScheduleExceptions } from "../shared/courseDates";
+import { generateCourseUid } from "../shared/courseUid";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -196,6 +197,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }, 0);
     const nextId = maxId + 1;
     const nextCourseId = String(nextId);
+    const newCourseUid = generateCourseUid();
     const visibleDates = deriveVisibleDates({
       planningMode,
       visibilityMode,
@@ -231,6 +233,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const item: Record<string, any> = {
       tenantId: { S: tenantId },
       courseId: { S: nextCourseId },
+      courseUid: { S: newCourseUid },
       id: { N: String(nextId) },
       name: { S: name },
       weekday: { S: weekday },
@@ -269,6 +272,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify({
         id: nextId,
         courseId: nextCourseId,
+        courseUid: newCourseUid,
         name,
         weekday,
         time,

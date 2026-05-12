@@ -8,6 +8,7 @@ import {
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import { deriveVisibleDates, pruneScheduleExceptions } from "../shared/courseDates";
+import { generateCourseUid } from "../shared/courseUid";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -548,9 +549,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       );
     }
 
+    const existingCourseUid = item.courseUid?.S?.trim();
+    const nextCourseUid = existingCourseUid || generateCourseUid();
+
     const updateItem: Record<string, any> = {
       tenantId: { S: tenantId },
       courseId: { S: courseId },
+      courseUid: { S: nextCourseUid },
       id: { N: String(Number.isFinite(nextId) ? nextId : 0) },
       name: { S: nextName },
       weekday: { S: nextWeekday },
@@ -619,6 +624,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               TableName: overridesTable,
               Item: {
                 ...overrideItem,
+                courseUid: { S: nextCourseUid },
                 participants: {
                   L: [...currentOverrideParticipants, ...participantsToAdd].map((entry) => ({ S: entry })),
                 },
@@ -635,6 +641,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify({
         id: Number.isFinite(nextId) ? nextId : 0,
         courseId,
+        courseUid: nextCourseUid,
         name: nextName,
         weekday: nextWeekday,
         time: nextTime,

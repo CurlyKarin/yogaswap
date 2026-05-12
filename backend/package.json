@@ -12,6 +12,7 @@
     "seed:build": "npm run build && node dist/seed/index.js",
     "seed:tenants": "ts-node src/scripts/seed_tenants.ts",
     "backfill:participants": "ts-node src/scripts/backfill_participant_profiles.ts",
+    "backfill:course-uids": "ts-node src/scripts/backfill_course_uids.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test": "jest",
     "lint": "eslint ."

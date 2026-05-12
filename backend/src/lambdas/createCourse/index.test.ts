@@ -29,6 +29,8 @@ function makeEvent(body: unknown, headers?: Record<string, string>): APIGatewayP
 
 describe("createCourse Lambda", () => {
   const OLD_ENV = process.env;
+  const COURSE_UID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   beforeEach(() => {
     jest.resetModules();
@@ -111,6 +113,7 @@ describe("createCourse Lambda", () => {
       expect.objectContaining({
         id: 5,
         courseId: "5",
+        courseUid: expect.stringMatching(COURSE_UID_REGEX),
         name: "Morgen Flow",
         weekday: "Mon",
         time: "08:30",
@@ -141,6 +144,7 @@ describe("createCourse Lambda", () => {
         Item: expect.objectContaining({
           tenantId: { S: "studio-a" },
           courseId: { S: "5" },
+          courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           id: { N: "5" },
           status: { S: "draft" },
         }),

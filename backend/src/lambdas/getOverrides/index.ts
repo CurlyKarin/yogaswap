@@ -38,6 +38,7 @@ export const handler = async (
     const data = await client.send(command);
     let items: CourseDateOverride[] = (data.Items || []).map((item) => ({
       courseId: Number(item.courseId.S!),
+      ...(item.courseUid?.S ? { courseUid: item.courseUid.S } : {}),
       date: item.date.S!,
       participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
       swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],

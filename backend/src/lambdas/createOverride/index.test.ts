@@ -1,5 +1,5 @@
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { handler } from './index';
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 
@@ -9,10 +9,14 @@ const dynamoMock = mockClient(DynamoDBClient);
 beforeEach(() => {
   dynamoMock.reset();
   process.env.OVERRIDES_TABLE = 'yogaswap-backend-demo-courseOverrides-table';
+  process.env.COURSES_TABLE = 'yogaswap-backend-demo-courses-table';
 });
 
 describe('createOverride Lambda', () => {
   it('should create a new override successfully', async () => {
+    dynamoMock.on(GetItemCommand).resolves({
+      Item: { courseUid: { S: 'course-uid-abc' } },
+    });
     dynamoMock.on(PutItemCommand).resolves({});
 
     const event: Partial<APIGatewayProxyEvent> = {
@@ -30,15 +34,16 @@ describe('createOverride Lambda', () => {
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body)).toEqual({ message: 'Override created' });
 
-    // Es wird genau ein PutItemCommand erwartet
-    expect(dynamoMock.calls()).toHaveLength(1);
+    expect(dynamoMock.commandCalls(GetItemCommand)).toHaveLength(1);
+    expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(1);
 
-    expect(dynamoMock.call(0).args[0].input).toMatchObject({
+    expect(dynamoMock.commandCalls(PutItemCommand)[0].args[0].input).toMatchObject({
       TableName: 'yogaswap-backend-demo-courseOverrides-table',
       Item: {
         tenantId: { S: 'default-tenant' },
         courseId_date: { S: '1_2025-10-01' },
         courseId: { S: '1' },
+        courseUid: { S: 'course-uid-abc' },
         date: { S: '2025-10-01' },
         participants: { L: [{ S: 'Luna' }] },
         swapped: { L: [] },
@@ -80,6 +85,9 @@ describe('createOverride Lambda', () => {
   });
 
   it('should handle DynamoDB errors gracefully', async () => {
+    dynamoMock.on(GetItemCommand).resolves({
+      Item: { courseUid: { S: 'course-uid-abc' } },
+    });
     dynamoMock.on(PutItemCommand).rejects(new Error('DynamoDB failure'));
 
     const event: Partial<APIGatewayProxyEvent> = {
@@ -96,6 +104,6 @@ describe('createOverride Lambda', () => {
 
     expect(result.statusCode).toBe(500);
     expect(JSON.parse(result.body)).toEqual({ error: 'Failed to create override' });
-    expect(dynamoMock.calls()).toHaveLength(1);
+    expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(1);
   });
 });

@@ -10,6 +10,8 @@ export type CourseDateOverride = {
   // Zugehöriger Tenant (wird bei Multi-Tenancy Pflicht, aktuell optional für Migration)
   tenantId?: string;
   courseId: number;
+  /** Stabile technische Kurs-ID (UUID), Dual-Write mit {@link Course.courseUid}. */
+  courseUid?: string;
   date: string; // ISO-String
   participants: string[];
   swapped?: string[]; // aktive Tausch-Teilnehmer
@@ -26,8 +28,12 @@ export type Swap = {
   tenantId?: string;
   user: string;        // der Teilnehmer
   fromCourseId: number;
+  /** Stabile Kurs-ID am Ursprung (Dual-Write). */
+  fromCourseUid?: string;
   fromDate: string;    // ISO des Ursprungstermins
   toCourseId: number;
+  /** Stabile Kurs-ID am Ziel (Dual-Write). */
+  toCourseUid?: string;
   toDate: string;      // ISO des Zieltermins
   status: SwapStatus;
 };
@@ -39,6 +45,11 @@ export type CourseVisibilityMode = "fixed_window" | "rolling_horizon";
 export type Course = {
   // Tenant, zu dem der Kurs gehört
   tenantId?: string;
+  /**
+   * Stabile technische Kurs-ID (UUID). Nach Abschluss der Migration (#122) Primärreferenz für APIs;
+   * `id` / `courseId` bleiben für Legacy und Anzeige nutzbar.
+   */
+  courseUid?: string;
   id: number;
   name: string;
   weekday: string; // z.B. "Mon", "Tue", ...

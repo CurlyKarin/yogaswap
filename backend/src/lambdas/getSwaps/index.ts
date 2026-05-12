@@ -81,8 +81,10 @@ export const handler = async (
     const items: Swap[] = (data.Items || []).map((item) => ({
       user: item.user.S!,
       fromCourseId: Number(item.fromCourseId?.S ?? item.fromCourseId?.N ?? 0),
+      ...(item.fromCourseUid?.S ? { fromCourseUid: item.fromCourseUid.S } : {}),
       fromDate: item.fromDate.S!,
       toCourseId: Number(item.toCourseId?.S ?? item.toCourseId?.N ?? 0),
+      ...(item.toCourseUid?.S ? { toCourseUid: item.toCourseUid.S } : {}),
       toDate: item.toDate.S!,
       status: item.status.S as Swap["status"],
     }));

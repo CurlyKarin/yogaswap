@@ -6,6 +6,7 @@ jest.mock('@aws-sdk/client-dynamodb', () => {
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     PutItemCommand: jest.fn((input) => input),
+    GetItemCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -17,7 +18,7 @@ describe('createSwap Lambda', () => {
 
   beforeEach(() => {
     jest.resetModules();
-    process.env = { ...OLD_ENV, SWAPS_TABLE: 'test-swaps' };
+    process.env = { ...OLD_ENV, SWAPS_TABLE: 'test-swaps', COURSES_TABLE: 'test-courses' };
     mockSend.mockReset();
   });
 
@@ -40,7 +41,10 @@ describe('createSwap Lambda', () => {
   });
 
   test('successfully creates a swap', async () => {
-    mockSend.mockResolvedValueOnce({});
+    mockSend
+      .mockResolvedValueOnce({ Item: { courseUid: { S: 'uid-from' } } })
+      .mockResolvedValueOnce({ Item: { courseUid: { S: 'uid-to' } } })
+      .mockResolvedValueOnce({});
     const event = baseEvent({
       user: 'Nia',
       fromCourseId: 'c1',
@@ -68,6 +72,8 @@ describe('createSwap Lambda', () => {
           tenantId_user: { S: 'default-tenant#Nia' },
           actorUserId: { NULL: true },
           actingForUserId: { NULL: true },
+          fromCourseUid: { S: 'uid-from' },
+          toCourseUid: { S: 'uid-to' },
         }),
       })
     );
