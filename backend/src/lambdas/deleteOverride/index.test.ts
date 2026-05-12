@@ -8,6 +8,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     DeleteItemCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -19,7 +20,7 @@ describe("deleteOverride Lambda", () => {
 
   beforeEach(() => {
     jest.resetModules();
-    process.env = { ...OLD_ENV, OVERRIDES_TABLE: "test-overrides" };
+    process.env = { ...OLD_ENV, OVERRIDES_TABLE: "test-overrides", COURSES_TABLE: "test-courses" };
     mockSend.mockReset();
   });
 

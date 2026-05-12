@@ -8,7 +8,7 @@ import {
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import { deriveVisibleDates, pruneScheduleExceptions } from "../shared/courseDates";
-import { generateCourseUid } from "../shared/courseUid";
+import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -187,8 +187,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 
-  const courseId = event.pathParameters?.courseId?.trim();
-  if (!courseId) {
+  const rawCourseId = event.pathParameters?.courseId?.trim();
+  if (!rawCourseId) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing courseId in path" }) };
   }
 
@@ -196,6 +196,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   if (!actorUserId) {
     return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
   }
+
+  const resolvedPath = await resolveLegacyCourseIdFromPathSegment(
+    client,
+    coursesTable,
+    tenantId,
+    rawCourseId,
+  );
+  if (!resolvedPath.ok) {
+    return { statusCode: resolvedPath.statusCode, body: resolvedPath.body };
+  }
+  const courseId = resolvedPath.legacyCourseId;
 
   const body = parseBody(event);
   if (!body) {

@@ -43,6 +43,7 @@ module "course_overrides_table" {
 }
 
 # Tenant-scoped: PK = tenantId, SK = courseId (string, z. B. "1", "2")
+# GSI_CourseUid: Lookup tenantId + courseUid → Projektion ALL (UUID in API-Pfaden)
 module "courses_table" {
   source    = "../modules/dynamodb"
   name      = "${var.project}-courses-table"
@@ -50,7 +51,16 @@ module "courses_table" {
   range_key = "courseId"
   attributes = [
     { name = "tenantId", type = "S" },
-    { name = "courseId", type = "S" }
+    { name = "courseId", type = "S" },
+    { name = "courseUid", type = "S" }
+  ]
+  global_secondary_index = [
+    {
+      name            = "GSI_CourseUid"
+      hash_key        = "tenantId"
+      range_key       = "courseUid"
+      projection_type = "ALL"
+    }
   ]
 }
 

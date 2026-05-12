@@ -114,7 +114,7 @@ describe("CourseDatesDialog", () => {
 
     await waitFor(() => {
       expect(mockedUpdateCourse).toHaveBeenCalledWith(
-        1,
+        "1",
         expect.objectContaining({
           planningMode: "bounded_series",
           visibilityMode: "fixed_window",
@@ -189,7 +189,7 @@ describe("CourseDatesDialog", () => {
 
     await waitFor(() => {
       expect(mockedUpdateCourse).toHaveBeenCalledWith(
-        1,
+        "1",
         expect.objectContaining({
           planningMode: "rolling_continuous",
           visibilityMode: "rolling_horizon",
@@ -320,7 +320,7 @@ describe("CourseDatesDialog", () => {
 
     await waitFor(() => {
       expect(mockedCancelCourseDate).toHaveBeenCalledWith(
-        1,
+        "1",
         "2026-01-06",
         expect.objectContaining({
           rollbackSuccessfulSwapsFromCancelledParticipants: false,

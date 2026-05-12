@@ -6,6 +6,7 @@ import {
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
+import { resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
@@ -39,8 +40,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 
-  const courseId = event.pathParameters?.courseId?.trim();
-  if (!courseId) {
+  const rawCourseId = event.pathParameters?.courseId?.trim();
+  if (!rawCourseId) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing courseId in path" }) };
   }
 
@@ -50,6 +51,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   try {
+    const resolvedPath = await resolveLegacyCourseIdFromPathSegment(
+      client,
+      coursesTable,
+      tenantId,
+      rawCourseId,
+    );
+    if (!resolvedPath.ok) {
+      return { statusCode: resolvedPath.statusCode, body: resolvedPath.body };
+    }
+    const courseId = resolvedPath.legacyCourseId;
+
     const membershipResp = await client.send(
       new GetItemCommand({
         TableName: membershipsTable,

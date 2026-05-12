@@ -14,13 +14,19 @@ export async function getOverrides(sinceDate?: string): Promise<CourseDateOverri
   }
 }
 
-export async function updateOverride(courseId: number, date: string, updates: Partial<CourseDateOverride>): Promise<void> {
+export async function updateOverride(
+  courseId: number | string,
+  date: string,
+  updates: Partial<CourseDateOverride>,
+): Promise<void> {
+  const pathCourse = encodeURIComponent(String(courseId));
+  const pathDate = encodeURIComponent(date);
   try {
     const headers = delegationHeaders();
     if (headers) {
-      await axios.put(`/course-overrides/${courseId}/${date}`, updates, { headers });
+      await axios.put(`/course-overrides/${pathCourse}/${pathDate}`, updates, { headers });
     } else {
-      await axios.put(`/course-overrides/${courseId}/${date}`, updates);
+      await axios.put(`/course-overrides/${pathCourse}/${pathDate}`, updates);
     }
     console.log('API Overrides Response (updates):', updates);
   } catch (error) {
@@ -28,13 +34,15 @@ export async function updateOverride(courseId: number, date: string, updates: Pa
   }
 }
 
-export async function deleteOverride(courseId: number, date: string): Promise<void> {
+export async function deleteOverride(courseId: number | string, date: string): Promise<void> {
+  const pathCourse = encodeURIComponent(String(courseId));
+  const pathDate = encodeURIComponent(date);
   try {
     const headers = delegationHeaders();
     if (headers) {
-      await axios.delete(`/course-overrides/${courseId}/${date}`, { headers });
+      await axios.delete(`/course-overrides/${pathCourse}/${pathDate}`, { headers });
     } else {
-      await axios.delete(`/course-overrides/${courseId}/${date}`);
+      await axios.delete(`/course-overrides/${pathCourse}/${pathDate}`);
     }
     console.log('API Overrides Response (delete):', { courseId, date });
   } catch (error) {
