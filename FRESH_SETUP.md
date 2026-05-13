@@ -27,11 +27,11 @@ source ~/.zshrc
 
 ---
 
-## 📦 Schritt 2: Node.js 20+ installieren
+## 📦 Schritt 2: Node.js 22 (LTS) installieren
 
 **Installieren:**
 ```bash
-brew install node@20
+brew install node@22
 ```
 
 **Shell neu laden (falls nötig):**
@@ -41,7 +41,7 @@ source ~/.zshrc
 
 **Verifizieren:**
 ```bash
-node --version   # Sollte v20.x.x sein
+node --version   # Sollte v22.x.x sein (Projekt: .nvmrc)
 npm --version    # Sollte eine Version zeigen
 ```
 
@@ -622,7 +622,7 @@ source ~/.zshrc
 ## 📝 Checkliste für neuen Rechner
 
 - [ ] Homebrew installiert
-- [ ] Node.js 20+ installiert (`node --version`)
+- [ ] Node.js 22 installiert (`node --version`, siehe `.nvmrc`)
 - [ ] OpenTofu installiert (`tofu --version`)
 - [ ] AWS CLI installiert (`aws --version`)
 - [ ] AWS Access Keys erstellt

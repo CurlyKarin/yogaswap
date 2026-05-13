@@ -35,12 +35,12 @@ check_command() {
 check_node_version() {
     if command -v node &> /dev/null; then
         local version=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-        if [ "$version" -ge 20 ]; then
-            echo "✅ Node.js Version: $(node --version) (OK)"
+        if [ "$version" -ge 22 ]; then
+            echo "✅ Node.js Version: $(node --version) (OK, Projekt .nvmrc: 22)"
             return 0
         else
-            echo "❌ Node.js Version: $(node --version) (Benötigt >= 20.0.0)"
-            echo "   Vite 7 erfordert Node.js 20+. Führe 'brew install node@20' aus."
+            echo "❌ Node.js Version: $(node --version) (Benötigt >= 22.0.0)"
+            echo "   Siehe .nvmrc / README. z. B. brew install node@22 oder nvm install"
             ERRORS=$((ERRORS + 1))
             return 1
         fi

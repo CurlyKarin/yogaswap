@@ -171,28 +171,34 @@ yogaswap/
 
 Bevor du mit dem Setup beginnst, musst du folgende Tools auf deinem Rechner installieren:
 
-### 1. Node.js (>= 20.x) und npm
+### 1. Node.js (22.x LTS) und npm
 
-**Wichtig:** Das Projekt verwendet Vite 7, das Node.js 20+ benötigt.
+**Wichtig:** CI und empfohlene lokale Version sind **Node.js 22** (siehe `.nvmrc`). Das Projekt nutzt Vite 7; Node 22 erfüllt die Anforderungen.
 
 **macOS (mit Homebrew):**
 ```bash
-brew install node@20
+brew install node@22
 ```
 
-Falls du bereits Node.js 18 installiert hast, aktualisiere es:
+Falls du noch eine ältere Hauptversion nutzt, aktualisiere sie z. B. so:
 ```bash
-brew uninstall node@18
-brew install node@20
+brew uninstall node@20
+brew install node@22
+```
+
+Mit **nvm** aus dem Repo-Verzeichnis:
+```bash
+nvm install
+nvm use   # liest .nvmrc
 ```
 
 **Oder direkt von der Website:**
 - Besuche [nodejs.org](https://nodejs.org/)
-- Installiere die LTS-Version (mindestens 20.x)
+- Installiere die **22.x LTS**
 
 **Verifizierung:**
 ```bash
-node --version  # Sollte >= 20.0.0 sein
+node --version  # Sollte v22.x.x sein (wie in .nvmrc)
 npm --version
 ```
 
