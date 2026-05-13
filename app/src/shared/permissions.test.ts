@@ -206,6 +206,94 @@ describe("permissions", () => {
         }),
       ).toBe(true);
     });
+
+    it("blendet Participant Kurse in draft aus", () => {
+      const draft = { ...dummyCourse, status: "draft" as const };
+      expect(
+        canSeeCourse(participantMembership, defaultSettings, draft, {
+          isTaughtByUser: true,
+          isBookedByUser: true,
+        }),
+      ).toBe(false);
+    });
+
+    it("erlaubt Instructor draft-Kurse bei Zuordnung (Planung), nicht ohne", () => {
+      const draft = { ...dummyCourse, status: "draft" as const };
+      expect(
+        canSeeCourse(instructorMembership, restrictiveSettings, draft, {
+          isTaughtByUser: true,
+          isBookedByUser: false,
+        }),
+      ).toBe(true);
+      expect(
+        canSeeCourse(instructorMembership, restrictiveSettings, draft, {
+          isTaughtByUser: false,
+          isBookedByUser: false,
+        }),
+      ).toBe(false);
+    });
+
+    it("zeigt Participant inaktive Kurse nur im Nachlauf (UTC) nach Kursende", () => {
+      const inactiveEnded = {
+        ...dummyCourse,
+        status: "inactive" as const,
+        seriesEndDate: "2026-05-10",
+      };
+      const withinGrace = new Date(Date.UTC(2026, 4, 17, 12, 0, 0));
+      expect(
+        canSeeCourse(participantMembership, defaultSettings, inactiveEnded, {
+          isTaughtByUser: false,
+          isBookedByUser: false,
+          now: withinGrace,
+        }),
+      ).toBe(true);
+
+      const afterGrace = new Date(Date.UTC(2026, 4, 18, 12, 0, 0));
+      expect(
+        canSeeCourse(participantMembership, defaultSettings, inactiveEnded, {
+          isTaughtByUser: false,
+          isBookedByUser: false,
+          now: afterGrace,
+        }),
+      ).toBe(false);
+    });
+
+    it("respektiert inactiveGraceDaysAfterCourseEnd im Tenant", () => {
+      const inactiveEnded = {
+        ...dummyCourse,
+        status: "inactive" as const,
+        seriesEndDate: "2026-05-10",
+      };
+      const dayAfterShortGrace = new Date(Date.UTC(2026, 4, 14, 12, 0, 0));
+      expect(
+        canSeeCourse(
+          participantMembership,
+          { ...defaultSettings, inactiveGraceDaysAfterCourseEnd: 3 },
+          inactiveEnded,
+          {
+            isTaughtByUser: false,
+            isBookedByUser: false,
+            now: dayAfterShortGrace,
+          },
+        ),
+      ).toBe(false);
+    });
+
+    it("blendet inaktiven Kurs fuer Participant aus, wenn Buchungs-/Instructor-Restriktion greift", () => {
+      const inactiveEnded = {
+        ...dummyCourse,
+        status: "inactive" as const,
+        seriesEndDate: "2026-05-10",
+      };
+      const withinGrace = new Date(Date.UTC(2026, 4, 12, 12, 0, 0));
+      expect(
+        canSeeCourse(participantMembership, restrictiveSettings, inactiveEnded, {
+          isTaughtByUser: false,
+          isBookedByUser: false,
+          now: withinGrace,
+        }),
+      ).toBe(false);
+    });
   });
 
   describe("canStartDelegationForCourse", () => {

@@ -315,7 +315,24 @@ export default function CourseList({
     );
   }, [courses, tenant?.settings, effectiveMembership, currentUser.nickname]);
 
-  const coursesWithUpcoming = visibleCourses.filter((c) => getCourseDates(c).length > 0);
+  const coursesWithUpcoming = useMemo(() => {
+    const hasUpcomingDates = (c: Course) => getCourseDates(c).length > 0;
+    if (!effectiveMembership) {
+      return visibleCourses.filter(hasUpcomingDates);
+    }
+    const seeCtx = (course: Course) => ({
+      isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
+      isBookedByUser: course.participants.some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
+    });
+    return visibleCourses.filter((c) => {
+      if (hasUpcomingDates(c)) return true;
+      // Inaktive Kurse im Nachlauf (#149): keine zukuenftigen Termine, aber noch sichtbar fuer Swaps
+      if (c.status === "inactive") {
+        return canSeeCourse(effectiveMembership, tenant?.settings, c, seeCtx(c));
+      }
+      return false;
+    });
+  }, [visibleCourses, effectiveMembership, tenant?.settings, currentUser.nickname]);
   const coursesToRender = canSeeCourseManagement ? visibleCourses : coursesWithUpcoming;
   const deleteTargetCourse = deleteTargetId
     ? visibleCourses.find((course) => course.id === deleteTargetId)

@@ -8,11 +8,10 @@ import type {
 /**
  * Hinweis:
  * Diese Datei ist die fachliche Source-of-Truth fuer Permissions.
- * Aktuell existiert zusaetzlich eine technische Kopie in
- * `backend/src/lambdas/shared/permissions.ts`, damit Backend-Tests/Lambda-Bundles
- * ohne ESM/Jest-Interop-Probleme laufen.
- * Bei Aenderungen bitte beide Stellen synchron halten, bis die Build-Toolchain
- * vereinheitlicht ist.
+ * In `backend/src/lambdas/shared/permissions.ts` liegt eine technische Teilkopie
+ * (nur Lambda-relevante Hilfen); `canSeeCourse` und weitere UI-Funktionen dort
+ * ergaenzen, sobald das Backend sie braucht. Build: `shared` vor App-Tests bauen
+ * (`npm run build --prefix shared`), da Vite `shared` auf `shared/dist` alias.
  */
 
 /**
@@ -122,14 +121,66 @@ export function canSeeAllCourses(
   return false;
 }
 
+/** Default-Nachlauf in Tagen (an app swapSettings.maxOffsetDays angeglichen). */
+const DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END = 7;
+
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function toIsoDateUtc(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function addCalendarDaysIsoUtc(iso: string, days: number): string {
+  const [y, m, day] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, day));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Letztes Kursende (YYYY-MM-DD) fuer Teilnehmer-Nachlauf bei inaktiven Kursen:
+ * seriesEndDate, sonst visibleUntil, sonst groesstes gueltiges Datum in `dates`.
+ */
+function courseEndDateIsoForInactiveGrace(
+  course: Pick<Course, "seriesEndDate" | "visibleUntil" | "dates">,
+): string | undefined {
+  const series = course.seriesEndDate?.trim();
+  if (series && ISO_DATE_ONLY.test(series)) return series;
+  const visible = course.visibleUntil?.trim();
+  if (visible && ISO_DATE_ONLY.test(visible)) return visible;
+  const raw = course.dates ?? [];
+  const valid = raw.filter((d) => typeof d === "string" && ISO_DATE_ONLY.test(d.trim()));
+  if (valid.length === 0) return undefined;
+  const trimmed = valid.map((d) => d.trim());
+  trimmed.sort((a, b) => b.localeCompare(a));
+  return trimmed[0];
+}
+
+function participantBaseVisible(
+  settings: TenantSettings | undefined,
+  context: { isTaughtByUser?: boolean; isBookedByUser?: boolean },
+): boolean {
+  if (settings?.participantsSeeOnlyOwnInstructors) {
+    return !!context.isBookedByUser || !!context.isTaughtByUser;
+  }
+  return true;
+}
+
 /**
  * Sichtbarkeitscheck auf Kurs-Ebene.
  * Der Aufrufer entscheidet, ob er bereits alle Kurse gefiltert hat
  * (z. B. durch canSeeAllCourses) oder hier pro Kurs filtern möchte.
  *
- * Für einen echten Teilnehmer-Fall müsste hier zusätzlich
- * Kontext über "eigene Instructor:innen" / Buchungen übergeben werden.
- * Das ist bewusst noch nicht ausmodelliert und kann später erweitert werden.
+ * Teilnehmer:innen:
+ * - `draft`: nie sichtbar
+ * - `inactive`: nur im Nachlauf (Kursende + TenantSettings.inactiveGraceDaysAfterCourseEnd,
+ *   Default 7 Tage) und nur wenn die bestehende Buchungs-/Instructor-Logik zutrifft
+ * - `active` / ohne Status: wie bisher
+ *
+ * Instructor:innen / Admins: Status filtert die Sichtbarkeit nicht (Planung / Verwaltung).
+ *
+ * `context.now` optional (Default: `new Date()`); fuer Tests oder deterministische UI
+ * explizit setzen. Nachlauf vergleicht Kalendertage in UTC (ISO-Datum).
  */
 export function canSeeCourse(
   membership: UserTenantMembership,
@@ -138,8 +189,14 @@ export function canSeeCourse(
   context: {
     isTaughtByUser?: boolean;
     isBookedByUser?: boolean;
+    /** Referenzzeit fuer inaktiven Nachlauf; Default `new Date()`. */
+    now?: Date;
   },
 ): boolean {
+  const refNow = context.now ?? new Date();
+  const todayIso = toIsoDateUtc(refNow);
+  const status = course.status ?? "active";
+
   if (membership.role === "admin") return true;
 
   if (membership.role === "instructor") {
@@ -148,11 +205,16 @@ export function canSeeCourse(
   }
 
   // Participant
-  if (settings?.participantsSeeOnlyOwnInstructors) {
-    return !!context.isBookedByUser || !!context.isTaughtByUser;
+  if (status === "draft") return false;
+
+  if (status === "inactive") {
+    const endIso = courseEndDateIsoForInactiveGrace(course);
+    if (!endIso) return false;
+    const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+    const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, graceDays);
+    if (todayIso > lastGraceInclusiveIso) return false;
   }
 
-  // Default: Teilnehmer:in sieht alle freigeschalteten Kurse
-  return true;
+  return participantBaseVisible(settings, context);
 }
 
