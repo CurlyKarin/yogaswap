@@ -41,6 +41,18 @@ Bei der Ausarbeitung habe ich AI bewusst als Sparringspartner genutzt, um Entsch
 
 ---
 
+## 🔑 Kurs-Identifikatoren (`courseUid` und Legacy-ID)
+
+Jeder Kurs hat eine **stabile UUID** (`courseUid`) für API-Pfade und fachliche Referenzen. Parallel bleibt die **numerische Legacy-ID** (Feld `id` in der App, DynamoDB-SK `courseId`):
+
+- **DynamoDB**: Sort-Key und zusammengesetzte Keys – z. B. Course-Overrides (`courseId_date`), Swaps und zugehörige GSI-Attribute.
+- **Swaps**: `fromCourseId` / `toCourseId` bleiben Teil der bestehenden Schlüssel- und Indexpfade und sorgen für **lesbare** zusammengesetzte IDs – nicht nur für die Oberfläche.
+- **REST**: Kursbezogene URLs akzeptieren **UUID oder Legacy-ID**; UUIDs werden serverseitig per GSI `GSI_CourseUid` auf die Legacy-SK abgebildet.
+
+Ausführlicher: [docs/course-identifiers.md](docs/course-identifiers.md) · Typkommentare: `shared/src/types.ts` (`Course`, `Swap`, `CourseDateOverride`).
+
+---
+
 ## 👥 #130 Scope A: Kursmitglieder verwalten
 
 Dieser Abschnitt dokumentiert den aktuellen Stand von **Issue #130, Scope A** (Kurs-Teilnehmerliste + Fremdverwaltung).
