@@ -6,6 +6,7 @@ import {
   canStartDelegationForCourse,
   canSeeAllCourses,
   canSeeCourse,
+  canShowParticipantCourseCard,
 } from "shared/permissions";
 import type {
   UserTenantMembership,
@@ -291,6 +292,57 @@ describe("permissions", () => {
           isTaughtByUser: false,
           isBookedByUser: false,
           now: withinGrace,
+        }),
+      ).toBe(false);
+    });
+  });
+
+  describe("canShowParticipantCourseCard", () => {
+    const baseCtx = { isTaughtByUser: false, isBookedByUser: false };
+
+    it("zeigt aktiven Kurs nur mit sichtbaren Terminen", () => {
+      const withDate = { ...dummyCourse, dates: ["2026-06-01"] };
+      expect(
+        canShowParticipantCourseCard(participantMembership, defaultSettings, withDate, {
+          ...baseCtx,
+          hasVisibleCourseDates: true,
+        }),
+      ).toBe(true);
+      expect(
+        canShowParticipantCourseCard(participantMembership, defaultSettings, withDate, {
+          ...baseCtx,
+          hasVisibleCourseDates: false,
+        }),
+      ).toBe(false);
+    });
+
+    it("zeigt inaktiven Kurs im Nachlauf auch ohne sichtbare Termine", () => {
+      const inactiveEnded = {
+        ...dummyCourse,
+        status: "inactive" as const,
+        seriesEndDate: "2026-05-10",
+        dates: [],
+      };
+      const withinGrace = new Date(Date.UTC(2026, 4, 12, 12, 0, 0));
+      expect(
+        canShowParticipantCourseCard(participantMembership, defaultSettings, inactiveEnded, {
+          ...baseCtx,
+          hasVisibleCourseDates: false,
+          now: withinGrace,
+        }),
+      ).toBe(true);
+    });
+
+    it("blendet draft auch mit Terminen aus", () => {
+      const draftWithDate = {
+        ...dummyCourse,
+        status: "draft" as const,
+        dates: ["2026-06-01"],
+      };
+      expect(
+        canShowParticipantCourseCard(participantMembership, defaultSettings, draftWithDate, {
+          ...baseCtx,
+          hasVisibleCourseDates: true,
         }),
       ).toBe(false);
     });

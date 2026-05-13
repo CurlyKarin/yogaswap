@@ -218,3 +218,26 @@ export function canSeeCourse(
   return participantBaseVisible(settings, context);
 }
 
+/**
+ * Teilnehmer-Kursliste (Kacheln): Kurs anzeigen, wenn {@link canSeeCourse} zutrifft und
+ * entweder sichtbare Termine existieren (`hasVisibleCourseDates`, z. B. aus
+ * `getCourseDates`) oder der Kurs `inactive` ist (Nachlauf ohne aktuelle Termine).
+ *
+ * Admin/Instructor-Listen nutzen `visibleCourses` direkt, nicht diese Funktion.
+ */
+export function canShowParticipantCourseCard(
+  membership: UserTenantMembership,
+  settings: TenantSettings | undefined,
+  course: Course,
+  context: {
+    isTaughtByUser?: boolean;
+    isBookedByUser?: boolean;
+    now?: Date;
+    hasVisibleCourseDates: boolean;
+  },
+): boolean {
+  if (!canSeeCourse(membership, settings, course, context)) return false;
+  if (context.hasVisibleCourseDates) return true;
+  return (course.status ?? "active") === "inactive";
+}
+
