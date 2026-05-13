@@ -9,6 +9,7 @@ export type TenantContext = {
 export type CourseDateOverride = {
   // Zugehöriger Tenant (wird bei Multi-Tenancy Pflicht, aktuell optional für Migration)
   tenantId?: string;
+  /** Legacy-Kurs-ID (numerisch); zusammen mit `date` Schlüsselteil und Lesbarkeit in Listen. */
   courseId: number;
   /** Stabile technische Kurs-ID (UUID), Dual-Write mit {@link Course.courseUid}. */
   courseUid?: string;
@@ -27,10 +28,17 @@ export type Swap = {
   // Tenant-Kontext für den Swap
   tenantId?: string;
   user: string;        // der Teilnehmer
+  /**
+   * Legacy-Kurs-ID (numerisch): bleibt u. a. für lesbare Swap-Schlüssel und GSI-Range-Attribute
+   * (`fromDate_fromCourseId_status`, `toDate_toCourseId_status`, `swapId`), nicht nur für UI.
+   */
   fromCourseId: number;
   /** Stabile Kurs-ID am Ursprung (Dual-Write). */
   fromCourseUid?: string;
   fromDate: string;    // ISO des Ursprungstermins
+  /**
+   * Legacy-Kurs-ID am Ziel — wie {@link Swap.fromCourseId}: Lesbarkeit und bestehende Schlüsselpfade.
+   */
   toCourseId: number;
   /** Stabile Kurs-ID am Ziel (Dual-Write). */
   toCourseUid?: string;
@@ -46,10 +54,14 @@ export type Course = {
   // Tenant, zu dem der Kurs gehört
   tenantId?: string;
   /**
-   * Stabile technische Kurs-ID (UUID). Nach Abschluss der Migration (#122) Primärreferenz für APIs;
-   * `id` / `courseId` bleiben für Legacy und Anzeige nutzbar.
+   * Stabile technische Kurs-ID (UUID). Primärreferenz für neue API-Pfade und übergreifende Referenzen.
+   *
+   * Die numerische {@link Course.id} (Legacy) bleibt parallel bestehen: DynamoDB-Sort-Key,
+   * zusammengesetzte Keys (Overrides `courseId_date`, Swap-IDs und GSI-Felder mit Kursbezug),
+   * sowie nachvollziehbare Anzeige — nicht nur „Sortierung“.
    */
   courseUid?: string;
+  /** Legacy-Kurs-ID (numerisch), entspricht der DynamoDB-SK `courseId` und numerischen Referenzen im Modell. */
   id: number;
   name: string;
   weekday: string; // z.B. "Mon", "Tue", ...
