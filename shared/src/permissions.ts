@@ -1,3 +1,9 @@
+import {
+  addCalendarDaysIsoUtc,
+  courseEndDateIso,
+  DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
+  toIsoDateUtc,
+} from "./courseStatus";
 import type {
   Course,
   ParticipantStatus,
@@ -121,41 +127,6 @@ export function canSeeAllCourses(
   return false;
 }
 
-/** Default-Nachlauf in Tagen (an app swapSettings.maxOffsetDays angeglichen). */
-const DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END = 7;
-
-const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
-function toIsoDateUtc(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function addCalendarDaysIsoUtc(iso: string, days: number): string {
-  const [y, m, day] = iso.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, day));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-}
-
-/**
- * Letztes Kursende (YYYY-MM-DD) fuer Teilnehmer-Nachlauf bei inaktiven Kursen:
- * seriesEndDate, sonst visibleUntil, sonst groesstes gueltiges Datum in `dates`.
- */
-function courseEndDateIsoForInactiveGrace(
-  course: Pick<Course, "seriesEndDate" | "visibleUntil" | "dates">,
-): string | undefined {
-  const series = course.seriesEndDate?.trim();
-  if (series && ISO_DATE_ONLY.test(series)) return series;
-  const visible = course.visibleUntil?.trim();
-  if (visible && ISO_DATE_ONLY.test(visible)) return visible;
-  const raw = course.dates ?? [];
-  const valid = raw.filter((d) => typeof d === "string" && ISO_DATE_ONLY.test(d.trim()));
-  if (valid.length === 0) return undefined;
-  const trimmed = valid.map((d) => d.trim());
-  trimmed.sort((a, b) => b.localeCompare(a));
-  return trimmed[0];
-}
-
 function participantBaseVisible(
   settings: TenantSettings | undefined,
   context: { isTaughtByUser?: boolean; isBookedByUser?: boolean },
@@ -208,7 +179,7 @@ export function canSeeCourse(
   if (status === "draft") return false;
 
   if (status === "inactive") {
-    const endIso = courseEndDateIsoForInactiveGrace(course);
+    const endIso = courseEndDateIso(course);
     if (!endIso) return false;
     const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
     const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, graceDays);

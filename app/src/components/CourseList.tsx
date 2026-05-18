@@ -29,6 +29,10 @@ import {
   updateCourse,
 } from "../api/courses";
 import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
+import {
+  looksLikeAutomaticallyInactive,
+  wouldAutoDeactivateBoundedSeries,
+} from "shared/courseStatus";
 import { courseApiPathKey } from "../lib/courseUid";
 
 type Props = {
@@ -692,6 +696,14 @@ export default function CourseList({
       <div className="grid">
         {coursesToRender.map((course) => {
           const dates = getCourseDates(course);
+          const hasUpcomingDates = dates.length > 0;
+          const statusLabel =
+            STATUS_OPTIONS.find((entry) => entry.value === (course.status ?? "active"))?.label ?? "Aktiv";
+          const statusHint = looksLikeAutomaticallyInactive(course, hasUpcomingDates)
+            ? " · automatisch inaktiv"
+            : wouldAutoDeactivateBoundedSeries(course, hasUpcomingDates)
+              ? " · wird beim Speichern inaktiv"
+              : "";
           return (
             <div key={course.id}>
               {canSeeCourseManagement && (
@@ -699,8 +711,8 @@ export default function CourseList({
                   <span className="course-card-actions-status">
                     Status:{" "}
                     <strong>
-                      {STATUS_OPTIONS.find((entry) => entry.value === (course.status ?? "active"))?.label ??
-                        "Aktiv"}
+                      {statusLabel}
+                      {statusHint}
                     </strong>
                   </span>
                   <div className="course-card-actions-buttons">
@@ -750,6 +762,10 @@ export default function CourseList({
                 dates={dates}
                 overrides={filteredOverrides}
                 swaps={swaps}
+                participantActionsLocked={
+                  !canSeeCourseManagement && (course.status ?? "active") === "inactive"
+                }
+                tenantSettings={tenant?.settings}
                 onToggleAbsence={onToggleAbsence}
                 confirmSwap={confirmSwap}
                 requestSwap={requestSwap}

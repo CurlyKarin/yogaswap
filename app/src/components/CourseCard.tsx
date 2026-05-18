@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import { Swap, CourseDateOverride, Course, User } from "shared/types";
+import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
+import {
+  formatCourseIsoDateDe,
+  getInactiveGraceLastDayIso,
+  isCourseInInactiveGracePeriod,
+  looksLikeAutomaticallyInactive,
+} from "shared/courseStatus";
 import { swapSettings } from "../data/swapSettings";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
 
@@ -10,6 +16,9 @@ type Props = {
   dates: Date[];
   overrides: CourseDateOverride[];
   swaps: Swap[];
+  /** Teilnehmer-Ansicht: keine neuen Absagen/Tauschanfragen bei inaktivem Kurs. */
+  participantActionsLocked?: boolean;
+  tenantSettings?: TenantSettings;
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
   confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   requestSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
@@ -32,6 +41,8 @@ export default function CourseCard({
   dates,
   overrides,
   swaps,
+  participantActionsLocked = false,
+  tenantSettings,
   onToggleAbsence,
   confirmSwap,
   requestSwap,
@@ -136,13 +147,55 @@ export default function CourseCard({
   const pendingCount = pendingSwapsFromOrigin.length;
   const hasPendingRequestsFromOrigin = pendingCount > 0;
 
+  const hasUpcomingDates = dates.length > 0;
+  const courseStatus = course.status ?? "active";
+  const isInactiveCourse = courseStatus === "inactive";
+  const inInactiveGrace = isInactiveCourse && isCourseInInactiveGracePeriod(course, tenantSettings);
+  const graceLastIso = inInactiveGrace ? getInactiveGraceLastDayIso(course, tenantSettings) : undefined;
+  const showAutoInactiveBadge =
+    participantActionsLocked && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
+  const userSwapsOnCourse = useMemo(
+    () =>
+      swaps.filter(
+        (s) =>
+          s.user === userName &&
+          (s.fromCourseId === course.id || s.toCourseId === course.id),
+      ),
+    [swaps, userName, course.id],
+  );
+  const canUseTermActions =
+    !participantActionsLocked && hasUpcomingDates && (isParticipant || originallyParticipant);
+
+  const inactiveNotice = participantActionsLocked
+    ? showAutoInactiveBadge
+      ? graceLastIso
+        ? `Dieser Kurs wurde automatisch beendet (keine weiteren Termine). Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
+        : "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten."
+      : graceLastIso
+        ? `Dieser Kurs ist inaktiv. Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
+        : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten."
+    : null;
+
   return (
-    <div className="course-card">
+    <div
+      className={`course-card${participantActionsLocked ? " course-card--inactive-participant" : ""}`}
+    >
       <div className="course-head">
-        <h3>{course.name}</h3>
-        <div className="muted">
-          {course.weekday} · {course.time}
+        <div className="course-head-title">
+          <h3>{course.name}</h3>
+          <div className="muted">
+            {course.weekday} · {course.time}
+          </div>
         </div>
+        {participantActionsLocked && isInactiveCourse && (
+          <span
+            className={`course-status-badge ${
+              showAutoInactiveBadge ? "course-status-badge--auto" : "course-status-badge--inactive"
+            }`}
+          >
+            {showAutoInactiveBadge ? "Automatisch inaktiv" : "Inaktiv"}
+          </span>
+        )}
       </div>
 
       <div className="course-row">
@@ -211,13 +264,19 @@ export default function CourseCard({
         </div>
       </div>
 
-      {hasNoUpcomingDates && (
+      {hasNoUpcomingDates && !participantActionsLocked && (
         <div className="course-row">
           <span className="muted small">Zur Zeit sind keine zukünftigen Termine für diesen Kurs geplant.</span>
         </div>
       )}
 
-      {!hasNoUpcomingDates && (isParticipant || originallyParticipant) ? (
+      {inactiveNotice && (
+        <div className="course-row course-inactive-notice" role="status">
+          <span className="muted small">{inactiveNotice}</span>
+        </div>
+      )}
+
+      {canUseTermActions ? (
         <div className="actions">
           {swapForThisTerm ? (
             <>
@@ -291,7 +350,7 @@ export default function CourseCard({
               )}
         </div>
 
-      ) : !hasNoUpcomingDates ? (
+      ) : !participantActionsLocked && !hasNoUpcomingDates ? (
         <>
           {swapForWaitlist ? (
             <div className="actions">
@@ -307,6 +366,22 @@ export default function CourseCard({
           )}
         </>
       ) : null}
+
+      {participantActionsLocked && userSwapsOnCourse.length > 0 && (
+        <div className="actions course-inactive-swap-actions">
+          {userSwapsOnCourse.map((swap) => (
+            <div key={`${swap.fromCourseId}-${swap.fromDate}-${swap.toCourseId}-${swap.toDate}-${swap.status}`}>
+              <button
+                type="button"
+                className="secondary danger"
+                onClick={() => cancelSwap(swap, course.id)}
+              >
+                {swap.status === "pending" ? "Tauschanfrage abbrechen" : "Tausch abbrechen"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Status-Text separat unter den Buttons */}
       {!hasNoUpcomingDates && allSwapsForThisTerm.length > 0 && (
@@ -341,7 +416,7 @@ export default function CourseCard({
         </div>
       )}
       {/* Swap-Modal */}
-      {!hasNoUpcomingDates && showSwapModal && (
+      {canUseTermActions && showSwapModal && (
         <div className="modal-backdrop">
           <div className="modal">
             <h4>

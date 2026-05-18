@@ -68,6 +68,26 @@ describe("CourseCard", () => {
     cleanup();
   });
 
+  it("zeigt Badge und Hinweis bei gesperrter Teilnehmer-Ansicht für inaktiven Kurs", () => {
+    const inactiveCourse: Course = {
+      ...baseCourse,
+      status: "inactive",
+      seriesEndDate: "2099-01-01",
+      dates: [],
+    };
+
+    renderCourseCard({
+      course: inactiveCourse,
+      dates: [],
+      overrides: [],
+      participantActionsLocked: true,
+    });
+
+    expect(screen.getByText("Automatisch inaktiv")).toBeInTheDocument();
+    expect(screen.getByText(/automatisch beendet/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
+  });
+
   it("zeigt Hinweis, wenn keine zukünftigen Termine vorhanden sind", () => {
     const courseWithoutFutureDates: Course = {
       ...baseCourse,
