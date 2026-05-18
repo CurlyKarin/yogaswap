@@ -562,13 +562,15 @@ export default function CourseList({
         setFormError("Kurs nicht gefunden.");
         return;
       }
+      const previousPlanningMode = courseForEdit.planningMode ?? "bounded_series";
+      const planningModeChanged = editState.planningMode !== previousPlanningMode;
       await updateCourse(courseApiPathKey(courseForEdit), {
         name: trimmedName,
         weekday: editState.weekday,
         time: editState.time,
         capacity,
         status: editState.status,
-        ...buildSchedulingFromMode(editState.planningMode),
+        ...(planningModeChanged ? buildSchedulingFromMode(editState.planningMode) : {}),
       });
       closeEditModal();
       await fetchData();
