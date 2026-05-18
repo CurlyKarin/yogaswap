@@ -478,6 +478,57 @@ describe("CourseList", () => {
     });
   });
 
+  it("überschreibt beim Kursbearbeiten keinen gesetzten Kursblock-Zeitraum", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurzer Block",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "draft",
+        planningMode: "bounded_series",
+        seriesStartDate: "2026-01-05",
+        seriesEndDate: "2026-01-05",
+        visibleFrom: "2026-01-05",
+        visibleUntil: "2026-01-05",
+        participants: [],
+        dates: ["2026-01-05"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+    mockedUpdateCourse.mockResolvedValue({ ...mockCourses[0], name: "Kurzer Block umbenannt" });
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findByText("Kurzer Block");
+    await user.click(screen.getAllByRole("button", { name: /kurs bearbeiten kurzer block/i })[0]);
+
+    const nameInput = screen.getByLabelText("Kursname bearbeiten");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Kurzer Block umbenannt");
+    await user.click(screen.getByRole("button", { name: /^speichern$/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateCourse).toHaveBeenCalledWith(
+        "1",
+        expect.not.objectContaining({
+          seriesStartDate: expect.any(String),
+          seriesEndDate: expect.any(String),
+        }),
+      );
+    });
+  });
+
   it("setzt Fokus beim Öffnen ins Edit-Modal und hält Tab im Dialog", async () => {
     const adminMembership: UserTenantMembership = {
       ...baseMembership,

@@ -285,14 +285,18 @@ export function createDatesState(course: Course): CourseDatesEditorState {
   const initialStart =
     course.planningMode === "rolling_continuous"
       ? defaults.start
-      : (course.seriesStartDate ?? defaults.start);
+      : (course.seriesStartDate ?? course.visibleFrom ?? defaults.start);
+  const initialEnd =
+    course.planningMode === "rolling_continuous"
+      ? defaults.end
+      : (course.seriesEndDate ?? course.visibleUntil ?? defaults.end);
   return {
     courseId: course.id,
     weekday: course.weekday,
     planningMode: course.planningMode ?? "bounded_series",
     visibilityHorizonWeeks: normalizeHorizonWeeks(course.visibilityHorizonWeeks),
     seriesStartDate: initialStart,
-    seriesEndDate: course.seriesEndDate ?? defaults.end,
+    seriesEndDate: initialEnd,
     excludedDates: dedupeAndSortDates(course.excludedDates ?? []),
     rangeCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
     excludedCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
