@@ -2,7 +2,11 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { GetItemCommand, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
-import { deriveVisibleDates, pruneScheduleExceptions } from "../shared/courseDates";
+import {
+  deriveVisibleDates,
+  hasUpcomingCourseOccurrences,
+  pruneScheduleExceptions,
+} from "../shared/courseDates";
 import { generateCourseUid } from "../shared/courseUid";
 
 const client = dynamoClient;
@@ -211,10 +215,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       includedDates,
       fallbackDates: [],
     });
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const hasFutureVisibleDates = visibleDates.some((entry) => entry >= todayIso);
+    const hasUpcomingOccurrences = hasUpcomingCourseOccurrences(visibleDates, time, new Date());
     const effectiveStatus =
-      status === "active" && planningMode === "bounded_series" && !hasFutureVisibleDates
+      status === "active" && planningMode === "bounded_series" && !hasUpcomingOccurrences
         ? "inactive"
         : status;
     if (effectiveStatus !== status) {

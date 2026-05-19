@@ -1,21 +1,23 @@
 /**
  * Lazy reconcile for course reads (#149): align persisted status/dates with derived schedule.
- * Same auto-inactive rule as createCourse/updateCourse (bounded_series, no future visible dates).
+ * Auto-inactive when no upcoming occurrence (date + time), aligned with app getCourseDates.
  */
+
+import { hasUpcomingCourseOccurrences } from "./courseDates";
 
 export function resolveEffectiveCourseStatus(
   storedStatus: string,
   planningMode: string | undefined,
   visibleDates: string[],
+  courseTime: string,
   now: Date = new Date(),
 ): string {
-  const todayIso = now.toISOString().slice(0, 10);
-  const hasFutureVisibleDates = visibleDates.some((entry) => entry >= todayIso);
   const status = storedStatus || "active";
+  const hasUpcoming = hasUpcomingCourseOccurrences(visibleDates, courseTime, now);
   if (
     status === "active" &&
     (planningMode ?? "bounded_series") === "bounded_series" &&
-    !hasFutureVisibleDates
+    !hasUpcoming
   ) {
     return "inactive";
   }
@@ -46,6 +48,7 @@ export function computeCourseReconcile(input: {
   planningMode?: string;
   visibleDates: string[];
   storedDates: string[];
+  courseTime: string;
   now?: Date;
 }): CourseReconcileOutcome {
   const now = input.now ?? new Date();
@@ -53,6 +56,7 @@ export function computeCourseReconcile(input: {
     input.storedStatus,
     input.planningMode,
     input.visibleDates,
+    input.courseTime,
     now,
   );
   const statusChanged = effectiveStatus !== (input.storedStatus || "active");

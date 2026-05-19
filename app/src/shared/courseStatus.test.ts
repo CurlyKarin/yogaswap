@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   courseEndDateIso,
   getInactiveGraceLastDayIso,
+  hasUpcomingCourseOccurrences,
   isCourseInInactiveGracePeriod,
+  isWithinPostCourseEndGrace,
   looksLikeAutomaticallyInactive,
   wouldAutoDeactivateBoundedSeries,
 } from "shared/courseStatus";
@@ -35,6 +37,21 @@ describe("courseStatus", () => {
     expect(isCourseInInactiveGracePeriod(inactive, undefined, within)).toBe(true);
     expect(isCourseInInactiveGracePeriod(inactive, undefined, after)).toBe(false);
     expect(getInactiveGraceLastDayIso(inactive)).toBe("2026-05-17");
+  });
+
+  it("prüft upcoming occurrences mit Uhrzeit", () => {
+    const term = ["2026-05-18"];
+    const before = new Date("2026-05-18T10:00:00.000+02:00");
+    const after = new Date("2026-05-18T19:00:00.000+02:00");
+    expect(hasUpcomingCourseOccurrences(term, "18:00", before)).toBe(true);
+    expect(hasUpcomingCourseOccurrences(term, "18:00", after)).toBe(false);
+    expect(
+      isWithinPostCourseEndGrace(
+        { ...baseCourse, dates: term, time: "18:00", seriesEndDate: "2026-05-18" },
+        undefined,
+        after,
+      ),
+    ).toBe(true);
   });
 
   it("erkennt auto-inaktiv-Heuristik und pending deactivation", () => {

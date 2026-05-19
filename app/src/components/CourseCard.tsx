@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
+  buildCourseOccurrenceLocal,
+  courseEndDateIso,
   formatCourseIsoDateDe,
   getInactiveGraceLastDayIso,
   isCourseInInactiveGracePeriod,
+  isWithinPostCourseEndGrace,
   looksLikeAutomaticallyInactive,
 } from "shared/courseStatus";
 import { swapSettings } from "../data/swapSettings";
@@ -150,8 +153,17 @@ export default function CourseCard({
   const hasUpcomingDates = dates.length > 0;
   const courseStatus = course.status ?? "active";
   const isInactiveCourse = courseStatus === "inactive";
-  const inInactiveGrace = isInactiveCourse && isCourseInInactiveGracePeriod(course, tenantSettings);
-  const graceLastIso = inInactiveGrace ? getInactiveGraceLastDayIso(course, tenantSettings) : undefined;
+  const inPostEndGrace = isWithinPostCourseEndGrace(course, tenantSettings);
+  const inInactiveGrace =
+    isInactiveCourse && isCourseInInactiveGracePeriod(course, tenantSettings);
+  const graceLastIso =
+    inPostEndGrace || inInactiveGrace
+      ? getInactiveGraceLastDayIso(course, tenantSettings)
+      : undefined;
+  const lastOccurrenceIso = courseEndDateIso(course);
+  const lastOccurrenceDate =
+    lastOccurrenceIso != null ? buildCourseOccurrenceLocal(lastOccurrenceIso, course.time) : null;
+  const showLastTermInSelect = hasNoUpcomingDates && lastOccurrenceDate != null && inPostEndGrace;
   const showAutoInactiveBadge =
     participantActionsLocked && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
   const userSwapsOnCourse = useMemo(
@@ -167,7 +179,7 @@ export default function CourseCard({
     !participantActionsLocked && hasUpcomingDates && (isParticipant || originallyParticipant);
 
   const inactiveNotice = participantActionsLocked
-    ? showAutoInactiveBadge
+    ? showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
       ? graceLastIso
         ? `Dieser Kurs wurde automatisch beendet (keine weiteren Termine). Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
         : "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten."
@@ -175,6 +187,12 @@ export default function CourseCard({
         ? `Dieser Kurs ist inaktiv. Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
         : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten."
     : null;
+
+  useEffect(() => {
+    if (showLastTermInSelect && lastOccurrenceDate) {
+      setSelectedDate(lastOccurrenceDate.toISOString());
+    }
+  }, [showLastTermInSelect, lastOccurrenceIso, course.time, lastOccurrenceDate]);
 
   return (
     <div
@@ -187,13 +205,17 @@ export default function CourseCard({
             {course.weekday} · {course.time}
           </div>
         </div>
-        {participantActionsLocked && isInactiveCourse && (
+        {participantActionsLocked && (
           <span
             className={`course-status-badge ${
-              showAutoInactiveBadge ? "course-status-badge--auto" : "course-status-badge--inactive"
+              showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
+                ? "course-status-badge--auto"
+                : "course-status-badge--inactive"
             }`}
           >
-            {showAutoInactiveBadge ? "Automatisch inaktiv" : "Inaktiv"}
+            {showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
+              ? "Automatisch inaktiv"
+              : "Inaktiv"}
           </span>
         )}
       </div>
@@ -209,11 +231,15 @@ export default function CourseCard({
       <div className="course-row">
         <div className="muted">Termine:</div>
         <select
-          value={hasNoUpcomingDates ? "" : selectedDate}
+          value={hasNoUpcomingDates && !showLastTermInSelect ? "" : selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
-          disabled={hasNoUpcomingDates}
+          disabled={hasNoUpcomingDates && !showLastTermInSelect}
         >
-          {hasNoUpcomingDates ? (
+          {showLastTermInSelect && lastOccurrenceDate ? (
+            <option value={lastOccurrenceDate.toISOString()}>
+              {lastOccurrenceDate.toLocaleDateString()} (letzter Termin)
+            </option>
+          ) : hasNoUpcomingDates ? (
             <option value="">—</option>
           ) : (
             dates

@@ -2,7 +2,9 @@ import {
   addCalendarDaysIsoUtc,
   courseEndDateIso,
   DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
+  isWithinPostCourseEndGrace,
   toIsoDateUtc,
+  wouldAutoDeactivateBoundedSeries,
 } from "./courseStatus";
 import type {
   Course,
@@ -209,6 +211,15 @@ export function canShowParticipantCourseCard(
 ): boolean {
   if (!canSeeCourse(membership, settings, course, context)) return false;
   if (context.hasVisibleCourseDates) return true;
-  return (course.status ?? "active") === "inactive";
+  const status = course.status ?? "active";
+  if (status === "inactive") return true;
+  const now = context.now ?? new Date();
+  if (
+    wouldAutoDeactivateBoundedSeries(course, context.hasVisibleCourseDates) &&
+    isWithinPostCourseEndGrace(course, settings, now)
+  ) {
+    return true;
+  }
+  return false;
 }
 

@@ -4,6 +4,29 @@ import type { Course, TenantSettings } from "./types";
 export const DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END = 7;
 
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Lokaler Kursbeginn (gleiche Logik wie `getCourseDates` in der App). */
+export function buildCourseOccurrenceLocal(isoDate: string, time: string): Date | null {
+  if (!ISO_DATE_ONLY.test(isoDate.trim()) || !TIME_HHMM.test(time.trim())) return null;
+  const [hours, minutes] = time.split(":").map(Number);
+  const base = new Date(isoDate);
+  if (Number.isNaN(base.getTime())) return null;
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
+}
+
+/** Mindestens ein Termin liegt in der Zukunft (Datum + Uhrzeit). */
+export function hasUpcomingCourseOccurrences(
+  dateIsos: string[],
+  time: string,
+  now: Date = new Date(),
+): boolean {
+  for (const iso of dateIsos) {
+    const occurrence = buildCourseOccurrenceLocal(iso, time);
+    if (occurrence && occurrence >= now) return true;
+  }
+  return false;
+}
 
 export function toIsoDateUtc(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -52,9 +75,24 @@ export function isCourseInInactiveGracePeriod(
   now: Date = new Date(),
 ): boolean {
   if ((course.status ?? "active") !== "inactive") return false;
-  const lastGraceIso = getInactiveGraceLastDayIso(course, settings);
-  if (!lastGraceIso) return false;
-  return toIsoDateUtc(now) <= lastGraceIso;
+  return isWithinPostCourseEndGrace(course, settings, now);
+}
+
+/**
+ * Nach Kursende (letzter Termin vorbei), innerhalb des Nachlaufs — auch wenn Status noch `active`
+ * (z. B. vor getCourses-Reconcile).
+ */
+export function isWithinPostCourseEndGrace(
+  course: Pick<Course, "dates" | "time" | "seriesEndDate" | "visibleUntil" | "status">,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  const endIso = courseEndDateIso(course);
+  if (!endIso) return false;
+  if (hasUpcomingCourseOccurrences(course.dates ?? [], course.time, now)) return false;
+  const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, graceDays);
+  return toIsoDateUtc(now) <= lastGraceInclusiveIso;
 }
 
 /**

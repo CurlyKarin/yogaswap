@@ -30,6 +30,7 @@ import {
 } from "../api/courses";
 import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
 import {
+  isWithinPostCourseEndGrace,
   looksLikeAutomaticallyInactive,
   wouldAutoDeactivateBoundedSeries,
 } from "shared/courseStatus";
@@ -765,7 +766,9 @@ export default function CourseList({
                 overrides={filteredOverrides}
                 swaps={swaps}
                 participantActionsLocked={
-                  !canSeeCourseManagement && (course.status ?? "active") === "inactive"
+                  !canSeeCourseManagement &&
+                  ((course.status ?? "active") === "inactive" ||
+                    isWithinPostCourseEndGrace(course, tenant?.settings))
                 }
                 tenantSettings={tenant?.settings}
                 onToggleAbsence={onToggleAbsence}

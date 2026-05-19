@@ -316,6 +316,24 @@ describe("permissions", () => {
       ).toBe(false);
     });
 
+    it("zeigt aktiven Ein-Termin-Kurs im Nachlauf nach Terminbeginn ohne zukuenftige Termine", () => {
+      const endedToday = {
+        ...dummyCourse,
+        status: "active" as const,
+        seriesEndDate: "2026-05-18",
+        dates: ["2026-05-18"],
+        time: "18:00",
+      };
+      const afterTerm = new Date("2026-05-18T19:00:00.000+02:00");
+      expect(
+        canShowParticipantCourseCard(participantMembership, defaultSettings, endedToday, {
+          ...baseCtx,
+          hasVisibleCourseDates: false,
+          now: afterTerm,
+        }),
+      ).toBe(true);
+    });
+
     it("zeigt inaktiven Kurs im Nachlauf auch ohne sichtbare Termine", () => {
       const inactiveEnded = {
         ...dummyCourse,

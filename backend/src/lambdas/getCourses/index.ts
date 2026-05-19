@@ -120,6 +120,7 @@ export const handler = async (
         planningMode,
         visibleDates,
         storedDates: fallbackDates,
+        courseTime: item.time?.S ?? "",
         now,
       });
 
