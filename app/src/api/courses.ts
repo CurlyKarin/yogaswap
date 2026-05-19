@@ -99,16 +99,33 @@ export async function createCourse(request: CreateCourseRequest): Promise<Course
   return mapApiCourseToCourse(response.data);
 }
 
+function apiErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const backendError =
+      typeof error.response?.data?.error === "string" ? error.response.data.error : undefined;
+    return backendError ?? fallback;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 export async function updateCourse(courseId: number | string, request: UpdateCourseRequest): Promise<Course> {
-  const response = await axios.put<ApiCourse>(`/courses/${encodeURIComponent(String(courseId))}`, request);
-  return mapApiCourseToCourse(response.data);
+  try {
+    const response = await axios.put<ApiCourse>(`/courses/${encodeURIComponent(String(courseId))}`, request);
+    return mapApiCourseToCourse(response.data);
+  } catch (error) {
+    throw new Error(apiErrorMessage(error, "Kurs konnte nicht gespeichert werden."));
+  }
 }
 
 export async function deleteCourse(courseId: number | string): Promise<DeleteCourseResponse> {
-  const response = await axios.delete<DeleteCourseResponse>(
-    `/courses/${encodeURIComponent(String(courseId))}`,
-  );
-  return response.data;
+  try {
+    const response = await axios.delete<DeleteCourseResponse>(
+      `/courses/${encodeURIComponent(String(courseId))}`,
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(apiErrorMessage(error, "Kurs konnte nicht gelöscht werden."));
+  }
 }
 
 export async function cancelCourseDate(

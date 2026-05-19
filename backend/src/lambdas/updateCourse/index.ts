@@ -12,6 +12,7 @@ import {
   hasUpcomingCourseOccurrences,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
+import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 
 const client = dynamoClient;
@@ -76,13 +77,6 @@ function isValidDateRange(start?: string, end?: string): boolean {
   return start <= end;
 }
 
-function isFutureOrTodayDateString(isoDate: string, now: Date): boolean {
-  const date = new Date(isoDate);
-  if (Number.isNaN(date.getTime())) return false;
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return date >= startOfToday;
-}
-
 function isCourseInFutureWithBuffer(courseDate: string, courseTime: string, now: Date): boolean {
   try {
     const [year, month, day] = courseDate.split("-").map(Number);
@@ -117,25 +111,26 @@ function getRollingExcludeLockBounds(now: Date): { startIso: string; endIso: str
   };
 }
 
-function hasAnyListEntries(item: Record<string, { L?: Array<{ S?: string }> }>): boolean {
-  const participantsCount = item.participants?.L?.length ?? 0;
-  const swappedCount = item.swapped?.L?.length ?? 0;
-  const waitlistCount = item.waitlist?.L?.length ?? 0;
-  return participantsCount > 0 || swappedCount > 0 || waitlistCount > 0;
-}
-
 async function canDeactivateCourse(params: {
   tenantId: string;
   courseId: string;
+  courseTime: string;
+  hasParticipants: boolean;
   swapsTable: string;
   overridesTable: string;
   existingDates: string[];
 }): Promise<boolean> {
   const now = new Date();
-  const hasUpcomingDates = params.existingDates.some((date) =>
-    isFutureOrTodayDateString(date, now),
-  );
-  if (hasUpcomingDates) return false;
+  if (
+    hasBlockingUpcomingCourseDates(
+      params.existingDates,
+      params.courseTime,
+      now,
+      params.hasParticipants,
+    )
+  ) {
+    return false;
+  }
 
   const overridesResp = await client.send(
     new QueryCommand({
@@ -148,11 +143,13 @@ async function canDeactivateCourse(params: {
       },
     }),
   );
-  const hasOpenOverrides = (overridesResp.Items ?? []).some((item) => {
-    const dateValue = item.date?.S;
-    if (!dateValue || !isFutureOrTodayDateString(dateValue, now)) return false;
-    return hasAnyListEntries(item as Record<string, { L?: Array<{ S?: string }> }>);
-  });
+  const hasOpenOverrides = (overridesResp.Items ?? []).some((item) =>
+    overrideBlocksCourseLifecycle(
+      item as Record<string, { S?: string; L?: Array<{ S?: string }> }>,
+      now,
+      params.hasParticipants,
+    ),
+  );
   if (hasOpenOverrides) return false;
 
   const swapsResp = await client.send(
@@ -361,19 +358,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const currentStatus = item.status?.S ?? "active";
     const nextStatus = status ?? currentStatus;
     if (status && nextStatus !== currentStatus) {
-      const currentPlanningMode = item.planningMode?.S ?? "bounded_series";
-      const requestedPlanningMode = planningMode ?? currentPlanningMode;
       const hasParticipants = (item.participants?.L?.length ?? 0) > 0;
       const transitionAllowed =
         (currentStatus === "inactive" && nextStatus === "draft") ||
         (currentStatus === "draft" && nextStatus === "active") ||
         (currentStatus === "active" && nextStatus === "inactive") ||
-        (
-          currentStatus === "active" &&
-          nextStatus === "draft" &&
-          requestedPlanningMode === "rolling_continuous" &&
-          !hasParticipants
-        );
+        (currentStatus === "active" && nextStatus === "draft" && !hasParticipants);
       if (!transitionAllowed) {
         return {
           statusCode: 400,
@@ -408,6 +398,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         const canDeactivate = await canDeactivateCourse({
           tenantId,
           courseId,
+          courseTime: item.time?.S ?? "",
+          hasParticipants,
           swapsTable,
           overridesTable,
           existingDates,

@@ -8,22 +8,12 @@ import {
 import { dynamoClient } from "../shared/dynamoClient";
 import { resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { getTenantContext } from "../shared/tenantContext";
+import {
+  hasBlockingUpcomingCourseDates,
+  overrideBlocksCourseLifecycle,
+} from "../shared/courseLifecycle";
 
 const client = dynamoClient;
-
-function isFutureOrTodayDateString(isoDate: string, now: Date): boolean {
-  const date = new Date(isoDate);
-  if (Number.isNaN(date.getTime())) return false;
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return date >= startOfToday;
-}
-
-function hasAnyListEntries(item: Record<string, { L?: Array<{ S?: string }> }>): boolean {
-  const participantsCount = item.participants?.L?.length ?? 0;
-  const swappedCount = item.swapped?.L?.length ?? 0;
-  const waitlistCount = item.waitlist?.L?.length ?? 0;
-  return participantsCount > 0 || swappedCount > 0 || waitlistCount > 0;
-}
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const coursesTable = process.env.COURSES_TABLE;
@@ -115,10 +105,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const now = new Date();
-    const hasUpcomingDates = (item.dates?.L ?? []).some((d) =>
-      d.S ? isFutureOrTodayDateString(d.S, now) : false,
-    );
-    if (hasUpcomingDates) {
+    const courseTime = item.time?.S ?? "";
+    const storedDates = (item.dates?.L ?? []).map((d) => d.S ?? "").filter(Boolean);
+    if (hasBlockingUpcomingCourseDates(storedDates, courseTime, now, participantsCount > 0)) {
       return {
         statusCode: 400,
         body: JSON.stringify({
@@ -139,13 +128,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         },
       }),
     );
-    const hasOpenOverrides = (overridesResp.Items ?? []).some((overrideItem) => {
-      const dateValue = overrideItem.date?.S;
-      if (!dateValue || !isFutureOrTodayDateString(dateValue, now)) return false;
-      return hasAnyListEntries(
-        overrideItem as unknown as Record<string, { L?: Array<{ S?: string }> }>,
-      );
-    });
+    const hasOpenOverrides = (overridesResp.Items ?? []).some((overrideItem) =>
+      overrideBlocksCourseLifecycle(
+        overrideItem as Record<string, { S?: string; L?: Array<{ S?: string }> }>,
+        now,
+        participantsCount > 0,
+      ),
+    );
     if (hasOpenOverrides) {
       return {
         statusCode: 400,
