@@ -64,6 +64,10 @@ describe("deleteCourse Lambda", () => {
       SWAPS_TABLE: "test-swaps",
     };
     mockSend.mockReset();
+    (GetItemCommand as unknown as jest.Mock).mockClear();
+    (DeleteItemCommand as unknown as jest.Mock).mockClear();
+    (QueryCommand as unknown as jest.Mock).mockClear();
+    (ScanCommand as unknown as jest.Mock).mockClear();
   });
 
   afterAll(() => {
@@ -103,30 +107,55 @@ describe("deleteCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toBe(deleteError);
   });
 
-  test("blocks delete when future dates exist", async () => {
+  test("allows delete for inactive course without participants despite future dates", async () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
       .mockResolvedValueOnce({
         Item: { ...baseCourseItem("inactive"), dates: { L: [{ S: tomorrow.toISOString().slice(0, 10) }] } },
-      });
+      })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({});
+
     const result = await handler(makeEvent());
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toBe(deleteError);
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).toHaveBeenCalled();
   });
 
-  test("blocks delete when open overrides exist", async () => {
+  test("blocks delete when open overrides with waitlist exist", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") })
       .mockResolvedValueOnce({
-        Items: [{ date: { S: new Date().toISOString().slice(0, 10) }, participants: { L: [{ S: "luna" }] } }],
+        Items: [
+          {
+            date: { S: "2099-01-06" },
+            participants: { L: [] },
+            waitlist: { L: [{ S: "luna" }] },
+          },
+        ],
       });
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(400);
     expect(QueryCommand).toHaveBeenCalled();
     expect(ScanCommand).not.toHaveBeenCalled();
+  });
+
+  test("allows delete when override only has stale participants", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({ Item: baseCourseItem("inactive") })
+      .mockResolvedValueOnce({
+        Items: [{ date: { S: "2099-01-06" }, participants: { L: [{ S: "luna" }] } }],
+      })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).toHaveBeenCalled();
   });
 
   test("blocks delete when open swaps exist", async () => {

@@ -77,6 +77,10 @@ describe("updateCourse Lambda", () => {
       SWAPS_TABLE: "test-swaps",
     };
     mockSend.mockReset();
+    (GetItemCommand as unknown as jest.Mock).mockClear();
+    (PutItemCommand as unknown as jest.Mock).mockClear();
+    (QueryCommand as unknown as jest.Mock).mockClear();
+    (ScanCommand as unknown as jest.Mock).mockClear();
   });
 
   afterAll(() => {
@@ -138,6 +142,22 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Invalid status transition/);
   });
 
+  test("allows active -> draft for bounded_series without participants", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ status: "draft" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).status).toBe("draft");
+  });
+
   test("allows active -> draft for rolling course without participants", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
@@ -157,7 +177,7 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).status).toBe("draft");
   });
 
-  test("blocks active -> inactive when future dates exist", async () => {
+  test("blocks active -> inactive when upcoming occurrences exist and course has participants", async () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     mockSend
@@ -174,14 +194,65 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Kurs kann nicht deaktiviert werden/);
   });
 
-  test("blocks active -> inactive when open overrides/swaps exist", async () => {
+  test("allows active -> inactive for bounded_series without participants despite future dates", async () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowIso = tomorrow.toISOString().slice(0, 10);
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [] },
+          dates: { L: [{ S: tomorrowIso }] },
+        },
+      })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ status: "inactive" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).status).toBe("inactive");
+  });
+
+  test("allows active -> inactive without participants when override only has stale participants", async () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [] },
+          dates: { L: [{ S: tomorrow.toISOString().slice(0, 10) }] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            date: { S: tomorrow.toISOString().slice(0, 10) },
+            participants: { L: [{ S: "luna" }] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ status: "inactive" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).status).toBe("inactive");
+    expect(ScanCommand).toHaveBeenCalled();
+  });
+
+  test("blocks active -> inactive when open overrides exist", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
       .mockResolvedValueOnce({ Item: baseCourseItem("active") })
       .mockResolvedValueOnce({
         Items: [
           {
-            date: { S: new Date().toISOString().slice(0, 10) },
+            date: { S: "2099-01-06" },
             participants: { L: [{ S: "luna" }] },
           },
         ],
