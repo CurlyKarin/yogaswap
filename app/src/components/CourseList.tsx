@@ -16,6 +16,7 @@ import {
   User,
   Tenant,
   UserTenantMembership,
+  DEFAULT_TENANT_ID,
 } from "shared/types";
 import { getSwaps } from "../api/swaps";
 import { getSwapsByStatus } from "../api/swaps";
@@ -27,7 +28,12 @@ import {
   getCourses,
   updateCourse,
 } from "../api/courses";
-import { canSeeCourse } from "shared/permissions";
+import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
+import {
+  isWithinPostCourseEndGrace,
+  looksLikeAutomaticallyInactive,
+  wouldAutoDeactivateBoundedSeries,
+} from "shared/courseStatus";
 import { courseApiPathKey } from "../lib/courseUid";
 
 type Props = {
@@ -231,8 +237,19 @@ export default function CourseList({
     };
   }, [membership, forceParticipantView, currentUser.nickname]);
 
-  const isAdmin = effectiveMembership?.role === "admin";
-  const isInstructor = effectiveMembership?.role === "instructor";
+  /** Ohne Dynamo-Membership (häufig bei Teilnehmer:innen): Rolle aus Cognito + Tenant für Kachel-Sichtbarkeit. */
+  const membershipForPermissions = useMemo<UserTenantMembership>(() => {
+    if (effectiveMembership) return effectiveMembership;
+    return {
+      userId: currentUser.nickname,
+      tenantId: tenant?.tenantId ?? DEFAULT_TENANT_ID,
+      role: currentUser.role,
+    };
+  }, [effectiveMembership, tenant?.tenantId, currentUser.nickname, currentUser.role]);
+
+  const resolvedRole = effectiveMembership?.role ?? currentUser.role;
+  const isAdmin = resolvedRole === "admin";
+  const isInstructor = resolvedRole === "instructor";
   const canSeeCourseManagement = isAdmin || isInstructor;
   const canManageCourses = isAdmin;
 
@@ -304,19 +321,28 @@ export default function CourseList({
   }, [currentUser?.nickname]);
 
   const visibleCourses = useMemo(() => {
-    if (!tenant?.settings || !effectiveMembership) {
-      return courses;
-    }
     return courses.filter((course) =>
-      canSeeCourse(effectiveMembership, tenant.settings, course, {
+      canSeeCourse(membershipForPermissions, tenant?.settings, course, {
         isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
         isBookedByUser: course.participants.some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
       }),
     );
-  }, [courses, tenant?.settings, effectiveMembership, currentUser.nickname]);
+  }, [courses, membershipForPermissions, tenant?.settings, currentUser.nickname]);
 
-  const coursesWithUpcoming = visibleCourses.filter((c) => getCourseDates(c).length > 0);
-  const coursesToRender = canSeeCourseManagement ? visibleCourses : coursesWithUpcoming;
+  const participantCoursesToRender = useMemo(() => {
+    const hasVisibleCourseDates = (c: Course) => getCourseDates(c).length > 0;
+    const seeCtx = (course: Course) => ({
+      isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
+      isBookedByUser: course.participants.some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
+    });
+    return visibleCourses.filter((c) =>
+      canShowParticipantCourseCard(membershipForPermissions, tenant?.settings, c, {
+        ...seeCtx(c),
+        hasVisibleCourseDates: hasVisibleCourseDates(c),
+      }),
+    );
+  }, [visibleCourses, membershipForPermissions, tenant?.settings, currentUser.nickname]);
+  const coursesToRender = canSeeCourseManagement ? visibleCourses : participantCoursesToRender;
   const deleteTargetCourse = deleteTargetId
     ? visibleCourses.find((course) => course.id === deleteTargetId)
     : undefined;
@@ -631,12 +657,12 @@ export default function CourseList({
     return <div role="alert">{error}</div>;
   }
 
-  if (visibleCourses.length === 0 || (!canSeeCourseManagement && coursesWithUpcoming.length === 0)) {
+  if (visibleCourses.length === 0 || (!canSeeCourseManagement && participantCoursesToRender.length === 0)) {
     return (
       <div className="muted" style={{ textAlign: "center", padding: "2rem" }} role="status" aria-live="polite">
         {canSeeCourseManagement
           ? "Aktuell sind noch keine Kurse angelegt."
-          : "Aktuell keine Termine zum Anzeigen. Es gibt nur vergangene Termine oder noch keine Kurse."}
+          : "Aktuell keine Kurse in dieser Ansicht — z. B. keine anstehenden Termine, Kurse in Planung, Sichtbarkeit nach Buchung/Lehrkraft oder abgelaufener Nachlauf bei inaktiven Kursen."}
       </div>
     );
   }
@@ -673,6 +699,14 @@ export default function CourseList({
       <div className="grid">
         {coursesToRender.map((course) => {
           const dates = getCourseDates(course);
+          const hasUpcomingDates = dates.length > 0;
+          const statusLabel =
+            STATUS_OPTIONS.find((entry) => entry.value === (course.status ?? "active"))?.label ?? "Aktiv";
+          const statusHint = looksLikeAutomaticallyInactive(course, hasUpcomingDates)
+            ? " · automatisch inaktiv"
+            : wouldAutoDeactivateBoundedSeries(course, hasUpcomingDates)
+              ? " · wird beim Speichern inaktiv"
+              : "";
           return (
             <div key={course.id}>
               {canSeeCourseManagement && (
@@ -680,8 +714,8 @@ export default function CourseList({
                   <span className="course-card-actions-status">
                     Status:{" "}
                     <strong>
-                      {STATUS_OPTIONS.find((entry) => entry.value === (course.status ?? "active"))?.label ??
-                        "Aktiv"}
+                      {statusLabel}
+                      {statusHint}
                     </strong>
                   </span>
                   <div className="course-card-actions-buttons">
@@ -731,6 +765,12 @@ export default function CourseList({
                 dates={dates}
                 overrides={filteredOverrides}
                 swaps={swaps}
+                participantActionsLocked={
+                  !canSeeCourseManagement &&
+                  ((course.status ?? "active") === "inactive" ||
+                    isWithinPostCourseEndGrace(course, tenant?.settings))
+                }
+                tenantSettings={tenant?.settings}
                 onToggleAbsence={onToggleAbsence}
                 confirmSwap={confirmSwap}
                 requestSwap={requestSwap}

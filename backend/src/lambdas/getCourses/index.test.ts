@@ -7,11 +7,12 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     QueryCommand: jest.fn((input) => input),
+    PutItemCommand: jest.fn((input) => input),
     mockSend,
   };
 });
 
-const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
+const { mockSend, PutItemCommand } = jest.requireMock("@aws-sdk/client-dynamodb");
 
 describe("getCourses Lambda", () => {
   const OLD_ENV = process.env;
@@ -115,6 +116,91 @@ describe("getCourses Lambda", () => {
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(500);
     expect(JSON.parse(result.body).error).toBe("Failed to get courses");
+  });
+
+  test("reconciles active bounded_series without future dates to inactive on read", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-05-18T12:00:00.000Z"));
+
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            id: { N: "3" },
+            courseId: { S: "3" },
+            name: { S: "Abgelaufen" },
+            weekday: { S: "Mon" },
+            time: { S: "10:00" },
+            capacity: { N: "10" },
+            status: { S: "active" },
+            planningMode: { S: "bounded_series" },
+            visibilityMode: { S: "fixed_window" },
+            seriesStartDate: { S: "2020-01-01" },
+            seriesEndDate: { S: "2020-01-31" },
+            visibleFrom: { S: "2020-01-01" },
+            visibleUntil: { S: "2020-01-31" },
+            participants: { L: [] },
+            dates: { L: [{ S: "2020-01-06" }] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body[0].status).toBe("inactive");
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          status: { S: "inactive" },
+        }),
+      }),
+    );
+
+    jest.useRealTimers();
+  });
+
+  test("reconciles to inactive when same-day term time has passed", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(Date.UTC(2026, 4, 18, 19, 0, 0)));
+
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            id: { N: "4" },
+            courseId: { S: "4" },
+            name: { S: "Ein Termin heute" },
+            weekday: { S: "Mon" },
+            time: { S: "18:00" },
+            capacity: { N: "10" },
+            status: { S: "active" },
+            planningMode: { S: "bounded_series" },
+            visibilityMode: { S: "fixed_window" },
+            seriesStartDate: { S: "2026-05-18" },
+            seriesEndDate: { S: "2026-05-18" },
+            visibleFrom: { S: "2026-05-18" },
+            visibleUntil: { S: "2026-05-18" },
+            participants: { L: [{ S: "alice" }] },
+            dates: { L: [{ S: "2026-05-18" }] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body)[0].status).toBe("inactive");
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({ status: { S: "inactive" } }),
+      }),
+    );
+
+    jest.useRealTimers();
   });
 
   test("derives visible dates from bounded series with fixed window and exclusions", async () => {

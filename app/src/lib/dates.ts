@@ -1,19 +1,18 @@
 // lib/dates.ts
 import { CourseDateOverride, Course, User } from "shared/types";
+import { buildCourseOccurrenceLocal } from "shared/courseStatus";
 import type { SwapSettings } from "../types";
 
 export function getCourseDates(course: Course, now: Date = new Date()) {
-  const [hours, minutes] = course.time.split(":").map(Number);
-  return course.dates
+  return (course.dates ?? [])
     .map((d) => {
-      const date = new Date(d);
-      if (isNaN(date.getTime())) {
+      const occurrence = buildCourseOccurrenceLocal(d, course.time);
+      if (!occurrence) {
         console.warn(`Ungültiges Datum in course.dates: ${d} für course ${course.id}`);
-        return null; // Ungültige Daten überspringen
       }
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes);
+      return occurrence;
     })
-    .filter((d): d is Date => d !== null) // Type-Guard
+    .filter((d): d is Date => d !== null)
     .filter((d) => d >= now);
 }
 

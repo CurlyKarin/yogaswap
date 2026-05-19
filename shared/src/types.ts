@@ -159,6 +159,13 @@ export interface TenantSettings {
    * Geplante Nachschaerfung nach Rollout via Tenant-Policy.
    */
   delegationCanManageActiveParticipants?: boolean;
+  /**
+   * Kalendertage nach dem letzten sichtbaren Kursende: inaktive Kurse bleiben fuer
+   * Teilnehmer:innen in Listen sichtbar (Swap-/Nachlauf-Fenster). Vergleich erfolgt
+   * in UTC (YYYY-MM-DD). Default im Code: 7 — fachlich an Swap maxOffsetDays gekoppelt,
+   * bis Studio-Einstellungen das Feld setzen.
+   */
+  inactiveGraceDaysAfterCourseEnd?: number;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

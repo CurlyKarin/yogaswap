@@ -1,3 +1,11 @@
+import {
+  addCalendarDaysIsoUtc,
+  courseEndDateIso,
+  DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
+  isWithinPostCourseEndGrace,
+  toIsoDateUtc,
+  wouldAutoDeactivateBoundedSeries,
+} from "./courseStatus";
 import type {
   Course,
   ParticipantStatus,
@@ -8,11 +16,10 @@ import type {
 /**
  * Hinweis:
  * Diese Datei ist die fachliche Source-of-Truth fuer Permissions.
- * Aktuell existiert zusaetzlich eine technische Kopie in
- * `backend/src/lambdas/shared/permissions.ts`, damit Backend-Tests/Lambda-Bundles
- * ohne ESM/Jest-Interop-Probleme laufen.
- * Bei Aenderungen bitte beide Stellen synchron halten, bis die Build-Toolchain
- * vereinheitlicht ist.
+ * In `backend/src/lambdas/shared/permissions.ts` liegt eine technische Teilkopie
+ * (nur Lambda-relevante Hilfen); `canSeeCourse` und weitere UI-Funktionen dort
+ * ergaenzen, sobald das Backend sie braucht. Build: `shared` vor App-Tests bauen
+ * (`npm run build --prefix shared`), da Vite `shared` auf `shared/dist` alias.
  */
 
 /**
@@ -122,14 +129,31 @@ export function canSeeAllCourses(
   return false;
 }
 
+function participantBaseVisible(
+  settings: TenantSettings | undefined,
+  context: { isTaughtByUser?: boolean; isBookedByUser?: boolean },
+): boolean {
+  if (settings?.participantsSeeOnlyOwnInstructors) {
+    return !!context.isBookedByUser || !!context.isTaughtByUser;
+  }
+  return true;
+}
+
 /**
  * Sichtbarkeitscheck auf Kurs-Ebene.
  * Der Aufrufer entscheidet, ob er bereits alle Kurse gefiltert hat
  * (z. B. durch canSeeAllCourses) oder hier pro Kurs filtern möchte.
  *
- * Für einen echten Teilnehmer-Fall müsste hier zusätzlich
- * Kontext über "eigene Instructor:innen" / Buchungen übergeben werden.
- * Das ist bewusst noch nicht ausmodelliert und kann später erweitert werden.
+ * Teilnehmer:innen:
+ * - `draft`: nie sichtbar
+ * - `inactive`: nur im Nachlauf (Kursende + TenantSettings.inactiveGraceDaysAfterCourseEnd,
+ *   Default 7 Tage) und nur wenn die bestehende Buchungs-/Instructor-Logik zutrifft
+ * - `active` / ohne Status: wie bisher
+ *
+ * Instructor:innen / Admins: Status filtert die Sichtbarkeit nicht (Planung / Verwaltung).
+ *
+ * `context.now` optional (Default: `new Date()`); fuer Tests oder deterministische UI
+ * explizit setzen. Nachlauf vergleicht Kalendertage in UTC (ISO-Datum).
  */
 export function canSeeCourse(
   membership: UserTenantMembership,
@@ -138,8 +162,14 @@ export function canSeeCourse(
   context: {
     isTaughtByUser?: boolean;
     isBookedByUser?: boolean;
+    /** Referenzzeit fuer inaktiven Nachlauf; Default `new Date()`. */
+    now?: Date;
   },
 ): boolean {
+  const refNow = context.now ?? new Date();
+  const todayIso = toIsoDateUtc(refNow);
+  const status = course.status ?? "active";
+
   if (membership.role === "admin") return true;
 
   if (membership.role === "instructor") {
@@ -148,11 +178,48 @@ export function canSeeCourse(
   }
 
   // Participant
-  if (settings?.participantsSeeOnlyOwnInstructors) {
-    return !!context.isBookedByUser || !!context.isTaughtByUser;
+  if (status === "draft") return false;
+
+  if (status === "inactive") {
+    const endIso = courseEndDateIso(course);
+    if (!endIso) return false;
+    const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+    const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, graceDays);
+    if (todayIso > lastGraceInclusiveIso) return false;
   }
 
-  // Default: Teilnehmer:in sieht alle freigeschalteten Kurse
-  return true;
+  return participantBaseVisible(settings, context);
+}
+
+/**
+ * Teilnehmer-Kursliste (Kacheln): Kurs anzeigen, wenn {@link canSeeCourse} zutrifft und
+ * entweder sichtbare Termine existieren (`hasVisibleCourseDates`, z. B. aus
+ * `getCourseDates`) oder der Kurs `inactive` ist (Nachlauf ohne aktuelle Termine).
+ *
+ * Admin/Instructor-Listen nutzen `visibleCourses` direkt, nicht diese Funktion.
+ */
+export function canShowParticipantCourseCard(
+  membership: UserTenantMembership,
+  settings: TenantSettings | undefined,
+  course: Course,
+  context: {
+    isTaughtByUser?: boolean;
+    isBookedByUser?: boolean;
+    now?: Date;
+    hasVisibleCourseDates: boolean;
+  },
+): boolean {
+  if (!canSeeCourse(membership, settings, course, context)) return false;
+  if (context.hasVisibleCourseDates) return true;
+  const status = course.status ?? "active";
+  if (status === "inactive") return true;
+  const now = context.now ?? new Date();
+  if (
+    wouldAutoDeactivateBoundedSeries(course, context.hasVisibleCourseDates) &&
+    isWithinPostCourseEndGrace(course, settings, now)
+  ) {
+    return true;
+  }
+  return false;
 }
 

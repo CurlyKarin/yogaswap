@@ -37,9 +37,13 @@ const mockedGetSwapsByStatus = getSwapsByStatus as unknown as ReturnType<typeof 
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
 const mockedCanSeeCourse = canSeeCourse as unknown as ReturnType<typeof vi.fn>;
 
-vi.mock("shared/permissions", () => ({
-  canSeeCourse: vi.fn(),
-}));
+vi.mock("shared/permissions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("shared/permissions")>();
+  return {
+    ...actual,
+    canSeeCourse: vi.fn(),
+  };
+});
 
 const baseUser: User = {
   nickname: "alice",
@@ -117,9 +121,7 @@ describe("CourseList", () => {
     await waitFor(() => {
       expect(screen.queryByText(/Loading.../i)).not.toBeInTheDocument();
       expect(
-        screen.queryByText(
-          /Aktuell keine Termine zum Anzeigen\. Es gibt nur vergangene Termine oder noch keine Kurse\./i,
-        ),
+        screen.queryByText(/Aktuell keine Kurse in dieser Ansicht/i),
       ).not.toBeInTheDocument();
     });
   });
@@ -161,11 +163,7 @@ describe("CourseList", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          /Aktuell keine Termine zum Anzeigen\. Es gibt nur vergangene Termine oder noch keine Kurse\./i,
-        ),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Aktuell keine Kurse in dieser Ansicht/i)).toBeInTheDocument();
     });
   });
 
@@ -217,7 +215,7 @@ describe("CourseList", () => {
     });
   });
 
-  it("rendert alle Kurse ohne Filter, wenn kein Tenant und keine Membership übergeben werden", async () => {
+  it("wendet canSeeCourse mit Cognito-Fallback an, wenn kein Tenant/Membership übergeben wird", async () => {
     const mockCourses: Course[] = [
       {
         tenantId: "default-tenant",
@@ -249,14 +247,16 @@ describe("CourseList", () => {
 
     render(<CourseList currentUser={baseUser} />);
 
-    // Kurse werden ohne Filter gerendert (können mehrfach vorkommen)
+    // Standard-Teilnehmer sieht beide aktiven Kurse; Kacheln können mehrfach vorkommen
     const kursAElements = await screen.findAllByText("Kurs A");
     const kursBElements = await screen.findAllByText("Kurs B");
     expect(kursAElements.length).toBeGreaterThan(0);
     expect(kursBElements.length).toBeGreaterThan(0);
 
-    // Ohne Tenant/Membership wird canSeeCourse nicht aufgerufen
-    expect(canSeeCourse).not.toHaveBeenCalled();
+    // Synthetische Membership: canSeeCourse wird pro Kurs aufgerufen (Standard-Teilnehmer sieht beide Kurse)
+    await waitFor(() => {
+      expect(canSeeCourse).toHaveBeenCalled();
+    });
   });
 
   it("zeigt Admin-Kursverwaltung und legt Kurs über Modal an", async () => {

@@ -203,3 +203,26 @@ export function deriveVisibleDates(input: DeriveVisibleDatesInput): string[] {
 
   return Array.from(visibleSet).sort((a, b) => a.localeCompare(b));
 }
+
+const TIME_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Lokaler Kursbeginn (abgestimmt mit App `getCourseDates`). */
+export function buildCourseOccurrenceLocal(isoDate: string, time: string): Date | null {
+  if (!ISO_DATE_ONLY.test(isoDate.trim()) || !TIME_HHMM.test(time.trim())) return null;
+  const [hours, minutes] = time.split(":").map(Number);
+  const base = new Date(isoDate);
+  if (Number.isNaN(base.getTime())) return null;
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
+}
+
+export function hasUpcomingCourseOccurrences(
+  dateIsos: string[],
+  time: string,
+  now: Date = new Date(),
+): boolean {
+  for (const iso of dateIsos) {
+    const occurrence = buildCourseOccurrenceLocal(iso, time);
+    if (occurrence && occurrence >= now) return true;
+  }
+  return false;
+}
