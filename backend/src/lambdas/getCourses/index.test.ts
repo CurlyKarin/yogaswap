@@ -164,7 +164,7 @@ describe("getCourses Lambda", () => {
 
   test("reconciles to inactive when same-day term time has passed", async () => {
     jest.useFakeTimers();
-    jest.setSystemTime(new Date("2026-05-18T19:00:00.000+02:00"));
+    jest.setSystemTime(new Date(Date.UTC(2026, 4, 18, 19, 0, 0)));
 
     mockSend
       .mockResolvedValueOnce({

@@ -324,7 +324,7 @@ describe("permissions", () => {
         dates: ["2026-05-18"],
         time: "18:00",
       };
-      const afterTerm = new Date("2026-05-18T19:00:00.000+02:00");
+      const afterTerm = new Date(Date.UTC(2026, 4, 18, 19, 0, 0));
       expect(
         canShowParticipantCourseCard(participantMembership, defaultSettings, endedToday, {
           ...baseCtx,

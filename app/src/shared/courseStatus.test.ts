@@ -41,8 +41,9 @@ describe("courseStatus", () => {
 
   it("prüft upcoming occurrences mit Uhrzeit", () => {
     const term = ["2026-05-18"];
-    const before = new Date("2026-05-18T10:00:00.000+02:00");
-    const after = new Date("2026-05-18T19:00:00.000+02:00");
+    // UTC-Zeiten: CI läuft in UTC; ISO-Datum + lokale Uhrzeit würden sonst vom Offset abweichen.
+    const before = new Date(Date.UTC(2026, 4, 18, 10, 0, 0));
+    const after = new Date(Date.UTC(2026, 4, 18, 19, 0, 0));
     expect(hasUpcomingCourseOccurrences(term, "18:00", before)).toBe(true);
     expect(hasUpcomingCourseOccurrences(term, "18:00", after)).toBe(false);
     expect(

@@ -28,7 +28,7 @@ describe("courseReconcile", () => {
         "bounded_series",
         termToday,
         "18:00",
-        new Date("2026-05-18T10:00:00.000+02:00"),
+        new Date(Date.UTC(2026, 4, 18, 10, 0, 0)),
       ),
     ).toBe("active");
     expect(
@@ -37,7 +37,7 @@ describe("courseReconcile", () => {
         "bounded_series",
         termToday,
         "18:00",
-        new Date("2026-05-18T19:00:00.000+02:00"),
+        new Date(Date.UTC(2026, 4, 18, 19, 0, 0)),
       ),
     ).toBe("inactive");
   });
