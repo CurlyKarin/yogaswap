@@ -9,8 +9,9 @@ import {
   isWithinPostCourseEndGrace,
   looksLikeAutomaticallyInactive,
 } from "shared/courseStatus";
-import { swapSettings } from "../data/swapSettings";
+import { resolveSwapWindow } from "shared/tenantSettings";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
+import type { SwapSettings } from "../types";
 
 type Props = {
   course: Course;
@@ -51,6 +52,11 @@ export default function CourseCard({
   requestSwap,
   cancelSwap,
 }: Props) {
+  const swapWindow: SwapSettings = useMemo(
+    () => resolveSwapWindow(tenantSettings),
+    [tenantSettings],
+  );
+
   const [selectedDate, setSelectedDate] = useState<string>(
     dates[0]?.toISOString() || ""
   );
@@ -100,18 +106,18 @@ export default function CourseCard({
 
   const availableSwapDates = useMemo(
     () =>
-      getAvailableDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate))
+      getAvailableDates(allCourses, overrides, currentUser, swapWindow, new Date(selectedDate))
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds]
+    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow]
   );
 
   const waitlistDates = useMemo(
     () =>
-      getWaitlistDates(allCourses, overrides, currentUser, swapSettings, new Date(selectedDate))
+      getWaitlistDates(allCourses, overrides, currentUser, swapWindow, new Date(selectedDate))
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds]
+    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow]
   );
 
   const swapForThisTerm = useMemo(

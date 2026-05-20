@@ -166,6 +166,16 @@ export interface TenantSettings {
    * bis Studio-Einstellungen das Feld setzen.
    */
   inactiveGraceDaysAfterCourseEnd?: number;
+  /**
+   * Tauschfenster: fruehestens X Kalendertage relativ zum Referenztermin (oft negativ).
+   * Default im Code: -7.
+   */
+  minOffsetDays?: number;
+  /**
+   * Tauschfenster: spaetestens X Kalendertage relativ zum Referenztermin.
+   * Default im Code: 7.
+   */
+  maxOffsetDays?: number;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

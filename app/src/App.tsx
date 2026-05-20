@@ -261,7 +261,11 @@ function MainApp() {
 
       {currentUser && canInvite && !actingForUserIdState && (
         <section className="main-section main-section-admin">
-          <AdminPanel canEditRoles={(membership?.role ?? currentUser.role) === "admin"} />
+          <AdminPanel
+            canEditRoles={(membership?.role ?? currentUser.role) === "admin"}
+            tenant={tenant}
+            onTenantUpdated={(updated) => setTenant(updated)}
+          />
         </section>
       )}
 

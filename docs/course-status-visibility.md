@@ -12,7 +12,7 @@ Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogasw
 | **Nachlauf** | Nach Kursende bleibt ein **`inactive`** Kurs für Teilnehmer:innen noch **X Kalendertage** sichtbar (Default **7**, UTC). |
 | **Lazy Reconcile** | Beim **`GET /courses`** (`get-courses` Lambda) werden Status und abgeleitete `dates` bei Bedarf in DynamoDB nachgezogen. |
 
-Studio-Konfiguration für den Nachlauf perspektivisch über Tenant-Settings ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)), siehe Abschnitt [Nachlauf und Tauschfenster](#nachlauf-und-tauschfenster).
+Studio-Konfiguration für Nachlauf und Tauschfenster über **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)): `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays`, `maxOffsetDays` in `TenantSettings`. Siehe Abschnitt [Nachlauf und Tauschfenster](#nachlauf-und-tauschfenster).
 
 ---
 

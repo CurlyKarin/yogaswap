@@ -390,6 +390,21 @@ locals {
       }
       s3_actions   = []
       s3_resources = []
+    },
+    "update_tenant_settings" = {
+      name      = "update-tenant-settings"
+      file_name = "updateTenantSettings.zip"
+      table_arns = [
+        module.tenants_table.table_arn,
+        module.memberships_table.table_arn,
+      ]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
+      tables = {
+        "TENANTS_TABLE"     = module.tenants_table.table_name
+        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
     }
     "start_password_reset_from_token" = {
       name             = "start-password-reset-from-token"
@@ -444,6 +459,7 @@ locals {
     "PUT /participants/{userId}"                 = "update_participant"
     "DELETE /participants/{userId}"              = "delete_participant"
     "GET /tenant-context"                        = "get_tenant_context"
+    "PUT /tenant-settings"                       = "update_tenant_settings"
   }
 
   build_files = fileset("../../app/build", "**")
@@ -471,6 +487,7 @@ module "yogaswap_api" {
     "POST /courses/{courseId}/dates/{date}/cancel",
     "DELETE /courses/{courseId}",
     "GET /tenant-context",
+    "PUT /tenant-settings",
   ]
 }
 #---------------cloudfront------------------
