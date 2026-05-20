@@ -15,6 +15,7 @@ const MVP_SETTINGS_KEYS = [
   "inactiveGraceDaysAfterCourseEnd",
   "minOffsetDays",
   "maxOffsetDays",
+  "excludeLockWeeks",
 ] as const;
 
 function parseBody(event: APIGatewayProxyEvent): StudioSettingsPatch | null {

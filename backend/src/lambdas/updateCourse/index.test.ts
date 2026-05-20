@@ -21,6 +21,15 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
 
 const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
 
+/** Leerer Tenant-Load → Default excludeLockWeeks (5). */
+const tenantSettingsLoadResponse = {};
+
+function mockAdminMembership() {
+  return mockSend.mockResolvedValueOnce({ Item: { role: { S: "admin" } } }).mockResolvedValueOnce(
+    tenantSettingsLoadResponse,
+  );
+}
+
 function makeEvent(
   body: unknown,
   pathCourseId = "1",
@@ -75,6 +84,7 @@ describe("updateCourse Lambda", () => {
       MEMBERSHIPS_TABLE: "test-memberships",
       OVERRIDES_TABLE: "test-overrides",
       SWAPS_TABLE: "test-swaps",
+      TENANTS_TABLE: "test-tenants",
     };
     mockSend.mockReset();
     (GetItemCommand as unknown as jest.Mock).mockClear();
@@ -95,14 +105,13 @@ describe("updateCourse Lambda", () => {
   });
 
   test("returns 404 when course not found", async () => {
-    mockSend.mockResolvedValueOnce({ Item: { role: { S: "admin" } } }).mockResolvedValueOnce({});
+    mockAdminMembership().mockResolvedValueOnce({});
     const result = await handler(makeEvent({ name: "Neu" }));
     expect(result.statusCode).toBe(404);
   });
 
   test("updates editable fields and keeps participants/dates", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
       .mockResolvedValueOnce({});
 
@@ -134,8 +143,7 @@ describe("updateCourse Lambda", () => {
   });
 
   test("rejects invalid status transition inactive -> active", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
     const result = await handler(makeEvent({ status: "active" }));
     expect(result.statusCode).toBe(400);
@@ -143,8 +151,7 @@ describe("updateCourse Lambda", () => {
   });
 
   test("allows active -> draft for bounded_series without participants", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
@@ -159,8 +166,7 @@ describe("updateCourse Lambda", () => {
   });
 
   test("allows active -> draft for rolling course without participants", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
@@ -180,8 +186,7 @@ describe("updateCourse Lambda", () => {
   test("blocks active -> inactive when upcoming occurrences exist and course has participants", async () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
@@ -198,8 +203,7 @@ describe("updateCourse Lambda", () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowIso = tomorrow.toISOString().slice(0, 10);
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
@@ -219,8 +223,7 @@ describe("updateCourse Lambda", () => {
   test("allows active -> inactive without participants when override only has stale participants", async () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
@@ -246,8 +249,7 @@ describe("updateCourse Lambda", () => {
   });
 
   test("blocks active -> inactive when open overrides exist", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("active") })
       .mockResolvedValueOnce({
         Items: [
@@ -267,8 +269,7 @@ describe("updateCourse Lambda", () => {
   test("allows active -> inactive when no open dates/refs", async () => {
     const oldDate = new Date();
     oldDate.setDate(oldDate.getDate() - 30);
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
@@ -291,8 +292,7 @@ describe("updateCourse Lambda", () => {
     allowed.setDate(allowed.getDate() + 50);
     const allowedIso = allowed.toISOString().slice(0, 10);
 
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
       .mockResolvedValueOnce({});
 
@@ -335,8 +335,7 @@ describe("updateCourse Lambda", () => {
     soon.setDate(soon.getDate() + 7);
     const soonIso = soon.toISOString().slice(0, 10);
 
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") });
 
     const result = await handler(
@@ -354,8 +353,7 @@ describe("updateCourse Lambda", () => {
   });
 
   test("rejects invalid fixed window range on update", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") });
 
     const result = await handler(
@@ -370,8 +368,7 @@ describe("updateCourse Lambda", () => {
   });
 
   test("updates course participants list", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
       .mockResolvedValueOnce({});
 
@@ -393,8 +390,7 @@ describe("updateCourse Lambda", () => {
   });
 
   test("prunes out-of-window exceptions for bounded_series", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
       .mockResolvedValueOnce({});
 
@@ -428,8 +424,7 @@ describe("updateCourse Lambda", () => {
     stalePast.setDate(stalePast.getDate() - 40);
     const stalePastIso = stalePast.toISOString().slice(0, 10);
 
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("draft"),
@@ -465,8 +460,7 @@ describe("updateCourse Lambda", () => {
   });
 
   test("auto-sets active bounded_series to inactive when no future visible dates remain", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
@@ -495,8 +489,7 @@ describe("updateCourse Lambda", () => {
     const futureDateIso = "2099-01-06";
     const pastDateIso = "2020-01-01";
 
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),

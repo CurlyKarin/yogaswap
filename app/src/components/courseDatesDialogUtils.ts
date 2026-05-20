@@ -1,4 +1,5 @@
 import type { Course, CoursePlanningMode } from "shared/types";
+import { DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS as SHARED_DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS } from "shared/tenantSettings";
 import { deriveVisibleDates } from "../lib/courseSchedule";
 
 export type CourseDatesEditorState = {
@@ -73,7 +74,8 @@ export function dedupeAndSortDates(values: string[]): string[] {
 }
 
 export const DEFAULT_ROLLING_HORIZON_WEEKS = 10;
-export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = 5;
+/** Fallback; Studio-Wert kommt aus `resolveRollingExcludeLockWeeks(tenantSettings)`. */
+export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = SHARED_DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
 const DEFAULT_ROLLING_EXCLUDE_SELECTION_WEEKS = 156; // ~3 Jahre für langfristige Planung
 
 function normalizeHorizonWeeks(value: number | undefined): number {

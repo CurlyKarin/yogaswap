@@ -8,6 +8,7 @@ export type StudioSettingsPatch = {
   inactiveGraceDaysAfterCourseEnd?: number;
   minOffsetDays?: number;
   maxOffsetDays?: number;
+  excludeLockWeeks?: number;
 };
 
 export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string | null {
@@ -35,6 +36,12 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     }
     if ((min as number) > (max as number)) {
       return "Tauschfenster: „frühestens“ darf nicht größer als „spätestens“ sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "excludeLockWeeks")) {
+    const weeks = patch.excludeLockWeeks;
+    if (!Number.isInteger(weeks) || (weeks ?? 0) < 1 || (weeks ?? 0) > 52) {
+      return "Planungssperre muss eine ganze Zahl zwischen 1 und 52 Wochen sein.";
     }
   }
   return null;

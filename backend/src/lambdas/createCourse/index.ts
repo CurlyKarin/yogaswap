@@ -8,13 +8,15 @@ import {
   pruneScheduleExceptions,
 } from "../shared/courseDates";
 import { generateCourseUid } from "../shared/courseUid";
+import {
+  loadTenantSettings,
+  resolveRollingExcludeLockWeeks,
+} from "../shared/tenantSettingsLoader";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
 const COURSE_PLANNING_MODES = new Set(["bounded_series", "rolling_continuous"]);
 const COURSE_VISIBILITY_MODES = new Set(["fixed_window", "rolling_horizon"]);
-const ROLLING_EXCLUDE_LOCK_WEEKS = 5;
-const MIN_ROLLING_HORIZON_WEEKS = ROLLING_EXCLUDE_LOCK_WEEKS;
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -63,10 +65,13 @@ function isValidDateRange(start?: string, end?: string): boolean {
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const coursesTable = process.env.COURSES_TABLE;
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
-  if (!coursesTable || !membershipsTable) {
+  const tenantsTable = process.env.TENANTS_TABLE;
+  if (!coursesTable || !membershipsTable || !tenantsTable) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "COURSES_TABLE or MEMBERSHIPS_TABLE env var is not set" }),
+      body: JSON.stringify({
+        error: "COURSES_TABLE, MEMBERSHIPS_TABLE or TENANTS_TABLE env var is not set",
+      }),
     };
   }
 
@@ -139,17 +144,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     };
   }
-  if (
-    (visibilityMode === "rolling_horizon" || visibilityHorizonWeeks != null) &&
-    (!Number.isInteger(visibilityHorizonWeeks) || (visibilityHorizonWeeks ?? 0) < MIN_ROLLING_HORIZON_WEEKS)
-  ) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({
-        error: `visibilityHorizonWeeks must be an integer >= ${MIN_ROLLING_HORIZON_WEEKS}`,
-      }),
-    };
-  }
   if (!excludedDatesInput || !includedDatesInput) {
     return {
       statusCode: 400,
@@ -171,6 +165,27 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const actorRole = membershipResp.Item?.role?.S;
     if (actorRole !== "admin") {
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+    }
+
+    let rollingExcludeLockWeeks = 5;
+    try {
+      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      rollingExcludeLockWeeks = resolveRollingExcludeLockWeeks(tenantSettings);
+    } catch (error) {
+      console.error("Failed to load tenant settings for rolling lock weeks:", error);
+    }
+
+    if (
+      (visibilityMode === "rolling_horizon" || visibilityHorizonWeeks != null) &&
+      (!Number.isInteger(visibilityHorizonWeeks) ||
+        (visibilityHorizonWeeks ?? 0) < rollingExcludeLockWeeks)
+    ) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: `visibilityHorizonWeeks must be an integer >= ${rollingExcludeLockWeeks}`,
+        }),
+      };
     }
 
     const prunedExceptions = pruneScheduleExceptions({

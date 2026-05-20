@@ -176,6 +176,12 @@ export interface TenantSettings {
    * Default im Code: 7.
    */
   maxOffsetDays?: number;
+  /**
+   * Rollkurs (`rolling_continuous`): Termine innerhalb der naechsten N Wochen
+   * duerfen nicht per `excludedDates` ausgeschlossen werden (nur Absage).
+   * Default im Code: 5.
+   */
+  excludeLockWeeks?: number;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

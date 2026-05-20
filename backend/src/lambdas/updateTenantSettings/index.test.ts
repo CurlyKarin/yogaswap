@@ -71,6 +71,7 @@ describe("updateTenantSettings Lambda", () => {
         inactiveGraceDaysAfterCourseEnd: 10,
         minOffsetDays: -14,
         maxOffsetDays: 14,
+        excludeLockWeeks: 8,
       }),
     );
 
@@ -82,6 +83,7 @@ describe("updateTenantSettings Lambda", () => {
       inactiveGraceDaysAfterCourseEnd: 10,
       minOffsetDays: -14,
       maxOffsetDays: 14,
+      excludeLockWeeks: 8,
     });
     expect(PutItemCommand).toHaveBeenCalled();
   });

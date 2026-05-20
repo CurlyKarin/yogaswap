@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { Calendar } from "lucide-react";
-import type { Course, CourseDateOverride, Swap } from "shared/types";
+import type { Course, CourseDateOverride, Swap, TenantSettings } from "shared/types";
+import { resolveRollingExcludeLockWeeks } from "shared/tenantSettings";
 import { cancelCourseDate, updateCourse } from "../api/courses";
 import CourseModalFrame from "./CourseModalFrame";
 import {
   DEFAULT_ROLLING_HORIZON_WEEKS,
-  DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS,
   WEEKDAY_ORDER,
   buildSeriesCalendarCells,
   compareIsoDate,
@@ -31,6 +31,7 @@ type CourseDatesDialogProps = {
   overrides: CourseDateOverride[];
   swaps: Swap[];
   canManageCourses: boolean;
+  tenantSettings?: TenantSettings;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 };
@@ -77,9 +78,14 @@ export default function CourseDatesDialog({
   overrides,
   swaps,
   canManageCourses,
+  tenantSettings,
   onClose,
   onSaved,
 }: CourseDatesDialogProps) {
+  const excludeLockWeeks = useMemo(
+    () => resolveRollingExcludeLockWeeks(tenantSettings),
+    [tenantSettings],
+  );
   const [datesState, setDatesState] = useState<CourseDatesEditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -165,7 +171,7 @@ export default function CourseDatesDialog({
   const rollingHorizonValid =
     !!datesState &&
     Number.isInteger(datesState.visibilityHorizonWeeks) &&
-    datesState.visibilityHorizonWeeks >= DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
+    datesState.visibilityHorizonWeeks >= excludeLockWeeks;
   const isActiveCancellationMode = course?.status === "active";
   const isRollingActiveMode = isActiveCancellationMode && datesState?.planningMode === "rolling_continuous";
   const isActiveReadOnly =
@@ -240,8 +246,8 @@ export default function CourseDatesDialog({
 
   const rollingExcludeLockRange = useMemo(() => {
     if (!datesState || datesState.planningMode !== "rolling_continuous" || !isActiveCancellationMode) return null;
-    return getRollingExcludeLockRangeIso(DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS);
-  }, [datesState, isActiveCancellationMode]);
+    return getRollingExcludeLockRangeIso(excludeLockWeeks);
+  }, [datesState, isActiveCancellationMode, excludeLockWeeks]);
 
   const rollingExcludeSelectionRange = useMemo(() => {
     if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
@@ -412,7 +418,7 @@ export default function CourseDatesDialog({
             ...prev,
             visibilityHorizonWeeks:
               Number.isInteger(numericValue) && numericValue > 0
-                ? Math.max(numericValue, DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS)
+                ? Math.max(numericValue, excludeLockWeeks)
                 : DEFAULT_ROLLING_HORIZON_WEEKS,
           }
         : prev,
@@ -605,7 +611,7 @@ export default function CourseDatesDialog({
     } else if (datesState.planningMode === "rolling_continuous") {
       if (!rollingHorizonValid) {
         setFormError(
-          `Bitte mindestens ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen für die Sichtbarkeit eingeben.`,
+          `Bitte mindestens ${excludeLockWeeks} Wochen für die Sichtbarkeit eingeben.`,
         );
         return;
       }
@@ -729,7 +735,7 @@ export default function CourseDatesDialog({
                 <input
                   id="rolling-horizon-weeks"
                   type="number"
-                  min={DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS}
+                  min={excludeLockWeeks}
                   step={1}
                   value={datesState.visibilityHorizonWeeks}
                   onChange={(event) => setRollingHorizonWeeks(event.target.value)}
@@ -980,7 +986,7 @@ export default function CourseDatesDialog({
                 <input
                   id="rolling-horizon-weeks"
                   type="number"
-                  min={DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS}
+                  min={excludeLockWeeks}
                   step={1}
                   value={datesState.visibilityHorizonWeeks}
                   onChange={(event) => setRollingHorizonWeeks(event.target.value)}
@@ -1010,7 +1016,7 @@ export default function CourseDatesDialog({
               <span className="course-editor-note">
                 {datesState.planningMode === "rolling_continuous"
                   ? isRollingActiveMode
-                    ? `Innerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen nur Absage; danach auch Ausschließen möglich.`
+                    ? `Innerhalb der nächsten ${excludeLockWeeks} Wochen nur Absage; danach auch Ausschließen möglich.`
                     : "Im Planungsmodus können alle Serientermine als Ausnahme gesetzt werden."
                   : "Nur Serientermine im Zeitraum sind wählbar."}
               </span>
@@ -1077,7 +1083,7 @@ export default function CourseDatesDialog({
                             isActiveReadOnly
                               ? "Nur Ansicht im aktiven Kurs"
                               : rollingLocked
-                                ? `Innerhalb der nächsten ${DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS} Wochen nur Absage möglich`
+                                ? `Innerhalb der nächsten ${excludeLockWeeks} Wochen nur Absage möglich`
                                 : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
                           }
                         >
