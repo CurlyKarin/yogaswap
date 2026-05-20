@@ -1,6 +1,6 @@
 import type { Course, TenantSettings } from "./types";
 
-/** Default-Nachlauf in Tagen (an app swapSettings.maxOffsetDays angeglichen). */
+/** Default-Nachlauf in Tagen (fachlich an `DEFAULT_SWAP_MAX_OFFSET_DAYS` gekoppelt). */
 export const DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END = 7;
 
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
