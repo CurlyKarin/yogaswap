@@ -13,6 +13,10 @@ import {
   pruneScheduleExceptions,
 } from "../shared/courseDates";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
+import {
+  loadTenantSettings,
+  resolveRollingExcludeLockWeeks,
+} from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 
 const client = dynamoClient;
@@ -21,8 +25,6 @@ const COURSE_PLANNING_MODES = new Set(["bounded_series", "rolling_continuous"]);
 const COURSE_VISIBILITY_MODES = new Set(["fixed_window", "rolling_horizon"]);
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-const ROLLING_EXCLUDE_LOCK_WEEKS = 5;
-const MIN_ROLLING_HORIZON_WEEKS = ROLLING_EXCLUDE_LOCK_WEEKS;
 const OVERRIDE_SYNC_TIME_BUFFER_MINUTES = 30;
 
 type UpdateCourseBody = {
@@ -102,9 +104,12 @@ function addDaysLocal(date: Date, days: number): Date {
   return next;
 }
 
-function getRollingExcludeLockBounds(now: Date): { startIso: string; endIso: string } {
+function getRollingExcludeLockBounds(
+  now: Date,
+  excludeLockWeeks: number,
+): { startIso: string; endIso: string } {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const end = addDaysLocal(startOfToday, ROLLING_EXCLUDE_LOCK_WEEKS * 7);
+  const end = addDaysLocal(startOfToday, excludeLockWeeks * 7);
   return {
     startIso: toIsoDateOnlyLocal(startOfToday),
     endIso: toIsoDateOnlyLocal(end),
@@ -178,12 +183,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const overridesTable = process.env.OVERRIDES_TABLE;
   const swapsTable = process.env.SWAPS_TABLE;
-  if (!coursesTable || !membershipsTable || !overridesTable || !swapsTable) {
+  const tenantsTable = process.env.TENANTS_TABLE;
+  if (!coursesTable || !membershipsTable || !overridesTable || !swapsTable || !tenantsTable) {
     return {
       statusCode: 500,
       body: JSON.stringify({
         error:
-          "COURSES_TABLE, MEMBERSHIPS_TABLE, OVERRIDES_TABLE or SWAPS_TABLE env var is not set",
+          "COURSES_TABLE, MEMBERSHIPS_TABLE, OVERRIDES_TABLE, SWAPS_TABLE or TENANTS_TABLE env var is not set",
       }),
     };
   }
@@ -309,21 +315,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify({ error: "participants must be an array of non-empty strings" }),
     };
   }
-  if (Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")) {
-    if (
-      visibilityHorizonWeeks == null ||
-      !Number.isInteger(visibilityHorizonWeeks) ||
-      visibilityHorizonWeeks < MIN_ROLLING_HORIZON_WEEKS
-    ) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          error: `visibilityHorizonWeeks must be an integer >= ${MIN_ROLLING_HORIZON_WEEKS}`,
-        }),
-      };
-    }
-  }
-
   try {
     const membershipResp = await client.send(
       new GetItemCommand({
@@ -338,6 +329,29 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const actorRole = membershipResp.Item?.role?.S;
     if (actorRole !== "admin") {
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+    }
+
+    let rollingExcludeLockWeeks = 5;
+    try {
+      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      rollingExcludeLockWeeks = resolveRollingExcludeLockWeeks(tenantSettings);
+    } catch (error) {
+      console.error("Failed to load tenant settings for rolling lock weeks:", error);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")) {
+      if (
+        visibilityHorizonWeeks == null ||
+        !Number.isInteger(visibilityHorizonWeeks) ||
+        visibilityHorizonWeeks < rollingExcludeLockWeeks
+      ) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({
+            error: `visibilityHorizonWeeks must be an integer >= ${rollingExcludeLockWeeks}`,
+          }),
+        };
+      }
     }
 
     const courseResp = await client.send(
@@ -480,12 +494,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     if (
       nextVisibilityMode === "rolling_horizon" &&
-      (!Number.isInteger(nextVisibilityHorizonWeeks) || (nextVisibilityHorizonWeeks ?? 0) < MIN_ROLLING_HORIZON_WEEKS)
+      (!Number.isInteger(nextVisibilityHorizonWeeks) ||
+        (nextVisibilityHorizonWeeks ?? 0) < rollingExcludeLockWeeks)
     ) {
       return {
         statusCode: 400,
         body: JSON.stringify({
-          error: `rolling_horizon requires visibilityHorizonWeeks >= ${MIN_ROLLING_HORIZON_WEEKS}`,
+          error: `rolling_horizon requires visibilityHorizonWeeks >= ${rollingExcludeLockWeeks}`,
         }),
       };
     }
@@ -493,7 +508,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (nextPlanningMode === "rolling_continuous") {
       const currentExcludedSet = new Set(currentExcludedDates);
       const addedExcludedDates = nextExcludedDates.filter((entry) => !currentExcludedSet.has(entry));
-      const lockBounds = getRollingExcludeLockBounds(new Date());
+      const lockBounds = getRollingExcludeLockBounds(new Date(), rollingExcludeLockWeeks);
       const hasLockedExcludedDate = addedExcludedDates.some(
         (entry) => entry >= lockBounds.startIso && entry <= lockBounds.endIso,
       );
@@ -501,7 +516,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         return {
           statusCode: 400,
           body: JSON.stringify({
-            error: `Termine innerhalb der nächsten ${ROLLING_EXCLUDE_LOCK_WEEKS} Wochen dürfen nicht ausgeschlossen werden. Bitte stattdessen absagen.`,
+            error: `Termine innerhalb der nächsten ${rollingExcludeLockWeeks} Wochen dürfen nicht ausgeschlossen werden. Bitte stattdessen absagen.`,
           }),
         };
       }

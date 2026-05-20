@@ -12,7 +12,7 @@ Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogasw
 | **Nachlauf** | Nach Kursende bleibt ein **`inactive`** Kurs für Teilnehmer:innen noch **X Kalendertage** sichtbar (Default **7**, UTC). |
 | **Lazy Reconcile** | Beim **`GET /courses`** (`get-courses` Lambda) werden Status und abgeleitete `dates` bei Bedarf in DynamoDB nachgezogen. |
 
-Studio-Konfiguration für den Nachlauf perspektivisch über Tenant-Settings ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)), siehe Abschnitt [Nachlauf und Tauschfenster](#nachlauf-und-tauschfenster).
+Studio-Konfiguration für Nachlauf, Tauschfenster und Planungssperre (Rollkurse) über **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)): `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays`, `maxOffsetDays`, `excludeLockWeeks` in `TenantSettings`. Siehe Abschnitt [Nachlauf und Tauschfenster](#nachlauf-und-tauschfenster).
 
 ---
 
@@ -120,9 +120,10 @@ letzterTagNachlauf = Kursende + inactiveGraceDaysAfterCourseEnd   (Kalendertage,
 | Einstellung | Ort (aktuell) | Default |
 |-------------|---------------|---------|
 | Nachlauf nach Kursende | `TenantSettings.inactiveGraceDaysAfterCourseEnd` | **7** |
-| Tauschfenster (App-Demo) | `app/src/data/swapSettings.ts` (`minOffsetDays` / `maxOffsetDays`) | **-7 / +7** |
+| Tauschfenster | `TenantSettings.minOffsetDays` / `maxOffsetDays` (`shared/tenantSettings.ts`) | **-7 / +7** |
+| Planungssperre (Rollkurs) | `TenantSettings.excludeLockWeeks` | **5** |
 
-**Produktentscheidung (#149):** Nachlauf und Swap-Fenster sollen **dieselbe Konfigurationsfamilie** nutzen (nicht zwei willkürlich getrennte Konstanten). Bis die Studio-UI ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)) das abbildet, ist der Nachlauf-Default an `maxOffsetDays` angeglichen.
+**Produktentscheidung (#149):** Nachlauf und Swap-Fenster nutzen **dieselbe Konfigurationsfamilie** in `TenantSettings` (Studio-UI [#44](https://github.com/CurlyKarin/yogaswap/issues/44)). Der Code-Default für den Nachlauf ist an `DEFAULT_SWAP_MAX_OFFSET_DAYS` angeglichen.
 
 Im Nachlauf:
 
@@ -170,6 +171,6 @@ Extern: [mermaid.live](https://mermaid.live) oder GitHub nach Push.
 ## Siehe auch
 
 - [#149](https://github.com/CurlyKarin/yogaswap/issues/149) — Umsetzung Sichtbarkeit + Auto-Transition
-- [#44](https://github.com/CurlyKarin/yogaswap/issues/44) — Studio-Settings (Tauschfenster + geplanter Nachlauf)
+- [#44](https://github.com/CurlyKarin/yogaswap/issues/44) — Studio-Settings (Nachlauf, Tauschfenster, Planungssperre)
 - [#129](https://github.com/CurlyKarin/yogaswap/issues/129) — Lifecycle-Guardrails (`updateCourse` / Prune)
 - [#165](https://github.com/CurlyKarin/yogaswap/issues/165) — Rollende Kurse mit optionalem Ende

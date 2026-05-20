@@ -15,6 +15,14 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
 
 const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
 
+const tenantSettingsLoadResponse = {};
+
+function mockAdminMembership() {
+  return mockSend.mockResolvedValueOnce({ Item: { role: { S: "admin" } } }).mockResolvedValueOnce(
+    tenantSettingsLoadResponse,
+  );
+}
+
 function makeEvent(body: unknown, headers?: Record<string, string>): APIGatewayProxyEvent {
   return {
     body: body == null ? null : JSON.stringify(body),
@@ -38,6 +46,7 @@ describe("createCourse Lambda", () => {
       ...OLD_ENV,
       COURSES_TABLE: "test-courses",
       MEMBERSHIPS_TABLE: "test-memberships",
+      TENANTS_TABLE: "test-tenants",
     };
     mockSend.mockReset();
   });
@@ -50,7 +59,7 @@ describe("createCourse Lambda", () => {
     delete process.env.COURSES_TABLE;
     const result = await handler(makeEvent({}));
     expect(result.statusCode).toBe(500);
-    expect(JSON.parse(result.body).error).toMatch(/COURSES_TABLE or MEMBERSHIPS_TABLE/);
+    expect(JSON.parse(result.body).error).toMatch(/COURSES_TABLE, MEMBERSHIPS_TABLE or TENANTS_TABLE/);
   });
 
   test("returns 403 when actor is missing", async () => {
@@ -93,8 +102,7 @@ describe("createCourse Lambda", () => {
   });
 
   test("creates course with default draft status", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({
         Items: [{ courseId: { S: "1" } }, { id: { N: "4" } }],
       })
@@ -156,8 +164,7 @@ describe("createCourse Lambda", () => {
     const condErr = new Error("collision");
     (condErr as { name?: string }).name = "ConditionalCheckFailedException";
 
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+    mockAdminMembership()
       .mockResolvedValueOnce({ Items: [] })
       .mockRejectedValueOnce(condErr);
 
@@ -169,10 +176,7 @@ describe("createCourse Lambda", () => {
   });
 
   test("creates course with scheduling model fields", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
-      .mockResolvedValueOnce({ Items: [] })
-      .mockResolvedValueOnce({});
+    mockAdminMembership().mockResolvedValueOnce({ Items: [] }).mockResolvedValueOnce({});
 
     const result = await handler(
       makeEvent({
@@ -223,10 +227,7 @@ describe("createCourse Lambda", () => {
   });
 
   test("prunes bounded exceptions and auto-downgrades active course without future dates", async () => {
-    mockSend
-      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
-      .mockResolvedValueOnce({ Items: [] })
-      .mockResolvedValueOnce({});
+    mockAdminMembership().mockResolvedValueOnce({ Items: [] }).mockResolvedValueOnce({});
 
     const result = await handler(
       makeEvent({

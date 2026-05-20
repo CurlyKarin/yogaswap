@@ -8,8 +8,9 @@ import {
   updateParticipant,
   type ParticipantWithStatus,
 } from "../api/participants";
-import type { UserRole } from "shared/types";
+import type { Tenant, UserRole } from "shared/types";
 import { getStatusPresentation } from "../lib/participants";
+import StudioSettingsSection from "./StudioSettingsSection";
 
 const ROLE_LABELS_DE: Record<UserRole, string> = {
   admin: "Admin",
@@ -25,6 +26,8 @@ function getRoleLabel(role: UserRole | undefined): string {
 
 type AdminPanelProps = {
   canEditRoles?: boolean;
+  tenant?: Tenant | null;
+  onTenantUpdated?: (tenant: Tenant) => void;
 };
 type CreateNicknameCheckState =
   | "idle"
@@ -34,7 +37,11 @@ type CreateNicknameCheckState =
   | "active_conflict"
   | "exists_in_tenant";
 
-export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
+export default function AdminPanel({
+  canEditRoles = false,
+  tenant = null,
+  onTenantUpdated,
+}: AdminPanelProps) {
   const [participants, setParticipants] = useState<ParticipantWithStatus[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participantsError, setParticipantsError] = useState("");
@@ -932,7 +939,11 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
   };
   
   return (
-    <div className="admin-panel">
+    <>
+      {canEditRoles && tenant && onTenantUpdated ? (
+        <StudioSettingsSection tenant={tenant} onSaved={onTenantUpdated} />
+      ) : null}
+      <div className="admin-panel">
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
           <h3 style={{ margin: 0 }}>Teilnehmer verwalten</h3>
@@ -1547,5 +1558,6 @@ export default function AdminPanel({ canEditRoles = false }: AdminPanelProps) {
         </div>
       )}
     </div>
+    </>
   );
 }

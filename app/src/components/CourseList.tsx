@@ -836,6 +836,7 @@ export default function CourseList({
         overrides={filteredOverrides}
         swaps={swaps}
         canManageCourses={canManageCourses}
+        tenantSettings={tenant?.settings}
         onClose={closeDatesModal}
         onSaved={fetchData}
       />
