@@ -14,6 +14,13 @@ import {
 } from "../shared/courseDates";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
+  courseHasParticipants,
+  isPlanningModeChangeLocked,
+  isRollingInactiveBlocked,
+  PLANNING_MODE_LOCKED_MESSAGE,
+  ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
+} from "../shared/courseEditPolicy";
+import {
   loadTenantSettings,
   resolveRollingExcludeLockWeeks,
 } from "../shared/tenantSettingsLoader";
@@ -370,9 +377,24 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const currentStatus = item.status?.S ?? "active";
+    const currentPlanningMode = item.planningMode?.S ?? "bounded_series";
+    const courseParticipants = item.participants?.L ?? [];
+
+    if (
+      Object.prototype.hasOwnProperty.call(body, "planningMode") &&
+      planningMode &&
+      planningMode !== currentPlanningMode &&
+      isPlanningModeChangeLocked({ status: currentStatus, participants: courseParticipants })
+    ) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: PLANNING_MODE_LOCKED_MESSAGE }),
+      };
+    }
+
     const nextStatus = status ?? currentStatus;
     if (status && nextStatus !== currentStatus) {
-      const hasParticipants = (item.participants?.L?.length ?? 0) > 0;
+      const hasParticipants = courseHasParticipants(courseParticipants);
       const transitionAllowed =
         (currentStatus === "inactive" && nextStatus === "draft") ||
         (currentStatus === "draft" && nextStatus === "active") ||
@@ -386,6 +408,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
 
       if (currentStatus === "active" && nextStatus === "inactive") {
+        if (
+          isRollingInactiveBlocked({
+            status: currentStatus,
+            planningMode: currentPlanningMode,
+            participants: courseParticipants,
+          })
+        ) {
+          return {
+            statusCode: 400,
+            body: JSON.stringify({ error: ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE }),
+          };
+        }
+
         const existingFallbackDates = item.dates?.L?.map((d) => d.S ?? "").filter(Boolean) ?? [];
         const existingExcludedDates =
           item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [];

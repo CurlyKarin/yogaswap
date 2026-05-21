@@ -142,6 +142,30 @@ describe("updateCourse Lambda", () => {
     );
   });
 
+  test("rejects planning mode change for active course with participants", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("active") });
+
+    const result = await handler(makeEvent({ planningMode: "rolling_continuous" }));
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Planungsmodus kann bei einem aktiven Kurs/);
+  });
+
+  test("rejects inactive transition for active rolling course with participants", async () => {
+    mockAdminMembership().mockResolvedValueOnce({
+      Item: {
+        ...baseCourseItem("active"),
+        planningMode: { S: "rolling_continuous" },
+        visibilityMode: { S: "rolling_horizon" },
+        visibilityHorizonWeeks: { N: "8" },
+        dates: { L: [] },
+      },
+    });
+
+    const result = await handler(makeEvent({ status: "inactive" }));
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Kursende/);
+  });
+
   test("rejects invalid status transition inactive -> active", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") });

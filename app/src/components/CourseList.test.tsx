@@ -529,6 +529,46 @@ describe("CourseList", () => {
     });
   });
 
+  it("sperrt Modus und Inaktiv bei aktivem Durchlaufend-Kurs mit Teilnehmern", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Rollend",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        planningMode: "rolling_continuous",
+        visibilityMode: "rolling_horizon",
+        visibilityHorizonWeeks: 8,
+        participants: ["luna"],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+
+    const user = userEvent.setup();
+    await screen.findByText("Rollend");
+    await user.click(screen.getByRole("button", { name: /kurs bearbeiten rollend/i }));
+
+    expect(screen.getByLabelText("Planungsmodus bearbeiten")).toBeDisabled();
+    expect(screen.getByText(/Planungsmodus kann bei einem aktiven Kurs/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Status bearbeiten")).toBeEnabled();
+    const inactiveOption = screen.getByRole("option", { name: /inaktiv/i });
+    expect(inactiveOption).toBeDisabled();
+    expect(screen.getByText(/ein Kursende/)).toBeInTheDocument();
+  });
+
   it("setzt Fokus beim Öffnen ins Edit-Modal und hält Tab im Dialog", async () => {
     const adminMembership: UserTenantMembership = {
       ...baseMembership,

@@ -18,6 +18,12 @@ import {
   UserTenantMembership,
   DEFAULT_TENANT_ID,
 } from "shared/types";
+import {
+  isPlanningModeChangeLocked,
+  isRollingInactiveBlocked,
+  PLANNING_MODE_LOCKED_MESSAGE,
+  ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
+} from "shared/courseEditPolicy";
 import { getSwaps } from "../api/swaps";
 import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
@@ -346,6 +352,9 @@ export default function CourseList({
   const deleteTargetCourse = deleteTargetId
     ? visibleCourses.find((course) => course.id === deleteTargetId)
     : undefined;
+  const editTargetCourse = editState
+    ? visibleCourses.find((course) => course.id === editState.id)
+    : undefined;
   const membersTargetCourse = membersTargetId
     ? visibleCourses.find((course) => course.id === membersTargetId)
     : undefined;
@@ -590,6 +599,25 @@ export default function CourseList({
       }
       const previousPlanningMode = courseForEdit.planningMode ?? "bounded_series";
       const planningModeChanged = editState.planningMode !== previousPlanningMode;
+      const planningModeLocked = isPlanningModeChangeLocked({
+        status: courseForEdit.status,
+        participants: courseForEdit.participants,
+      });
+      if (planningModeChanged && planningModeLocked) {
+        setFormError(PLANNING_MODE_LOCKED_MESSAGE);
+        return;
+      }
+      if (
+        editState.status === "inactive" &&
+        isRollingInactiveBlocked({
+          status: courseForEdit.status,
+          planningMode: courseForEdit.planningMode,
+          participants: courseForEdit.participants,
+        })
+      ) {
+        setFormError(ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE);
+        return;
+      }
       await updateCourse(courseApiPathKey(courseForEdit), {
         name: trimmedName,
         weekday: editState.weekday,
@@ -809,6 +837,23 @@ export default function CourseList({
         statusOptions={STATUS_OPTIONS}
         planningModeOptions={PLANNING_MODE_OPTIONS}
         planningModeHint={planningModeHint}
+        planningModeLocked={
+          !!editTargetCourse &&
+          isPlanningModeChangeLocked({
+            status: editTargetCourse.status,
+            participants: editTargetCourse.participants,
+          })
+        }
+        planningModeLockedHint={PLANNING_MODE_LOCKED_MESSAGE}
+        rollingInactiveBlocked={
+          !!editTargetCourse &&
+          isRollingInactiveBlocked({
+            status: editTargetCourse.status,
+            planningMode: editTargetCourse.planningMode,
+            participants: editTargetCourse.participants,
+          })
+        }
+        rollingInactiveHint={ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE}
         onKeyDown={handleEditDialogKeyDown}
         onClose={closeEditModal}
         onSave={saveEditCourse}
