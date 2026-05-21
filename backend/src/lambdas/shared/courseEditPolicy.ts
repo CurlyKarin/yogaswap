@@ -6,6 +6,41 @@ export const PLANNING_MODE_LOCKED_MESSAGE =
 export const ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE =
   "Ein durchlaufender Kurs mit Teilnehmern kann nicht direkt auf inaktiv gesetzt werden. Bitte planen Sie ein Kursende.";
 
+export const PLANNED_END_INVALID_MESSAGE =
+  "Das Kursende muss nach der Planungssperre liegen (ISO-Datum YYYY-MM-DD).";
+
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function toIsoDateOnlyLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addCalendarDaysIso(iso: string, days: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const next = new Date(year, month - 1, day);
+  next.setDate(next.getDate() + days);
+  return toIsoDateOnlyLocal(next);
+}
+
+export function getMinPlannedEndDateIso(excludeLockWeeks: number, now: Date = new Date()): string {
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const lockEnd = new Date(startOfToday);
+  lockEnd.setDate(lockEnd.getDate() + excludeLockWeeks * 7);
+  return addCalendarDaysIso(toIsoDateOnlyLocal(lockEnd), 1);
+}
+
+export function isPlannedEndDateAllowed(
+  iso: string,
+  excludeLockWeeks: number,
+  now: Date = new Date(),
+): boolean {
+  if (!ISO_DATE_ONLY.test(iso)) return false;
+  return iso >= getMinPlannedEndDateIso(excludeLockWeeks, now);
+}
+
 export function courseHasParticipants(participants?: Array<{ S?: string }>): boolean {
   return (participants?.length ?? 0) > 0;
 }

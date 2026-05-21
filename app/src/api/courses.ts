@@ -21,6 +21,7 @@ function mapApiCourseToCourse(item: ApiCourse): Course {
     visibilityMode: item.visibilityMode,
     seriesStartDate: item.seriesStartDate,
     seriesEndDate: item.seriesEndDate,
+    plannedEndDate: item.plannedEndDate,
     visibleFrom: item.visibleFrom,
     visibleUntil: item.visibleUntil,
     visibilityHorizonWeeks: item.visibilityHorizonWeeks,
@@ -46,6 +47,7 @@ export type CreateCourseRequest = {
   visibilityMode?: CourseVisibilityMode;
   seriesStartDate?: string;
   seriesEndDate?: string;
+  plannedEndDate?: string | null;
   visibleFrom?: string;
   visibleUntil?: string;
   visibilityHorizonWeeks?: number;

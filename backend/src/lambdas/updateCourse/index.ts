@@ -16,8 +16,10 @@ import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from ".
 import {
   courseHasParticipants,
   isPlanningModeChangeLocked,
+  isPlannedEndDateAllowed,
   isRollingInactiveBlocked,
   PLANNING_MODE_LOCKED_MESSAGE,
+  PLANNED_END_INVALID_MESSAGE,
   ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
 } from "../shared/courseEditPolicy";
 import {
@@ -44,6 +46,7 @@ type UpdateCourseBody = {
   visibilityMode?: string;
   seriesStartDate?: string;
   seriesEndDate?: string;
+  plannedEndDate?: string | null;
   visibleFrom?: string;
   visibleUntil?: string;
   visibilityHorizonWeeks?: number;
@@ -236,6 +239,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     && !Object.prototype.hasOwnProperty.call(body, "visibilityMode")
     && !Object.prototype.hasOwnProperty.call(body, "seriesStartDate")
     && !Object.prototype.hasOwnProperty.call(body, "seriesEndDate")
+    && !Object.prototype.hasOwnProperty.call(body, "plannedEndDate")
     && !Object.prototype.hasOwnProperty.call(body, "visibleFrom")
     && !Object.prototype.hasOwnProperty.call(body, "visibleUntil")
     && !Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")
@@ -254,6 +258,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const visibilityMode = typeof body.visibilityMode === "string" ? body.visibilityMode.trim() : undefined;
   const seriesStartDate = typeof body.seriesStartDate === "string" ? body.seriesStartDate.trim() : undefined;
   const seriesEndDate = typeof body.seriesEndDate === "string" ? body.seriesEndDate.trim() : undefined;
+  const hasPlannedEndDatePatch = Object.prototype.hasOwnProperty.call(body, "plannedEndDate");
   const visibleFrom = typeof body.visibleFrom === "string" ? body.visibleFrom.trim() : undefined;
   const visibleUntil = typeof body.visibleUntil === "string" ? body.visibleUntil.trim() : undefined;
   const visibilityHorizonWeeks =
@@ -479,6 +484,39 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextVisibilityMode = visibilityMode ?? item.visibilityMode?.S;
     const nextSeriesStartDate = seriesStartDate ?? item.seriesStartDate?.S;
     const nextSeriesEndDate = seriesEndDate ?? item.seriesEndDate?.S;
+    let nextPlannedEndDate: string | undefined = item.plannedEndDate?.S;
+    if (hasPlannedEndDatePatch) {
+      const rawPlannedEnd = body.plannedEndDate;
+      if (rawPlannedEnd == null || (typeof rawPlannedEnd === "string" && !rawPlannedEnd.trim())) {
+        nextPlannedEndDate = undefined;
+      } else if (typeof rawPlannedEnd === "string") {
+        const trimmed = rawPlannedEnd.trim();
+        if (!ISO_DATE_ONLY.test(trimmed)) {
+          return {
+            statusCode: 400,
+            body: JSON.stringify({ error: PLANNED_END_INVALID_MESSAGE }),
+          };
+        }
+        if ((nextPlanningMode ?? item.planningMode?.S) !== "rolling_continuous") {
+          return {
+            statusCode: 400,
+            body: JSON.stringify({ error: "plannedEndDate is only allowed for rolling_continuous courses" }),
+          };
+        }
+        if (!isPlannedEndDateAllowed(trimmed, rollingExcludeLockWeeks, new Date())) {
+          return {
+            statusCode: 400,
+            body: JSON.stringify({ error: PLANNED_END_INVALID_MESSAGE }),
+          };
+        }
+        nextPlannedEndDate = trimmed;
+      } else {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: PLANNED_END_INVALID_MESSAGE }),
+        };
+      }
+    }
     const nextVisibleFrom = visibleFrom ?? item.visibleFrom?.S;
     const nextVisibleUntil = visibleUntil ?? item.visibleUntil?.S;
     const nextVisibilityHorizonWeeks =
@@ -563,6 +601,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       weekday: nextWeekday,
       seriesStartDate: nextSeriesStartDate,
       seriesEndDate: nextSeriesEndDate,
+      plannedEndDate: nextPlannedEndDate,
       visibleFrom: nextVisibleFrom,
       visibleUntil: nextVisibleUntil,
       visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
@@ -629,6 +668,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (nextVisibilityMode) updateItem.visibilityMode = { S: nextVisibilityMode };
     if (nextSeriesStartDate) updateItem.seriesStartDate = { S: nextSeriesStartDate };
     if (nextSeriesEndDate) updateItem.seriesEndDate = { S: nextSeriesEndDate };
+    if (nextPlannedEndDate) updateItem.plannedEndDate = { S: nextPlannedEndDate };
     if (nextVisibleFrom) updateItem.visibleFrom = { S: nextVisibleFrom };
     if (nextVisibleUntil) updateItem.visibleUntil = { S: nextVisibleUntil };
     if (nextVisibilityHorizonWeeks != null) {
@@ -711,6 +751,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         visibilityMode: nextVisibilityMode,
         seriesStartDate: nextSeriesStartDate,
         seriesEndDate: nextSeriesEndDate,
+        plannedEndDate: nextPlannedEndDate,
         visibleFrom: nextVisibleFrom,
         visibleUntil: nextVisibleUntil,
         visibilityHorizonWeeks: nextVisibilityHorizonWeeks,

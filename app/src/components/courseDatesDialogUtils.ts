@@ -108,11 +108,11 @@ export function parseIsoDateOnlyUtc(value: string): Date | null {
   return toIsoDateOnly(parsed) === value ? parsed : null;
 }
 
-function toMonthKey(date: Date): string {
+export function toMonthKey(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function monthKeyFromIsoDate(value: string): string | null {
+export function monthKeyFromIsoDate(value: string): string | null {
   const parsed = parseIsoDateOnlyUtc(value);
   if (!parsed) return null;
   return toMonthKey(parsed);

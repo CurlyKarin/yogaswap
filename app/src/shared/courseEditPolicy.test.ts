@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isPlanningModeChangeLocked, isRollingInactiveBlocked } from "shared/courseEditPolicy";
+import {
+  getMinPlannedEndDateIso,
+  isPlannedEndDateAllowed,
+  isPlanningModeChangeLocked,
+  isRollingInactiveBlocked,
+} from "shared/courseEditPolicy";
 
 describe("courseEditPolicy", () => {
   it("locks planning mode change for active courses with participants", () => {
@@ -23,5 +28,11 @@ describe("courseEditPolicy", () => {
         participants: ["luna"],
       }),
     ).toBe(false);
+  });
+
+  it("requires planned end after exclude lock window", () => {
+    const min = getMinPlannedEndDateIso(5, new Date("2026-01-01T12:00:00"));
+    expect(isPlannedEndDateAllowed(min, 5, new Date("2026-01-01T12:00:00"))).toBe(true);
+    expect(isPlannedEndDateAllowed("2026-01-10", 5, new Date("2026-01-01T12:00:00"))).toBe(false);
   });
 });

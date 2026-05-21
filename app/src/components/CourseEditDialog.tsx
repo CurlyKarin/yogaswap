@@ -1,6 +1,7 @@
 import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
 import CourseModalFrame from "./CourseModalFrame";
+import CoursePlannedEndField from "./CoursePlannedEndField";
 
 type CourseEditorState = {
   id: number;
@@ -10,6 +11,7 @@ type CourseEditorState = {
   capacity: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
+  plannedEndDate: string | null;
 };
 
 type WeekdayOption = { value: string; label: string };
@@ -31,6 +33,7 @@ type CourseEditDialogProps = {
   planningModeLockedHint?: string | null;
   rollingInactiveBlocked?: boolean;
   rollingInactiveHint?: string | null;
+  excludeLockWeeks?: number;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onClose: () => void;
   onSave: () => void;
@@ -52,6 +55,7 @@ export default function CourseEditDialog({
   planningModeLockedHint = null,
   rollingInactiveBlocked = false,
   rollingInactiveHint = null,
+  excludeLockWeeks = 5,
   onKeyDown,
   onClose,
   onSave,
@@ -145,6 +149,15 @@ export default function CourseEditDialog({
             <p className="course-editor-inline-hint">{planningModeLockedHint}</p>
           )}
           <p className="course-editor-inline-hint">{planningModeHint(state.planningMode)}</p>
+          {state.planningMode === "rolling_continuous" && (
+            <CoursePlannedEndField
+              weekday={state.weekday}
+              plannedEndDate={state.plannedEndDate}
+              excludeLockWeeks={excludeLockWeeks}
+              saving={saving}
+              onChange={(plannedEndDate) => onChange({ ...state, plannedEndDate })}
+            />
+          )}
           {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
         </div>
         <div className="modal-actions dialog-actions">

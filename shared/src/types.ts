@@ -72,6 +72,11 @@ export type Course = {
   visibilityMode?: CourseVisibilityMode;
   seriesStartDate?: string;
   seriesEndDate?: string;
+  /**
+   * Nur bei `rolling_continuous`: geplantes letztes Kursdatum (YYYY-MM-DD).
+   * Unbefristet = Feld fehlt/leer. Kein Wechsel zu `bounded_series`.
+   */
+  plannedEndDate?: string;
   visibleFrom?: string;
   visibleUntil?: string;
   visibilityHorizonWeeks?: number;

@@ -593,9 +593,12 @@ a:focus-visible {
   font-weight: 700;
 }
 
-.course-editor-calendar-cell.is-excluded-date {
+.course-editor-calendar-cell.is-excluded-date,
+.course-editor-calendar-cell.is-planned-end-date {
   background: #fee2e2;
-  border-color: #fca5a5;
+  border-color: #ef4444;
+  color: #991b1b;
+  font-weight: 700;
 }
 
 .course-editor-calendar-legend {

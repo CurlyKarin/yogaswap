@@ -166,6 +166,56 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Kursende/);
   });
 
+  test("stores plannedEndDate for rolling course and caps derived dates", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          visibilityHorizonWeeks: { N: "8" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        plannedEndDate: "2099-06-20",
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.plannedEndDate).toBe("2099-06-20");
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          plannedEndDate: { S: "2099-06-20" },
+        }),
+      }),
+    );
+  });
+
+  test("rejects plannedEndDate inside planning lock window", async () => {
+    const lockEnd = new Date();
+    lockEnd.setDate(lockEnd.getDate() + 3);
+    const tooEarly = lockEnd.toISOString().slice(0, 10);
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          visibilityHorizonWeeks: { N: "8" },
+        },
+      });
+
+    const result = await handler(makeEvent({ plannedEndDate: tooEarly }));
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Planungssperre/);
+  });
+
   test("rejects invalid status transition inactive -> active", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") });

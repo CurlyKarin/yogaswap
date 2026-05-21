@@ -72,6 +72,7 @@ export type DeriveVisibleDatesInput = {
   weekday: string;
   seriesStartDate?: string;
   seriesEndDate?: string;
+  plannedEndDate?: string;
   visibleFrom?: string;
   visibleUntil?: string;
   visibilityHorizonWeeks?: number;
@@ -106,6 +107,10 @@ export function deriveVisibleDates(input: DeriveVisibleDatesInput): string[] {
         : 8;
     baseWindowStart = todayUtc;
     baseWindowEnd = addDaysUtc(todayUtc, horizonWeeks * 7);
+    const plannedEnd = parseDateOnlyUtc(input.plannedEndDate);
+    if (plannedEnd && plannedEnd < baseWindowEnd) {
+      baseWindowEnd = plannedEnd;
+    }
   } else {
     return fallbackDates;
   }

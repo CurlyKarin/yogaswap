@@ -20,10 +20,13 @@ import {
 } from "shared/types";
 import {
   isPlanningModeChangeLocked,
+  isPlannedEndDateAllowed,
   isRollingInactiveBlocked,
   PLANNING_MODE_LOCKED_MESSAGE,
+  PLANNED_END_INVALID_MESSAGE,
   ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
 } from "shared/courseEditPolicy";
+import { resolveRollingExcludeLockWeeks } from "shared/tenantSettings";
 import { getSwaps } from "../api/swaps";
 import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
@@ -57,6 +60,7 @@ type CourseEditorState = {
   capacity: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
+  plannedEndDate: string | null;
 };
 
 type CourseCreateState = {
@@ -184,6 +188,7 @@ function toEditorState(course: Course): CourseEditorState {
     capacity: String(course.capacity),
     status: course.status ?? "active",
     planningMode: course.planningMode ?? "bounded_series",
+    plannedEndDate: course.plannedEndDate?.trim() ? course.plannedEndDate.trim() : null,
   };
 }
 
@@ -475,7 +480,8 @@ export default function CourseList({
       editState.time !== editInitialState.time ||
       editState.capacity !== editInitialState.capacity ||
       editState.status !== editInitialState.status ||
-      editState.planningMode !== editInitialState.planningMode);
+      editState.planningMode !== editInitialState.planningMode ||
+      editState.plannedEndDate !== editInitialState.plannedEndDate);
   const canSubmitEdit = canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
 
   const handleCreateDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -618,6 +624,16 @@ export default function CourseList({
         setFormError(ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE);
         return;
       }
+      const excludeLockWeeks = resolveRollingExcludeLockWeeks(tenant?.settings);
+      const plannedEndChanged = editState.plannedEndDate !== editInitialState?.plannedEndDate;
+      if (
+        plannedEndChanged &&
+        editState.plannedEndDate &&
+        !isPlannedEndDateAllowed(editState.plannedEndDate, excludeLockWeeks)
+      ) {
+        setFormError(PLANNED_END_INVALID_MESSAGE);
+        return;
+      }
       await updateCourse(courseApiPathKey(courseForEdit), {
         name: trimmedName,
         weekday: editState.weekday,
@@ -625,6 +641,9 @@ export default function CourseList({
         capacity,
         status: editState.status,
         ...(planningModeChanged ? buildSchedulingFromMode(editState.planningMode) : {}),
+        ...(plannedEndChanged
+          ? { plannedEndDate: editState.plannedEndDate }
+          : {}),
       });
       closeEditModal();
       await fetchData();
@@ -854,6 +873,7 @@ export default function CourseList({
           })
         }
         rollingInactiveHint={ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE}
+        excludeLockWeeks={resolveRollingExcludeLockWeeks(tenant?.settings)}
         onKeyDown={handleEditDialogKeyDown}
         onClose={closeEditModal}
         onSave={saveEditCourse}

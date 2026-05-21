@@ -35,6 +35,7 @@ function mapItemToCourseResponse(
     visibilityMode,
     seriesStartDate: item.seriesStartDate?.S,
     seriesEndDate: item.seriesEndDate?.S,
+    plannedEndDate: item.plannedEndDate?.S,
     visibleFrom: item.visibleFrom?.S,
     visibleUntil: item.visibleUntil?.S,
     visibilityHorizonWeeks: item.visibilityHorizonWeeks?.N
@@ -104,6 +105,7 @@ export const handler = async (
         weekday: item.weekday?.S ?? "",
         seriesStartDate: item.seriesStartDate?.S,
         seriesEndDate: item.seriesEndDate?.S,
+        plannedEndDate: item.plannedEndDate?.S,
         visibleFrom: item.visibleFrom?.S,
         visibleUntil: item.visibleUntil?.S,
         visibilityHorizonWeeks: item.visibilityHorizonWeeks?.N
