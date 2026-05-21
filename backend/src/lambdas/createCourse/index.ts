@@ -10,7 +10,7 @@ import {
 import { generateCourseUid } from "../shared/courseUid";
 import {
   loadTenantSettings,
-  resolveRollingExcludeLockWeeks,
+  resolveRollingPlanningHorizonWeeks,
 } from "../shared/tenantSettingsLoader";
 
 const client = dynamoClient;
@@ -32,7 +32,6 @@ type CreateCourseBody = {
   seriesEndDate?: string;
   visibleFrom?: string;
   visibleUntil?: string;
-  visibilityHorizonWeeks?: number;
   excludedDates?: string[];
   includedDates?: string[];
 };
@@ -101,8 +100,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     typeof body.visibleFrom === "string" ? body.visibleFrom.trim() : undefined;
   const visibleUntil =
     typeof body.visibleUntil === "string" ? body.visibleUntil.trim() : undefined;
-  const visibilityHorizonWeeks =
-    Number.isFinite(body.visibilityHorizonWeeks) ? Number(body.visibilityHorizonWeeks) : undefined;
   const excludedDatesInput = normalizeDateListInput(body.excludedDates);
   const includedDatesInput = normalizeDateListInput(body.includedDates);
   const capacity = Number.isFinite(body.capacity) ? Number(body.capacity) : NaN;
@@ -167,32 +164,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
 
-    let rollingExcludeLockWeeks = 5;
+    let rollingPlanningHorizonWeeks = 5;
     try {
       const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
-      rollingExcludeLockWeeks = resolveRollingExcludeLockWeeks(tenantSettings);
+      rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenantSettings);
     } catch (error) {
-      console.error("Failed to load tenant settings for rolling lock weeks:", error);
-    }
-
-    if (
-      (visibilityMode === "rolling_horizon" || visibilityHorizonWeeks != null) &&
-      (!Number.isInteger(visibilityHorizonWeeks) ||
-        (visibilityHorizonWeeks ?? 0) < rollingExcludeLockWeeks)
-    ) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          error: `visibilityHorizonWeeks must be an integer >= ${rollingExcludeLockWeeks}`,
-        }),
-      };
+      console.error("Failed to load tenant settings for rolling planning horizon:", error);
     }
 
     const prunedExceptions = pruneScheduleExceptions({
       planningMode,
       seriesStartDate,
       seriesEndDate,
-      visibilityHorizonWeeks,
       excludedDates: excludedDatesInput,
       includedDates: includedDatesInput,
     });
@@ -217,15 +200,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextId = maxId + 1;
     const nextCourseId = String(nextId);
     const newCourseUid = generateCourseUid();
+    const effectiveVisibilityMode =
+      visibilityMode ?? (planningMode === "rolling_continuous" ? "rolling_horizon" : undefined);
     const visibleDates = deriveVisibleDates({
       planningMode,
-      visibilityMode,
+      visibilityMode: effectiveVisibilityMode,
       weekday,
       seriesStartDate,
       seriesEndDate,
       visibleFrom,
       visibleUntil,
-      visibilityHorizonWeeks,
+      rollingPlanningHorizonWeeks:
+        planningMode === "rolling_continuous" ? rollingPlanningHorizonWeeks : undefined,
       excludedDates,
       includedDates,
       fallbackDates: [],
@@ -262,14 +248,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       dates: { L: visibleDates.map((entry) => ({ S: entry })) },
     };
     if (planningMode) item.planningMode = { S: planningMode };
-    if (visibilityMode) item.visibilityMode = { S: visibilityMode };
+    if (effectiveVisibilityMode) item.visibilityMode = { S: effectiveVisibilityMode };
     if (seriesStartDate) item.seriesStartDate = { S: seriesStartDate };
     if (seriesEndDate) item.seriesEndDate = { S: seriesEndDate };
     if (visibleFrom) item.visibleFrom = { S: visibleFrom };
     if (visibleUntil) item.visibleUntil = { S: visibleUntil };
-    if (visibilityHorizonWeeks != null) {
-      item.visibilityHorizonWeeks = { N: String(visibilityHorizonWeeks) };
-    }
     if (excludedDates.length > 0) {
       item.excludedDates = { L: excludedDates.map((entry) => ({ S: entry })) };
     }
@@ -297,12 +280,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         capacity,
         status: effectiveStatus,
         planningMode,
-        visibilityMode,
+        visibilityMode: effectiveVisibilityMode,
         seriesStartDate,
         seriesEndDate,
         visibleFrom,
         visibleUntil,
-        visibilityHorizonWeeks,
         excludedDates,
         includedDates,
         visibleDates,

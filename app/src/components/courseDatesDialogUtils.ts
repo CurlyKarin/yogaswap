@@ -1,12 +1,13 @@
 import type { Course, CoursePlanningMode } from "shared/types";
-import { DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS as SHARED_DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS } from "shared/tenantSettings";
+import {
+  DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS as SHARED_DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS,
+} from "shared/tenantSettings";
 import { deriveVisibleDates } from "../lib/courseSchedule";
 
 export type CourseDatesEditorState = {
   courseId: number;
   weekday: string;
   planningMode: CoursePlanningMode;
-  visibilityHorizonWeeks: number;
   seriesStartDate: string;
   seriesEndDate: string;
   excludedDates: string[];
@@ -73,23 +74,21 @@ export function dedupeAndSortDates(values: string[]): string[] {
   return Array.from(new Set(values.filter(isValidIsoDateOnly))).sort(compareIsoDate);
 }
 
-export const DEFAULT_ROLLING_HORIZON_WEEKS = 10;
-/** Fallback; Studio-Wert kommt aus `resolveRollingExcludeLockWeeks(tenantSettings)`. */
-export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = SHARED_DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
-const DEFAULT_ROLLING_EXCLUDE_SELECTION_WEEKS = 156; // ~3 Jahre für langfristige Planung
+/** Fallback; Studio-Wert kommt aus `resolveRollingPlanningHorizonWeeks(tenantSettings)`. */
+export const DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS = SHARED_DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
+/** @deprecated Alias */
+export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
 
-function normalizeHorizonWeeks(value: number | undefined): number {
-  if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_HORIZON_WEEKS;
-  return Math.max(Number(value), DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS);
-}
+/** Langfristige Admin-/Kursleiter-Planung (~3 Jahre), unabhängig vom Teilnehmer-Sichtfenster. */
+export const ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS = 156;
 
-function normalizeExcludeLockWeeks(value: number | undefined): number {
-  if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
+function normalizeRollingPlanningHorizonWeeks(value: number | undefined): number {
+  if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
   return Number(value);
 }
 
-function normalizeExcludeSelectionWeeks(value: number | undefined): number {
-  if (!Number.isInteger(value) || (value ?? 0) <= 0) return DEFAULT_ROLLING_EXCLUDE_SELECTION_WEEKS;
+function normalizeAdminPlanningWeeks(value: number | undefined): number {
+  if (!Number.isInteger(value) || (value ?? 0) <= 0) return ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS;
   return Number(value);
 }
 
@@ -211,59 +210,49 @@ export function generateSeriesPreviewDates(
 }
 
 export function getRollingWindowRangeIso(
-  visibilityHorizonWeeks: number,
+  rollingPlanningHorizonWeeks: number,
   now: Date = new Date(),
 ): { start: string; end: string } {
   const start = new Date(now);
   start.setHours(12, 0, 0, 0);
   const end = new Date(start);
-  end.setDate(end.getDate() + normalizeHorizonWeeks(visibilityHorizonWeeks) * 7);
+  end.setDate(end.getDate() + normalizeRollingPlanningHorizonWeeks(rollingPlanningHorizonWeeks) * 7);
   return {
     start: toIsoDateOnly(start),
     end: toIsoDateOnly(end),
   };
 }
 
-export function getRollingExcludeLockRangeIso(
-  excludeLockWeeks: number = DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS,
+export function getRollingAdminPlanningRangeIso(
+  previewWeeks: number = ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS,
   now: Date = new Date(),
 ): { start: string; end: string } {
   const start = new Date(now);
   start.setHours(12, 0, 0, 0);
   const end = new Date(start);
-  end.setDate(end.getDate() + normalizeExcludeLockWeeks(excludeLockWeeks) * 7);
+  end.setDate(end.getDate() + normalizeAdminPlanningWeeks(previewWeeks) * 7);
   return {
     start: toIsoDateOnly(start),
     end: toIsoDateOnly(end),
   };
 }
 
-export function getRollingExcludeSelectionRangeIso(
-  excludeSelectionWeeks: number = DEFAULT_ROLLING_EXCLUDE_SELECTION_WEEKS,
-  now: Date = new Date(),
-): { start: string; end: string } {
-  const start = new Date(now);
-  start.setHours(12, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + normalizeExcludeSelectionWeeks(excludeSelectionWeeks) * 7);
-  return {
-    start: toIsoDateOnly(start),
-    end: toIsoDateOnly(end),
-  };
-}
+/** @deprecated Nutze {@link getRollingWindowRangeIso}. */
+export const getRollingExcludeLockRangeIso = getRollingWindowRangeIso;
 
 export function generatePreviewDates(
   state: Pick<
     CourseDatesEditorState,
-    "planningMode" | "weekday" | "seriesStartDate" | "seriesEndDate" | "visibilityHorizonWeeks" | "excludedDates"
+    "planningMode" | "weekday" | "seriesStartDate" | "seriesEndDate" | "excludedDates"
   >,
+  rollingPlanningHorizonWeeks: number = DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS,
 ): string[] {
   if (state.planningMode === "rolling_continuous") {
     return deriveVisibleDates({
       planningMode: "rolling_continuous",
       visibilityMode: "rolling_horizon",
       weekday: state.weekday,
-      visibilityHorizonWeeks: state.visibilityHorizonWeeks,
+      rollingPlanningHorizonWeeks,
       excludedDates: state.excludedDates,
       includedDates: [],
       fallbackDates: [],
@@ -296,7 +285,6 @@ export function createDatesState(course: Course): CourseDatesEditorState {
     courseId: course.id,
     weekday: course.weekday,
     planningMode: course.planningMode ?? "bounded_series",
-    visibilityHorizonWeeks: normalizeHorizonWeeks(course.visibilityHorizonWeeks),
     seriesStartDate: initialStart,
     seriesEndDate: initialEnd,
     excludedDates: dedupeAndSortDates(course.excludedDates ?? []),

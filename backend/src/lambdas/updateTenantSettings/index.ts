@@ -15,7 +15,7 @@ const MVP_SETTINGS_KEYS = [
   "inactiveGraceDaysAfterCourseEnd",
   "minOffsetDays",
   "maxOffsetDays",
-  "excludeLockWeeks",
+  "rollingPlanningHorizonWeeks",
 ] as const;
 
 function parseBody(event: APIGatewayProxyEvent): StudioSettingsPatch | null {
@@ -39,7 +39,21 @@ function mergeTenantSettings(
       (next as Record<string, number>)[key] = patch[key] as number;
     }
   }
+  if (Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks")) {
+    delete next.excludeLockWeeks;
+  } else if (Object.prototype.hasOwnProperty.call(patch, "excludeLockWeeks")) {
+    next.rollingPlanningHorizonWeeks = patch.excludeLockWeeks;
+    delete next.excludeLockWeeks;
+  }
   return next;
+}
+
+function hasUpdatablePatch(patch: StudioSettingsPatch): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(patch, "name") ||
+    MVP_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
+    Object.prototype.hasOwnProperty.call(patch, "excludeLockWeeks")
+  );
 }
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -59,10 +73,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON body" }) };
   }
 
-  if (
-    !Object.prototype.hasOwnProperty.call(body, "name") &&
-    !MVP_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(body, key))
-  ) {
+  if (!hasUpdatablePatch(body)) {
     return { statusCode: 400, body: JSON.stringify({ error: "No updatable fields provided" }) };
   }
 

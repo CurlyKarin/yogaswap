@@ -5,6 +5,10 @@ import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
 import { deriveVisibleDates } from "../shared/courseDates";
 import { computeCourseReconcile } from "../shared/courseReconcile";
+import {
+  loadTenantSettings,
+  resolveRollingPlanningHorizonWeeks,
+} from "../shared/tenantSettingsLoader";
 
 const client = dynamoClient;
 
@@ -55,6 +59,7 @@ export const handler = async (
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> => {
   const tableName = process.env.COURSES_TABLE;
+  const tenantsTable = process.env.TENANTS_TABLE;
 
   if (!tableName) {
     console.error("COURSES_TABLE env var is not set");
@@ -67,6 +72,16 @@ export const handler = async (
   try {
     const { tenantId, userId } = getTenantContext(event);
     console.log("getCourses tenant context", { tenantId, userId });
+
+    let rollingPlanningHorizonWeeks = 5;
+    if (tenantsTable) {
+      try {
+        const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+        rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenantSettings);
+      } catch (error) {
+        console.error("Failed to load tenant settings for rolling horizon:", error);
+      }
+    }
 
     const result = await client.send(
       new QueryCommand({
@@ -108,9 +123,8 @@ export const handler = async (
         plannedEndDate: item.plannedEndDate?.S,
         visibleFrom: item.visibleFrom?.S,
         visibleUntil: item.visibleUntil?.S,
-        visibilityHorizonWeeks: item.visibilityHorizonWeeks?.N
-          ? Number(item.visibilityHorizonWeeks.N)
-          : undefined,
+        rollingPlanningHorizonWeeks:
+          planningMode === "rolling_continuous" ? rollingPlanningHorizonWeeks : undefined,
         excludedDates,
         includedDates,
         fallbackDates,

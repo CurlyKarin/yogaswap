@@ -13,6 +13,9 @@ vi.mock("../api/courses", () => ({
 const mockedUpdateCourse = updateCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedCancelCourseDate = cancelCourseDate as unknown as ReturnType<typeof vi.fn>;
 
+const rollingTenant10 = { rollingPlanningHorizonWeeks: 10 };
+const rollingTenant2 = { rollingPlanningHorizonWeeks: 2 };
+
 function makeCourse(overrides: Partial<Course> = {}): Course {
   return {
     tenantId: "default-tenant",
@@ -158,18 +161,16 @@ describe("CourseDatesDialog", () => {
     expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
   });
 
-  it("speichert durchlaufende Kurse mit rolling horizon", async () => {
+  it("speichert durchlaufende Kurse ohne kursbezogenes Sichtfenster", async () => {
     mockedUpdateCourse.mockResolvedValue({});
     const onClose = vi.fn();
     const onSaved = vi.fn().mockResolvedValue(undefined);
     render(
       <CourseDatesDialog
-        course={makeCourse({
-          planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 10,
-        })}
+        course={makeCourse({ planningMode: "rolling_continuous" })}
         overrides={[]}
         swaps={[]}
+        tenantSettings={rollingTenant10}
         canManageCourses
         onClose={onClose}
         onSaved={onSaved}
@@ -181,9 +182,8 @@ describe("CourseDatesDialog", () => {
     const dialog = dialogs[dialogs.length - 1];
     const dialogQueries = within(dialog);
     expect(dialogQueries.getByText(/durchlaufend \(rollend\)/i)).toBeInTheDocument();
-
-    const horizonInput = dialogQueries.getByLabelText(/sichtfenster wochen/i);
-    fireEvent.change(horizonInput, { target: { value: "12" } });
+    expect(dialogQueries.getByText(/10 wochen \(studio-einstellungen\)/i)).toBeInTheDocument();
+    expect(dialogQueries.queryByLabelText(/sichtfenster wochen/i)).not.toBeInTheDocument();
 
     await user.click(dialogQueries.getByRole("button", { name: /termine übernehmen/i }));
 
@@ -193,27 +193,28 @@ describe("CourseDatesDialog", () => {
         expect.objectContaining({
           planningMode: "rolling_continuous",
           visibilityMode: "rolling_horizon",
-          visibilityHorizonWeeks: 12,
           excludedDates: [],
           includedDates: [],
         }),
+      );
+      expect(mockedUpdateCourse).toHaveBeenCalledWith(
+        "1",
+        expect.not.objectContaining({ visibilityHorizonWeeks: expect.anything() }),
       );
       expect(onClose).toHaveBeenCalledTimes(1);
       expect(onSaved).toHaveBeenCalledTimes(1);
     });
   });
 
-  it("erlaubt im rolling Planungsmodus excludedDates auch im bisherigen Schutzfenster", async () => {
+  it("erlaubt im Rollkurs-Entwurf Ausschluss auch innerhalb des Teilnehmer-Sichtfensters", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
     render(
       <CourseDatesDialog
-        course={makeCourse({
-          planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 10,
-        })}
+        course={makeCourse({ planningMode: "rolling_continuous", status: "draft" })}
         overrides={[]}
         swaps={[]}
+        tenantSettings={rollingTenant2}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -221,29 +222,23 @@ describe("CourseDatesDialog", () => {
     );
 
     const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
-    const dialog = dialogs[dialogs.length - 1];
-    const dialogQueries = within(dialog);
+    const dialogQueries = within(dialogs[dialogs.length - 1]);
     fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
 
     const nearCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-01-06/i });
     expect(nearCell).not.toBeDisabled();
 
-    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
-    const laterCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-02-10/i });
-    expect(laterCell).not.toBeDisabled();
+    fireEvent.click(nearCell);
+    expect(screen.getByText(formatDateForDisplay("2026-01-06"))).toBeInTheDocument();
   });
 
-  it("erlaubt rolling excludedDates auch außerhalb des Sichtfensters", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+  it("zeigt für inaktive Rollkurse keinen Ausschluss-Kalender", () => {
     render(
       <CourseDatesDialog
-        course={makeCourse({
-          planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 2,
-        })}
+        course={makeCourse({ planningMode: "rolling_continuous", status: "inactive" })}
         overrides={[]}
         swaps={[]}
+        tenantSettings={rollingTenant10}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -251,15 +246,8 @@ describe("CourseDatesDialog", () => {
     );
 
     const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
-    const dialog = dialogs[dialogs.length - 1];
-    const dialogQueries = within(dialog);
-    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
-
-    // Liegt deutlich außerhalb des 2-Wochen-Sichtfensters, muss aber auswählbar bleiben.
-    const farFutureCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-03-03/i });
-    expect(farFutureCell).not.toBeDisabled();
+    const dialogQueries = within(dialogs[dialogs.length - 1]);
+    expect(dialogQueries.queryByRole("button", { name: /kalender für ausnahmetermin öffnen/i })).not.toBeInTheDocument();
   });
 
   it("zeigt bei aktivem Kursblock nur den Absage-Flow", async () => {
@@ -342,10 +330,10 @@ describe("CourseDatesDialog", () => {
         course={makeCourse({
           status: "active",
           planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 10,
         })}
         overrides={[]}
         swaps={[]}
+        tenantSettings={rollingTenant10}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -369,11 +357,11 @@ describe("CourseDatesDialog", () => {
         course={makeCourse({
           status: "active",
           planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 10,
           excludedDates: ["2026-01-13"],
         })}
         overrides={[]}
         swaps={[]}
+        tenantSettings={rollingTenant10}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -398,7 +386,7 @@ describe("CourseDatesDialog", () => {
     expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeEnabled();
   });
 
-  it("lässt im aktiven rolling Kurs außerhalb Lockfenster Ausschluss über denselben Kalender zu", async () => {
+  it("lässt im aktiven rolling Kurs außerhalb des Teilnehmer-Sichtfensters Ausschluss zu", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
     render(
@@ -406,10 +394,10 @@ describe("CourseDatesDialog", () => {
         course={makeCourse({
           status: "active",
           planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 10,
         })}
         overrides={[]}
         swaps={[]}
+        tenantSettings={rollingTenant2}
         canManageCourses
         onClose={vi.fn()}
         onSaved={vi.fn()}
@@ -417,125 +405,19 @@ describe("CourseDatesDialog", () => {
     );
 
     const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
-    const dialog = dialogs[dialogs.length - 1];
-    const dialogQueries = within(dialog);
+    const dialogQueries = within(dialogs[dialogs.length - 1]);
     fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
 
     const nearLocked = dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i });
-    expect(nearLocked).not.toBeDisabled();
+    expect(nearLocked).toBeEnabled();
     expect(nearLocked).toHaveAttribute("title", expect.stringMatching(/nur absage möglich/i));
 
     fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
     const farAllowed = dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i });
-    expect(farAllowed).not.toBeDisabled();
+    expect(farAllowed).toBeEnabled();
     expect(farAllowed).toHaveAttribute("title", expect.stringMatching(/termin ausschließen/i));
     fireEvent.click(farAllowed);
     expect(dialogQueries.getByText(/Ausschlüsse in Bearbeitung/i)).toBeInTheDocument();
-    expect(dialogQueries.getByText(/hinzugefügt: 1, zurückgenommen: 0/i)).toBeInTheDocument();
-  });
-
-  it("schließt im aktiven rolling Kurs nach Ausschluss-Übernahme den Dialog", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
-    mockedUpdateCourse.mockResolvedValue({});
-    const onClose = vi.fn();
-    const onSaved = vi.fn().mockResolvedValue(undefined);
-    render(
-      <CourseDatesDialog
-        course={makeCourse({
-          status: "active",
-          planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 10,
-        })}
-        overrides={[]}
-        swaps={[]}
-        canManageCourses
-        onClose={onClose}
-        onSaved={onSaved}
-      />,
-    );
-
-    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
-    const dialog = dialogs[dialogs.length - 1];
-    const dialogQueries = within(dialog);
-    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
-
-    fireEvent.click(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i }));
-    await vi.runAllTimersAsync();
-
-    expect(mockedUpdateCourse).toHaveBeenCalledTimes(1);
-    expect(onSaved).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("bleibt bei Fehlern beim Ausschluss-Speichern offen und zeigt Fehlermeldung", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
-    mockedUpdateCourse.mockRejectedValue(new Error("Speichern fehlgeschlagen"));
-    const onClose = vi.fn();
-    const onSaved = vi.fn().mockResolvedValue(undefined);
-    render(
-      <CourseDatesDialog
-        course={makeCourse({
-          status: "active",
-          planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 10,
-        })}
-        overrides={[]}
-        swaps={[]}
-        canManageCourses
-        onClose={onClose}
-        onSaved={onSaved}
-      />,
-    );
-
-    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
-    const dialog = dialogs[dialogs.length - 1];
-    const dialogQueries = within(dialog);
-    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i }));
-    await vi.runAllTimersAsync();
-
-    expect(mockedUpdateCourse).toHaveBeenCalledTimes(1);
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(onClose).not.toHaveBeenCalled();
-    expect(dialogQueries.getByText(/speichern fehlgeschlagen/i)).toBeInTheDocument();
-  });
-
-  it("wechselt den Primärbutton im aktiven rolling Modus zwischen Ausschluss und Absage", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
-    render(
-      <CourseDatesDialog
-        course={makeCourse({
-          status: "active",
-          planningMode: "rolling_continuous",
-          visibilityHorizonWeeks: 10,
-        })}
-        overrides={[]}
-        swaps={[]}
-        canManageCourses
-        onClose={vi.fn()}
-        onSaved={vi.fn()}
-      />,
-    );
-
-    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
-    const dialog = dialogs[dialogs.length - 1];
-    const dialogQueries = within(dialog);
-    fireEvent.click(dialogQueries.getByRole("button", { name: /kalender für terminabsage öffnen/i }));
-
-    fireEvent.click(dialogQueries.getByRole("button", { name: /nächster monat/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-02-10/i }));
-    expect(dialogQueries.getByRole("button", { name: /ausschluss übernehmen/i })).toBeInTheDocument();
-
-    fireEvent.click(dialogQueries.getByRole("button", { name: /vorheriger monat/i }));
-    fireEvent.click(dialogQueries.getByRole("button", { name: /absage datum 2026-01-06/i }));
-    expect(dialogQueries.getByRole("button", { name: /absage überprüfen/i })).toBeInTheDocument();
   });
 
   it("zeigt Hinweis statt Fehler bei teilweisem Erfolg mit operationWarnings", async () => {

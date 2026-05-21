@@ -26,7 +26,7 @@ import {
   PLANNED_END_INVALID_MESSAGE,
   ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
 } from "shared/courseEditPolicy";
-import { resolveRollingExcludeLockWeeks } from "shared/tenantSettings";
+import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
 import { getSwaps } from "../api/swaps";
 import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
@@ -132,7 +132,6 @@ function buildSchedulingFromMode(mode: CoursePlanningMode) {
     return {
       planningMode: "rolling_continuous" as const,
       visibilityMode: "rolling_horizon" as const,
-      visibilityHorizonWeeks: 8,
     };
   }
 
@@ -624,12 +623,12 @@ export default function CourseList({
         setFormError(ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE);
         return;
       }
-      const excludeLockWeeks = resolveRollingExcludeLockWeeks(tenant?.settings);
+      const rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenant?.settings);
       const plannedEndChanged = editState.plannedEndDate !== editInitialState?.plannedEndDate;
       if (
         plannedEndChanged &&
         editState.plannedEndDate &&
-        !isPlannedEndDateAllowed(editState.plannedEndDate, excludeLockWeeks)
+        !isPlannedEndDateAllowed(editState.plannedEndDate, rollingPlanningHorizonWeeks)
       ) {
         setFormError(PLANNED_END_INVALID_MESSAGE);
         return;
@@ -873,7 +872,7 @@ export default function CourseList({
           })
         }
         rollingInactiveHint={ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE}
-        excludeLockWeeks={resolveRollingExcludeLockWeeks(tenant?.settings)}
+        excludeLockWeeks={resolveRollingPlanningHorizonWeeks(tenant?.settings)}
         onKeyDown={handleEditDialogKeyDown}
         onClose={closeEditModal}
         onSave={saveEditCourse}

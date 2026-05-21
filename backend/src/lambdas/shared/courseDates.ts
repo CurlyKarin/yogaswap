@@ -75,6 +75,8 @@ export type DeriveVisibleDatesInput = {
   plannedEndDate?: string;
   visibleFrom?: string;
   visibleUntil?: string;
+  rollingPlanningHorizonWeeks?: number;
+  /** @deprecated Legacy-Kursdaten */
   visibilityHorizonWeeks?: number;
   excludedDates: string[];
   includedDates: string[];
@@ -167,9 +169,11 @@ export function deriveVisibleDates(input: DeriveVisibleDatesInput): string[] {
     baseWindowEnd = seriesEnd;
   } else if (planningMode === "rolling_continuous") {
     const horizonWeeks =
-      Number.isInteger(input.visibilityHorizonWeeks) && (input.visibilityHorizonWeeks ?? 0) > 0
-        ? Number(input.visibilityHorizonWeeks)
-        : 8;
+      Number.isInteger(input.rollingPlanningHorizonWeeks) && (input.rollingPlanningHorizonWeeks ?? 0) > 0
+        ? Number(input.rollingPlanningHorizonWeeks)
+        : Number.isInteger(input.visibilityHorizonWeeks) && (input.visibilityHorizonWeeks ?? 0) > 0
+          ? Number(input.visibilityHorizonWeeks)
+          : 5;
     baseWindowStart = todayUtc;
     baseWindowEnd = addDaysUtc(todayUtc, horizonWeeks * 7);
     const plannedEnd = parseDateOnlyUtc(input.plannedEndDate);

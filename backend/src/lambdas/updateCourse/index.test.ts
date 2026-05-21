@@ -374,7 +374,6 @@ describe("updateCourse Lambda", () => {
       makeEvent({
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 10,
         excludedDates: [allowedIso],
         includedDates: [],
       }),
@@ -387,7 +386,6 @@ describe("updateCourse Lambda", () => {
           courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
-          visibilityHorizonWeeks: { N: "10" },
           excludedDates: { L: [{ S: allowedIso }] },
         }),
       }),
@@ -398,25 +396,49 @@ describe("updateCourse Lambda", () => {
       expect.objectContaining({
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 10,
         excludedDates: [allowedIso],
       }),
     );
   });
 
-  test("blocks adding excludedDates inside rolling lock window", async () => {
+  test("allows excludedDates inside rolling lock window for draft courses", async () => {
     const soon = new Date();
     soon.setDate(soon.getDate() + 7);
     const soonIso = soon.toISOString().slice(0, 10);
 
     mockAdminMembership()
-      .mockResolvedValueOnce({ Item: baseCourseItem("draft") });
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
+      .mockResolvedValueOnce({});
 
     const result = await handler(
       makeEvent({
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 10,
+        excludedDates: [soonIso],
+        includedDates: [],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).excludedDates).toEqual([soonIso]);
+  });
+
+  test("blocks adding excludedDates inside rolling lock window for active courses", async () => {
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 7);
+    const soonIso = soon.toISOString().slice(0, 10);
+
+    mockAdminMembership().mockResolvedValueOnce({
+      Item: {
+        ...baseCourseItem("active"),
+        planningMode: { S: "rolling_continuous" },
+        visibilityMode: { S: "rolling_horizon" },
+        excludedDates: { L: [] },
+      },
+    });
+
+    const result = await handler(
+      makeEvent({
         excludedDates: [soonIso],
         includedDates: [],
       }),
@@ -504,7 +526,6 @@ describe("updateCourse Lambda", () => {
           ...baseCourseItem("draft"),
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
-          visibilityHorizonWeeks: { N: "10" },
           excludedDates: { L: [] },
           includedDates: { L: [] },
         },
@@ -515,7 +536,6 @@ describe("updateCourse Lambda", () => {
       makeEvent({
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 10,
         excludedDates: [stalePastIso, farFutureIso],
         includedDates: [],
       }),

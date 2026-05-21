@@ -24,7 +24,7 @@ import {
 } from "../shared/courseEditPolicy";
 import {
   loadTenantSettings,
-  resolveRollingExcludeLockWeeks,
+  resolveRollingPlanningHorizonWeeks,
 } from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 
@@ -49,7 +49,6 @@ type UpdateCourseBody = {
   plannedEndDate?: string | null;
   visibleFrom?: string;
   visibleUntil?: string;
-  visibilityHorizonWeeks?: number;
   excludedDates?: string[];
   includedDates?: string[];
   participants?: string[];
@@ -114,12 +113,12 @@ function addDaysLocal(date: Date, days: number): Date {
   return next;
 }
 
-function getRollingExcludeLockBounds(
+function getRollingPlanningLockBounds(
   now: Date,
-  excludeLockWeeks: number,
+  rollingPlanningHorizonWeeks: number,
 ): { startIso: string; endIso: string } {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const end = addDaysLocal(startOfToday, excludeLockWeeks * 7);
+  const end = addDaysLocal(startOfToday, rollingPlanningHorizonWeeks * 7);
   return {
     startIso: toIsoDateOnlyLocal(startOfToday),
     endIso: toIsoDateOnlyLocal(end),
@@ -242,7 +241,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     && !Object.prototype.hasOwnProperty.call(body, "plannedEndDate")
     && !Object.prototype.hasOwnProperty.call(body, "visibleFrom")
     && !Object.prototype.hasOwnProperty.call(body, "visibleUntil")
-    && !Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")
     && !Object.prototype.hasOwnProperty.call(body, "excludedDates")
     && !Object.prototype.hasOwnProperty.call(body, "includedDates")
     && !Object.prototype.hasOwnProperty.call(body, "participants")
@@ -261,10 +259,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const hasPlannedEndDatePatch = Object.prototype.hasOwnProperty.call(body, "plannedEndDate");
   const visibleFrom = typeof body.visibleFrom === "string" ? body.visibleFrom.trim() : undefined;
   const visibleUntil = typeof body.visibleUntil === "string" ? body.visibleUntil.trim() : undefined;
-  const visibilityHorizonWeeks =
-    Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks") && Number.isFinite(body.visibilityHorizonWeeks)
-      ? Number(body.visibilityHorizonWeeks)
-      : undefined;
   const excludedDates = Object.prototype.hasOwnProperty.call(body, "excludedDates")
     ? normalizeDateListInput(body.excludedDates)
     : undefined;
@@ -343,27 +337,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
 
-    let rollingExcludeLockWeeks = 5;
+    let rollingPlanningHorizonWeeks = 5;
     try {
       const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
-      rollingExcludeLockWeeks = resolveRollingExcludeLockWeeks(tenantSettings);
+      rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenantSettings);
     } catch (error) {
-      console.error("Failed to load tenant settings for rolling lock weeks:", error);
-    }
-
-    if (Object.prototype.hasOwnProperty.call(body, "visibilityHorizonWeeks")) {
-      if (
-        visibilityHorizonWeeks == null ||
-        !Number.isInteger(visibilityHorizonWeeks) ||
-        visibilityHorizonWeeks < rollingExcludeLockWeeks
-      ) {
-        return {
-          statusCode: 400,
-          body: JSON.stringify({
-            error: `visibilityHorizonWeeks must be an integer >= ${rollingExcludeLockWeeks}`,
-          }),
-        };
-      }
+      console.error("Failed to load tenant settings for rolling planning horizon:", error);
     }
 
     const courseResp = await client.send(
@@ -437,11 +416,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           weekday: item.weekday?.S ?? "",
           seriesStartDate: item.seriesStartDate?.S,
           seriesEndDate: item.seriesEndDate?.S,
+          plannedEndDate: item.plannedEndDate?.S,
           visibleFrom: item.visibleFrom?.S,
           visibleUntil: item.visibleUntil?.S,
-          visibilityHorizonWeeks: item.visibilityHorizonWeeks?.N
-            ? Number(item.visibilityHorizonWeeks.N)
-            : undefined,
+          rollingPlanningHorizonWeeks:
+            item.planningMode?.S === "rolling_continuous" ? rollingPlanningHorizonWeeks : undefined,
           excludedDates: existingExcludedDates,
           includedDates: existingIncludedDates,
           fallbackDates: existingFallbackDates,
@@ -503,7 +482,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             body: JSON.stringify({ error: "plannedEndDate is only allowed for rolling_continuous courses" }),
           };
         }
-        if (!isPlannedEndDateAllowed(trimmed, rollingExcludeLockWeeks, new Date())) {
+        if (!isPlannedEndDateAllowed(trimmed, rollingPlanningHorizonWeeks, new Date())) {
           return {
             statusCode: 400,
             body: JSON.stringify({ error: PLANNED_END_INVALID_MESSAGE }),
@@ -519,9 +498,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     const nextVisibleFrom = visibleFrom ?? item.visibleFrom?.S;
     const nextVisibleUntil = visibleUntil ?? item.visibleUntil?.S;
-    const nextVisibilityHorizonWeeks =
-      visibilityHorizonWeeks ??
-      (item.visibilityHorizonWeeks?.N ? Number.parseInt(item.visibilityHorizonWeeks.N, 10) : undefined);
     const nextExcludedDatesRaw =
       excludedDates ?? (item.excludedDates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? []);
     const nextIncludedDatesRaw =
@@ -530,7 +506,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       planningMode: nextPlanningMode,
       seriesStartDate: nextSeriesStartDate,
       seriesEndDate: nextSeriesEndDate,
-      visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
       excludedDates: nextExcludedDatesRaw,
       includedDates: nextIncludedDatesRaw,
     });
@@ -565,23 +540,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }),
       };
     }
-    if (
-      nextVisibilityMode === "rolling_horizon" &&
-      (!Number.isInteger(nextVisibilityHorizonWeeks) ||
-        (nextVisibilityHorizonWeeks ?? 0) < rollingExcludeLockWeeks)
-    ) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          error: `rolling_horizon requires visibilityHorizonWeeks >= ${rollingExcludeLockWeeks}`,
-        }),
-      };
-    }
-
-    if (nextPlanningMode === "rolling_continuous") {
+    if (nextPlanningMode === "rolling_continuous" && nextStatus === "active") {
       const currentExcludedSet = new Set(currentExcludedDates);
       const addedExcludedDates = nextExcludedDates.filter((entry) => !currentExcludedSet.has(entry));
-      const lockBounds = getRollingExcludeLockBounds(new Date(), rollingExcludeLockWeeks);
+      const lockBounds = getRollingPlanningLockBounds(new Date(), rollingPlanningHorizonWeeks);
       const hasLockedExcludedDate = addedExcludedDates.some(
         (entry) => entry >= lockBounds.startIso && entry <= lockBounds.endIso,
       );
@@ -589,7 +551,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         return {
           statusCode: 400,
           body: JSON.stringify({
-            error: `Termine innerhalb der nächsten ${rollingExcludeLockWeeks} Wochen dürfen nicht ausgeschlossen werden. Bitte stattdessen absagen.`,
+            error: `Termine innerhalb der nächsten ${rollingPlanningHorizonWeeks} Wochen dürfen nicht ausgeschlossen werden. Bitte stattdessen absagen.`,
           }),
         };
       }
@@ -604,7 +566,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       plannedEndDate: nextPlannedEndDate,
       visibleFrom: nextVisibleFrom,
       visibleUntil: nextVisibleUntil,
-      visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
+      rollingPlanningHorizonWeeks:
+        nextPlanningMode === "rolling_continuous" ? rollingPlanningHorizonWeeks : undefined,
       excludedDates: nextExcludedDates,
       includedDates: nextIncludedDates,
       fallbackDates: item.dates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [],
@@ -671,9 +634,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (nextPlannedEndDate) updateItem.plannedEndDate = { S: nextPlannedEndDate };
     if (nextVisibleFrom) updateItem.visibleFrom = { S: nextVisibleFrom };
     if (nextVisibleUntil) updateItem.visibleUntil = { S: nextVisibleUntil };
-    if (nextVisibilityHorizonWeeks != null) {
-      updateItem.visibilityHorizonWeeks = { N: String(nextVisibilityHorizonWeeks) };
-    }
     if (nextExcludedDates.length > 0) {
       updateItem.excludedDates = { L: nextExcludedDates.map((entry) => ({ S: entry })) };
     }
@@ -754,7 +714,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         plannedEndDate: nextPlannedEndDate,
         visibleFrom: nextVisibleFrom,
         visibleUntil: nextVisibleUntil,
-        visibilityHorizonWeeks: nextVisibilityHorizonWeeks,
         excludedDates: nextExcludedDates,
         includedDates: nextIncludedDates,
         visibleDates: nextDates,

@@ -1,11 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { Calendar } from "lucide-react";
 import type { Course, CourseDateOverride, Swap, TenantSettings } from "shared/types";
-import { resolveRollingExcludeLockWeeks } from "shared/tenantSettings";
+import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
 import { cancelCourseDate, updateCourse } from "../api/courses";
 import CourseModalFrame from "./CourseModalFrame";
 import {
-  DEFAULT_ROLLING_HORIZON_WEEKS,
   WEEKDAY_ORDER,
   buildSeriesCalendarCells,
   compareIsoDate,
@@ -14,9 +13,9 @@ import {
   formatIsoDateForDisplay,
   formatMonthLabel,
   generatePreviewDates,
-  getRollingExcludeLockRangeIso,
-  getRollingExcludeSelectionRangeIso,
+  getRollingAdminPlanningRangeIso,
   getRollingWindowRangeIso,
+  ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS,
   isValidIsoDateOnly,
   parseIsoDateOnlyUtc,
   planningModeLabel,
@@ -71,8 +70,6 @@ function isIsoDateInFuture(isoDate: string): boolean {
   return isoDate > today;
 }
 
-const ROLLING_MANAGEMENT_PREVIEW_WEEKS = 156;
-
 export default function CourseDatesDialog({
   course,
   overrides,
@@ -82,8 +79,8 @@ export default function CourseDatesDialog({
   onClose,
   onSaved,
 }: CourseDatesDialogProps) {
-  const excludeLockWeeks = useMemo(
-    () => resolveRollingExcludeLockWeeks(tenantSettings),
+  const rollingPlanningHorizonWeeks = useMemo(
+    () => resolveRollingPlanningHorizonWeeks(tenantSettings),
     [tenantSettings],
   );
   const [datesState, setDatesState] = useState<CourseDatesEditorState | null>(null);
@@ -168,15 +165,15 @@ export default function CourseDatesDialog({
     isValidIsoDateOnly(datesState.seriesStartDate) &&
     isValidIsoDateOnly(datesState.seriesEndDate) &&
     compareIsoDate(datesState.seriesStartDate, datesState.seriesEndDate) <= 0;
-  const rollingHorizonValid =
-    !!datesState &&
-    Number.isInteger(datesState.visibilityHorizonWeeks) &&
-    datesState.visibilityHorizonWeeks >= excludeLockWeeks;
   const isActiveCancellationMode = course?.status === "active";
   const isRollingActiveMode = isActiveCancellationMode && datesState?.planningMode === "rolling_continuous";
   const isActiveReadOnly =
     isActiveCancellationMode && datesState?.planningMode === "bounded_series";
-  const showExcludedDatesEditor = !isActiveCancellationMode;
+  const isRollingDraftPlanning =
+    course?.status === "draft" && datesState?.planningMode === "rolling_continuous";
+  const showExcludedDatesEditor =
+    !isActiveCancellationMode &&
+    (datesState?.planningMode !== "rolling_continuous" || isRollingDraftPlanning);
 
   const canSaveDatesConfig =
     canManageCourses &&
@@ -185,36 +182,26 @@ export default function CourseDatesDialog({
     !!datesState &&
     (
       (datesState.planningMode === "bounded_series" && datesSeriesRangeValid) ||
-      (datesState.planningMode === "rolling_continuous" && rollingHorizonValid)
+      datesState.planningMode === "rolling_continuous"
     );
 
   const datesPreview = useMemo(() => {
     if (!datesState) return [];
-    if (isRollingActiveMode) {
-      return generatePreviewDates({
-        ...datesState,
-        visibilityHorizonWeeks: ROLLING_MANAGEMENT_PREVIEW_WEEKS,
-      });
-    }
-    return generatePreviewDates(datesState);
-  }, [datesState, isRollingActiveMode]);
+    return generatePreviewDates(datesState, rollingPlanningHorizonWeeks);
+  }, [datesState, rollingPlanningHorizonWeeks]);
 
   const fullPlannedDatesForActiveCancellation = useMemo(() => {
     if (!datesState || !isActiveCancellationMode) return [];
-    if (isRollingActiveMode) {
-      return generatePreviewDates({
-        ...datesState,
-        excludedDates: [],
-        visibilityHorizonWeeks: ROLLING_MANAGEMENT_PREVIEW_WEEKS,
-      });
+    if (datesState.planningMode === "rolling_continuous" && canManageCourses) {
+      return generatePreviewDates({ ...datesState, excludedDates: [] }, ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS);
     }
-    return generatePreviewDates({ ...datesState, excludedDates: [] });
-  }, [datesState, isActiveCancellationMode, isRollingActiveMode]);
+    return generatePreviewDates({ ...datesState, excludedDates: [] }, rollingPlanningHorizonWeeks);
+  }, [datesState, isActiveCancellationMode, canManageCourses, rollingPlanningHorizonWeeks]);
 
   const activePreviewDates = useMemo(() => {
     if (!datesState || !isActiveCancellationMode) return [];
-    return generatePreviewDates(datesState);
-  }, [datesState, isActiveCancellationMode]);
+    return generatePreviewDates(datesState, rollingPlanningHorizonWeeks);
+  }, [datesState, isActiveCancellationMode, rollingPlanningHorizonWeeks]);
   const rollingExcludeDraftSummary = useMemo(() => {
     if (!datesState || !isRollingActiveMode) return null;
     const initialExcludedSet = new Set(initialExcludedDatesRef.current);
@@ -233,33 +220,32 @@ export default function CourseDatesDialog({
       ? navigator.language
       : "de-DE";
 
+  const rollingParticipantVisibilityRange = useMemo(() => {
+    if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
+    return getRollingWindowRangeIso(rollingPlanningHorizonWeeks);
+  }, [datesState, rollingPlanningHorizonWeeks]);
+
+  const rollingAdminPlanningRange = useMemo(() => {
+    if (!datesState || datesState.planningMode !== "rolling_continuous" || !canManageCourses) return null;
+    return getRollingAdminPlanningRangeIso();
+  }, [datesState, canManageCourses]);
+
   const effectiveRange = useMemo(() => {
     if (!datesState) return null;
     if (datesState.planningMode === "rolling_continuous") {
-      return getRollingWindowRangeIso(datesState.visibilityHorizonWeeks);
+      return rollingAdminPlanningRange ?? rollingParticipantVisibilityRange;
     }
     return {
       start: datesState.seriesStartDate,
       end: datesState.seriesEndDate,
     };
-  }, [datesState]);
+  }, [datesState, rollingAdminPlanningRange, rollingParticipantVisibilityRange]);
 
-  const rollingExcludeLockRange = useMemo(() => {
-    if (!datesState || datesState.planningMode !== "rolling_continuous" || !isActiveCancellationMode) return null;
-    return getRollingExcludeLockRangeIso(excludeLockWeeks);
-  }, [datesState, isActiveCancellationMode, excludeLockWeeks]);
-
-  const rollingExcludeSelectionRange = useMemo(() => {
-    if (!datesState || datesState.planningMode !== "rolling_continuous") return null;
-    return getRollingExcludeSelectionRangeIso();
-  }, [datesState]);
+  const rollingPlanningLockRange = rollingParticipantVisibilityRange;
 
   const rangeCalendarCells = useMemo(() => {
     if (!datesState || !effectiveRange) return [];
-    const calendarRange =
-      isRollingActiveMode && datesState.planningMode === "rolling_continuous" && rollingExcludeSelectionRange
-        ? rollingExcludeSelectionRange
-        : effectiveRange;
+    const calendarRange = effectiveRange;
     return buildSeriesCalendarCells(
       datesState.rangeCalendarMonth,
       datesState.weekday,
@@ -267,7 +253,7 @@ export default function CourseDatesDialog({
       calendarRange.end,
       datesState.excludedDates,
     );
-  }, [datesState, effectiveRange, isRollingActiveMode, rollingExcludeSelectionRange]);
+  }, [datesState, effectiveRange]);
 
   const rangeCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
@@ -276,10 +262,7 @@ export default function CourseDatesDialog({
 
   const excludedCalendarCells = useMemo(() => {
     if (!datesState) return [];
-    const exclusionRange =
-      datesState.planningMode === "rolling_continuous"
-        ? rollingExcludeSelectionRange
-        : effectiveRange;
+    const exclusionRange = effectiveRange;
     if (!exclusionRange) return [];
     return buildSeriesCalendarCells(
       datesState.excludedCalendarMonth,
@@ -288,7 +271,7 @@ export default function CourseDatesDialog({
       exclusionRange.end,
       datesState.excludedDates,
     );
-  }, [datesState, effectiveRange, rollingExcludeSelectionRange]);
+  }, [datesState, effectiveRange]);
 
   const excludedCalendarMonthLabel = useMemo(() => {
     if (!datesState) return "";
@@ -297,12 +280,6 @@ export default function CourseDatesDialog({
 
   const formattedSeriesStart = datesState ? formatIsoDateForDisplay(datesState.seriesStartDate, displayLocale) : "";
   const formattedSeriesEnd = datesState ? formatIsoDateForDisplay(datesState.seriesEndDate, displayLocale) : "";
-  const formattedEffectiveRangeStart = effectiveRange
-    ? formatIsoDateForDisplay(effectiveRange.start, displayLocale)
-    : "";
-  const formattedEffectiveRangeEnd = effectiveRange
-    ? formatIsoDateForDisplay(effectiveRange.end, displayLocale)
-    : "";
   const formattedExcludedDates = useMemo(() => {
     if (!datesState) return [];
     return datesState.excludedDates.map((entry) => formatIsoDateForDisplay(entry, displayLocale));
@@ -409,24 +386,6 @@ export default function CourseDatesDialog({
     );
   };
 
-  const setRollingHorizonWeeks = (value: string) => {
-    if (saving || isActiveReadOnly) return;
-    const numericValue = Number.parseInt(value, 10);
-    setDatesState((prev) =>
-      prev
-        ? {
-            ...prev,
-            visibilityHorizonWeeks:
-              Number.isInteger(numericValue) && numericValue > 0
-                ? Math.max(numericValue, excludeLockWeeks)
-                : DEFAULT_ROLLING_HORIZON_WEEKS,
-          }
-        : prev,
-    );
-    setFormError(null);
-    setFormNotices([]);
-  };
-
   const setSeriesRangeDate = (isoDate: string) => {
     if (saving || isActiveReadOnly) return;
     if (!isValidIsoDateOnly(isoDate)) return;
@@ -487,7 +446,7 @@ export default function CourseDatesDialog({
       if (!prev) return prev;
       const currentRange =
         prev.planningMode === "rolling_continuous"
-          ? getRollingExcludeSelectionRangeIso()
+          ? (rollingAdminPlanningRange ?? getRollingWindowRangeIso(rollingPlanningHorizonWeeks))
           : { start: prev.seriesStartDate, end: prev.seriesEndDate };
       const inSeriesRange =
         compareIsoDate(isoDate, currentRange.start) >= 0 && compareIsoDate(isoDate, currentRange.end) <= 0;
@@ -498,9 +457,9 @@ export default function CourseDatesDialog({
       const rollingLocked =
         isActiveCancellationMode &&
         prev.planningMode === "rolling_continuous" &&
-        !!rollingExcludeLockRange &&
-        compareIsoDate(isoDate, rollingExcludeLockRange.start) >= 0 &&
-        compareIsoDate(isoDate, rollingExcludeLockRange.end) <= 0;
+        !!rollingPlanningLockRange &&
+        compareIsoDate(isoDate, rollingPlanningLockRange.start) >= 0 &&
+        compareIsoDate(isoDate, rollingPlanningLockRange.end) <= 0;
       if (!inSeriesRange || !isSeriesWeekday) {
         return prev;
       }
@@ -521,9 +480,9 @@ export default function CourseDatesDialog({
     if (!fullPlannedDatesForActiveCancellation.includes(isoDate)) return;
     const rollingLocked =
       datesState?.planningMode === "rolling_continuous" &&
-      !!rollingExcludeLockRange &&
-      compareIsoDate(isoDate, rollingExcludeLockRange.start) >= 0 &&
-      compareIsoDate(isoDate, rollingExcludeLockRange.end) <= 0;
+      !!rollingPlanningLockRange &&
+      compareIsoDate(isoDate, rollingPlanningLockRange.start) >= 0 &&
+      compareIsoDate(isoDate, rollingPlanningLockRange.end) <= 0;
     const isExcluded = datesState?.excludedDates.includes(isoDate) ?? false;
     if (rollingLocked || datesState?.planningMode === "bounded_series") {
       if (isExcluded) return;
@@ -608,14 +567,7 @@ export default function CourseDatesDialog({
         setFormError("Bitte einen gültigen Zeitraum mit Start- und Enddatum wählen.");
         return;
       }
-    } else if (datesState.planningMode === "rolling_continuous") {
-      if (!rollingHorizonValid) {
-        setFormError(
-          `Bitte mindestens ${excludeLockWeeks} Wochen für die Sichtbarkeit eingeben.`,
-        );
-        return;
-      }
-    } else {
+    } else if (datesState.planningMode !== "rolling_continuous") {
       setFormError("Unbekannter Planungsmodus.");
       return;
     }
@@ -628,7 +580,6 @@ export default function CourseDatesDialog({
         await updateCourse(courseApiPathKey(course), {
           planningMode: "rolling_continuous",
           visibilityMode: "rolling_horizon",
-          visibilityHorizonWeeks: datesState.visibilityHorizonWeeks,
           excludedDates: datesState.excludedDates,
           includedDates: [],
         });
@@ -670,7 +621,6 @@ export default function CourseDatesDialog({
       await updateCourse(courseApiPathKey(course), {
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: datesState.visibilityHorizonWeeks,
         excludedDates: datesState.excludedDates,
         includedDates: [],
       });
@@ -709,7 +659,9 @@ export default function CourseDatesDialog({
         <div className="dialog-stack">
           <div className="course-editor-subsection">
             <strong className="course-editor-list-title">
-              Vorschau Termine ({isActiveCancellationMode ? activePreviewDates.length : datesPreview.length})
+              {datesState.planningMode === "rolling_continuous"
+                ? `Vorschau Termine für Teilnehmer (${isActiveCancellationMode ? activePreviewDates.length : datesPreview.length})`
+                : `Vorschau Termine (${isActiveCancellationMode ? activePreviewDates.length : datesPreview.length})`}
             </strong>
             {(isActiveCancellationMode ? activePreviewDates.length : datesPreview.length) === 0 ? (
               <p className="course-editor-note">Keine Termine im gewählten Zeitraum.</p>
@@ -722,29 +674,21 @@ export default function CourseDatesDialog({
             )}
           </div>
 
-          {isRollingActiveMode && (
+          {datesState.planningMode === "rolling_continuous" && rollingParticipantVisibilityRange && (
             <div className="course-editor-subsection">
-              <strong className="course-editor-list-title">Sichtfenster</strong>
+              <strong className="course-editor-list-title">Sichtfenster für Teilnehmer</strong>
               <p className="course-editor-note">
-                Von heute ({formattedEffectiveRangeStart}) bis {formattedEffectiveRangeEnd}
+                Von heute ({formatIsoDateForDisplay(rollingParticipantVisibilityRange.start, displayLocale)}) bis{" "}
+                {formatIsoDateForDisplay(rollingParticipantVisibilityRange.end, displayLocale)} —{" "}
+                {rollingPlanningHorizonWeeks} Wochen (Studio-Einstellungen).
               </p>
-              <div className="course-editor-inline-row">
-                <label htmlFor="rolling-horizon-weeks" className="course-editor-note">
-                  Sichtbarkeit in Wochen
-                </label>
-                <input
-                  id="rolling-horizon-weeks"
-                  type="number"
-                  min={excludeLockWeeks}
-                  step={1}
-                  value={datesState.visibilityHorizonWeeks}
-                  onChange={(event) => setRollingHorizonWeeks(event.target.value)}
-                  aria-label="Sichtfenster Wochen"
-                  disabled={saving}
-                  className="dialog-field"
-                  style={{ width: 96 }}
-                />
-              </div>
+              {canManageCourses && effectiveRange && (
+                <p className="course-editor-note">
+                  Admin- und Kursleiter-Planung bis{" "}
+                  {formatIsoDateForDisplay(effectiveRange.end, displayLocale)}. Innerhalb der{" "}
+                  {rollingPlanningHorizonWeeks} Wochen nur Absage; danach Termine ausschließen möglich.
+                </p>
+              )}
             </div>
           )}
 
@@ -756,8 +700,9 @@ export default function CourseDatesDialog({
                   : "Terminkalender zur Übersicht und Absage"}
               </strong>
               <p className="course-editor-note">
-                Es werden alle geplanten Serientermine angezeigt. Ausgeschlossene Termine sind markiert und nicht
-                auswählbar.
+                {isRollingActiveMode
+                  ? `Es werden alle geplanten Serientermine angezeigt. Innerhalb der nächsten ${rollingPlanningHorizonWeeks} Wochen nur Absage; danach auch Ausschließen möglich.`
+                  : "Es werden alle geplanten Serientermine angezeigt. Ausgeschlossene Termine sind markiert und nicht auswählbar."}
               </p>
               <div className="course-editor-inline-row">
                 <button
@@ -803,9 +748,9 @@ export default function CourseDatesDialog({
                       const isCancelledDate = datesState.excludedDates.includes(cell.isoDate);
                       const rollingLocked =
                         datesState.planningMode === "rolling_continuous" &&
-                        !!rollingExcludeLockRange &&
-                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.start) >= 0 &&
-                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.end) <= 0;
+                        !!rollingPlanningLockRange &&
+                        compareIsoDate(cell.isoDate, rollingPlanningLockRange.start) >= 0 &&
+                        compareIsoDate(cell.isoDate, rollingPlanningLockRange.end) <= 0;
                       const isSelectable =
                         cell.isSeriesDate &&
                         (!isCancelledDate || (isRollingActiveMode && !rollingLocked));
@@ -973,31 +918,7 @@ export default function CourseDatesDialog({
                 </div>
               )}
             </div>
-          ) : (
-            <div className="course-editor-subsection">
-              <strong className="course-editor-list-title">Sichtfenster</strong>
-              <p className="course-editor-note">
-                Von heute ({formattedEffectiveRangeStart}) bis {formattedEffectiveRangeEnd}
-              </p>
-              <div className="course-editor-inline-row">
-                <label htmlFor="rolling-horizon-weeks" className="course-editor-note">
-                  Sichtbarkeit in Wochen
-                </label>
-                <input
-                  id="rolling-horizon-weeks"
-                  type="number"
-                  min={excludeLockWeeks}
-                  step={1}
-                  value={datesState.visibilityHorizonWeeks}
-                  onChange={(event) => setRollingHorizonWeeks(event.target.value)}
-                  aria-label="Sichtfenster Wochen"
-                  disabled={saving || isActiveReadOnly}
-                  className="dialog-field"
-                  style={{ width: 96 }}
-                />
-              </div>
-            </div>
-          )}
+          ) : null}
 
           {showExcludedDatesEditor && (
             <div className="course-editor-subsection">
@@ -1015,9 +936,7 @@ export default function CourseDatesDialog({
               </button>
               <span className="course-editor-note">
                 {datesState.planningMode === "rolling_continuous"
-                  ? isRollingActiveMode
-                    ? `Innerhalb der nächsten ${excludeLockWeeks} Wochen nur Absage; danach auch Ausschließen möglich.`
-                    : "Im Planungsmodus können alle Serientermine als Ausnahme gesetzt werden."
+                  ? "Serientermine im Planungszeitraum können ausgeschlossen werden (Entwurf)."
                   : "Nur Serientermine im Zeitraum sind wählbar."}
               </span>
             </div>
@@ -1053,10 +972,11 @@ export default function CourseDatesDialog({
                   <div className="course-editor-calendar-grid">
                     {excludedCalendarCells.map((cell) => {
                       const rollingLocked =
+                        isActiveCancellationMode &&
                         datesState.planningMode === "rolling_continuous" &&
-                        !!rollingExcludeLockRange &&
-                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.start) >= 0 &&
-                        compareIsoDate(cell.isoDate, rollingExcludeLockRange.end) <= 0;
+                        !!rollingPlanningLockRange &&
+                        compareIsoDate(cell.isoDate, rollingPlanningLockRange.start) >= 0 &&
+                        compareIsoDate(cell.isoDate, rollingPlanningLockRange.end) <= 0;
                       const cellClassName = [
                         "course-editor-calendar-cell",
                         cell.inCurrentMonth ? "" : "is-outside-month",
@@ -1083,7 +1003,7 @@ export default function CourseDatesDialog({
                             isActiveReadOnly
                               ? "Nur Ansicht im aktiven Kurs"
                               : rollingLocked
-                                ? `Innerhalb der nächsten ${excludeLockWeeks} Wochen nur Absage möglich`
+                                ? `Im Planungsfenster (${rollingPlanningHorizonWeeks} Wochen) nur Absage möglich`
                                 : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
                           }
                         >

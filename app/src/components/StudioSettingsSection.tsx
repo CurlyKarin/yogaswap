@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import type { Tenant } from "shared/types";
 import {
   resolveInactiveGraceDays,
-  resolveRollingExcludeLockWeeks,
+  resolveRollingPlanningHorizonWeeks,
   resolveSwapWindow,
   validateStudioSettingsPatch,
 } from "shared/tenantSettings";
@@ -50,13 +50,13 @@ type StudioSettingsSectionProps = {
 export default function StudioSettingsSection({ tenant, onSaved }: StudioSettingsSectionProps) {
   const swapDefaults = resolveSwapWindow(tenant.settings);
   const graceDefault = resolveInactiveGraceDays(tenant.settings);
-  const excludeLockDefault = resolveRollingExcludeLockWeeks(tenant.settings);
+  const horizonDefault = resolveRollingPlanningHorizonWeeks(tenant.settings);
 
   const [name, setName] = useState(tenant.name);
   const [inactiveGraceDays, setInactiveGraceDays] = useState(String(graceDefault));
   const [minOffsetDays, setMinOffsetDays] = useState(String(swapDefaults.minOffsetDays));
   const [maxOffsetDays, setMaxOffsetDays] = useState(String(swapDefaults.maxOffsetDays));
-  const [excludeLockWeeks, setExcludeLockWeeks] = useState(String(excludeLockDefault));
+  const [rollingPlanningHorizonWeeks, setRollingPlanningHorizonWeeks] = useState(String(horizonDefault));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -67,7 +67,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setInactiveGraceDays(String(resolveInactiveGraceDays(tenant.settings)));
     setMinOffsetDays(String(swap.minOffsetDays));
     setMaxOffsetDays(String(swap.maxOffsetDays));
-    setExcludeLockWeeks(String(resolveRollingExcludeLockWeeks(tenant.settings)));
+    setRollingPlanningHorizonWeeks(String(resolveRollingPlanningHorizonWeeks(tenant.settings)));
     setError(null);
     setSuccess(null);
   }, [tenant]);
@@ -78,7 +78,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
       inactiveGraceDaysAfterCourseEnd: Number.parseInt(inactiveGraceDays, 10),
       minOffsetDays: Number.parseInt(minOffsetDays, 10),
       maxOffsetDays: Number.parseInt(maxOffsetDays, 10),
-      excludeLockWeeks: Number.parseInt(excludeLockWeeks, 10),
+      rollingPlanningHorizonWeeks: Number.parseInt(rollingPlanningHorizonWeeks, 10),
     };
     const validationError = validateStudioSettingsPatch(patch);
     if (validationError) {
@@ -166,17 +166,17 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
         </label>
 
         <label className="dialog-field">
-          <FieldLabelWithTooltip tooltip="Für durchlaufende Kurse: innerhalb dieser Wochen ab heute im Kalender nur Absage, kein Ausschließen von Terminen. Das Sichtfenster muss mindestens so groß sein.">
-            Planungssperre für Durchlaufende Kurse (Wochen)
+          <FieldLabelWithTooltip tooltip="Für durchlaufende Kurse: legt fest, welche Termine ab heute existieren (Teilnehmer und Admin) und innerhalb welcher Frist nur Absage statt Ausschließen möglich ist.">
+            Planungs- und Sichtfenster für Durchlaufende Kurse (Wochen)
           </FieldLabelWithTooltip>
           <input
             type="number"
             min={1}
             max={52}
-            value={excludeLockWeeks}
-            onChange={(e) => setExcludeLockWeeks(e.target.value)}
+            value={rollingPlanningHorizonWeeks}
+            onChange={(e) => setRollingPlanningHorizonWeeks(e.target.value)}
             disabled={saving}
-            aria-label="Planungssperre für Durchlaufende Kurse in Wochen"
+            aria-label="Planungs- und Sichtfenster für Durchlaufende Kurse in Wochen"
           />
         </label>
       </div>
