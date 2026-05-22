@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { GetItemCommand, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { deriveVisibleDates } from "../shared/courseDates";
 import { handler } from "./index";
 
 jest.mock("@aws-sdk/client-dynamodb", () => {
@@ -261,5 +262,79 @@ describe("createCourse Lambda", () => {
     expect(body.status).toBe("inactive");
     expect(body.excludedDates).toEqual(["2020-01-13"]);
     expect(body.includedDates).toEqual(["2020-01-15"]);
+  });
+
+  test("creates rolling_continuous course with tenant horizon and rolling_horizon visibility", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-05-19T12:00:00.000Z"));
+
+    const horizonWeeks = 2;
+    const now = new Date("2026-05-19T12:00:00.000Z");
+    const expectedDates = deriveVisibleDates({
+      planningMode: "rolling_continuous",
+      visibilityMode: "rolling_horizon",
+      weekday: "Mon",
+      rollingPlanningHorizonWeeks: horizonWeeks,
+      excludedDates: [],
+      includedDates: [],
+      fallbackDates: [],
+      now,
+    });
+
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Studio" },
+          settings: {
+            M: {
+              rollingPlanningHorizonWeeks: { N: String(horizonWeeks) },
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({ Items: [{ courseId: { S: "1" } }] })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        name: "Durchlaufend",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        planningMode: "rolling_continuous",
+      }),
+    );
+
+    expect(result.statusCode).toBe(201);
+    const body = JSON.parse(result.body);
+    expect(body).toEqual(
+      expect.objectContaining({
+        planningMode: "rolling_continuous",
+        visibilityMode: "rolling_horizon",
+        visibleDates: expectedDates,
+        dates: expectedDates,
+      }),
+    );
+    expect(expectedDates.length).toBeGreaterThan(0);
+
+    expect(GetItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-tenants",
+        Key: { tenantId: { S: "default-tenant" } },
+      }),
+    );
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          dates: { L: expectedDates.map((entry) => ({ S: entry })) },
+        }),
+      }),
+    );
+
+    jest.useRealTimers();
   });
 });
