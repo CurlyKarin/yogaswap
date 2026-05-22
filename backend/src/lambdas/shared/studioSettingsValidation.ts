@@ -9,8 +9,6 @@ export type StudioSettingsPatch = {
   minOffsetDays?: number;
   maxOffsetDays?: number;
   rollingPlanningHorizonWeeks?: number;
-  /** @deprecated Wird beim Speichern nach `rollingPlanningHorizonWeeks` migriert. */
-  excludeLockWeeks?: number;
 };
 
 export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string | null {
@@ -33,22 +31,16 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     if (!Number.isInteger(min) || !Number.isInteger(max)) {
       return "Tauschfenster: beide Werte müssen ganze Zahlen sein.";
     }
-    if ((min ?? 0) < -90 || (min ?? 0) > 90 || (max ?? 0) > 90 || (max ?? 0) > 90) {
+    if ((min ?? 0) < -90 || (min ?? 0) > 90 || (max ?? 0) < -90 || (max ?? 0) > 90) {
       return "Tauschfenster: Werte müssen zwischen -90 und 90 liegen.";
     }
     if ((min as number) > (max as number)) {
       return "Tauschfenster: „frühestens“ darf nicht größer als „spätestens“ sein.";
     }
   }
-  const horizonWeeks =
-    Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks")
-      ? patch.rollingPlanningHorizonWeeks
-      : patch.excludeLockWeeks;
-  if (
-    Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks") ||
-    Object.prototype.hasOwnProperty.call(patch, "excludeLockWeeks")
-  ) {
-    if (!Number.isInteger(horizonWeeks) || (horizonWeeks ?? 0) < 1 || (horizonWeeks ?? 0) > 52) {
+  if (Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks")) {
+    const weeks = patch.rollingPlanningHorizonWeeks;
+    if (!Number.isInteger(weeks) || (weeks ?? 0) < 1 || (weeks ?? 0) > 52) {
       return "Planungs- und Sichtfenster muss eine ganze Zahl zwischen 1 und 52 Wochen sein.";
     }
   }

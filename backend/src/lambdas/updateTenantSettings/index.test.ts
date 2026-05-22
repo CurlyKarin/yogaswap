@@ -85,7 +85,6 @@ describe("updateTenantSettings Lambda", () => {
       maxOffsetDays: 14,
       rollingPlanningHorizonWeeks: 8,
     });
-    expect(body.settings.excludeLockWeeks).toBeUndefined();
     expect(PutItemCommand).toHaveBeenCalled();
   });
 

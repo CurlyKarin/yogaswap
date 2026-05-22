@@ -24,12 +24,9 @@ export async function loadTenantSettings(
 
 /** Kopie von `shared/src/tenantSettings.ts` (resolveRollingPlanningHorizonWeeks). */
 export function resolveRollingPlanningHorizonWeeks(settings?: TenantSettings): number {
-  const value = settings?.rollingPlanningHorizonWeeks ?? settings?.excludeLockWeeks;
+  const value = settings?.rollingPlanningHorizonWeeks;
   if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 52) {
     return value;
   }
   return DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
 }
-
-/** @deprecated Nutze {@link resolveRollingPlanningHorizonWeeks}. */
-export const resolveRollingExcludeLockWeeks = resolveRollingPlanningHorizonWeeks;

@@ -18,7 +18,7 @@ import {
 type CoursePlannedEndFieldProps = {
   weekday: string;
   plannedEndDate: string | null;
-  excludeLockWeeks: number;
+  rollingPlanningHorizonWeeks: number;
   saving: boolean;
   onChange: (plannedEndDate: string | null) => void;
 };
@@ -31,7 +31,7 @@ function addYearsToMonthKey(monthKey: string, years: number): string {
 export default function CoursePlannedEndField({
   weekday,
   plannedEndDate,
-  excludeLockWeeks,
+  rollingPlanningHorizonWeeks,
   saving,
   onChange,
 }: CoursePlannedEndFieldProps) {
@@ -40,7 +40,10 @@ export default function CoursePlannedEndField({
     (plannedEndDate ? monthKeyFromIsoDate(plannedEndDate) : null) ?? toMonthKey(new Date()),
   );
 
-  const minEndIso = useMemo(() => getMinPlannedEndDateIso(excludeLockWeeks), [excludeLockWeeks]);
+  const minEndIso = useMemo(
+    () => getMinPlannedEndDateIso(rollingPlanningHorizonWeeks),
+    [rollingPlanningHorizonWeeks],
+  );
   const maxEndIso = useMemo(() => {
     const farMonth = addYearsToMonthKey(toMonthKey(new Date()), 3);
     return `${farMonth}-28`;
@@ -61,7 +64,7 @@ export default function CoursePlannedEndField({
   }, [calendarMonth]);
 
   const toggleEndDate = (isoDate: string) => {
-    if (!isPlannedEndDateAllowed(isoDate, excludeLockWeeks)) return;
+    if (!isPlannedEndDateAllowed(isoDate, rollingPlanningHorizonWeeks)) return;
     onChange(plannedEndDate === isoDate ? null : isoDate);
   };
 

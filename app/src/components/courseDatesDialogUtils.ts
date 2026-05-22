@@ -76,8 +76,6 @@ export function dedupeAndSortDates(values: string[]): string[] {
 
 /** Fallback; Studio-Wert kommt aus `resolveRollingPlanningHorizonWeeks(tenantSettings)`. */
 export const DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS = SHARED_DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
-/** @deprecated Alias */
-export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
 
 /** Langfristige Admin-/Kursleiter-Planung (~3 Jahre), unabhängig vom Teilnehmer-Sichtfenster. */
 export const ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS = 156;
@@ -236,9 +234,6 @@ export function getRollingAdminPlanningRangeIso(
     end: toIsoDateOnly(end),
   };
 }
-
-/** @deprecated Nutze {@link getRollingWindowRangeIso}. */
-export const getRollingExcludeLockRangeIso = getRollingWindowRangeIso;
 
 export function generatePreviewDates(
   state: Pick<

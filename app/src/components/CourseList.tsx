@@ -872,7 +872,7 @@ export default function CourseList({
           })
         }
         rollingInactiveHint={ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE}
-        excludeLockWeeks={resolveRollingPlanningHorizonWeeks(tenant?.settings)}
+        rollingPlanningHorizonWeeks={resolveRollingPlanningHorizonWeeks(tenant?.settings)}
         onKeyDown={handleEditDialogKeyDown}
         onClose={closeEditModal}
         onSave={saveEditCourse}

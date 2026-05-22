@@ -33,7 +33,7 @@ type CourseEditDialogProps = {
   planningModeLockedHint?: string | null;
   rollingInactiveBlocked?: boolean;
   rollingInactiveHint?: string | null;
-  excludeLockWeeks?: number;
+  rollingPlanningHorizonWeeks?: number;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onClose: () => void;
   onSave: () => void;
@@ -55,7 +55,7 @@ export default function CourseEditDialog({
   planningModeLockedHint = null,
   rollingInactiveBlocked = false,
   rollingInactiveHint = null,
-  excludeLockWeeks = 5,
+  rollingPlanningHorizonWeeks = 5,
   onKeyDown,
   onClose,
   onSave,
@@ -153,7 +153,7 @@ export default function CourseEditDialog({
             <CoursePlannedEndField
               weekday={state.weekday}
               plannedEndDate={state.plannedEndDate}
-              excludeLockWeeks={excludeLockWeeks}
+              rollingPlanningHorizonWeeks={rollingPlanningHorizonWeeks}
               saving={saving}
               onChange={(plannedEndDate) => onChange({ ...state, plannedEndDate })}
             />

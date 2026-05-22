@@ -79,11 +79,6 @@ export type Course = {
   plannedEndDate?: string;
   visibleFrom?: string;
   visibleUntil?: string;
-  /**
-   * @deprecated Rollkurse nutzen `TenantSettings.rollingPlanningHorizonWeeks`.
-   * Nur noch fuer Legacy-Daten in DynamoDB; wird nicht mehr geschrieben.
-   */
-  visibilityHorizonWeeks?: number;
   excludedDates?: string[];
   includedDates?: string[];
   visibleDates?: string[];
@@ -191,10 +186,6 @@ export interface TenantSettings {
    * welcher Frist nur Absage statt Ausschliessen moeglich ist. Default: 5.
    */
   rollingPlanningHorizonWeeks?: number;
-  /**
-   * @deprecated Umbenannt zu `rollingPlanningHorizonWeeks` (Migration beim Lesen).
-   */
-  excludeLockWeeks?: number;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

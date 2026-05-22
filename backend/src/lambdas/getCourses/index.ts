@@ -42,9 +42,6 @@ function mapItemToCourseResponse(
     plannedEndDate: item.plannedEndDate?.S,
     visibleFrom: item.visibleFrom?.S,
     visibleUntil: item.visibleUntil?.S,
-    visibilityHorizonWeeks: item.visibilityHorizonWeeks?.N
-      ? Number(item.visibilityHorizonWeeks.N)
-      : undefined,
     excludedDates,
     includedDates,
     visibleDates,

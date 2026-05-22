@@ -25,20 +25,20 @@ function addCalendarDaysIso(iso: string, days: number): string {
   return toIsoDateOnlyLocal(next);
 }
 
-export function getMinPlannedEndDateIso(excludeLockWeeks: number, now: Date = new Date()): string {
+export function getMinPlannedEndDateIso(rollingPlanningHorizonWeeks: number, now: Date = new Date()): string {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const lockEnd = new Date(startOfToday);
-  lockEnd.setDate(lockEnd.getDate() + excludeLockWeeks * 7);
+  lockEnd.setDate(lockEnd.getDate() + rollingPlanningHorizonWeeks * 7);
   return addCalendarDaysIso(toIsoDateOnlyLocal(lockEnd), 1);
 }
 
 export function isPlannedEndDateAllowed(
   iso: string,
-  excludeLockWeeks: number,
+  rollingPlanningHorizonWeeks: number,
   now: Date = new Date(),
 ): boolean {
   if (!ISO_DATE_ONLY.test(iso)) return false;
-  return iso >= getMinPlannedEndDateIso(excludeLockWeeks, now);
+  return iso >= getMinPlannedEndDateIso(rollingPlanningHorizonWeeks, now);
 }
 
 export function courseHasParticipants(participants?: Array<{ S?: string }>): boolean {

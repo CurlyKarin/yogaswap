@@ -21,7 +21,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
 
 const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
 
-/** Leerer Tenant-Load → Default excludeLockWeeks (5). */
+/** Leerer Tenant-Load → Default rollingPlanningHorizonWeeks (5). */
 const tenantSettingsLoadResponse = {};
 
 function mockAdminMembership() {
@@ -156,7 +156,6 @@ describe("updateCourse Lambda", () => {
         ...baseCourseItem("active"),
         planningMode: { S: "rolling_continuous" },
         visibilityMode: { S: "rolling_horizon" },
-        visibilityHorizonWeeks: { N: "8" },
         dates: { L: [] },
       },
     });
@@ -173,7 +172,6 @@ describe("updateCourse Lambda", () => {
           ...baseCourseItem("active"),
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
-          visibilityHorizonWeeks: { N: "8" },
         },
       })
       .mockResolvedValueOnce({});
@@ -207,7 +205,6 @@ describe("updateCourse Lambda", () => {
           ...baseCourseItem("active"),
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
-          visibilityHorizonWeeks: { N: "8" },
         },
       });
 
@@ -246,7 +243,6 @@ describe("updateCourse Lambda", () => {
           ...baseCourseItem("active"),
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
-          visibilityHorizonWeeks: { N: "8" },
           participants: { L: [] },
         },
       })

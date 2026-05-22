@@ -197,10 +197,6 @@ describe("CourseDatesDialog", () => {
           includedDates: [],
         }),
       );
-      expect(mockedUpdateCourse).toHaveBeenCalledWith(
-        "1",
-        expect.not.objectContaining({ visibilityHorizonWeeks: expect.anything() }),
-      );
       expect(onClose).toHaveBeenCalledTimes(1);
       expect(onSaved).toHaveBeenCalledTimes(1);
     });

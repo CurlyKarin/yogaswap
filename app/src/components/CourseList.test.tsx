@@ -545,7 +545,6 @@ describe("CourseList", () => {
         status: "active",
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 8,
         participants: ["luna"],
         dates: ["2099-06-16"],
       },

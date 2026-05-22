@@ -5,9 +5,6 @@ export const DEFAULT_SWAP_MIN_OFFSET_DAYS = -7;
 export const DEFAULT_SWAP_MAX_OFFSET_DAYS = 7;
 export const DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS = 5;
 
-/** @deprecated Alias fuer {@link DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS}. */
-export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
-
 export type SwapWindow = {
   minOffsetDays: number;
   maxOffsetDays: number;
@@ -29,15 +26,12 @@ export function resolveSwapWindow(settings?: TenantSettings): SwapWindow {
 }
 
 export function resolveRollingPlanningHorizonWeeks(settings?: TenantSettings): number {
-  const value = settings?.rollingPlanningHorizonWeeks ?? settings?.excludeLockWeeks;
+  const value = settings?.rollingPlanningHorizonWeeks;
   if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 52) {
     return value;
   }
   return DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
 }
-
-/** @deprecated Nutze {@link resolveRollingPlanningHorizonWeeks}. */
-export const resolveRollingExcludeLockWeeks = resolveRollingPlanningHorizonWeeks;
 
 export function resolveInactiveGraceDays(settings?: TenantSettings): number {
   const value = settings?.inactiveGraceDaysAfterCourseEnd;
@@ -52,8 +46,6 @@ export type StudioSettingsPatch = {
   minOffsetDays?: number;
   maxOffsetDays?: number;
   rollingPlanningHorizonWeeks?: number;
-  /** @deprecated Wird beim Speichern nach `rollingPlanningHorizonWeeks` migriert. */
-  excludeLockWeeks?: number;
 };
 
 export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string | null {
@@ -83,15 +75,9 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
       return "Tauschfenster: „frühestens“ darf nicht größer als „spätestens“ sein.";
     }
   }
-  const horizonWeeks =
-    Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks")
-      ? patch.rollingPlanningHorizonWeeks
-      : patch.excludeLockWeeks;
-  if (
-    Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks") ||
-    Object.prototype.hasOwnProperty.call(patch, "excludeLockWeeks")
-  ) {
-    if (!Number.isInteger(horizonWeeks) || (horizonWeeks ?? 0) < 1 || (horizonWeeks ?? 0) > 52) {
+  if (Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks")) {
+    const weeks = patch.rollingPlanningHorizonWeeks;
+    if (!Number.isInteger(weeks) || (weeks ?? 0) < 1 || (weeks ?? 0) > 52) {
       return "Planungs- und Sichtfenster muss eine ganze Zahl zwischen 1 und 52 Wochen sein.";
     }
   }

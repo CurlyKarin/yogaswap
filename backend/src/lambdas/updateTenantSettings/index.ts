@@ -39,20 +39,13 @@ function mergeTenantSettings(
       (next as Record<string, number>)[key] = patch[key] as number;
     }
   }
-  if (Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks")) {
-    delete next.excludeLockWeeks;
-  } else if (Object.prototype.hasOwnProperty.call(patch, "excludeLockWeeks")) {
-    next.rollingPlanningHorizonWeeks = patch.excludeLockWeeks;
-    delete next.excludeLockWeeks;
-  }
   return next;
 }
 
 function hasUpdatablePatch(patch: StudioSettingsPatch): boolean {
   return (
     Object.prototype.hasOwnProperty.call(patch, "name") ||
-    MVP_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
-    Object.prototype.hasOwnProperty.call(patch, "excludeLockWeeks")
+    MVP_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key))
   );
 }
 
