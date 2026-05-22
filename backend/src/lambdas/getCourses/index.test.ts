@@ -1,11 +1,13 @@
-import { QueryCommand } from "@aws-sdk/client-dynamodb";
+import { GetItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
 import { APIGatewayProxyEvent } from "aws-lambda";
+import { deriveVisibleDates } from "../shared/courseDates";
 import { handler } from "./index";
 
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
+    GetItemCommand: jest.fn((input) => input),
     QueryCommand: jest.fn((input) => input),
     PutItemCommand: jest.fn((input) => input),
     mockSend,
@@ -244,5 +246,85 @@ describe("getCourses Lambda", () => {
         dates: ["2026-01-05", "2026-01-14", "2026-01-19"],
       }),
     );
+  });
+
+  test("derives rolling_continuous dates from tenant rollingPlanningHorizonWeeks", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-05-19T12:00:00.000Z"));
+    process.env.TENANTS_TABLE = "test-tenants";
+
+    const now = new Date("2026-05-19T12:00:00.000Z");
+    const horizonWeeks = 3;
+    const expectedDates = deriveVisibleDates({
+      planningMode: "rolling_continuous",
+      visibilityMode: "rolling_horizon",
+      weekday: "Mon",
+      rollingPlanningHorizonWeeks: horizonWeeks,
+      excludedDates: [],
+      includedDates: [],
+      fallbackDates: [],
+      now,
+    });
+
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Studio" },
+          settings: {
+            M: {
+              rollingPlanningHorizonWeeks: { N: String(horizonWeeks) },
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            id: { N: "5" },
+            courseId: { S: "5" },
+            name: { S: "Rolling" },
+            weekday: { S: "Mon" },
+            time: { S: "10:00" },
+            capacity: { N: "10" },
+            status: { S: "draft" },
+            planningMode: { S: "rolling_continuous" },
+            visibilityMode: { S: "rolling_horizon" },
+            participants: { L: [] },
+            dates: { L: [{ S: "2099-01-06" }] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+
+    expect(body[0]).toEqual(
+      expect.objectContaining({
+        planningMode: "rolling_continuous",
+        visibilityMode: "rolling_horizon",
+        visibleDates: expectedDates,
+        dates: expectedDates,
+      }),
+    );
+    expect(expectedDates.length).toBeGreaterThan(0);
+
+    expect(GetItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-tenants",
+        Key: { tenantId: { S: "default-tenant" } },
+      }),
+    );
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          dates: { L: expectedDates.map((entry) => ({ S: entry })) },
+        }),
+      }),
+    );
+
+    jest.useRealTimers();
   });
 });

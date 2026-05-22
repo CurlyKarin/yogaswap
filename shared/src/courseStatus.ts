@@ -41,13 +41,17 @@ export function addCalendarDaysIsoUtc(iso: string, days: number): string {
 
 /**
  * Letztes Kursende (YYYY-MM-DD) fuer Nachlauf bei inaktiven Kursen:
- * seriesEndDate, sonst visibleUntil, sonst groesstes gueltiges Datum in `dates`.
+ * `plannedEndDate` (Rollkurs), sonst seriesEndDate, visibleUntil, max aus `dates`.
  */
 export function courseEndDateIso(
-  course: Pick<Course, "seriesEndDate" | "visibleUntil" | "dates">,
+  course: Pick<Course, "plannedEndDate" | "seriesEndDate" | "visibleUntil" | "dates" | "planningMode">,
 ): string | undefined {
+  const planned = course.plannedEndDate?.trim();
+  if (planned && ISO_DATE_ONLY.test(planned)) return planned;
   const series = course.seriesEndDate?.trim();
-  if (series && ISO_DATE_ONLY.test(series)) return series;
+  if (series && ISO_DATE_ONLY.test(series) && (course.planningMode ?? "bounded_series") === "bounded_series") {
+    return series;
+  }
   const visible = course.visibleUntil?.trim();
   if (visible && ISO_DATE_ONLY.test(visible)) return visible;
   const raw = course.dates ?? [];

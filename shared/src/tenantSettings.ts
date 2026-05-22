@@ -3,7 +3,7 @@ import type { TenantSettings } from "./types";
 
 export const DEFAULT_SWAP_MIN_OFFSET_DAYS = -7;
 export const DEFAULT_SWAP_MAX_OFFSET_DAYS = 7;
-export const DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS = 5;
+export const DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS = 5;
 
 export type SwapWindow = {
   minOffsetDays: number;
@@ -25,12 +25,12 @@ export function resolveSwapWindow(settings?: TenantSettings): SwapWindow {
   };
 }
 
-export function resolveRollingExcludeLockWeeks(settings?: TenantSettings): number {
-  const value = settings?.excludeLockWeeks;
+export function resolveRollingPlanningHorizonWeeks(settings?: TenantSettings): number {
+  const value = settings?.rollingPlanningHorizonWeeks;
   if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 52) {
     return value;
   }
-  return DEFAULT_ROLLING_EXCLUDE_LOCK_WEEKS;
+  return DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
 }
 
 export function resolveInactiveGraceDays(settings?: TenantSettings): number {
@@ -45,7 +45,7 @@ export type StudioSettingsPatch = {
   inactiveGraceDaysAfterCourseEnd?: number;
   minOffsetDays?: number;
   maxOffsetDays?: number;
-  excludeLockWeeks?: number;
+  rollingPlanningHorizonWeeks?: number;
 };
 
 export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string | null {
@@ -75,10 +75,10 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
       return "Tauschfenster: „frühestens“ darf nicht größer als „spätestens“ sein.";
     }
   }
-  if (Object.prototype.hasOwnProperty.call(patch, "excludeLockWeeks")) {
-    const weeks = patch.excludeLockWeeks;
+  if (Object.prototype.hasOwnProperty.call(patch, "rollingPlanningHorizonWeeks")) {
+    const weeks = patch.rollingPlanningHorizonWeeks;
     if (!Number.isInteger(weeks) || (weeks ?? 0) < 1 || (weeks ?? 0) > 52) {
-      return "Planungssperre muss eine ganze Zahl zwischen 1 und 52 Wochen sein.";
+      return "Planungs- und Sichtfenster muss eine ganze Zahl zwischen 1 und 52 Wochen sein.";
     }
   }
   return null;

@@ -133,10 +133,11 @@ locals {
     "get_courses" = {
       name             = "get-courses"
       file_name        = "getCourses.zip"
-      table_arns       = [module.courses_table.table_arn]
+      table_arns       = [module.courses_table.table_arn, module.tenants_table.table_arn]
       dynamodb_actions = ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:PutItem"]
       tables = {
         "COURSES_TABLE" = module.courses_table.table_name
+        "TENANTS_TABLE" = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -157,17 +158,29 @@ locals {
     "update_course" = {
       name             = "update-course"
       file_name        = "updateCourse.zip"
-      table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn, module.tenants_table.table_arn]
+      table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn, module.tenants_table.table_arn, module.participants_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:Scan"]
       tables = {
-        "COURSES_TABLE"     = module.courses_table.table_name
-        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
-        "OVERRIDES_TABLE"   = module.course_overrides_table.table_name
-        "SWAPS_TABLE"       = module.swaps_table.table_name
-        "TENANTS_TABLE"     = module.tenants_table.table_name
+        "COURSES_TABLE"      = module.courses_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "OVERRIDES_TABLE"    = module.course_overrides_table.table_name
+        "SWAPS_TABLE"        = module.swaps_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
+      additional_policies = [
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail"]
+          Resource = "*"
+        }
+      ]
+      environment = {
+        SES_SOURCE_EMAIL = var.ses_source_email
+        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+      }
     },
     "cancel_course_date" = {
       name             = "cancel-course-date"
@@ -399,11 +412,17 @@ locals {
       table_arns = [
         module.tenants_table.table_arn,
         module.memberships_table.table_arn,
+        module.courses_table.table_arn,
+        module.swaps_table.table_arn,
+        module.course_overrides_table.table_arn,
       ]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
       tables = {
         "TENANTS_TABLE"     = module.tenants_table.table_name
         "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+        "COURSES_TABLE"     = module.courses_table.table_name
+        "SWAPS_TABLE"       = module.swaps_table.table_name
+        "OVERRIDES_TABLE"   = module.course_overrides_table.table_name
       }
       s3_actions   = []
       s3_resources = []

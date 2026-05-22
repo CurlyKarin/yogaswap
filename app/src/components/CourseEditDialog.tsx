@@ -1,6 +1,7 @@
 import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
 import CourseModalFrame from "./CourseModalFrame";
+import CoursePlannedEndField from "./CoursePlannedEndField";
 
 type CourseEditorState = {
   id: number;
@@ -10,6 +11,7 @@ type CourseEditorState = {
   capacity: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
+  plannedEndDate: string | null;
 };
 
 type WeekdayOption = { value: string; label: string };
@@ -27,6 +29,11 @@ type CourseEditDialogProps = {
   statusOptions: readonly StatusOption[];
   planningModeOptions: readonly PlanningModeOption[];
   planningModeHint: (mode: CoursePlanningMode) => string;
+  planningModeLocked?: boolean;
+  planningModeLockedHint?: string | null;
+  rollingInactiveBlocked?: boolean;
+  rollingInactiveHint?: string | null;
+  rollingPlanningHorizonWeeks?: number;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onClose: () => void;
   onSave: () => void;
@@ -44,6 +51,11 @@ export default function CourseEditDialog({
   statusOptions,
   planningModeOptions,
   planningModeHint,
+  planningModeLocked = false,
+  planningModeLockedHint = null,
+  rollingInactiveBlocked = false,
+  rollingInactiveHint = null,
+  rollingPlanningHorizonWeeks = 5,
   onKeyDown,
   onClose,
   onSave,
@@ -103,11 +115,18 @@ export default function CourseEditDialog({
             className="dialog-field"
           >
             {statusOptions.map((status) => (
-              <option key={status.value} value={status.value}>
+              <option
+                key={status.value}
+                value={status.value}
+                disabled={rollingInactiveBlocked && status.value === "inactive"}
+              >
                 {status.label}
               </option>
             ))}
           </select>
+          {rollingInactiveBlocked && rollingInactiveHint && (
+            <p className="course-editor-inline-hint">{rollingInactiveHint}</p>
+          )}
           <select
             aria-label="Planungsmodus bearbeiten"
             value={state.planningMode}
@@ -117,7 +136,7 @@ export default function CourseEditDialog({
                 planningMode: event.target.value as CoursePlanningMode,
               })
             }
-            disabled={saving}
+            disabled={saving || planningModeLocked}
             className="dialog-field"
           >
             {planningModeOptions.map((mode) => (
@@ -126,7 +145,19 @@ export default function CourseEditDialog({
               </option>
             ))}
           </select>
+          {planningModeLocked && planningModeLockedHint && (
+            <p className="course-editor-inline-hint">{planningModeLockedHint}</p>
+          )}
           <p className="course-editor-inline-hint">{planningModeHint(state.planningMode)}</p>
+          {state.planningMode === "rolling_continuous" && (
+            <CoursePlannedEndField
+              weekday={state.weekday}
+              plannedEndDate={state.plannedEndDate}
+              rollingPlanningHorizonWeeks={rollingPlanningHorizonWeeks}
+              saving={saving}
+              onChange={(plannedEndDate) => onChange({ ...state, plannedEndDate })}
+            />
+          )}
           {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
         </div>
         <div className="modal-actions dialog-actions">

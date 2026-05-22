@@ -72,9 +72,13 @@ export type Course = {
   visibilityMode?: CourseVisibilityMode;
   seriesStartDate?: string;
   seriesEndDate?: string;
+  /**
+   * Nur bei `rolling_continuous`: geplantes letztes Kursdatum (YYYY-MM-DD).
+   * Unbefristet = Feld fehlt/leer. Kein Wechsel zu `bounded_series`.
+   */
+  plannedEndDate?: string;
   visibleFrom?: string;
   visibleUntil?: string;
-  visibilityHorizonWeeks?: number;
   excludedDates?: string[];
   includedDates?: string[];
   visibleDates?: string[];
@@ -177,11 +181,11 @@ export interface TenantSettings {
    */
   maxOffsetDays?: number;
   /**
-   * Rollkurs (`rolling_continuous`): Termine innerhalb der naechsten N Wochen
-   * duerfen nicht per `excludedDates` ausgeschlossen werden (nur Absage).
-   * Default im Code: 5.
+   * Rollkurs (`rolling_continuous`): Planungs- und Sichtfenster in Wochen ab heute.
+   * Legt fest, welche Kurstermine existieren (Teilnehmer + Admin) und innerhalb
+   * welcher Frist nur Absage statt Ausschliessen moeglich ist. Default: 5.
    */
-  excludeLockWeeks?: number;
+  rollingPlanningHorizonWeeks?: number;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

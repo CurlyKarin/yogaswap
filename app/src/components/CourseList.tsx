@@ -18,6 +18,15 @@ import {
   UserTenantMembership,
   DEFAULT_TENANT_ID,
 } from "shared/types";
+import {
+  isPlanningModeChangeLocked,
+  isPlannedEndDateAllowed,
+  isRollingInactiveBlocked,
+  PLANNING_MODE_LOCKED_MESSAGE,
+  PLANNED_END_INVALID_MESSAGE,
+  ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
+} from "shared/courseEditPolicy";
+import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
 import { getSwaps } from "../api/swaps";
 import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
@@ -51,6 +60,7 @@ type CourseEditorState = {
   capacity: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
+  plannedEndDate: string | null;
 };
 
 type CourseCreateState = {
@@ -122,7 +132,6 @@ function buildSchedulingFromMode(mode: CoursePlanningMode) {
     return {
       planningMode: "rolling_continuous" as const,
       visibilityMode: "rolling_horizon" as const,
-      visibilityHorizonWeeks: 8,
     };
   }
 
@@ -178,6 +187,7 @@ function toEditorState(course: Course): CourseEditorState {
     capacity: String(course.capacity),
     status: course.status ?? "active",
     planningMode: course.planningMode ?? "bounded_series",
+    plannedEndDate: course.plannedEndDate?.trim() ? course.plannedEndDate.trim() : null,
   };
 }
 
@@ -346,6 +356,9 @@ export default function CourseList({
   const deleteTargetCourse = deleteTargetId
     ? visibleCourses.find((course) => course.id === deleteTargetId)
     : undefined;
+  const editTargetCourse = editState
+    ? visibleCourses.find((course) => course.id === editState.id)
+    : undefined;
   const membersTargetCourse = membersTargetId
     ? visibleCourses.find((course) => course.id === membersTargetId)
     : undefined;
@@ -466,7 +479,8 @@ export default function CourseList({
       editState.time !== editInitialState.time ||
       editState.capacity !== editInitialState.capacity ||
       editState.status !== editInitialState.status ||
-      editState.planningMode !== editInitialState.planningMode);
+      editState.planningMode !== editInitialState.planningMode ||
+      editState.plannedEndDate !== editInitialState.plannedEndDate);
   const canSubmitEdit = canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
 
   const handleCreateDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -590,6 +604,35 @@ export default function CourseList({
       }
       const previousPlanningMode = courseForEdit.planningMode ?? "bounded_series";
       const planningModeChanged = editState.planningMode !== previousPlanningMode;
+      const planningModeLocked = isPlanningModeChangeLocked({
+        status: courseForEdit.status,
+        participants: courseForEdit.participants,
+      });
+      if (planningModeChanged && planningModeLocked) {
+        setFormError(PLANNING_MODE_LOCKED_MESSAGE);
+        return;
+      }
+      if (
+        editState.status === "inactive" &&
+        isRollingInactiveBlocked({
+          status: courseForEdit.status,
+          planningMode: courseForEdit.planningMode,
+          participants: courseForEdit.participants,
+        })
+      ) {
+        setFormError(ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE);
+        return;
+      }
+      const rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenant?.settings);
+      const plannedEndChanged = editState.plannedEndDate !== editInitialState?.plannedEndDate;
+      if (
+        plannedEndChanged &&
+        editState.plannedEndDate &&
+        !isPlannedEndDateAllowed(editState.plannedEndDate, rollingPlanningHorizonWeeks)
+      ) {
+        setFormError(PLANNED_END_INVALID_MESSAGE);
+        return;
+      }
       await updateCourse(courseApiPathKey(courseForEdit), {
         name: trimmedName,
         weekday: editState.weekday,
@@ -597,6 +640,9 @@ export default function CourseList({
         capacity,
         status: editState.status,
         ...(planningModeChanged ? buildSchedulingFromMode(editState.planningMode) : {}),
+        ...(plannedEndChanged
+          ? { plannedEndDate: editState.plannedEndDate }
+          : {}),
       });
       closeEditModal();
       await fetchData();
@@ -809,6 +855,24 @@ export default function CourseList({
         statusOptions={STATUS_OPTIONS}
         planningModeOptions={PLANNING_MODE_OPTIONS}
         planningModeHint={planningModeHint}
+        planningModeLocked={
+          !!editTargetCourse &&
+          isPlanningModeChangeLocked({
+            status: editTargetCourse.status,
+            participants: editTargetCourse.participants,
+          })
+        }
+        planningModeLockedHint={PLANNING_MODE_LOCKED_MESSAGE}
+        rollingInactiveBlocked={
+          !!editTargetCourse &&
+          isRollingInactiveBlocked({
+            status: editTargetCourse.status,
+            planningMode: editTargetCourse.planningMode,
+            participants: editTargetCourse.participants,
+          })
+        }
+        rollingInactiveHint={ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE}
+        rollingPlanningHorizonWeeks={resolveRollingPlanningHorizonWeeks(tenant?.settings)}
         onKeyDown={handleEditDialogKeyDown}
         onClose={closeEditModal}
         onSave={saveEditCourse}

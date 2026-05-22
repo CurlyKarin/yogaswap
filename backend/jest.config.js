@@ -4,4 +4,7 @@ module.exports = {
   roots: ['<rootDir>/src'],
   testMatch: ['**/?(*.)+(spec|test).ts'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  moduleNameMapper: {
+    '^@yogaswap/shared$': '<rootDir>/../shared/src/index.ts',
+  },
 };

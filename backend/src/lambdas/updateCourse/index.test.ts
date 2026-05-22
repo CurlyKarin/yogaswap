@@ -7,6 +7,15 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { handler } from "./index";
 
+jest.mock("@aws-sdk/client-ses", () => {
+  const mockSesSend = jest.fn();
+  return {
+    SESClient: jest.fn(() => ({ send: mockSesSend })),
+    SendEmailCommand: jest.fn((input) => input),
+    mockSesSend,
+  };
+});
+
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {
@@ -19,9 +28,10 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
   };
 });
 
+const { mockSesSend } = jest.requireMock("@aws-sdk/client-ses");
 const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
 
-/** Leerer Tenant-Load → Default excludeLockWeeks (5). */
+/** Leerer Tenant-Load → Default rollingPlanningHorizonWeeks (5). */
 const tenantSettingsLoadResponse = {};
 
 function mockAdminMembership() {
@@ -85,8 +95,11 @@ describe("updateCourse Lambda", () => {
       OVERRIDES_TABLE: "test-overrides",
       SWAPS_TABLE: "test-swaps",
       TENANTS_TABLE: "test-tenants",
+      PARTICIPANTS_TABLE: "test-participants",
+      SES_SOURCE_EMAIL: "studio@example.com",
     };
     mockSend.mockReset();
+    mockSesSend.mockReset();
     (GetItemCommand as unknown as jest.Mock).mockClear();
     (PutItemCommand as unknown as jest.Mock).mockClear();
     (QueryCommand as unknown as jest.Mock).mockClear();
@@ -142,6 +155,149 @@ describe("updateCourse Lambda", () => {
     );
   });
 
+  test("rejects planning mode change for active course with participants", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("active") });
+
+    const result = await handler(makeEvent({ planningMode: "rolling_continuous" }));
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Planungsmodus kann bei einem aktiven Kurs/);
+  });
+
+  test("rejects inactive transition for active rolling course with participants", async () => {
+    mockAdminMembership().mockResolvedValueOnce({
+      Item: {
+        ...baseCourseItem("active"),
+        planningMode: { S: "rolling_continuous" },
+        visibilityMode: { S: "rolling_horizon" },
+        dates: { L: [] },
+      },
+    });
+
+    const result = await handler(makeEvent({ status: "inactive" }));
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Kursende/);
+  });
+
+  test("stores plannedEndDate for rolling course and caps derived dates", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        plannedEndDate: "2099-06-20",
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.plannedEndDate).toBe("2099-06-20");
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          plannedEndDate: { S: "2099-06-20" },
+        }),
+      }),
+    );
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+  });
+
+  test("notifies participants when plannedEndDate is cleared", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          plannedEndDate: { S: "2099-06-20" },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        plannedEndDate: null,
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).plannedEndDate).toBeUndefined();
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    const sesInput = mockSesSend.mock.calls[0][0];
+    expect(sesInput.Message.Subject.Data).toMatch(/aufgehoben/i);
+  });
+
+  test("does not send plannedEndDate mail when date is unchanged", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          plannedEndDate: { S: "2099-06-20" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        plannedEndDate: "2099-06-20",
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).not.toHaveBeenCalled();
+  });
+
+  test("rejects plannedEndDate inside planning lock window", async () => {
+    const lockEnd = new Date();
+    lockEnd.setDate(lockEnd.getDate() + 3);
+    const tooEarly = lockEnd.toISOString().slice(0, 10);
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+        },
+      });
+
+    const result = await handler(makeEvent({ plannedEndDate: tooEarly }));
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Planungssperre/);
+  });
+
   test("rejects invalid status transition inactive -> active", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
@@ -172,7 +328,6 @@ describe("updateCourse Lambda", () => {
           ...baseCourseItem("active"),
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
-          visibilityHorizonWeeks: { N: "8" },
           participants: { L: [] },
         },
       })
@@ -300,7 +455,6 @@ describe("updateCourse Lambda", () => {
       makeEvent({
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 10,
         excludedDates: [allowedIso],
         includedDates: [],
       }),
@@ -313,7 +467,6 @@ describe("updateCourse Lambda", () => {
           courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
-          visibilityHorizonWeeks: { N: "10" },
           excludedDates: { L: [{ S: allowedIso }] },
         }),
       }),
@@ -324,25 +477,49 @@ describe("updateCourse Lambda", () => {
       expect.objectContaining({
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 10,
         excludedDates: [allowedIso],
       }),
     );
   });
 
-  test("blocks adding excludedDates inside rolling lock window", async () => {
+  test("allows excludedDates inside rolling lock window for draft courses", async () => {
     const soon = new Date();
     soon.setDate(soon.getDate() + 7);
     const soonIso = soon.toISOString().slice(0, 10);
 
     mockAdminMembership()
-      .mockResolvedValueOnce({ Item: baseCourseItem("draft") });
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
+      .mockResolvedValueOnce({});
 
     const result = await handler(
       makeEvent({
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 10,
+        excludedDates: [soonIso],
+        includedDates: [],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).excludedDates).toEqual([soonIso]);
+  });
+
+  test("blocks adding excludedDates inside rolling lock window for active courses", async () => {
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 7);
+    const soonIso = soon.toISOString().slice(0, 10);
+
+    mockAdminMembership().mockResolvedValueOnce({
+      Item: {
+        ...baseCourseItem("active"),
+        planningMode: { S: "rolling_continuous" },
+        visibilityMode: { S: "rolling_horizon" },
+        excludedDates: { L: [] },
+      },
+    });
+
+    const result = await handler(
+      makeEvent({
         excludedDates: [soonIso],
         includedDates: [],
       }),
@@ -430,7 +607,6 @@ describe("updateCourse Lambda", () => {
           ...baseCourseItem("draft"),
           planningMode: { S: "rolling_continuous" },
           visibilityMode: { S: "rolling_horizon" },
-          visibilityHorizonWeeks: { N: "10" },
           excludedDates: { L: [] },
           includedDates: { L: [] },
         },
@@ -441,7 +617,6 @@ describe("updateCourse Lambda", () => {
       makeEvent({
         planningMode: "rolling_continuous",
         visibilityMode: "rolling_horizon",
-        visibilityHorizonWeeks: 10,
         excludedDates: [stalePastIso, farFutureIso],
         includedDates: [],
       }),

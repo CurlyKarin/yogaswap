@@ -12,7 +12,7 @@ Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogasw
 | **Nachlauf** | Nach Kursende bleibt ein **`inactive`** Kurs für Teilnehmer:innen noch **X Kalendertage** sichtbar (Default **7**, UTC). |
 | **Lazy Reconcile** | Beim **`GET /courses`** (`get-courses` Lambda) werden Status und abgeleitete `dates` bei Bedarf in DynamoDB nachgezogen. |
 
-Studio-Konfiguration für Nachlauf, Tauschfenster und Planungssperre (Rollkurse) über **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)): `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays`, `maxOffsetDays`, `excludeLockWeeks` in `TenantSettings`. Siehe Abschnitt [Nachlauf und Tauschfenster](#nachlauf-und-tauschfenster).
+Studio-Konfiguration für Nachlauf, Tauschfenster und Rollkurs-Fenster über **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)): `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays`, `maxOffsetDays`, `rollingPlanningHorizonWeeks` in `TenantSettings`. Rollkurse: siehe [rolling-courses-planning.md](./rolling-courses-planning.md). Nachlauf/Tauschfenster: [Nachlauf und Tauschfenster](#nachlauf-und-tauschfenster).
 
 ---
 
@@ -121,7 +121,7 @@ letzterTagNachlauf = Kursende + inactiveGraceDaysAfterCourseEnd   (Kalendertage,
 |-------------|---------------|---------|
 | Nachlauf nach Kursende | `TenantSettings.inactiveGraceDaysAfterCourseEnd` | **7** |
 | Tauschfenster | `TenantSettings.minOffsetDays` / `maxOffsetDays` (`shared/tenantSettings.ts`) | **-7 / +7** |
-| Planungssperre (Rollkurs) | `TenantSettings.excludeLockWeeks` | **5** |
+| Planungs- und Sichtfenster (Rollkurs) | `TenantSettings.rollingPlanningHorizonWeeks` | **5** |
 
 **Produktentscheidung (#149):** Nachlauf und Swap-Fenster nutzen **dieselbe Konfigurationsfamilie** in `TenantSettings` (Studio-UI [#44](https://github.com/CurlyKarin/yogaswap/issues/44)). Der Code-Default für den Nachlauf ist an `DEFAULT_SWAP_MAX_OFFSET_DAYS` angeglichen.
 

@@ -72,9 +72,10 @@ export type DeriveVisibleDatesInput = {
   weekday: string;
   seriesStartDate?: string;
   seriesEndDate?: string;
+  plannedEndDate?: string;
   visibleFrom?: string;
   visibleUntil?: string;
-  visibilityHorizonWeeks?: number;
+  rollingPlanningHorizonWeeks?: number;
   excludedDates: string[];
   includedDates: string[];
   fallbackDates: string[];
@@ -101,11 +102,15 @@ export function deriveVisibleDates(input: DeriveVisibleDatesInput): string[] {
     baseWindowEnd = seriesEnd;
   } else if (planningMode === "rolling_continuous") {
     const horizonWeeks =
-      Number.isInteger(input.visibilityHorizonWeeks) && (input.visibilityHorizonWeeks ?? 0) > 0
-        ? Number(input.visibilityHorizonWeeks)
-        : 8;
+      Number.isInteger(input.rollingPlanningHorizonWeeks) && (input.rollingPlanningHorizonWeeks ?? 0) > 0
+        ? Number(input.rollingPlanningHorizonWeeks)
+        : 5;
     baseWindowStart = todayUtc;
     baseWindowEnd = addDaysUtc(todayUtc, horizonWeeks * 7);
+    const plannedEnd = parseDateOnlyUtc(input.plannedEndDate);
+    if (plannedEnd && plannedEnd < baseWindowEnd) {
+      baseWindowEnd = plannedEnd;
+    }
   } else {
     return fallbackDates;
   }
