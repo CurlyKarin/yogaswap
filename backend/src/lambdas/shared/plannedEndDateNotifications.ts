@@ -1,7 +1,12 @@
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { resolveParticipantEmail } from "./participantEmailLookup";
-import { buildPlannedEndDateMail } from "./templates/course/courseMailTemplates";
+import {
+  buildPlannedEndDateClearedMail,
+  buildPlannedEndDateMail,
+} from "./templates/course/courseMailTemplates";
+
+export type PlannedEndDateNotificationChange = "set" | "cleared";
 
 const ses = new SESClient({});
 
@@ -25,6 +30,7 @@ export async function notifyParticipantsPlannedEndDate(
     loginUrl?: string;
     tenantId: string;
     courseName: string;
+    change: PlannedEndDateNotificationChange;
     plannedEndDateIso: string;
     participantUserIds: string[];
   },
@@ -75,13 +81,22 @@ export async function notifyParticipantsPlannedEndDate(
     }
 
     const recipientName = (resolvedUserId || userId || "Teilnehmer").trim();
-    const mail = buildPlannedEndDateMail({
-      locale: params.mailLocale,
-      nickname: recipientName,
-      courseName: params.courseName,
-      plannedEndDateIso: params.plannedEndDateIso,
-      loginUrl: params.loginUrl,
-    });
+    const mail =
+      params.change === "cleared"
+        ? buildPlannedEndDateClearedMail({
+            locale: params.mailLocale,
+            nickname: recipientName,
+            courseName: params.courseName,
+            previousPlannedEndDateIso: params.plannedEndDateIso,
+            loginUrl: params.loginUrl,
+          })
+        : buildPlannedEndDateMail({
+            locale: params.mailLocale,
+            nickname: recipientName,
+            courseName: params.courseName,
+            plannedEndDateIso: params.plannedEndDateIso,
+            loginUrl: params.loginUrl,
+          });
 
     try {
       await ses.send(

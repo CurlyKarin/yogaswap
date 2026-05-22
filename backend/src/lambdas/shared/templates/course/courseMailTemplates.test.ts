@@ -1,4 +1,8 @@
-import { buildPlannedEndDateMail, formatIsoDateDe } from "./courseMailTemplates";
+import {
+  buildPlannedEndDateClearedMail,
+  buildPlannedEndDateMail,
+  formatIsoDateDe,
+} from "./courseMailTemplates";
 
 describe("courseMailTemplates", () => {
   test("formatIsoDateDe formats UTC date in german locale", () => {
@@ -16,5 +20,16 @@ describe("courseMailTemplates", () => {
     expect(mail.html).toMatch(/Luna/);
     expect(mail.html).toMatch(/20\.06\.2026/);
     expect(mail.html).toMatch(/app\.example\.com/);
+  });
+
+  test("buildPlannedEndDateClearedMail describes removed end date", () => {
+    const mail = buildPlannedEndDateClearedMail({
+      nickname: "Luna",
+      courseName: "Morgenyoga",
+      previousPlannedEndDateIso: "2026-06-20",
+    });
+    expect(mail.subject).toMatch(/aufgehoben/);
+    expect(mail.html).toMatch(/aufgehoben/);
+    expect(mail.html).toMatch(/20\.06\.2026/);
   });
 });

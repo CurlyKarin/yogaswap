@@ -54,3 +54,36 @@ export function buildPlannedEndDateMail(input: PlannedEndDateMailInput): MailTem
     html: "",
   };
 }
+
+type PlannedEndDateClearedMailInput = {
+  locale?: string;
+  nickname: string;
+  courseName: string;
+  previousPlannedEndDateIso: string;
+  loginUrl?: string;
+};
+
+export function buildPlannedEndDateClearedMail(input: PlannedEndDateClearedMailInput): MailTemplate {
+  const locale = normalizeLocale(input.locale);
+  const previousEndLabel = formatIsoDateDe(input.previousPlannedEndDateIso);
+  const loginHint = input.loginUrl
+    ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
+    : "";
+
+  if (locale === "de") {
+    return {
+      subject: `Kursende aufgehoben: ${input.courseName}`,
+      html: `
+        <p>Hallo ${input.nickname},</p>
+        <p>für den Kurs <strong>${input.courseName}</strong> wurde das geplante Kursende vom <strong>${previousEndLabel}</strong> wieder aufgehoben.</p>
+        <p>Der Kurs läuft damit wieder ohne festes Enddatum weiter (Termine gemäß Studio-Planungsfenster).</p>
+        ${loginHint}
+      `,
+    };
+  }
+
+  return {
+    subject: `Kursende aufgehoben: ${input.courseName}`,
+    html: "",
+  };
+}

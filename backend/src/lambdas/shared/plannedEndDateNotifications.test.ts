@@ -33,6 +33,7 @@ describe("plannedEndDateNotifications", () => {
     const result = await notifyParticipantsPlannedEndDate(client, {
       tenantId: "t1",
       courseName: "Yoga",
+      change: "set",
       plannedEndDateIso: "2026-06-20",
       participantUserIds: ["luna"],
     });
@@ -67,6 +68,7 @@ describe("plannedEndDateNotifications", () => {
       sesSourceEmail: "studio@example.com",
       tenantId: "t1",
       courseName: "Flow",
+      change: "set",
       plannedEndDateIso: "2026-06-20",
       participantUserIds: ["luna", "neo"],
     });

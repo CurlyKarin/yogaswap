@@ -650,15 +650,24 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     );
 
     const previousPlannedEndDate = item.plannedEndDate?.S;
-    const shouldNotifyPlannedEnd =
-      hasPlannedEndDatePatch &&
-      !!nextPlannedEndDate &&
+    const isRollingActiveWithParticipants =
       (nextPlanningMode ?? item.planningMode?.S) === "rolling_continuous" &&
       effectiveStatus === "active" &&
-      nextParticipants.length > 0 &&
-      previousPlannedEndDate !== nextPlannedEndDate;
+      nextParticipants.length > 0;
 
-    if (shouldNotifyPlannedEnd) {
+    let plannedEndNotifyChange: "set" | "cleared" | null = null;
+    let plannedEndNotifyDateIso: string | undefined;
+    if (hasPlannedEndDatePatch && isRollingActiveWithParticipants) {
+      if (nextPlannedEndDate && previousPlannedEndDate !== nextPlannedEndDate) {
+        plannedEndNotifyChange = "set";
+        plannedEndNotifyDateIso = nextPlannedEndDate;
+      } else if (!nextPlannedEndDate && previousPlannedEndDate) {
+        plannedEndNotifyChange = "cleared";
+        plannedEndNotifyDateIso = previousPlannedEndDate;
+      }
+    }
+
+    if (plannedEndNotifyChange && plannedEndNotifyDateIso) {
       const participantsTable = process.env.PARTICIPANTS_TABLE;
       const sesSourceEmail = process.env.SES_SOURCE_EMAIL;
       const baseUrlEnv = process.env.BASE_URL || "";
@@ -674,13 +683,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           loginUrl,
           tenantId,
           courseName: nextName,
-          plannedEndDateIso: nextPlannedEndDate!,
+          change: plannedEndNotifyChange,
+          plannedEndDateIso: plannedEndNotifyDateIso,
           participantUserIds,
         });
         console.info("updateCourse plannedEndDate mail summary", {
           tenantId,
           courseId,
-          plannedEndDate: nextPlannedEndDate,
+          change: plannedEndNotifyChange,
+          plannedEndDate: plannedEndNotifyDateIso,
           ...mailSummary,
         });
       } catch (notificationError) {

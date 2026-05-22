@@ -219,6 +219,42 @@ describe("updateCourse Lambda", () => {
     expect(mockSesSend).toHaveBeenCalledTimes(1);
   });
 
+  test("notifies participants when plannedEndDate is cleared", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          plannedEndDate: { S: "2099-06-20" },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        plannedEndDate: null,
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).plannedEndDate).toBeUndefined();
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    const sesInput = mockSesSend.mock.calls[0][0];
+    expect(sesInput.Message.Subject.Data).toMatch(/aufgehoben/i);
+  });
+
   test("does not send plannedEndDate mail when date is unchanged", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })

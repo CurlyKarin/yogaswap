@@ -25,7 +25,7 @@ Für `planningMode: rolling_continuous` gibt es **kein** separates Kursfeld für
 - Nur für aktive Rollkurse mit Teilnehmern (statt Status `inactive`).
 - Mindestdatum: Ende der Planungssperre (= Studio-Fenster ab heute).
 - „Unbefristet“ entfernt das Feld wieder.
-- Beim **Setzen oder Ändern** des Kursendes (`PUT /courses/{courseId}`) erhalten eingetragene Kursteilnehmer mit Login eine **E-Mail** (wie bei Terminabsage; nur eingeladene ohne Login werden übersprungen).
+- Beim **Setzen, Ändern oder Aufheben** des Kursendes (`PUT /courses/{courseId}`) erhalten eingetragene Kursteilnehmer mit Login eine **E-Mail** (wie bei Terminabsage; nur eingeladene ohne Login werden übersprungen).
 
 ## Swaps und Cleanup
 
