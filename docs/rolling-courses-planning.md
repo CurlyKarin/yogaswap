@@ -32,6 +32,7 @@ Für `planningMode: rolling_continuous` gibt es **kein** separates Kursfeld `vis
 - In Produktion sind derzeit keine Rollkurse mit Swaps erwartet.
 - Beim Setzen von `plannedEndDate` gibt es **keinen** aufwändigen Swap-Cleanup wie bei Terminabsage.
 - Verwaiste Swaps außerhalb des sichtbaren Fensters gelten als **Fehldaten** (manuell bereinigen, falls nötig).
+- **After Rollout (Modell-Mix):** Diskussion Cleanup vs. erzwungene Absagen vs. Tausch-Regeln — GitHub [#174](https://github.com/CurlyKarin/yogaswap/issues/174).
 
 ## Technik (Kurz)
 
