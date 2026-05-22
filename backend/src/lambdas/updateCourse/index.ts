@@ -27,6 +27,7 @@ import {
   resolveRollingPlanningHorizonWeeks,
 } from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
+import { notifyParticipantsPlannedEndDate } from "../shared/plannedEndDateNotifications";
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -647,6 +648,49 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         Item: updateItem,
       }),
     );
+
+    const previousPlannedEndDate = item.plannedEndDate?.S;
+    const shouldNotifyPlannedEnd =
+      hasPlannedEndDatePatch &&
+      !!nextPlannedEndDate &&
+      (nextPlanningMode ?? item.planningMode?.S) === "rolling_continuous" &&
+      effectiveStatus === "active" &&
+      nextParticipants.length > 0 &&
+      previousPlannedEndDate !== nextPlannedEndDate;
+
+    if (shouldNotifyPlannedEnd) {
+      const participantsTable = process.env.PARTICIPANTS_TABLE;
+      const sesSourceEmail = process.env.SES_SOURCE_EMAIL;
+      const baseUrlEnv = process.env.BASE_URL || "";
+      const loginUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : baseUrlEnv ? `https://${baseUrlEnv}` : undefined;
+      const participantUserIds = nextParticipants
+        .map((entry) => entry.S ?? "")
+        .filter((entry) => entry.length > 0);
+      try {
+        const mailSummary = await notifyParticipantsPlannedEndDate(client, {
+          participantsTable,
+          sesSourceEmail,
+          mailLocale: process.env.MAIL_LOCALE || "de",
+          loginUrl,
+          tenantId,
+          courseName: nextName,
+          plannedEndDateIso: nextPlannedEndDate!,
+          participantUserIds,
+        });
+        console.info("updateCourse plannedEndDate mail summary", {
+          tenantId,
+          courseId,
+          plannedEndDate: nextPlannedEndDate,
+          ...mailSummary,
+        });
+      } catch (notificationError) {
+        console.warn("updateCourse plannedEndDate notification failed", {
+          tenantId,
+          courseId,
+          error: notificationError,
+        });
+      }
+    }
 
     if (participants && effectiveStatus === "active") {
       const previousParticipants =

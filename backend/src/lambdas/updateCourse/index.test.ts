@@ -7,6 +7,15 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { handler } from "./index";
 
+jest.mock("@aws-sdk/client-ses", () => {
+  const mockSesSend = jest.fn();
+  return {
+    SESClient: jest.fn(() => ({ send: mockSesSend })),
+    SendEmailCommand: jest.fn((input) => input),
+    mockSesSend,
+  };
+});
+
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {
@@ -19,6 +28,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
   };
 });
 
+const { mockSesSend } = jest.requireMock("@aws-sdk/client-ses");
 const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
 
 /** Leerer Tenant-Load → Default rollingPlanningHorizonWeeks (5). */
@@ -85,8 +95,11 @@ describe("updateCourse Lambda", () => {
       OVERRIDES_TABLE: "test-overrides",
       SWAPS_TABLE: "test-swaps",
       TENANTS_TABLE: "test-tenants",
+      PARTICIPANTS_TABLE: "test-participants",
+      SES_SOURCE_EMAIL: "studio@example.com",
     };
     mockSend.mockReset();
+    mockSesSend.mockReset();
     (GetItemCommand as unknown as jest.Mock).mockClear();
     (PutItemCommand as unknown as jest.Mock).mockClear();
     (QueryCommand as unknown as jest.Mock).mockClear();
@@ -166,7 +179,9 @@ describe("updateCourse Lambda", () => {
   });
 
   test("stores plannedEndDate for rolling course and caps derived dates", async () => {
-    mockAdminMembership()
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
@@ -174,7 +189,16 @@ describe("updateCourse Lambda", () => {
           visibilityMode: { S: "rolling_horizon" },
         },
       })
-      .mockResolvedValueOnce({});
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+
+    mockSesSend.mockResolvedValueOnce({});
 
     const result = await handler(
       makeEvent({
@@ -192,6 +216,31 @@ describe("updateCourse Lambda", () => {
         }),
       }),
     );
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not send plannedEndDate mail when date is unchanged", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          plannedEndDate: { S: "2099-06-20" },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        plannedEndDate: "2099-06-20",
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).not.toHaveBeenCalled();
   });
 
   test("rejects plannedEndDate inside planning lock window", async () => {
