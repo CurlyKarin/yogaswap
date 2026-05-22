@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import type { Tenant } from "shared/types";
 import {
   resolveInactiveGraceDays,
@@ -71,12 +71,6 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setError(null);
     setSuccess(null);
   }, [tenant]);
-
-  const parsedHorizonWeeks = Number.parseInt(rollingPlanningHorizonWeeks, 10);
-  const isShrinkingHorizon = useMemo(
-    () => Number.isInteger(parsedHorizonWeeks) && parsedHorizonWeeks < horizonDefault,
-    [parsedHorizonWeeks, horizonDefault],
-  );
 
   const handleSave = async () => {
     const patch = {
@@ -172,7 +166,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
         </label>
 
         <label className="dialog-field">
-          <FieldLabelWithTooltip tooltip="Für durchlaufende Kurse: legt fest, welche Termine ab heute existieren (Teilnehmer und Admin) und innerhalb welcher Frist nur Absage statt Ausschließen möglich ist. Verkleinerung: weniger sichtbare Termine; Speichern scheitert, wenn im betroffenen Zeitraum noch offene Tauschanfragen oder gebuchte Rollkurs-Termine liegen.">
+          <FieldLabelWithTooltip tooltip="Für durchlaufende Kurse: legt studio-weit fest, welche Termine ab heute Teilnehmer sehen und tauschen dürfen und innerhalb welcher Frist bei aktivem Kurs nur Absage statt Ausschließen möglich ist. Vergrößerung ist jederzeit möglich. Beim Verkleinern werden weniger Termine sichtbar; Speichern ist nur möglich, wenn im betroffenen Zeitraum keine offenen Tauschanfragen und keine gebuchten Rollkurs-Termine mehr liegen — diese vorher abschließen oder abbrechen.">
             Planungs- und Sichtfenster für Durchlaufende Kurse (Wochen)
           </FieldLabelWithTooltip>
           <input
@@ -184,18 +178,6 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
             disabled={saving}
             aria-label="Planungs- und Sichtfenster für Durchlaufende Kurse in Wochen"
           />
-          <p className="muted small" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
-            Gilt für alle Durchlaufenden Kurse. Eine Vergrößerung ist jederzeit möglich; beim
-            Verkleinern prüft das System offene Tausche und Terminbuchungen im Zeitraum, der für
-            Teilnehmer nicht mehr sichtbar wäre.
-          </p>
-          {isShrinkingHorizon && (
-            <p className="muted small" role="note" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
-              Sie verringern das Fenster von {horizonDefault} auf {parsedHorizonWeeks} Wochen — bitte
-              offene Tauschanfragen und gebuchte Termine in diesem Bereich vor dem Speichern
-              abschließen oder abbrechen.
-            </p>
-          )}
         </label>
       </div>
 
