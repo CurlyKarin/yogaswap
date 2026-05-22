@@ -35,19 +35,17 @@ Für `planningMode: rolling_continuous` gibt es **kein** separates Kursfeld für
 
 ## Studio-Fenster verkleinern
 
-**Aktuelles Verhalten (ohne Migration):**
+**Guard beim Speichern (`PUT /tenant-settings`):**
+
+- Wird `rollingPlanningHorizonWeeks` **verkleinert**, prüft das Backend den Zeitraum zwischen neuem und altem Fensterende (nur für `rolling_continuous`-Kurse).
+- Gibt es dort noch **`pending`/`active` Swaps** oder Overrides mit Teilnehmern/Swap/Warteliste → Speichern wird mit **400** abgelehnt (gemeinsame Logik in `shared/rollingHorizonShrink.ts`, Dynamo-Laden in `horizonShrinkGuard.ts`).
+- **Erhöhen** des Fensters ist unkritisch.
+
+**Nach erfolgreichem Speichern (ohne Migration):**
 
 - Wirkt **sofort** auf alle Rollkurse beim nächsten `GET /courses`: `dates` / `visibleDates` werden mit dem **neuen** N aus `deriveVisibleDates` neu abgeleitet.
-- Termine **außerhalb** des neuen Fensters sind für Teilnehmer nicht mehr sichtbar/tauschbar.
-- Gespeicherte `excludedDates` weit in der Zukunft **bleiben** in DynamoDB (werden für die Ableitung außerhalb des Fensters irrelevant).
-- **Swaps** auf betroffene Termine werden **nicht** automatisch bereinigt → [#174](https://github.com/CurlyKarin/yogaswap/issues/174).
-
-**Best Practice (Empfehlung):**
-
-1. Verkleinern nur mit bewusster Admin-Entscheidung (Hinweis im UI: „weniger sichtbare Termine, prüfe Swaps“).
-2. Vor Verkleinerung: keine offenen Swaps auf Rollkurs-Termine im betroffenen Zeitraum (oder Follow-up #174).
-3. Kein automatisches Löschen von `excludedDates` — optional späteres Aufräumen, kein Muss.
-4. **Erhöhen** des Fensters ist unkritisch (mehr Termine sichtbar).
+- Gespeicherte `excludedDates` weit in der Zukunft **bleiben** in DynamoDB.
+- Verwaiste Swaps außerhalb des Fensters (falls Guard umgangen oder Altbestand) → [#174](https://github.com/CurlyKarin/yogaswap/issues/174).
 
 ## Technik (Kurz)
 

@@ -400,11 +400,17 @@ locals {
       table_arns = [
         module.tenants_table.table_arn,
         module.memberships_table.table_arn,
+        module.courses_table.table_arn,
+        module.swaps_table.table_arn,
+        module.course_overrides_table.table_arn,
       ]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
       tables = {
         "TENANTS_TABLE"     = module.tenants_table.table_name
         "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+        "COURSES_TABLE"     = module.courses_table.table_name
+        "SWAPS_TABLE"       = module.swaps_table.table_name
+        "OVERRIDES_TABLE"   = module.course_overrides_table.table_name
       }
       s3_actions   = []
       s3_resources = []
