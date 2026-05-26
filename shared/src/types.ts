@@ -17,6 +17,8 @@ export type CourseDateOverride = {
   participants: string[];
   swapped?: string[]; // aktive Tausch-Teilnehmer
   waitlist?: string[]; // Nachrücker für volle Termine
+  /** Kurzfristig abgesagt — bleiben in {@link participants} (Slot bleibt belegt). */
+  shortNoticeCancellations?: string[];
   // Anonyme Schnupperteilnehmer / Blocker ohne expliziten User
   // Belegt Kapazität, ohne eine konkrete Person zu modellieren
   anonymousTrialCount?: number;
@@ -186,6 +188,12 @@ export interface TenantSettings {
    * welcher Frist nur Absage statt Ausschliessen moeglich ist. Default: 5.
    */
   rollingPlanningHorizonWeeks?: number;
+  /**
+   * Minuten vor Kursbeginn: ab dann kein neuer Tausch vom Termin (Self-Service);
+   * kurzfristige Absage über {@link CourseDateOverride.shortNoticeCancellations}.
+   * Default im Code: 60.
+   */
+  cancellationSwapCutoffMinutesBeforeStart?: number;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

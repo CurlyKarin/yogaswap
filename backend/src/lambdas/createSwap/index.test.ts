@@ -42,15 +42,21 @@ describe('createSwap Lambda', () => {
 
   test('successfully creates a swap', async () => {
     mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          time: { S: '10:00' },
+          participants: { L: [{ S: 'Nia' }] },
+        },
+      })
       .mockResolvedValueOnce({ Item: { courseUid: { S: 'uid-from' } } })
       .mockResolvedValueOnce({ Item: { courseUid: { S: 'uid-to' } } })
       .mockResolvedValueOnce({});
     const event = baseEvent({
       user: 'Nia',
       fromCourseId: 'c1',
-      fromDate: '2025-10-01',
+      fromDate: '2099-06-15',
       toCourseId: 'c2',
-      toDate: '2025-10-05',
+      toDate: '2099-06-20',
       status: 'pending',
     });
 
@@ -64,7 +70,7 @@ describe('createSwap Lambda', () => {
         TableName: 'test-swaps',
         Item: expect.objectContaining({
           tenantId: { S: 'default-tenant' },
-          user_swapId: { S: 'Nia#2025-10-01_c1_2025-10-05_c2' },
+          user_swapId: { S: 'Nia#2099-06-15_c1_2099-06-20_c2' },
           user: { S: 'Nia' },
           fromCourseId: { S: 'c1' },
           toCourseId: { S: 'c2' },
@@ -95,9 +101,9 @@ describe('createSwap Lambda', () => {
     const event = baseEvent({
       user: 'Nia',
       fromCourseId: 'c1',
-      fromDate: '2025-10-01',
+      fromDate: '2099-06-15',
       toCourseId: 'c2',
-      toDate: '2025-10-05',
+      toDate: '2099-06-20',
       status: 'pending',
     });
 

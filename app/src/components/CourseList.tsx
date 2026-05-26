@@ -317,6 +317,7 @@ export default function CourseList({
     setSwaps,
     currentUser,
     fetchData,
+    tenant?.settings,
   );
 
   // 👉 Debug-Ausgabe bei jedem Swaps-Update

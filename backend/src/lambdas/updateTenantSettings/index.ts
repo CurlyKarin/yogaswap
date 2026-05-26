@@ -21,6 +21,7 @@ const MVP_SETTINGS_KEYS = [
   "minOffsetDays",
   "maxOffsetDays",
   "rollingPlanningHorizonWeeks",
+  "cancellationSwapCutoffMinutesBeforeStart",
 ] as const;
 
 function parseBody(event: APIGatewayProxyEvent): StudioSettingsPatch | null {

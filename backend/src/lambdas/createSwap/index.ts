@@ -1,9 +1,12 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { canCreateSwapFromOrigin } from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
+import { loadTenantSettings } from '../shared/tenantSettingsLoader';
+import { mapOverrideItem, mapStringList } from '../shared/overrideDynamo';
 
 const client = dynamoClient;
 
@@ -19,6 +22,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
   const tableName = process.env.SWAPS_TABLE;
   const coursesTable = process.env.COURSES_TABLE;
+  const overridesTable = process.env.OVERRIDES_TABLE;
+  const tenantsTable = process.env.TENANTS_TABLE;
 
   try {
     if (!tableName) {
@@ -33,6 +38,60 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const fromLegacyId = swap.fromCourseId.toString();
+    const courseResp = await client.send(
+      new GetItemCommand({
+        TableName: coursesTable,
+        Key: { tenantId: { S: tenantId }, courseId: { S: fromLegacyId } },
+        ConsistentRead: true,
+      }),
+    );
+    if (!courseResp.Item) {
+      return { statusCode: 404, body: JSON.stringify({ error: 'Origin course not found' }) };
+    }
+    const courseTime = courseResp.Item.time?.S ?? '';
+    const baseParticipants = mapStringList(courseResp.Item.participants);
+
+    let override;
+    if (overridesTable) {
+      const courseId_date = `${fromLegacyId}_${swap.fromDate}`;
+      const overrideResp = await client.send(
+        new GetItemCommand({
+          TableName: overridesTable,
+          Key: { tenantId: { S: tenantId }, courseId_date: { S: courseId_date } },
+          ConsistentRead: true,
+        }),
+      );
+      if (overrideResp.Item) {
+        override = mapOverrideItem(overrideResp.Item);
+      }
+    }
+    const participants = override?.participants ?? baseParticipants;
+    const originallyParticipant = baseParticipants.some(
+      (p) => p.toLowerCase() === swap.user.toLowerCase(),
+    );
+    const tenantSettings = tenantsTable
+      ? await loadTenantSettings(client, tenantsTable, tenantId)
+      : undefined;
+
+    if (
+      !canCreateSwapFromOrigin({
+        isoDate: swap.fromDate,
+        courseTime,
+        tenantSettings,
+        override,
+        userName: swap.user,
+        participants,
+        originallyParticipant,
+      })
+    ) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: 'In diesem Zeitfenster ist kein Tausch vom Ursprungstermin mehr möglich.',
+        }),
+      };
+    }
+
     const toLegacyId = swap.toCourseId.toString();
     const [fromCourseUid, toCourseUid] = await Promise.all([
       fetchCourseUidByLegacyCourseId(client, coursesTable, tenantId, fromLegacyId),

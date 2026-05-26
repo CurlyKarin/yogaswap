@@ -2,10 +2,35 @@ import { useCallback, useEffect, useRef } from "react";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { sameDayUTC } from "../lib/dates";
 import { overrideCourseUidFields, swapCourseUidFields } from "../lib/courseUid";
-import { Swap, CourseDateOverride, Course, User } from "shared/types";
+import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
+import {
+  addUserUniqueCaseInsensitive,
+  canCreateSwapFromOrigin,
+  includesUserCaseInsensitive,
+  isShortNoticeCancelled,
+  isWithinCancellationSwapCutoff,
+  removeUserCaseInsensitive,
+  resolveCancellationSwapCutoffMinutes,
+} from "shared/cancellationSwapCutoff";
 import { createSwap, deleteSwap, processPromotions } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
 
+/** Behält shortNotice, falls API-Antwort das Feld (noch) nicht liefert. */
+function mergeOverridesPreservingShortNotice(
+  prev: CourseDateOverride[],
+  next: CourseDateOverride[],
+): CourseDateOverride[] {
+  return next.map((o) => {
+    const prior = prev.find((p) => p.courseId === o.courseId && p.date === o.date);
+    if (
+      prior?.shortNoticeCancellations?.length &&
+      !o.shortNoticeCancellations?.length
+    ) {
+      return { ...o, shortNoticeCancellations: prior.shortNoticeCancellations };
+    }
+    return o;
+  });
+}
 
 export function useCourseSwaps(
   courses: Course[],
@@ -14,7 +39,8 @@ export function useCourseSwaps(
   swaps: Swap[], 
   setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, 
   currentUser: User,
-  fetchData: () => Promise<void>
+  fetchData: () => Promise<void>,
+  tenantSettings?: TenantSettings,
 ) {
   const equalsIgnoreCase = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
   const requestSwapRef = useRef<(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => Promise<void>>(null!);
@@ -40,45 +66,112 @@ export function useCourseSwaps(
    * @param {string} dateIso - das Datum im ISO-Format, für den der Tausch erstellt werden soll
    * @param {string} userName - der Benutzername, unter dem der Tausch erstellt werden soll
    */
+  const cleanupPendingSwapsFromOrigin = useCallback(
+    async (fromCourseId: number, fromDateIso: string, userName: string) => {
+      const pendingFromOrigin = swaps.filter(
+        (s) =>
+          s.status === "pending" &&
+          equalsIgnoreCase(s.user, userName) &&
+          s.fromCourseId === fromCourseId &&
+          s.fromDate === fromDateIso,
+      );
+      if (pendingFromOrigin.length === 0) return;
+
+      await Promise.all(pendingFromOrigin.map((s) => deleteSwap(s)));
+      setSwaps((prev) =>
+        prev.filter(
+          (s) =>
+            !pendingFromOrigin.some(
+              (p) =>
+                p.fromCourseId === s.fromCourseId &&
+                p.fromDate === s.fromDate &&
+                p.toCourseId === s.toCourseId &&
+                p.toDate === s.toDate &&
+                equalsIgnoreCase(p.user, s.user),
+            ),
+        ),
+      );
+      setOverrides((prev) =>
+        prev.map((o) => {
+          const affected = pendingFromOrigin.filter(
+            (p) => p.toCourseId === o.courseId && p.toDate === o.date,
+          );
+          if (affected.length === 0) return o;
+          const usersToRemove = new Set(affected.map((p) => p.user.toLowerCase()));
+          const waitlistAfter = (o.waitlist ?? []).filter((u) => !usersToRemove.has(u.toLowerCase()));
+          if (waitlistAfter.length === (o.waitlist ?? []).length) return o;
+          updateOverride(o.courseId, o.date, { waitlist: waitlistAfter });
+          return { ...o, waitlist: waitlistAfter };
+        }),
+      );
+    },
+    [swaps, setOverrides, setSwaps],
+  );
+
   const onToggleAbsence = useCallback(
     async (course: Course, dateIso: string, userName: string) => {
       try {
-      // Absagen blockieren, wenn bereits aktiver Swap
-      // TODO: Prüfen, ob diese Prüfung notwendig ist (Kommentar im Originalcode)
-      const hasSwap = swaps.some(
+      const hasActiveSwapFromOrigin = swaps.some(
         (s: Swap) =>
-          s.user.toLowerCase() === userName.toLowerCase() &&
+          equalsIgnoreCase(s.user, userName) &&
           s.fromCourseId === course.id &&
           s.fromDate === dateIso &&
-          s.status === 'active'
+          s.status === "active",
       );
 
-      if (hasSwap) {
-        alert('Absagen nicht möglich, solange ein Tausch aktiv oder offen ist.');
+      if (hasActiveSwapFromOrigin) {
+        alert("Absagen nicht möglich, solange ein aktiver Tausch vom Ursprungstermin besteht.");
         return;
       }
 
-      // Warnung bei Warteliste
-      const waitlist = getEffectiveWaitlist(course, filteredOverrides, dateIso);
-      if (waitlist.length > 0) {
-        const proceed = confirm(
-          `Achtung: Für diesen Termin existiert eine Warteliste (${waitlist.length} Person(en)). ` +
-          `Deine Absage hat direkte Auswirkungen – jemand rückt automatisch nach. Möchtest du fortfahren?`
-        );
-        if (!proceed) return;
+      const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
+      const inCutoff = isWithinCancellationSwapCutoff(dateIso, course.time, cutoffMinutes);
+
+      const existingOverride = filteredOverrides.find(
+        (o) => o.courseId === course.id && o.date === dateIso,
+      );
+      const isSn = isShortNoticeCancelled(existingOverride, userName);
+      const isIn = includesUserCaseInsensitive(
+        existingOverride?.participants ?? course.participants,
+        userName,
+      );
+
+      if (!isIn && !isSn && inCutoff) {
+        alert("Absage kann in diesem Zeitfenster nicht zurückgenommen werden.");
+        return;
       }
 
-      const updateOrCreateOverride = (
-        prev: CourseDateOverride[],
+      if (isSn && inCutoff) {
+        alert("Kurzfristige Absage kann in diesem Zeitfenster nicht zurückgenommen werden.");
+        return;
+      }
+
+      if (isIn && !isSn && !inCutoff) {
+        const waitlist = getEffectiveWaitlist(course, filteredOverrides, dateIso);
+        if (waitlist.length > 0) {
+          const proceed = confirm(
+            `Achtung: Für diesen Termin existiert eine Warteliste (${waitlist.length} Person(en)). ` +
+              `Deine Absage hat direkte Auswirkungen – jemand rückt automatisch nach. Möchtest du fortfahren?`,
+          );
+          if (!proceed) return;
+        }
+      }
+
+      const persistOverride = (
+        courseId: number,
+        dateKey: string,
         nextOverride: CourseDateOverride,
         idx: number,
-        courseId: number,
-        dateIso: string
+        prev: CourseDateOverride[],
       ) => {
         const updated = [...prev];
+        const payload = {
+          participants: nextOverride.participants,
+          shortNoticeCancellations: nextOverride.shortNoticeCancellations ?? [],
+        };
         if (idx >= 0) {
           updated[idx] = nextOverride;
-          updateOverride(courseId, dateIso, { participants: nextOverride.participants });
+          updateOverride(courseId, dateKey, payload);
         } else {
           updated.push(nextOverride);
           createOverride(nextOverride);
@@ -89,7 +182,7 @@ export function useCourseSwaps(
       setOverrides((prev: CourseDateOverride[]) => {
         const date = new Date(dateIso);
         const idx = prev.findIndex(
-          (o: CourseDateOverride) => o.courseId === course.id && sameDayUTC(new Date(o.date), date)
+          (o: CourseDateOverride) => o.courseId === course.id && sameDayUTC(new Date(o.date), date),
         );
 
         const baseOverride: CourseDateOverride =
@@ -101,38 +194,40 @@ export function useCourseSwaps(
                 participants: [...course.participants],
                 swapped: [],
                 waitlist: [],
+                shortNoticeCancellations: [],
                 ...overrideCourseUidFields(course),
               };
 
         const courseCapacity = course.capacity;
-        const userNameLower = userName.toLowerCase();
-        const isIn = baseOverride.participants.some((p) => p.toLowerCase() === userNameLower);
+        let nextParticipants = [...baseOverride.participants];
+        let nextShortNotice = [...(baseOverride.shortNoticeCancellations ?? [])];
 
-        let nextParticipants: string[];
-        if (isIn) {
-          // Absage: User entfernen
-          // Removal case-insensitive, damit gemischte Alt-Daten korrekt funktionieren.
-          nextParticipants = baseOverride.participants.filter((p) => p.toLowerCase() !== userNameLower);
+        if (isSn) {
+          nextShortNotice = removeUserCaseInsensitive(nextShortNotice, userName);
+        } else if (isIn && inCutoff) {
+          nextShortNotice = addUserUniqueCaseInsensitive(nextShortNotice, userName);
+        } else if (isIn) {
+          nextParticipants = removeUserCaseInsensitive(nextParticipants, userName);
         } else {
-          // Rücknahme: User hinzufügen, nur wenn Platz frei
-          if (baseOverride.participants.length >= courseCapacity) {
-            alert('Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.');
+          if (nextParticipants.length >= courseCapacity) {
+            alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
             return prev;
           }
-          // Keine Duplikate durch unterschiedliche Schreibweise zulassen.
-          nextParticipants = [
-            ...baseOverride.participants.filter((p) => p.toLowerCase() !== userNameLower),
-            userName,
-          ];
+          nextParticipants = addUserUniqueCaseInsensitive(nextParticipants, userName);
         }
 
         const nextOverride: CourseDateOverride = {
           ...baseOverride,
           participants: nextParticipants,
+          shortNoticeCancellations: nextShortNotice,
         };
 
-        return updateOrCreateOverride(prev, nextOverride, idx, course.id, dateIso);
+        return persistOverride(course.id, dateIso, nextOverride, idx, prev);
       });
+
+      if (isIn && !isSn && inCutoff) {
+        await cleanupPendingSwapsFromOrigin(course.id, dateIso, userName);
+      }
 
       console.log('Calling processPromotions for onToggleAbsence...');
       const response = await processPromotions(); // Nachrücken übernehmen
@@ -140,7 +235,7 @@ export function useCourseSwaps(
 
       if (response && response.swaps && response.overrides) {
         setSwaps(response.swaps);
-        setOverrides(response.overrides);
+        setOverrides((prev) => mergeOverridesPreservingShortNotice(prev, response.overrides!));
       } else {
         console.warn('No valid response from processPromotions, falling back to fetchData');
         await fetchData();
@@ -152,7 +247,7 @@ export function useCourseSwaps(
     },
     // courses, currentUser.nickname kept so callback updates when they change
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setOverrides/setSwaps stable; courses/nickname intentional
-    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps]
+    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings, cleanupPendingSwapsFromOrigin]
   );
 
   /**
@@ -164,9 +259,36 @@ export function useCourseSwaps(
    * @param {string} userName - der Name des Benutzers, der den Tausch durchführen soll
    * @returns {Promise<void>} - das zurückgegebene Promise
    */
+  const assertCanSwapFromOrigin = (fromCourse: Course, fromDateIso: string, userName: string) => {
+    const override = filteredOverrides.find(
+      (o) => o.courseId === fromCourse.id && o.date === fromDateIso,
+    );
+    const participants = override?.participants ?? fromCourse.participants;
+    const originallyParticipant = fromCourse.participants.some((p) =>
+      equalsIgnoreCase(p, userName),
+    );
+    if (
+      !canCreateSwapFromOrigin({
+        isoDate: fromDateIso,
+        courseTime: fromCourse.time,
+        tenantSettings,
+        override,
+        userName,
+        participants,
+        originallyParticipant,
+      })
+    ) {
+      alert("In diesem Zeitfenster ist kein Tausch vom Ursprungstermin mehr möglich.");
+      return false;
+    }
+    return true;
+  };
+
   const confirmSwap = useCallback(
     async (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => {
       try {
+        if (!assertCanSwapFromOrigin(fromCourse, fromDateIso, userName)) return;
+
         // Swap nur 1x aktiv pro User+Termin
         // TODO: nur zur Sicherheit hier drin, Prüfen!!!
         const existing = swaps.find(
@@ -342,7 +464,7 @@ export function useCourseSwaps(
 
         if (response && response.swaps && response.overrides) {
           setSwaps(response.swaps);
-          setOverrides(response.overrides);
+          setOverrides((prev) => mergeOverridesPreservingShortNotice(prev, response.overrides!));
         } else {
           console.warn('No valid response from processPromotions, falling back to fetchData');
           await fetchData();
@@ -355,7 +477,7 @@ export function useCourseSwaps(
     },
     // requestSwap via ref to avoid circular dependency (confirmSwap -> requestSwap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps]
+    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   /**
@@ -371,6 +493,52 @@ export function useCourseSwaps(
       try {
         console.log("[cancelSwap use] START", { swap, clickedCourseId, swaps });
         const isOrigin = swap.fromCourseId === clickedCourseId;
+        const targetCourse = courses.find((c) => c.id === swap.toCourseId);
+        const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
+        const targetInCutoff =
+          targetCourse &&
+          isWithinCancellationSwapCutoff(swap.toDate, targetCourse.time, cutoffMinutes);
+
+        if (swap.status === "active" && !isOrigin && targetInCutoff) {
+          const targetOverride = filteredOverrides.find(
+            (o) => o.courseId === swap.toCourseId && o.date === swap.toDate,
+          );
+          const isSn = isShortNoticeCancelled(targetOverride, swap.user);
+          const baseOverride: CourseDateOverride = targetOverride ?? {
+            courseId: swap.toCourseId,
+            date: swap.toDate,
+            participants: targetCourse?.participants ?? [],
+            swapped: [],
+            waitlist: [],
+            shortNoticeCancellations: [],
+            ...(targetCourse ? overrideCourseUidFields(targetCourse) : {}),
+          };
+          const nextShortNotice = isSn
+            ? removeUserCaseInsensitive(baseOverride.shortNoticeCancellations ?? [], swap.user)
+            : addUserUniqueCaseInsensitive(baseOverride.shortNoticeCancellations ?? [], swap.user);
+
+          const nextOverride: CourseDateOverride = {
+            ...baseOverride,
+            shortNoticeCancellations: nextShortNotice,
+          };
+          const idx = filteredOverrides.findIndex(
+            (o) => o.courseId === swap.toCourseId && o.date === swap.toDate,
+          );
+          setOverrides((prev) => {
+            const updated = [...prev];
+            if (idx >= 0) {
+              updated[idx] = nextOverride;
+              updateOverride(swap.toCourseId, swap.toDate, {
+                shortNoticeCancellations: nextShortNotice,
+              });
+            } else {
+              updated.push(nextOverride);
+              createOverride(nextOverride);
+            }
+            return updated;
+          });
+          return;
+        }
 
         console.log("[cancelSwap] START", { swap, clickedCourseId, isOrigin });
 
@@ -461,7 +629,7 @@ export function useCourseSwaps(
 
         if (response && response.swaps && response.overrides) {
           setSwaps(response.swaps);
-          setOverrides(response.overrides);
+          setOverrides((prev) => mergeOverridesPreservingShortNotice(prev, response.overrides!));
         } else {
           console.warn('No valid response from processPromotions, falling back to fetchData');
           await fetchData();
@@ -473,7 +641,7 @@ export function useCourseSwaps(
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentUser.nickname intentional for refresh
-    [swaps, currentUser.nickname, fetchData, setOverrides, setSwaps]
+    [swaps, courses, filteredOverrides, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   /**
@@ -488,6 +656,8 @@ export function useCourseSwaps(
   const requestSwap = useCallback(
     async (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => {
       try {
+        if (!assertCanSwapFromOrigin(fromCourse, fromDateIso, userName)) return;
+
         // 1) prüfen, ob schon ein Swap existiert
         const existing = swaps.find(
           (s) =>
@@ -570,7 +740,7 @@ export function useCourseSwaps(
 
         if (response && response.swaps && response.overrides) {
           setSwaps(response.swaps);
-          setOverrides(response.overrides);
+          setOverrides((prev) => mergeOverridesPreservingShortNotice(prev, response.overrides!));
         } else {
           console.warn('No valid response from processPromotions, falling back to fetchData');
           await fetchData();
@@ -582,7 +752,7 @@ export function useCourseSwaps(
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentUser.nickname intentional for refresh
-    [courses, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps]
+    [courses, swaps, filteredOverrides, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   requestSwapRef.current = requestSwap;

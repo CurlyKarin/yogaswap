@@ -1,6 +1,7 @@
 import { mockClient } from 'aws-sdk-client-mock';
 import {
   DynamoDBClient,
+  GetItemCommand,
   QueryCommand,
   UpdateItemCommand,
   UpdateItemCommandInput,
@@ -10,6 +11,20 @@ import type { APIGatewayProxyEvent } from 'aws-lambda';
 
 const dynamoMock = mockClient(DynamoDBClient);
 
+function mockCourseAndOverrideLookup() {
+  dynamoMock
+    .on(GetItemCommand)
+    .resolvesOnce({
+      Item: {
+        tenantId: { S: 'default-tenant' },
+        courseId: { S: '1' },
+        time: { S: '10:00' },
+        participants: { L: [{ S: 'Luna' }] },
+      },
+    })
+    .resolvesOnce({ Item: undefined });
+}
+
 beforeEach(() => {
   dynamoMock.reset();
   process.env.OVERRIDES_TABLE = 'yogaswap-backend-demo-courseOverrides-table';
@@ -18,6 +33,7 @@ beforeEach(() => {
 
 describe('updateOverride Lambda', () => {
   it('should update an override successfully', async () => {
+    mockCourseAndOverrideLookup();
     dynamoMock.on(UpdateItemCommand).resolves({});
 
     const event: APIGatewayProxyEvent = {
@@ -42,11 +58,12 @@ describe('updateOverride Lambda', () => {
 
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body)).toEqual({ message: 'Override updated' });
-    expect(dynamoMock.calls()).toHaveLength(1);
+    expect(dynamoMock.commandCalls(GetItemCommand)).toHaveLength(2);
+    expect(dynamoMock.commandCalls(UpdateItemCommand)).toHaveLength(1);
     expect(dynamoMock.commandCalls(QueryCommand)).toHaveLength(0);
 
     // Zugriff auf das Input-Objekt des Commands (typisiert!)
-    const call = dynamoMock.call(0).args[0].input as UpdateItemCommandInput;
+    const call = dynamoMock.commandCalls(UpdateItemCommand)[0].args[0].input as UpdateItemCommandInput;
 
     expect(call.TableName).toBe('yogaswap-backend-demo-courseOverrides-table');
     expect(call.Key).toEqual({
@@ -138,6 +155,7 @@ describe('updateOverride Lambda', () => {
   });
 
   it('should handle DynamoDB errors gracefully', async () => {
+    mockCourseAndOverrideLookup();
     dynamoMock.on(UpdateItemCommand).rejects(new Error('DynamoDB failure'));
 
     const event: APIGatewayProxyEvent = {
@@ -158,13 +176,24 @@ describe('updateOverride Lambda', () => {
     const result = await handler(event);
     expect(result.statusCode).toBe(500);
     expect(JSON.parse(result.body)).toEqual({ error: 'Failed to update override' });
-    expect(dynamoMock.calls()).toHaveLength(1);
+    expect(dynamoMock.commandCalls(UpdateItemCommand)).toHaveLength(1);
   });
 
   it('resolves courseUid path segment via GSI then updates override', async () => {
     dynamoMock.on(QueryCommand).resolves({
       Items: [{ courseId: { S: '42' }, courseUid: { S: '550e8400-e29b-41d4-a716-446655440000' } }],
     });
+    dynamoMock
+      .on(GetItemCommand)
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          courseId: { S: '42' },
+          time: { S: '10:00' },
+          participants: { L: [{ S: 'Luna' }] },
+        },
+      })
+      .resolvesOnce({ Item: undefined });
     dynamoMock.on(UpdateItemCommand).resolves({});
 
     const uidPath = '550e8400-e29b-41d4-a716-446655440000';

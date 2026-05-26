@@ -3,6 +3,7 @@ import { QueryCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } fr
 import { Swap, CourseDateOverride, Course } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
+import { mapOverrideItem } from "../shared/overrideDynamo";
 
 const client = dynamoClient;
 
@@ -126,6 +127,9 @@ async function createOverrideHelper(tenantId: string, override: CourseDateOverri
       participants: { L: (override.participants || []).map((p) => ({ S: p })) },
       swapped: { L: (override.swapped || []).map((s) => ({ S: s })) },
       waitlist: { L: (override.waitlist || []).map((w) => ({ S: w })) },
+      shortNoticeCancellations: {
+        L: (override.shortNoticeCancellations || []).map((w) => ({ S: w })),
+      },
     },
   });
 
@@ -208,13 +212,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ConsistentRead: true,
       });
       const overridesData = await client.send(overridesCommand);
-      const allOverrides: CourseDateOverride[] = (overridesData.Items || []).map((item) => ({
-        courseId: Number(item.courseId.S!),
-        date: item.date.S!,
-        participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
-        swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
-        waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
-      }));
+      const allOverrides: CourseDateOverride[] = (overridesData.Items || []).map((item) =>
+        mapOverrideItem(item),
+      );
 
       // Filtere Overrides: zukünftige Termine oder heutige Termine mit Puffer
       const now = new Date();
@@ -407,13 +407,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ConsistentRead: true,
     });
     const updatedOverridesData = await client.send(updatedOverridesCommand);
-    const updatedOverrides: CourseDateOverride[] = (updatedOverridesData.Items || []).map((item) => ({
-      courseId: Number(item.courseId.S!),
-      date: item.date.S!,
-      participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
-      swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
-      waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
-    }));
+    const updatedOverrides: CourseDateOverride[] = (updatedOverridesData.Items || []).map((item) =>
+      mapOverrideItem(item),
+    );
     console.log(`[processPromotions] Complete after ${iterations} iterations`);
     
     return {

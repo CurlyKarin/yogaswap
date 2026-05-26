@@ -17,10 +17,18 @@ locals {
     "get_swaps" = {
       name             = var.lambdas["get_swaps"].name
       file_name        = var.lambdas["get_swaps"].file_name
-      table_arns       = [module.swaps_table.table_arn]
-      dynamodb_actions = var.lambdas["get_swaps"].dynamodb_actions
+      table_arns = [
+        module.swaps_table.table_arn,
+        module.courses_table.table_arn,
+        module.course_overrides_table.table_arn,
+        module.tenants_table.table_arn,
+      ]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:Scan", "dynamodb:Query", "dynamodb:DeleteItem", "dynamodb:UpdateItem"]
       tables = {
-        "SWAPS_TABLE" = module.swaps_table.table_name
+        "SWAPS_TABLE"     = module.swaps_table.table_name
+        "COURSES_TABLE"   = module.courses_table.table_name
+        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+        "TENANTS_TABLE"   = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -28,10 +36,18 @@ locals {
     "get_swaps_by_status" = {
       name             = "get-swaps-by-status"
       file_name        = "getSwapsByStatus.zip"
-      table_arns       = [module.swaps_table.table_arn]
-      dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query"]
+      table_arns = [
+        module.swaps_table.table_arn,
+        module.courses_table.table_arn,
+        module.course_overrides_table.table_arn,
+        module.tenants_table.table_arn,
+      ]
+      dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query", "dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem"]
       tables = {
-        "SWAPS_TABLE" = module.swaps_table.table_name
+        "SWAPS_TABLE"     = module.swaps_table.table_name
+        "COURSES_TABLE"   = module.courses_table.table_name
+        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+        "TENANTS_TABLE"   = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -39,11 +55,18 @@ locals {
     "create_swap" = {
       name             = "create-swap"
       file_name        = "createSwap.zip"
-      table_arns       = [module.swaps_table.table_arn, module.courses_table.table_arn]
+      table_arns = [
+        module.swaps_table.table_arn,
+        module.courses_table.table_arn,
+        module.course_overrides_table.table_arn,
+        module.tenants_table.table_arn,
+      ]
       dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem"]
       tables = {
-        "SWAPS_TABLE"   = module.swaps_table.table_name
-        "COURSES_TABLE" = module.courses_table.table_name
+        "SWAPS_TABLE"     = module.swaps_table.table_name
+        "COURSES_TABLE"   = module.courses_table.table_name
+        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
+        "TENANTS_TABLE"   = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -96,11 +119,16 @@ locals {
     "update_override" = {
       name             = "update-override"
       file_name        = "updateOverride.zip"
-      table_arns       = [module.course_overrides_table.table_arn, module.courses_table.table_arn]
-      dynamodb_actions = ["dynamodb:UpdateItem", "dynamodb:Query"]
+      table_arns = [
+        module.course_overrides_table.table_arn,
+        module.courses_table.table_arn,
+        module.tenants_table.table_arn,
+      ]
+      dynamodb_actions = ["dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:GetItem"]
       tables = {
         "OVERRIDES_TABLE" = module.course_overrides_table.table_name
         "COURSES_TABLE"   = module.courses_table.table_name
+        "TENANTS_TABLE"   = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []

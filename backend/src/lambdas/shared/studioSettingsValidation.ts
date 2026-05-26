@@ -9,6 +9,7 @@ export type StudioSettingsPatch = {
   minOffsetDays?: number;
   maxOffsetDays?: number;
   rollingPlanningHorizonWeeks?: number;
+  cancellationSwapCutoffMinutesBeforeStart?: number;
 };
 
 export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string | null {
@@ -42,6 +43,12 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     const weeks = patch.rollingPlanningHorizonWeeks;
     if (!Number.isInteger(weeks) || (weeks ?? 0) < 1 || (weeks ?? 0) > 52) {
       return "Planungs- und Sichtfenster muss eine ganze Zahl zwischen 1 und 52 Wochen sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "cancellationSwapCutoffMinutesBeforeStart")) {
+    const minutes = patch.cancellationSwapCutoffMinutesBeforeStart;
+    if (!Number.isInteger(minutes) || (minutes ?? 0) < 0 || (minutes ?? 0) > 24 * 60) {
+      return "Kurzfrist-Absage: Minuten vor Terminbeginn müssen eine ganze Zahl zwischen 0 und 1440 sein.";
     }
   }
   return null;
