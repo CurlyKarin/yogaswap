@@ -117,9 +117,17 @@ export default function CourseCard({
       participants,
       originallyParticipant,
     });
-  /** RC: Rücknahme = wieder in participants (im Cutoff gesperrt). */
+  const hasActiveOriginSwapInPast = swaps.some(
+    (s) =>
+      s.user === userName &&
+      s.status === "active" &&
+      s.fromCourseId === course.id &&
+      s.fromDate === selectedDateKey &&
+      new Date(s.toDate) < new Date(),
+  );
+  /** RC: Rücknahme = wieder in participants (auch im Cutoff), außer historischem aktivem Swap. */
   const canUndoRegularAbsence =
-    hasCancelled && !isShortNotice && !originInCutoff && !isParticipant;
+    hasCancelled && !isShortNotice && !isParticipant && !hasActiveOriginSwapInPast;
 
   const pendingSwapsFromOrigin = useMemo(
     () =>

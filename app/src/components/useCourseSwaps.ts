@@ -47,10 +47,6 @@ export function useCourseSwaps(
   // Filtere Overrides für aktuelle und zukünftige Termine
   // Fallback auf leeres Array, wenn overrides undefined oder kein Array ist
   const filteredOverrides = overrides;
-// const filteredOverrides = useMemo(
-//     () => overrides.filter((o) => courses.some((c) => c.id === o.courseId)),
-//     [overrides, courses]
-//   );
 
   useEffect(() => {
     console.log('🔄 Filtered Overrides:', filteredOverrides);
@@ -108,6 +104,71 @@ export function useCourseSwaps(
     [swaps, setOverrides, setSwaps],
   );
 
+  const cleanupAllSwapsFromOrigin = useCallback(
+    async (fromCourseId: number, fromDateIso: string, userName: string) => {
+      const originSwaps = swaps.filter(
+        (s) =>
+          equalsIgnoreCase(s.user, userName) &&
+          s.fromCourseId === fromCourseId &&
+          s.fromDate === fromDateIso,
+      );
+      if (originSwaps.length === 0) return;
+
+      await Promise.all(originSwaps.map((s) => deleteSwap(s)));
+      setSwaps((prev) =>
+        prev.filter(
+          (s) =>
+            !originSwaps.some(
+              (o) =>
+                equalsIgnoreCase(o.user, s.user) &&
+                o.fromCourseId === s.fromCourseId &&
+                o.fromDate === s.fromDate &&
+                o.toCourseId === s.toCourseId &&
+                o.toDate === s.toDate,
+            ),
+        ),
+      );
+
+      setOverrides((prev) =>
+        prev.map((o) => {
+          const next = { ...o };
+          const before = { ...o };
+          for (const swap of originSwaps) {
+            if (o.courseId === swap.fromCourseId && o.date === swap.fromDate) {
+              if (swap.status === "active") {
+                next.swapped = (next.swapped ?? []).filter((u) => !equalsIgnoreCase(u, swap.user));
+                next.participants = next.participants.filter((p) => !equalsIgnoreCase(p, swap.user));
+              } else {
+                next.waitlist = (next.waitlist ?? []).filter((u) => !equalsIgnoreCase(u, swap.user));
+              }
+            }
+            if (o.courseId === swap.toCourseId && o.date === swap.toDate) {
+              if (swap.status === "active") {
+                next.participants = next.participants.filter((p) => !equalsIgnoreCase(p, swap.user));
+                next.swapped = (next.swapped ?? []).filter((u) => !equalsIgnoreCase(u, swap.user));
+              } else {
+                next.waitlist = (next.waitlist ?? []).filter((u) => !equalsIgnoreCase(u, swap.user));
+              }
+            }
+          }
+          if (
+            JSON.stringify(before.participants) !== JSON.stringify(next.participants) ||
+            JSON.stringify(before.swapped) !== JSON.stringify(next.swapped) ||
+            JSON.stringify(before.waitlist) !== JSON.stringify(next.waitlist)
+          ) {
+            updateOverride(o.courseId, o.date, {
+              participants: next.participants,
+              swapped: next.swapped,
+              waitlist: next.waitlist,
+            });
+          }
+          return next;
+        }),
+      );
+    },
+    [swaps, setOverrides, setSwaps],
+  );
+
   const onToggleAbsence = useCallback(
     async (course: Course, dateIso: string, userName: string) => {
       try {
@@ -136,11 +197,6 @@ export function useCourseSwaps(
         userName,
       );
 
-      if (!isIn && !isSn && inCutoff) {
-        alert("Absage kann in diesem Zeitfenster nicht zurückgenommen werden.");
-        return;
-      }
-
       if (isIn && !isSn && !inCutoff) {
         const waitlist = getEffectiveWaitlist(course, filteredOverrides, dateIso);
         if (waitlist.length > 0) {
@@ -149,6 +205,42 @@ export function useCourseSwaps(
               `Deine Absage hat direkte Auswirkungen – jemand rückt automatisch nach. Möchtest du fortfahren?`,
           );
           if (!proceed) return;
+        }
+      }
+
+      const originSwaps = swaps.filter(
+        (s) =>
+          equalsIgnoreCase(s.user, userName) &&
+          s.fromCourseId === course.id &&
+          s.fromDate === dateIso,
+      );
+      const pendingCount = originSwaps.filter((s) => s.status === "pending").length;
+      const activeFutureCount = originSwaps.filter(
+        (s) => s.status === "active" && new Date(s.toDate) >= new Date(),
+      ).length;
+      const activePastCount = originSwaps.filter(
+        (s) => s.status === "active" && new Date(s.toDate) < new Date(),
+      ).length;
+
+      if (!isIn && !isSn) {
+        if (activePastCount > 0) {
+          alert("Diese Absage kann nicht mehr zurückgenommen werden, weil ein aktiver Tausch in der Vergangenheit liegt.");
+          return;
+        }
+        const warningParts: string[] = [
+          "Absage zurücknehmen und wieder am Termin teilnehmen?",
+          "Der Anspruch auf Ersatztermin erlischt.",
+        ];
+        if (pendingCount > 0) {
+          warningParts.push(`Offene Tauschanfragen (${pendingCount}) werden gelöscht.`);
+        }
+        if (activeFutureCount > 0) {
+          warningParts.push(`Aktive zukünftige Tausche (${activeFutureCount}) werden aufgehoben.`);
+        }
+        const proceed = confirm(warningParts.join(" "));
+        if (!proceed) return;
+        if (originSwaps.length > 0) {
+          await cleanupAllSwapsFromOrigin(course.id, dateIso, userName);
         }
       }
 
@@ -242,7 +334,7 @@ export function useCourseSwaps(
     },
     // courses, currentUser.nickname kept so callback updates when they change
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setOverrides/setSwaps stable; courses/nickname intentional
-    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings, cleanupPendingSwapsFromOrigin]
+    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings, cleanupPendingSwapsFromOrigin, cleanupAllSwapsFromOrigin]
   );
 
   /**

@@ -26,7 +26,17 @@
 - Aktion: Eintrag aus `shortNoticeCancellations` entfernen; `participants` **unverändert** (Platz war ohnehin belegt).
 - UI: Button **„Absage zurücknehmen“** bei SN immer sichtbar.
 - **Kein** neuer Tausch vom Termin, solange die Person im Cutoff noch normal eingetragen ist und kein RC-Fall vorliegt (weiter `createSwap`-Sperre im Cutoff).
-- **RC** „Absage zurücknehmen“ (wieder in `participants` nach rechtzeitiger Absage) bleibt im Cutoff **gesperrt** (Platz könnte frei werden / Nachrücken).
+
+## RC-Rücknahme (rechtzeitig abgesagt)
+
+RC-Rücknahme ist möglich (auch im Cutoff), wenn noch Platz frei ist. Vor dem Ausführen erscheint ein Bestätigungsdialog.
+
+| Szenario | Verhalten |
+|--------|-----------|
+| RC + **pending** Swaps vorhanden | Warnung; bei Bestätigung werden pending Swaps vom Ursprung gelöscht (Anspruch auf Ersatz erlischt) |
+| RC + **keine** Swaps | Warnung; bei Bestätigung Rücknahme der Absage |
+| RC + **aktiver zukünftiger** Swap | Warnung; bei Bestätigung wird der aktive Swap aufgehoben |
+| RC + **aktiver vergangener** Swap | Kein Rücknahme-Button (auch außerhalb Cutoff) |
 
 ## Abgrenzung
 
