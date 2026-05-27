@@ -235,23 +235,41 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         console.log('freeSpots:', freeSpots);
         if (freeSpots <= 0) continue;
 
-        // Wähle promotedUser: Priorisiere currentUser oder erste Person
-        let promotedUser: string | undefined;
-        if (currentUser && includesUserCaseInsensitive(override.waitlist, currentUser)) {
-          promotedUser = currentUser;
-        } else {
-          promotedUser = override.waitlist?.[0];
-        }
-        if (!promotedUser) continue;
+        // Wähle promotedUser: currentUser priorisieren, sonst ersten Waitlist-Eintrag
+        // mit passendem pending Swap (stale Waitlist-Einträge überspringen).
+        const waitlistCandidates = override.waitlist ?? [];
+        const prioritizedCandidates =
+          currentUser && includesUserCaseInsensitive(waitlistCandidates, currentUser)
+            ? [
+                currentUser,
+                ...waitlistCandidates.filter(
+                  (entry) => normalized(entry) !== normalized(currentUser),
+                ),
+              ]
+            : waitlistCandidates;
 
-        console.log('promotedUser:', promotedUser, 'override.courseId:', override.courseId, 'override.date:', override.date, 'override.waitlist:', override.waitlist);
-        const correspondingSwap = pendingSwaps.find(
-          (s) =>
-            normalized(s.user) === normalized(promotedUser) &&
-            s.toCourseId === override.courseId &&
-            s.toDate === override.date
+        let correspondingSwap: Swap | undefined;
+        for (const candidate of prioritizedCandidates) {
+          const match = pendingSwaps.find(
+            (s) =>
+              normalized(s.user) === normalized(candidate) &&
+              s.toCourseId === override.courseId &&
+              s.toDate === override.date,
+          );
+          if (match) {
+            correspondingSwap = match;
+            break;
+          }
+        }
+        console.log(
+          'promotion candidate resolution:',
+          {
+            overrideCourseId: override.courseId,
+            overrideDate: override.date,
+            waitlistCandidates: prioritizedCandidates,
+            correspondingSwap,
+          },
         );
-        console.log('Find in pendingSwaps:', pendingSwaps, 'correspondingSwap:', correspondingSwap);
         if (!correspondingSwap) continue;
 
         const promotedSwapUser = correspondingSwap.user;

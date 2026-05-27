@@ -118,3 +118,62 @@ test("returns 200 and can promote when data is in the future (fixed now)", async
   expect(Array.isArray(body.swaps)).toBe(true);
   expect(Array.isArray(body.overrides)).toBe(true);
 });
+
+test("skips stale first waitlist entry and promotes next valid pending swap", async () => {
+  const pendingSwap = {
+    swapId: { S: "2025-10-01_1_2025-10-02_2" },
+    user: { S: "Alice" },
+    fromCourseId: { N: "1" },
+    fromDate: { S: "2025-10-01" },
+    toCourseId: { N: "2" },
+    toDate: { S: "2025-10-02" },
+    status: { S: "pending" },
+  };
+  const course = {
+    id: { N: "2" },
+    name: { S: "Yoga" },
+    weekday: { S: "Tuesday" },
+    time: { S: "10:00" },
+    capacity: { N: "2" },
+    participants: { L: [] },
+    dates: { L: [{ S: "2025-10-02" }] },
+  };
+  const overrideWithStaleFirstWaitlist = {
+    courseId: { S: "2" },
+    date: { S: "2025-10-02" },
+    participants: { L: [{ S: "Bob" }] },
+    swapped: { L: [] },
+    waitlist: { L: [{ S: "Ghost" }, { S: "Alice" }] },
+  };
+
+  ddbMock.on(UpdateItemCommand).resolves({});
+  ddbMock.on(PutItemCommand).resolves({});
+  ddbMock
+    .on(QueryCommand)
+    .resolvesOnce({ Items: [pendingSwap] })
+    .resolvesOnce({ Items: [course] })
+    .resolvesOnce({ Items: [overrideWithStaleFirstWaitlist] })
+    .resolvesOnce({ Items: [] })
+    .resolvesOnce({ Items: [course] })
+    .resolvesOnce({ Items: [overrideWithStaleFirstWaitlist] })
+    .resolvesOnce({
+      Items: [{ ...pendingSwap, status: { S: "active" } }],
+    })
+    .resolvesOnce({
+      Items: [
+        {
+          ...overrideWithStaleFirstWaitlist,
+          participants: { L: [{ S: "Bob" }, { S: "Alice" }] },
+          waitlist: { L: [{ S: "Ghost" }] },
+        },
+      ],
+    });
+
+  const event = makeEvent({ currentUser: "nobody" });
+  const result = await handler(event);
+
+  expect(result.statusCode).toBe(200);
+  const body = JSON.parse(result.body);
+  expect(body.promoted).toBe(1);
+  expect(Array.isArray(body.overrides)).toBe(true);
+});
