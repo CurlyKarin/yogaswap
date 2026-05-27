@@ -117,9 +117,7 @@ export default function CourseCard({
       participants,
       originallyParticipant,
     });
-  /** SN: Rücknahme = Eintrag aus shortNotice entfernen (bleibt in participants). */
-  const canUndoShortNotice = isShortNotice && !originInCutoff;
-  /** RC: Rücknahme = wieder in participants. */
+  /** RC: Rücknahme = wieder in participants (im Cutoff gesperrt). */
   const canUndoRegularAbsence =
     hasCancelled && !isShortNotice && !originInCutoff && !isParticipant;
 
@@ -400,18 +398,12 @@ export default function CourseCard({
           ) : (
             <>
               {isShortNotice ? (
-                canUndoShortNotice ? (
-                  <button
-                    className="danger"
-                    onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
-                  >
-                    Absage zurücknehmen
-                  </button>
-                ) : (
-                  <span className="muted small" role="status">
-                    Kurzfristige Absage — Rücknahme im Cutoff-Fenster nicht möglich.
-                  </span>
-                )
+                <button
+                  className="danger"
+                  onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
+                >
+                  Absage zurücknehmen
+                </button>
               ) : isParticipant ? (
                 <button
                   className="danger"

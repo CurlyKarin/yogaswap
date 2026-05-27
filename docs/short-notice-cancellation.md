@@ -1,5 +1,12 @@
 # Kurzfristige Absage ohne Tausch (#167)
 
+## Begriffe (nur Doku)
+
+| Kürzel | Bedeutung |
+|--------|-----------|
+| **SN** | Short notice — kurzfristige Absage (im Cutoff-Fenster); Feld `shortNoticeCancellations` |
+| **RC** | Regular cancellation — rechtzeitige Absage (vor Cutoff); nur aus `participants`, nicht in SN |
+
 ## Studio-Einstellung
 
 - `cancellationSwapCutoffMinutesBeforeStart` (Default: **60**)
@@ -10,7 +17,16 @@
 `CourseDateOverride.shortNoticeCancellations`: Nicknames mit **kurzfristiger** Absage.
 
 - Nutzer **bleibt** in `participants` (Slot bleibt belegt, kein Nachrücken).
-- **Rechtzeitige** Absage: nur aus `participants`, nicht in SN — Tausch weiter möglich (auch wenn das Cutoff-Fenster später erreicht wird).
+- **Rechtzeitige (RC) Absage:** nur aus `participants`, nicht in SN — Tausch weiter möglich (auch wenn das Cutoff-Fenster später erreicht wird).
+
+## SN-Rücknahme (Produktentscheidung)
+
+**Kurzfristige Absage kann jederzeit zurückgenommen werden** — auch im Cutoff.
+
+- Aktion: Eintrag aus `shortNoticeCancellations` entfernen; `participants` **unverändert** (Platz war ohnehin belegt).
+- UI: Button **„Absage zurücknehmen“** bei SN immer sichtbar.
+- **Kein** neuer Tausch vom Termin, solange die Person im Cutoff noch normal eingetragen ist und kein RC-Fall vorliegt (weiter `createSwap`-Sperre im Cutoff).
+- **RC** „Absage zurücknehmen“ (wieder in `participants` nach rechtzeitiger Absage) bleibt im Cutoff **gesperrt** (Platz könnte frei werden / Nachrücken).
 
 ## Abgrenzung
 

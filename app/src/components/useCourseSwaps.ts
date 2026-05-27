@@ -141,11 +141,6 @@ export function useCourseSwaps(
         return;
       }
 
-      if (isSn && inCutoff) {
-        alert("Kurzfristige Absage kann in diesem Zeitfenster nicht zurückgenommen werden.");
-        return;
-      }
-
       if (isIn && !isSn && !inCutoff) {
         const waitlist = getEffectiveWaitlist(course, filteredOverrides, dateIso);
         if (waitlist.length > 0) {

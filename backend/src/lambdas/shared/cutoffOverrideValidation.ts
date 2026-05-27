@@ -76,9 +76,7 @@ export function validateSelfServiceOverrideTransition(input: {
     return "Kurzfristige Absage erfordert einen Eintrag in der Teilnehmerliste.";
   }
 
-  if (wasSn && !isSn && inCutoff) {
-    return "Kurzfristige Absage kann in diesem Zeitfenster nicht zurückgenommen werden.";
-  }
+  // SN-Rücknahme ist immer erlaubt: Platz bleibt durch participants ohnehin belegt.
 
   if (!wasSn && isSn && !inCutoff) {
     return "Kurzfristige Absage ist nur kurz vor Kursbeginn möglich.";
