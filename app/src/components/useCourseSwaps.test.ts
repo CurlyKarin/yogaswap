@@ -299,9 +299,165 @@ describe("useCourseSwaps", () => {
 
     expect(createSwap).toHaveBeenCalledTimes(1);
     expect(deleteSwap).toHaveBeenCalledTimes(2);
-    expect(updateOverride).toHaveBeenCalledWith(2, "2099-06-17", { waitlist: ["mia"] });
+    expect(updateOverride).toHaveBeenCalledWith(
+      2,
+      "2099-06-17",
+      expect.objectContaining({ waitlist: ["mia"] }),
+    );
     expect(updateOverride).toHaveBeenCalledWith(3, "2099-06-18", { waitlist: ["zoe"] });
     expect(processPromotions).toHaveBeenCalledTimes(1);
+  });
+
+  it("RC-Rücknahme mit pending Swaps zeigt Warnung und räumt Swaps auf", async () => {
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([
+        {
+          ...baseOverride,
+          participants: [], // RC: user ist ausgetragen
+        },
+        {
+          courseId: 2,
+          date: "2099-06-17",
+          participants: ["bob"],
+          swapped: [],
+          waitlist: ["alice", "mia"],
+        },
+      ]),
+    );
+    const setSwaps = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const pending: Swap = {
+      user: "alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 2,
+      toDate: "2099-06-17",
+      status: "pending",
+    };
+
+    (processPromotions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      swaps: [],
+      overrides: [],
+    });
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course],
+        [
+          { ...baseOverride, participants: [] },
+          { courseId: 2, date: "2099-06-17", participants: ["bob"], swapped: [], waitlist: ["alice", "mia"] },
+        ],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [pending],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.onToggleAbsence(course, "2099-06-16", baseUser.nickname);
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Offene Tauschanfragen (1) werden gelöscht."),
+    );
+    expect(deleteSwap).toHaveBeenCalledTimes(1);
+    expect(updateOverride).toHaveBeenCalledWith(
+      2,
+      "2099-06-17",
+      expect.objectContaining({ waitlist: ["mia"] }),
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("RC-Rücknahme bricht bei Warnung-Abbruch ab", async () => {
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([{ ...baseOverride, participants: [] }]),
+    );
+    const setSwaps = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course],
+        [{ ...baseOverride, participants: [] }],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.onToggleAbsence(course, "2099-06-16", baseUser.nickname);
+    });
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(processPromotions).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("RC-Rücknahme blockiert bei aktivem Swap in der Vergangenheit", async () => {
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([{ ...baseOverride, participants: [] }]),
+    );
+    const setSwaps = vi.fn();
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    const activePast: Swap = {
+      user: "alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 9,
+      toDate: "2000-01-01",
+      status: "active",
+    };
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course],
+        [{ ...baseOverride, participants: [] }],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [activePast],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.onToggleAbsence(course, "2099-06-16", baseUser.nickname);
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Absagen nicht möglich, solange ein aktiver Tausch vom Ursprungstermin besteht.",
+    );
+    expect(processPromotions).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 });
 

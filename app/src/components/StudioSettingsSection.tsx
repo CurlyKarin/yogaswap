@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import type { Tenant } from "shared/types";
 import {
+  resolveCancellationSwapCutoffMinutes,
   resolveInactiveGraceDays,
   resolveRollingPlanningHorizonWeeks,
   resolveSwapWindow,
@@ -51,12 +52,14 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const swapDefaults = resolveSwapWindow(tenant.settings);
   const graceDefault = resolveInactiveGraceDays(tenant.settings);
   const horizonDefault = resolveRollingPlanningHorizonWeeks(tenant.settings);
+  const cutoffDefault = resolveCancellationSwapCutoffMinutes(tenant.settings);
 
   const [name, setName] = useState(tenant.name);
   const [inactiveGraceDays, setInactiveGraceDays] = useState(String(graceDefault));
   const [minOffsetDays, setMinOffsetDays] = useState(String(swapDefaults.minOffsetDays));
   const [maxOffsetDays, setMaxOffsetDays] = useState(String(swapDefaults.maxOffsetDays));
   const [rollingPlanningHorizonWeeks, setRollingPlanningHorizonWeeks] = useState(String(horizonDefault));
+  const [cancellationSwapCutoffMinutes, setCancellationSwapCutoffMinutes] = useState(String(cutoffDefault));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -68,6 +71,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setMinOffsetDays(String(swap.minOffsetDays));
     setMaxOffsetDays(String(swap.maxOffsetDays));
     setRollingPlanningHorizonWeeks(String(resolveRollingPlanningHorizonWeeks(tenant.settings)));
+    setCancellationSwapCutoffMinutes(String(resolveCancellationSwapCutoffMinutes(tenant.settings)));
     setError(null);
     setSuccess(null);
   }, [tenant]);
@@ -79,6 +83,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
       minOffsetDays: Number.parseInt(minOffsetDays, 10),
       maxOffsetDays: Number.parseInt(maxOffsetDays, 10),
       rollingPlanningHorizonWeeks: Number.parseInt(rollingPlanningHorizonWeeks, 10),
+      cancellationSwapCutoffMinutesBeforeStart: Number.parseInt(cancellationSwapCutoffMinutes, 10),
     };
     const validationError = validateStudioSettingsPatch(patch);
     if (validationError) {
@@ -161,6 +166,21 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
             max={90}
             value={maxOffsetDays}
             onChange={(e) => setMaxOffsetDays(e.target.value)}
+            disabled={saving}
+          />
+        </label>
+
+        <label className="dialog-field">
+          <FieldLabelWithTooltip tooltip="Ab diesem Zeitpunkt vor Kursbeginn können Teilnehmer:innen nur noch kurzfristig absagen (Platz bleibt belegt), aber keinen neuen Tausch mehr vom Termin starten.">
+            Kurzfrist-Absage: Minuten vor Terminbeginn
+          </FieldLabelWithTooltip>
+          <input
+            type="number"
+            min={0}
+            max={1440}
+            step={15}
+            value={cancellationSwapCutoffMinutes}
+            onChange={(e) => setCancellationSwapCutoffMinutes(e.target.value)}
             disabled={saving}
           />
         </label>

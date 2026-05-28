@@ -199,6 +199,10 @@ body {
 .chip.swapped {
   background-color: #ffd54f; /* Gelb für Tausch */
 }
+.chip.short-notice {
+  background-color: #ffccbc; /* Kurzfristig abgesagt, Platz bleibt belegt */
+  text-decoration: line-through;
+}
 .chip.free {
   background-color: #c8e6c9; /* Grün für frei */
   font-style: italic;

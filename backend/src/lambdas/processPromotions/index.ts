@@ -1,13 +1,19 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { QueryCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
-import { Swap, CourseDateOverride, Course } from "@yogaswap/shared";
+import {
+  Swap,
+  CourseDateOverride,
+  Course,
+  resolveCancellationSwapCutoffMinutes,
+} from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
+import { mapOverrideItem } from "../shared/overrideDynamo";
+import { loadTenantSettings } from "../shared/tenantSettingsLoader";
 
 const client = dynamoClient;
 
-// Hardcodierter Zeitpuffer (in Minuten) vor Kursbeginn für Nachrücken
-const PROMOTION_TIME_BUFFER_MINUTES = 30;
+const DEFAULT_NO_AUTOMATION_MINUTES = 60;
 
 function normalized(value: string): string {
   return value.trim().toLowerCase();
@@ -32,15 +38,20 @@ function addUserUniqueCaseInsensitive(values: string[] | undefined, user: string
 }
 
 // Hilfsfunktion: Prüft, ob ein Kursbeginn mindestens PROMOTION_TIME_BUFFER_MINUTES in der Zukunft liegt
-function isCourseInFuture(courseDate: string, courseTime: string, now: Date): boolean {
+function isCourseInFuture(
+  courseDate: string,
+  courseTime: string,
+  now: Date,
+  noAutomationMinutes: number,
+): boolean {
   try {
     // Kombiniere Datum (YYYY-MM-DD) und Uhrzeit (HH:mm) zu einem Date-Objekt
     const [year, month, day] = courseDate.split('-').map(Number);
     const [hours, minutes] = courseTime.split(':').map(Number);
     const courseStart = new Date(year, month - 1, day, hours, minutes);
     
-    // Aktuelle Zeit + Puffer
-    const bufferTime = new Date(now.getTime() + PROMOTION_TIME_BUFFER_MINUTES * 60 * 1000);
+    // Aktuelle Zeit + Sperrfenster für automatische Promotion
+    const bufferTime = new Date(now.getTime() + noAutomationMinutes * 60 * 1000);
     
     // Prüfe, ob Kursbeginn nach bufferTime liegt
     return courseStart >= bufferTime;
@@ -126,6 +137,9 @@ async function createOverrideHelper(tenantId: string, override: CourseDateOverri
       participants: { L: (override.participants || []).map((p) => ({ S: p })) },
       swapped: { L: (override.swapped || []).map((s) => ({ S: s })) },
       waitlist: { L: (override.waitlist || []).map((w) => ({ S: w })) },
+      shortNoticeCancellations: {
+        L: (override.shortNoticeCancellations || []).map((w) => ({ S: w })),
+      },
     },
   });
 
@@ -151,6 +165,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     body = JSON.parse(event.body);
     // Extrahiere currentUser (anpassen je nach Auth-Setup)
     const currentUser = event.requestContext?.authorizer?.principalId || body.currentUser || null;
+
+    let noAutomationMinutes = DEFAULT_NO_AUTOMATION_MINUTES;
+    const tenantsTable = process.env.TENANTS_TABLE;
+    if (tenantsTable) {
+      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      noAutomationMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
+    }
 
     let iterations = 0;
     let changed = true;
@@ -208,20 +229,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ConsistentRead: true,
       });
       const overridesData = await client.send(overridesCommand);
-      const allOverrides: CourseDateOverride[] = (overridesData.Items || []).map((item) => ({
-        courseId: Number(item.courseId.S!),
-        date: item.date.S!,
-        participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
-        swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
-        waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
-      }));
+      const allOverrides: CourseDateOverride[] = (overridesData.Items || []).map((item) =>
+        mapOverrideItem(item),
+      );
 
       // Filtere Overrides: zukünftige Termine oder heutige Termine mit Puffer
       const now = new Date();
       const futureOverrides = allOverrides.filter((o) => {
         const course = courses.find((c) => c.id === o.courseId);
         if (!course) return false;
-        return isCourseInFuture(o.date, course.time, now);
+        return isCourseInFuture(o.date, course.time, now, noAutomationMinutes);
       });
       console.log('futureOverrides:', futureOverrides);
 
@@ -235,23 +252,41 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         console.log('freeSpots:', freeSpots);
         if (freeSpots <= 0) continue;
 
-        // Wähle promotedUser: Priorisiere currentUser oder erste Person
-        let promotedUser: string | undefined;
-        if (currentUser && includesUserCaseInsensitive(override.waitlist, currentUser)) {
-          promotedUser = currentUser;
-        } else {
-          promotedUser = override.waitlist?.[0];
-        }
-        if (!promotedUser) continue;
+        // Wähle promotedUser: currentUser priorisieren, sonst ersten Waitlist-Eintrag
+        // mit passendem pending Swap (stale Waitlist-Einträge überspringen).
+        const waitlistCandidates = override.waitlist ?? [];
+        const prioritizedCandidates =
+          currentUser && includesUserCaseInsensitive(waitlistCandidates, currentUser)
+            ? [
+                currentUser,
+                ...waitlistCandidates.filter(
+                  (entry) => normalized(entry) !== normalized(currentUser),
+                ),
+              ]
+            : waitlistCandidates;
 
-        console.log('promotedUser:', promotedUser, 'override.courseId:', override.courseId, 'override.date:', override.date, 'override.waitlist:', override.waitlist);
-        const correspondingSwap = pendingSwaps.find(
-          (s) =>
-            normalized(s.user) === normalized(promotedUser) &&
-            s.toCourseId === override.courseId &&
-            s.toDate === override.date
+        let correspondingSwap: Swap | undefined;
+        for (const candidate of prioritizedCandidates) {
+          const match = pendingSwaps.find(
+            (s) =>
+              normalized(s.user) === normalized(candidate) &&
+              s.toCourseId === override.courseId &&
+              s.toDate === override.date,
+          );
+          if (match) {
+            correspondingSwap = match;
+            break;
+          }
+        }
+        console.log(
+          'promotion candidate resolution:',
+          {
+            overrideCourseId: override.courseId,
+            overrideDate: override.date,
+            waitlistCandidates: prioritizedCandidates,
+            correspondingSwap,
+          },
         );
-        console.log('Find in pendingSwaps:', pendingSwaps, 'correspondingSwap:', correspondingSwap);
         if (!correspondingSwap) continue;
 
         const promotedSwapUser = correspondingSwap.user;
@@ -407,13 +442,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ConsistentRead: true,
     });
     const updatedOverridesData = await client.send(updatedOverridesCommand);
-    const updatedOverrides: CourseDateOverride[] = (updatedOverridesData.Items || []).map((item) => ({
-      courseId: Number(item.courseId.S!),
-      date: item.date.S!,
-      participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
-      swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
-      waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
-    }));
+    const updatedOverrides: CourseDateOverride[] = (updatedOverridesData.Items || []).map((item) =>
+      mapOverrideItem(item),
+    );
     console.log(`[processPromotions] Complete after ${iterations} iterations`);
     
     return {

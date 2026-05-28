@@ -10,6 +10,13 @@ import {
   looksLikeAutomaticallyInactive,
 } from "shared/courseStatus";
 import { resolveSwapWindow } from "shared/tenantSettings";
+import {
+  canCreateSwapFromOrigin,
+  hasEffectiveCancellation,
+  isShortNoticeCancelled,
+  isWithinCancellationSwapCutoff,
+  resolveCancellationSwapCutoffMinutes,
+} from "shared/cancellationSwapCutoff";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
 import type { SwapSettings } from "../types";
 
@@ -79,13 +86,48 @@ export default function CourseCard({
   const hasNoUpcomingDates = dates.length === 0;
   const participants = hasNoUpcomingDates ? course.participants : (override ? override.participants : course.participants);
   const swapped = hasNoUpcomingDates ? [] : (override?.swapped ?? []);
+  const shortNotice = hasNoUpcomingDates ? [] : (override?.shortNoticeCancellations ?? []);
   const freeSpots = course.capacity - participants.length;
   const waitlist = hasNoUpcomingDates ? [] : (override?.waitlist ?? []);
 
   const userNameLower = userName.toLowerCase();
   const isParticipant = participants.some((p) => p.toLowerCase() === userNameLower);
   const originallyParticipant = course.participants.some((p) => p.toLowerCase() === userNameLower);
-  const hasCancelled = originallyParticipant && !isParticipant;
+  const isShortNotice = isShortNoticeCancelled(override, userName);
+  const hasCancelled = hasEffectiveCancellation(
+    originallyParticipant,
+    override,
+    participants,
+    userName,
+  );
+  const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
+  const originInCutoff = isWithinCancellationSwapCutoff(
+    selectedDateKey,
+    course.time,
+    cutoffMinutes,
+  );
+  const canSwapFromOrigin =
+    (originallyParticipant || hasCancelled) &&
+    canCreateSwapFromOrigin({
+      isoDate: selectedDateKey,
+      courseTime: course.time,
+      tenantSettings,
+      override,
+      userName,
+      participants,
+      originallyParticipant,
+    });
+  const hasActiveOriginSwapInPast = swaps.some(
+    (s) =>
+      s.user === userName &&
+      s.status === "active" &&
+      s.fromCourseId === course.id &&
+      s.fromDate === selectedDateKey &&
+      new Date(s.toDate) < new Date(),
+  );
+  /** RC: Rücknahme = wieder in participants (auch im Cutoff), außer historischem aktivem Swap. */
+  const canUndoRegularAbsence =
+    hasCancelled && !isShortNotice && !isParticipant && !hasActiveOriginSwapInPast;
 
   const pendingSwapsFromOrigin = useMemo(
     () =>
@@ -265,8 +307,19 @@ export default function CourseCard({
           {participants.length === 0 && <span className="chip">—</span>}
           {participants.map((name) => (
             <span
-              className={`chip ${swapped.includes(name) ? "swapped" : ""}`}
+              className={`chip ${
+                shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
+                  ? "short-notice"
+                  : swapped.includes(name)
+                    ? "swapped"
+                    : ""
+              }`}
               key={name}
+              title={
+                shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
+                  ? "Kurzfristig abgesagt — Platz bleibt belegt"
+                  : undefined
+              }
             >
               {name}
             </span>
@@ -330,27 +383,51 @@ export default function CourseCard({
               >
                 {swapForThisTerm.status === "pending"
                   ? "Tauschanfragen abbrechen"
-                  : "Tausch abbrechen"}
+                  : swapForThisTerm.status === "active" &&
+                      swapForThisTerm.toCourseId === course.id &&
+                      isWithinCancellationSwapCutoff(
+                        swapForThisTerm.toDate,
+                        allCourses.find((c) => c.id === swapForThisTerm.toCourseId)?.time ?? "",
+                        cutoffMinutes,
+                      )
+                    ? isShortNoticeCancelled(
+                        overrides.find(
+                          (o) =>
+                            o.courseId === swapForThisTerm.toCourseId &&
+                            o.date === swapForThisTerm.toDate,
+                        ),
+                        userName,
+                      )
+                      ? "Tauschabsage zurücknehmen"
+                      : "Am Zieltermin kurzfristig absagen"
+                    : "Tausch abbrechen"}
               </button>
             </>
           ) : (
             <>
-              {isParticipant ? (
+              {isShortNotice ? (
+                <button
+                  className="danger"
+                  onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
+                >
+                  Absage zurücknehmen
+                </button>
+              ) : isParticipant ? (
                 <button
                   className="danger"
                   onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
                 >
                   Termin absagen
                 </button>
-              ) : hasCancelled ? (
+              ) : canUndoRegularAbsence ? (
                 <button onClick={() => onToggleAbsence(course, selectedDateKey, userName)}>
                   Absage zurücknehmen
                 </button>
-              ) : (
+              ) : hasCancelled ? null : (
                 <div className="muted">Nicht in diesem Termin eingetragen</div>
               )}
 
-              {(originallyParticipant || hasCancelled) && (
+              {canSwapFromOrigin && (
                 <button
                   className="secondary"
                   onClick={() => {
@@ -362,11 +439,16 @@ export default function CourseCard({
                   {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
                 </button>
               )}
-              
+              {originInCutoff && (originallyParticipant || hasCancelled) && !canSwapFromOrigin && (
+                <p className="muted small" role="status">
+                  Weniger als {cutoffMinutes} Minuten vor Termin — kein Tausch mehr möglich.
+                </p>
+              )}
+
             </>
           )}
           {/* 🆕 Wenn schon pending-Requests existieren: zusätzlicher Button */}
-              {hasPendingRequestsFromOrigin && (
+              {hasPendingRequestsFromOrigin && canSwapFromOrigin && (
                 <button
                   className="secondary"
                   onClick={() => {

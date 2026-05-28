@@ -3,6 +3,7 @@ import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import { Swap } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
+import { applySwapCutoffReconcileIfConfigured } from "../shared/applySwapCutoffReconcile";
 
 const client = dynamoClient;
 
@@ -52,8 +53,13 @@ export const handler = async (
       toDate: item.toDate.S!,
       status: item.status.S as Swap["status"],
     }));
-    console.log('getSwapsByStatus result:', items);
-    return { statusCode: 200, body: JSON.stringify(items) };
+    const reconciled = await applySwapCutoffReconcileIfConfigured({
+      client,
+      tenantId,
+      swaps: items,
+    });
+    console.log('getSwapsByStatus result:', reconciled);
+    return { statusCode: 200, body: JSON.stringify(reconciled) };
   } catch (err) {
     console.error('Error querying swaps by status:', err);
     return { statusCode: 500, body: JSON.stringify({ error: 'Internal Server Error' }) };

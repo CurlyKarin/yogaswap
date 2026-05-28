@@ -4,5 +4,6 @@ export * from './courseStatus';
 export * from './courseEditPolicy';
 export * from './tenantSettings';
 export * from './rollingHorizonShrink';
+export * from './cancellationSwapCutoff';
 export * from './lib/storage';
 export * from './data/mockUsers';

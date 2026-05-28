@@ -32,6 +32,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const participants = override.participants || [];
     const swapped = override.swapped || [];
     const waitlist = override.waitlist || [];
+    const shortNoticeCancellations = override.shortNoticeCancellations || [];
 
     if (!Array.isArray(participants) || participants.some((p: any) => typeof p !== 'string')) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Invalid participants array' }) };
@@ -41,6 +42,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     if (!Array.isArray(waitlist) || waitlist.some((w: any) => typeof w !== 'string')) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Invalid waitlist array' }) };
+    }
+    if (
+      !Array.isArray(shortNoticeCancellations) ||
+      shortNoticeCancellations.some((w: any) => typeof w !== 'string')
+    ) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid shortNoticeCancellations array' }) };
     }
 
     const courseId_date = `${override.courseId}_${override.date}`;
@@ -55,6 +62,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       participants: { L: participants.map((p: string) => ({ S: p })) },
       swapped: { L: swapped.map((s: string) => ({ S: s })) },
       waitlist: { L: waitlist.map((w: string) => ({ S: w })) },
+      shortNoticeCancellations: { L: shortNoticeCancellations.map((w: string) => ({ S: w })) },
       actorUserId: userId ? { S: userId } : { NULL: true },
       actingForUserId: actingForUserId ? { S: actingForUserId } : { NULL: true },
       ...(courseUid ? { courseUid: { S: courseUid } } : {}),

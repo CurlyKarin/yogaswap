@@ -3,6 +3,7 @@ import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import type { CourseDateOverride } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
+import { mapOverrideItem } from "../shared/overrideDynamo";
 
 const client = dynamoClient;
 
@@ -36,14 +37,7 @@ export const handler = async (
 
   try {
     const data = await client.send(command);
-    let items: CourseDateOverride[] = (data.Items || []).map((item) => ({
-      courseId: Number(item.courseId.S!),
-      ...(item.courseUid?.S ? { courseUid: item.courseUid.S } : {}),
-      date: item.date.S!,
-      participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
-      swapped: item.swapped.L ? item.swapped.L.map((s: any) => s.S) : [],
-      waitlist: item.waitlist.L ? item.waitlist.L.map((w: any) => w.S) : [],
-    }));
+    let items: CourseDateOverride[] = (data.Items || []).map((item) => mapOverrideItem(item));
 
     if (sinceDate) {
       items = items.filter((o) => new Date(o.date) >= new Date(sinceDate));

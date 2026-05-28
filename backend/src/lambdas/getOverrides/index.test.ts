@@ -38,6 +38,7 @@ describe('getOverrides Lambda', () => {
         participants: ['Luna'],
         swapped: [],
         waitlist: [],
+        shortNoticeCancellations: [],
       },
     ]);
     expect(dynamoMock.calls()).toHaveLength(1);
@@ -76,6 +77,7 @@ describe('getOverrides Lambda', () => {
         participants: ['Luna'],
         swapped: [],
         waitlist: [],
+        shortNoticeCancellations: [],
       },
     ]);
     expect(dynamoMock.call(0).args[0].input).toMatchObject({
@@ -118,6 +120,7 @@ describe('getOverrides Lambda', () => {
         participants: ['Kai'],
         swapped: [],
         waitlist: [],
+        shortNoticeCancellations: [],
       },
     ]);
   });

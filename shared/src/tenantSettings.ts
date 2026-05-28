@@ -4,6 +4,7 @@ import type { TenantSettings } from "./types";
 export const DEFAULT_SWAP_MIN_OFFSET_DAYS = -7;
 export const DEFAULT_SWAP_MAX_OFFSET_DAYS = 7;
 export const DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS = 5;
+export { DEFAULT_CANCELLATION_SWAP_CUTOFF_MINUTES, resolveCancellationSwapCutoffMinutes } from "./cancellationSwapCutoff";
 
 export type SwapWindow = {
   minOffsetDays: number;
@@ -46,6 +47,7 @@ export type StudioSettingsPatch = {
   minOffsetDays?: number;
   maxOffsetDays?: number;
   rollingPlanningHorizonWeeks?: number;
+  cancellationSwapCutoffMinutesBeforeStart?: number;
 };
 
 export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string | null {
@@ -79,6 +81,12 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     const weeks = patch.rollingPlanningHorizonWeeks;
     if (!Number.isInteger(weeks) || (weeks ?? 0) < 1 || (weeks ?? 0) > 52) {
       return "Planungs- und Sichtfenster muss eine ganze Zahl zwischen 1 und 52 Wochen sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "cancellationSwapCutoffMinutesBeforeStart")) {
+    const minutes = patch.cancellationSwapCutoffMinutesBeforeStart;
+    if (!Number.isInteger(minutes) || (minutes ?? 0) < 0 || (minutes ?? 0) > 24 * 60) {
+      return "Kurzfrist-Absage: Minuten vor Terminbeginn müssen eine ganze Zahl zwischen 0 und 1440 sein.";
     }
   }
   return null;
