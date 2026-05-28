@@ -177,3 +177,48 @@ test("skips stale first waitlist entry and promotes next valid pending swap", as
   expect(body.promoted).toBe(1);
   expect(Array.isArray(body.overrides)).toBe(true);
 });
+
+test("does not promote when target term is inside cutoff window", async () => {
+  // TEST_NOW = 2025-09-01T06:00:00.000Z; target 06:30 lies inside default 60-minute cutoff.
+  const pendingSwap = {
+    swapId: { S: "2025-09-01_1_2025-09-01_2" },
+    user: { S: "Alice" },
+    fromCourseId: { N: "1" },
+    fromDate: { S: "2025-09-01" },
+    toCourseId: { N: "2" },
+    toDate: { S: "2025-09-01" },
+    status: { S: "pending" },
+  };
+  const course = {
+    id: { N: "2" },
+    name: { S: "Yoga" },
+    weekday: { S: "Monday" },
+    time: { S: "06:30" },
+    capacity: { N: "2" },
+    participants: { L: [] },
+    dates: { L: [{ S: "2025-09-01" }] },
+  };
+  const overrideWithWaitlist = {
+    courseId: { S: "2" },
+    date: { S: "2025-09-01" },
+    participants: { L: [{ S: "Bob" }] },
+    swapped: { L: [] },
+    waitlist: { L: [{ S: "Alice" }] },
+  };
+
+  ddbMock
+    .on(QueryCommand)
+    .resolvesOnce({ Items: [pendingSwap] })
+    .resolvesOnce({ Items: [course] })
+    .resolvesOnce({ Items: [overrideWithWaitlist] })
+    .resolvesOnce({ Items: [pendingSwap] }) // final swaps
+    .resolvesOnce({ Items: [overrideWithWaitlist] }); // final overrides
+
+  const event = makeEvent({ currentUser: "Alice" });
+  const result = await handler(event);
+
+  expect(result.statusCode).toBe(200);
+  const body = JSON.parse(result.body);
+  expect(body.promoted).toBe(0);
+  expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
+});

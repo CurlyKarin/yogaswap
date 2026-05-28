@@ -1,14 +1,19 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { QueryCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
-import { Swap, CourseDateOverride, Course } from "@yogaswap/shared";
+import {
+  Swap,
+  CourseDateOverride,
+  Course,
+  resolveCancellationSwapCutoffMinutes,
+} from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
 import { mapOverrideItem } from "../shared/overrideDynamo";
+import { loadTenantSettings } from "../shared/tenantSettingsLoader";
 
 const client = dynamoClient;
 
-// Hardcodierter Zeitpuffer (in Minuten) vor Kursbeginn für Nachrücken
-const PROMOTION_TIME_BUFFER_MINUTES = 30;
+const DEFAULT_NO_AUTOMATION_MINUTES = 60;
 
 function normalized(value: string): string {
   return value.trim().toLowerCase();
@@ -33,15 +38,20 @@ function addUserUniqueCaseInsensitive(values: string[] | undefined, user: string
 }
 
 // Hilfsfunktion: Prüft, ob ein Kursbeginn mindestens PROMOTION_TIME_BUFFER_MINUTES in der Zukunft liegt
-function isCourseInFuture(courseDate: string, courseTime: string, now: Date): boolean {
+function isCourseInFuture(
+  courseDate: string,
+  courseTime: string,
+  now: Date,
+  noAutomationMinutes: number,
+): boolean {
   try {
     // Kombiniere Datum (YYYY-MM-DD) und Uhrzeit (HH:mm) zu einem Date-Objekt
     const [year, month, day] = courseDate.split('-').map(Number);
     const [hours, minutes] = courseTime.split(':').map(Number);
     const courseStart = new Date(year, month - 1, day, hours, minutes);
     
-    // Aktuelle Zeit + Puffer
-    const bufferTime = new Date(now.getTime() + PROMOTION_TIME_BUFFER_MINUTES * 60 * 1000);
+    // Aktuelle Zeit + Sperrfenster für automatische Promotion
+    const bufferTime = new Date(now.getTime() + noAutomationMinutes * 60 * 1000);
     
     // Prüfe, ob Kursbeginn nach bufferTime liegt
     return courseStart >= bufferTime;
@@ -156,6 +166,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Extrahiere currentUser (anpassen je nach Auth-Setup)
     const currentUser = event.requestContext?.authorizer?.principalId || body.currentUser || null;
 
+    let noAutomationMinutes = DEFAULT_NO_AUTOMATION_MINUTES;
+    const tenantsTable = process.env.TENANTS_TABLE;
+    if (tenantsTable) {
+      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      noAutomationMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
+    }
+
     let iterations = 0;
     let changed = true;
     const maxIterations = 10;
@@ -221,7 +238,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const futureOverrides = allOverrides.filter((o) => {
         const course = courses.find((c) => c.id === o.courseId);
         if (!course) return false;
-        return isCourseInFuture(o.date, course.time, now);
+        return isCourseInFuture(o.date, course.time, now, noAutomationMinutes);
       });
       console.log('futureOverrides:', futureOverrides);
 
