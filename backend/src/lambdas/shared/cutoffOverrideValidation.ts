@@ -77,6 +77,9 @@ export function validateSelfServiceOverrideTransition(input: {
   }
 
   // SN-Rücknahme ist immer erlaubt: Platz bleibt durch participants ohnehin belegt.
+  if (wasSn && !isSn && isParticipant) {
+    return null;
+  }
 
   if (!wasSn && isSn && !inCutoff) {
     return "Kurzfristige Absage ist nur kurz vor Kursbeginn möglich.";
