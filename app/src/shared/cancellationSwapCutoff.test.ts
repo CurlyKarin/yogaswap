@@ -21,6 +21,24 @@ describe("cancellationSwapCutoff", () => {
     expect(isWithinCancellationSwapCutoff(isoDate, time, 60, new Date(atCutoff.getTime() - 1000))).toBe(false);
   });
 
+  it("cutoff 0 disables cutoff checks", () => {
+    const isoDate = "2099-06-15";
+    const time = "10:00";
+    const afterStart = new Date(2099, 5, 15, 10, 30);
+    expect(isWithinCancellationSwapCutoff(isoDate, time, 0, afterStart)).toBe(false);
+    expect(
+      canCreateSwapFromOrigin({
+        isoDate,
+        courseTime: time,
+        tenantSettings: { cancellationSwapCutoffMinutesBeforeStart: 0 },
+        userName: "alice",
+        participants: ["alice"],
+        originallyParticipant: true,
+        now: afterStart,
+      }),
+    ).toBe(true);
+  });
+
   it("canCreateSwapFromOrigin blocks SN", () => {
     const override = {
       courseId: 1,

@@ -10,6 +10,7 @@
 ## Studio-Einstellung
 
 - `cancellationSwapCutoffMinutesBeforeStart` (Default: **60**)
+- `0` deaktiviert den Kurzfrist-Cutoff (keine automatische SN-Setzung, kein Cutoff-Block)
 - Vergleich: Kursbeginn = `date` + `course.time` (lokal, wie `buildCourseOccurrenceLocal`)
 
 ## Datenmodell (Variante B)
