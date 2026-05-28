@@ -112,4 +112,76 @@ describe('createSwap Lambda', () => {
     expect(result.statusCode).toBe(500);
     expect(JSON.parse(result.body).error).toBe('Failed to create swap');
   });
+
+  test('returns 400 when origin is inside cutoff window', async () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const fromDate = `${year}-${month}-${day}`;
+    const soon = new Date(now.getTime() + 30 * 60 * 1000);
+    const hh = String(soon.getHours()).padStart(2, '0');
+    const mm = String(soon.getMinutes()).padStart(2, '0');
+    const fromTime = `${hh}:${mm}`;
+
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        time: { S: fromTime },
+        participants: { L: [{ S: 'Nia' }] },
+      },
+    });
+
+    const event = baseEvent({
+      user: 'Nia',
+      fromCourseId: 'c1',
+      fromDate,
+      toCourseId: 'c2',
+      toDate: '2099-06-20',
+      status: 'pending',
+    });
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toContain('kein Tausch');
+  });
+
+  test('returns 400 when origin has shortNotice cancellation marker', async () => {
+    process.env = {
+      ...process.env,
+      SWAPS_TABLE: 'test-swaps',
+      COURSES_TABLE: 'test-courses',
+      OVERRIDES_TABLE: 'test-overrides',
+    };
+
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          time: { S: '10:00' },
+          participants: { L: [{ S: 'Nia' }] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          courseId: { S: '1' },
+          date: { S: '2099-06-15' },
+          participants: { L: [{ S: 'Nia' }] },
+          swapped: { L: [] },
+          waitlist: { L: [] },
+          shortNoticeCancellations: { L: [{ S: 'Nia' }] },
+        },
+      });
+
+    const event = baseEvent({
+      user: 'Nia',
+      fromCourseId: '1',
+      fromDate: '2099-06-15',
+      toCourseId: '2',
+      toDate: '2099-06-20',
+      status: 'pending',
+    });
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toContain('kein Tausch');
+  });
 });
