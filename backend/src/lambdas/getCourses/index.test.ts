@@ -66,6 +66,7 @@ describe("getCourses Lambda", () => {
         weekday: "Monday",
         time: "10:00",
         capacity: 12,
+        overbookLimit: 0,
         status: "draft",
         excludedDates: [],
         includedDates: [],
