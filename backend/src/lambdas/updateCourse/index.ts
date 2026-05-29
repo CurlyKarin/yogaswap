@@ -28,7 +28,7 @@ import {
 } from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { notifyParticipantsPlannedEndDate } from "../shared/plannedEndDateNotifications";
-import { validateOverbookLimit } from "@yogaswap/shared";
+import { validateOverbookLimit, validateParticipantListSize } from "@yogaswap/shared";
 
 const INSTRUCTOR_OVERBOOK_ONLY_KEYS = new Set(["overbookLimit"]);
 
@@ -524,6 +524,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextParticipants = participants
       ? participants.map((entry) => ({ S: entry }))
       : (item.participants?.L ?? []);
+    if (participants) {
+      const capacityError = validateParticipantListSize(nextParticipants.length, {
+        capacity: nextCapacity,
+        overbookLimit: nextOverbookLimit,
+      });
+      if (capacityError) {
+        return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+      }
+    }
     const nextPlanningMode = planningMode ?? item.planningMode?.S;
     const nextVisibilityMode = visibilityMode ?? item.visibilityMode?.S;
     const nextSeriesStartDate = seriesStartDate ?? item.seriesStartDate?.S;

@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { canCreateSwapFromOrigin } from '@yogaswap/shared';
+import { canCreateSwapFromOrigin, validateParticipantListSize } from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
@@ -93,6 +93,51 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const toLegacyId = swap.toCourseId.toString();
+    const toCourseResp = await client.send(
+      new GetItemCommand({
+        TableName: coursesTable,
+        Key: { tenantId: { S: tenantId }, courseId: { S: toLegacyId } },
+        ConsistentRead: true,
+      }),
+    );
+    if (!toCourseResp.Item) {
+      return { statusCode: 404, body: JSON.stringify({ error: 'Target course not found' }) };
+    }
+    const toCapacity = {
+      capacity: toCourseResp.Item.capacity?.N ? Number.parseInt(toCourseResp.Item.capacity.N, 10) : 0,
+      overbookLimit: toCourseResp.Item.overbookLimit?.N
+        ? Number.parseInt(toCourseResp.Item.overbookLimit.N, 10)
+        : 0,
+    };
+    let targetParticipants = mapStringList(toCourseResp.Item.participants);
+    if (overridesTable) {
+      const targetOverrideKey = `${toLegacyId}_${swap.toDate}`;
+      const targetOverrideResp = await client.send(
+        new GetItemCommand({
+          TableName: overridesTable,
+          Key: { tenantId: { S: tenantId }, courseId_date: { S: targetOverrideKey } },
+          ConsistentRead: true,
+        }),
+      );
+      if (targetOverrideResp.Item) {
+        targetParticipants = mapOverrideItem(targetOverrideResp.Item).participants;
+      }
+    }
+    const swapUserLower = swap.user.toLowerCase();
+    const userOnTarget = targetParticipants.some((p) => p.toLowerCase() === swapUserLower);
+    const countAfterSwap = userOnTarget
+      ? targetParticipants.length
+      : targetParticipants.length + 1;
+    if (swap.status === 'active') {
+      const targetCapacityError = validateParticipantListSize(countAfterSwap, toCapacity);
+      if (targetCapacityError) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'Der Zieltermin ist voll (maximale Raumkapazität erreicht).' }),
+        };
+      }
+    }
+
     const [fromCourseUid, toCourseUid] = await Promise.all([
       fetchCourseUidByLegacyCourseId(client, coursesTable, tenantId, fromLegacyId),
       fetchCourseUidByLegacyCourseId(client, coursesTable, tenantId, toLegacyId),

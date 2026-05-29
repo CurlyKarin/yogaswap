@@ -142,6 +142,34 @@ describe("updateCourse Lambda", () => {
     expect(result.statusCode).toBe(403);
   });
 
+  test("rejects participants above maxCapacity", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("active") });
+
+    const result = await handler(
+      makeEvent({
+        participants: [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f",
+          "g",
+          "h",
+          "i",
+          "j",
+          "k",
+          "l",
+          "m",
+        ],
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toMatch(/Maximal 12/);
+  });
+
   test("returns 404 when course not found", async () => {
     mockAdminMembership().mockResolvedValueOnce({});
     const result = await handler(makeEvent({ name: "Neu" }));

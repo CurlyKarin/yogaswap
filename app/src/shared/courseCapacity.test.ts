@@ -5,6 +5,7 @@ import {
   resolveMaxCapacity,
   resolveOverbookLimit,
   validateOverbookLimit,
+  validateParticipantListSize,
 } from "shared/courseCapacity";
 
 describe("courseCapacity", () => {
@@ -35,5 +36,15 @@ describe("courseCapacity", () => {
   it("validateOverbookLimit rejects invalid values", () => {
     expect(validateOverbookLimit(10, -1)).toMatch(/nicht-negative/);
     expect(validateOverbookLimit(10, 2)).toBeNull();
+  });
+
+  it("boundary counts capacity-1, capacity, maxCapacity, maxCapacity+1", () => {
+    const small = { capacity: 4, overbookLimit: 2 };
+    expect(hasBookingCapacity(3, small)).toBe(true);
+    expect(hasBookingCapacity(4, small)).toBe(true);
+    expect(hasBookingCapacity(5, small)).toBe(true);
+    expect(hasBookingCapacity(6, small)).toBe(false);
+    expect(validateParticipantListSize(6, small)).toBeNull();
+    expect(validateParticipantListSize(7, small)).toMatch(/Maximal 6/);
   });
 });

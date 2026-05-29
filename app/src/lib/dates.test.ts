@@ -211,4 +211,45 @@ describe("getAvailableDates / getWaitlistDates", () => {
 
     expect(available.map((entry) => entry.course.id)).toEqual([11]);
   });
+
+  it("treats term as full only at maxCapacity including overbookLimit", () => {
+    const referenceDate = new Date("2025-06-15");
+    const overbookCourse: Course = {
+      ...course,
+      id: 20,
+      capacity: 2,
+      overbookLimit: 1,
+      participants: ["a", "b"],
+      dates: ["2025-06-16"],
+    };
+    const fullOverride: CourseDateOverride[] = [
+      {
+        courseId: 20,
+        date: "2025-06-16",
+        participants: ["a", "b", "c"],
+        swapped: [],
+        waitlist: [],
+      },
+    ];
+
+    const stillAvailable = getAvailableDates(
+      [overbookCourse],
+      [],
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
+    const fullAtMax = getAvailableDates(
+      [overbookCourse],
+      fullOverride,
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
+
+    expect(stillAvailable).toHaveLength(1);
+    expect(fullAtMax).toHaveLength(0);
+  });
 });

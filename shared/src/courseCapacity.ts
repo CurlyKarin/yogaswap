@@ -50,3 +50,18 @@ export function validateOverbookLimit(
   }
   return null;
 }
+
+/** Teilnehmerliste darf die harte Raumgrenze nicht überschreiten. */
+export function validateParticipantListSize(
+  participantCount: number,
+  course: CourseCapacityFields,
+): string | null {
+  const max = resolveMaxCapacity(course);
+  if (!Number.isInteger(participantCount) || participantCount < 0) {
+    return "Teilnehmerzahl muss eine nicht-negative ganze Zahl sein.";
+  }
+  if (participantCount > max) {
+    return `Maximal ${max} Teilnehmer erlaubt.`;
+  }
+  return null;
+}
