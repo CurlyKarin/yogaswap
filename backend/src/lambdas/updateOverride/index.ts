@@ -12,6 +12,7 @@ import {
   type OverrideUpdateBody,
 } from '../shared/cutoffOverrideValidation';
 import { mapOverrideItem, mapStringList, stringListAttribute } from '../shared/overrideDynamo';
+import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
 
 const client = dynamoClient;
 
@@ -99,6 +100,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     const courseTime = courseResp.Item.time?.S ?? '';
     const baseParticipants = mapStringList(courseResp.Item.participants);
+    const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
 
     const courseId_date = `${legacyCourseId}_${date}`;
     const existingResp = await client.send(
@@ -139,6 +141,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
       if (transitionError) {
         return { statusCode: 400, body: JSON.stringify({ error: transitionError }) };
+      }
+    }
+
+    if (updates.participants) {
+      const capacityError = validateParticipantsForCourse(updates.participants, capacityFields);
+      if (capacityError) {
+        return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
       }
     }
 

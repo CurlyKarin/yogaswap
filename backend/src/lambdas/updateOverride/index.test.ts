@@ -19,6 +19,8 @@ function mockCourseAndOverrideLookup() {
         tenantId: { S: 'default-tenant' },
         courseId: { S: '1' },
         time: { S: '10:00' },
+        capacity: { N: '12' },
+        overbookLimit: { N: '0' },
         participants: { L: [{ S: 'Luna' }] },
       },
     })
@@ -190,6 +192,8 @@ describe('updateOverride Lambda', () => {
           tenantId: { S: 'default-tenant' },
           courseId: { S: '42' },
           time: { S: '10:00' },
+          capacity: { N: '12' },
+          overbookLimit: { N: '0' },
           participants: { L: [{ S: 'Luna' }] },
         },
       })

@@ -12,6 +12,7 @@ import {
   removeUserCaseInsensitive,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
+import { hasBookingCapacity, resolveMaxCapacity } from "shared/courseCapacity";
 import { createSwap, deleteSwap, processPromotions } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
 
@@ -285,7 +286,7 @@ export function useCourseSwaps(
                 ...overrideCourseUidFields(course),
               };
 
-        const courseCapacity = course.capacity;
+        const maxCapacity = resolveMaxCapacity(course);
         let nextParticipants = [...baseOverride.participants];
         let nextShortNotice = [...(baseOverride.shortNoticeCancellations ?? [])];
 
@@ -296,7 +297,7 @@ export function useCourseSwaps(
         } else if (isIn) {
           nextParticipants = removeUserCaseInsensitive(nextParticipants, userName);
         } else {
-          if (nextParticipants.length >= courseCapacity) {
+          if (nextParticipants.length >= maxCapacity) {
             alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
             return prev;
           }
@@ -415,7 +416,7 @@ export function useCourseSwaps(
           ? existingTargetOverride.participants
           : targetCourse.participants;
 
-        if (effectiveTargetParticipants.length >= targetCourse.capacity) {
+        if (!hasBookingCapacity(effectiveTargetParticipants.length, targetCourse)) {
           alert("Der gewählte Ersatztermin ist inzwischen voll.");
           return;
         }

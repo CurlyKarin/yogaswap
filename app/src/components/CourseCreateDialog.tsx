@@ -1,12 +1,14 @@
 import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
 import CourseModalFrame from "./CourseModalFrame";
+import CourseCapacityFields from "./CourseCapacityFields";
 
 type CourseCreateState = {
   name: string;
   weekday: string;
   time: string;
   capacity: string;
+  overbookLimit: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
 };
@@ -86,14 +88,12 @@ export default function CourseCreateDialog({
             disabled={saving}
             className="dialog-field"
           />
-          <input
-            type="number"
-            aria-label="Kapazität"
-            min={0}
-            value={state.capacity}
-            onChange={(event) => onChange({ ...state, capacity: event.target.value })}
-            disabled={saving}
-            className="dialog-field"
+          <CourseCapacityFields
+            capacity={state.capacity}
+            overbookLimit={state.overbookLimit}
+            saving={saving}
+            onCapacityChange={(capacity) => onChange({ ...state, capacity })}
+            onOverbookLimitChange={(overbookLimit) => onChange({ ...state, overbookLimit })}
           />
           <select
             aria-label="Status"

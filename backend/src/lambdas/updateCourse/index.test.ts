@@ -117,6 +117,59 @@ describe("updateCourse Lambda", () => {
     expect(GetItemCommand).toHaveBeenCalled();
   });
 
+  test("instructor can patch overbookLimit only", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "instructor" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({ Item: baseCourseItem("active") });
+
+    const result = await handler(
+      makeEvent({ overbookLimit: 3 }, "1", undefined),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.overbookLimit).toBe(3);
+    expect(body.capacity).toBe(12);
+    expect(PutItemCommand).toHaveBeenCalled();
+    const putInput = (PutItemCommand as unknown as jest.Mock).mock.calls.at(-1)?.[0];
+    expect(putInput?.Item?.overbookLimit?.N).toBe("3");
+  });
+
+  test("instructor cannot patch fields other than overbookLimit", async () => {
+    mockSend.mockResolvedValueOnce({ Item: { role: { S: "instructor" } } });
+    const result = await handler(makeEvent({ overbookLimit: 1, name: "Neu" }));
+    expect(result.statusCode).toBe(403);
+  });
+
+  test("rejects participants above maxCapacity", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("active") });
+
+    const result = await handler(
+      makeEvent({
+        participants: [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f",
+          "g",
+          "h",
+          "i",
+          "j",
+          "k",
+          "l",
+          "m",
+        ],
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toMatch(/Maximal 12/);
+  });
+
   test("returns 404 when course not found", async () => {
     mockAdminMembership().mockResolvedValueOnce({});
     const result = await handler(makeEvent({ name: "Neu" }));

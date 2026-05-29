@@ -6,6 +6,12 @@ import type { APIGatewayProxyEvent } from 'aws-lambda';
 // Mock DynamoDB client
 const dynamoMock = mockClient(DynamoDBClient);
 
+const mockCourseItem = {
+  courseUid: { S: 'course-uid-abc' },
+  capacity: { N: '12' },
+  overbookLimit: { N: '0' },
+};
+
 beforeEach(() => {
   dynamoMock.reset();
   process.env.OVERRIDES_TABLE = 'yogaswap-backend-demo-courseOverrides-table';
@@ -14,9 +20,7 @@ beforeEach(() => {
 
 describe('createOverride Lambda', () => {
   it('should create a new override successfully', async () => {
-    dynamoMock.on(GetItemCommand).resolves({
-      Item: { courseUid: { S: 'course-uid-abc' } },
-    });
+    dynamoMock.on(GetItemCommand).resolves({ Item: mockCourseItem });
     dynamoMock.on(PutItemCommand).resolves({});
 
     const event: Partial<APIGatewayProxyEvent> = {
@@ -34,7 +38,7 @@ describe('createOverride Lambda', () => {
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body)).toEqual({ message: 'Override created' });
 
-    expect(dynamoMock.commandCalls(GetItemCommand)).toHaveLength(1);
+    expect(dynamoMock.commandCalls(GetItemCommand)).toHaveLength(2);
     expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(1);
 
     expect(dynamoMock.commandCalls(PutItemCommand)[0].args[0].input).toMatchObject({
@@ -84,10 +88,30 @@ describe('createOverride Lambda', () => {
     expect(dynamoMock.calls()).toHaveLength(0);
   });
 
-  it('should handle DynamoDB errors gracefully', async () => {
+  it('should return 400 when participants exceed maxCapacity', async () => {
     dynamoMock.on(GetItemCommand).resolves({
-      Item: { courseUid: { S: 'course-uid-abc' } },
+      Item: { ...mockCourseItem, capacity: { N: '1' }, overbookLimit: { N: '0' } },
     });
+
+    const event: Partial<APIGatewayProxyEvent> = {
+      body: JSON.stringify({
+        courseId: 1,
+        date: '2025-10-01',
+        participants: ['A', 'B'],
+        swapped: [],
+        waitlist: [],
+      }),
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Maximal 1/);
+    expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(0);
+  });
+
+  it('should handle DynamoDB errors gracefully', async () => {
+    dynamoMock.on(GetItemCommand).resolves({ Item: mockCourseItem });
     dynamoMock.on(PutItemCommand).rejects(new Error('DynamoDB failure'));
 
     const event: Partial<APIGatewayProxyEvent> = {

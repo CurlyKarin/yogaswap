@@ -87,7 +87,12 @@ function collectCourseDates(
         );
         const participants = override ? override.participants : course.participants;
 
-        const isFull = participants.length >= course.capacity;
+        const maxCapacity =
+          course.capacity +
+          (typeof course.overbookLimit === "number" && course.overbookLimit >= 0
+            ? course.overbookLimit
+            : 0);
+        const isFull = participants.length >= maxCapacity;
         const currentUserLower = currentUser.nickname.toLowerCase();
         const userAlreadyInThisCourse =
           participants.some((p) => p.toLowerCase() === currentUserLower) ||

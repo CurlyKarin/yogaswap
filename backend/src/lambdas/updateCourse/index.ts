@@ -28,6 +28,14 @@ import {
 } from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { notifyParticipantsPlannedEndDate } from "../shared/plannedEndDateNotifications";
+import { validateOverbookLimit, validateParticipantListSize } from "@yogaswap/shared";
+
+const INSTRUCTOR_OVERBOOK_ONLY_KEYS = new Set(["overbookLimit"]);
+
+function isInstructorOverbookOnlyPatch(body: UpdateCourseBody): boolean {
+  const keys = Object.keys(body).filter((key) => Object.prototype.hasOwnProperty.call(body, key));
+  return keys.length > 0 && keys.every((key) => INSTRUCTOR_OVERBOOK_ONLY_KEYS.has(key));
+}
 
 const client = dynamoClient;
 const COURSE_STATUSES = new Set(["inactive", "draft", "active"]);
@@ -42,6 +50,7 @@ type UpdateCourseBody = {
   weekday?: string;
   time?: string;
   capacity?: number;
+  overbookLimit?: number;
   status?: string;
   planningMode?: string;
   visibilityMode?: string;
@@ -234,6 +243,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     !Object.prototype.hasOwnProperty.call(body, "weekday") &&
     !Object.prototype.hasOwnProperty.call(body, "time") &&
     !Object.prototype.hasOwnProperty.call(body, "capacity") &&
+    !Object.prototype.hasOwnProperty.call(body, "overbookLimit") &&
     !Object.prototype.hasOwnProperty.call(body, "status")
     && !Object.prototype.hasOwnProperty.call(body, "planningMode")
     && !Object.prototype.hasOwnProperty.call(body, "visibilityMode")
@@ -272,6 +282,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const capacity =
     Object.prototype.hasOwnProperty.call(body, "capacity") && Number.isFinite(body.capacity)
       ? Number(body.capacity)
+      : undefined;
+  const overbookLimit =
+    Object.prototype.hasOwnProperty.call(body, "overbookLimit") && Number.isFinite(body.overbookLimit)
+      ? Number(body.overbookLimit)
       : undefined;
 
   if (Object.prototype.hasOwnProperty.call(body, "name") && !name) {
@@ -334,7 +348,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     );
     const actorRole = membershipResp.Item?.role?.S;
-    if (actorRole !== "admin") {
+    const instructorOverbookOnly = actorRole === "instructor" && isInstructorOverbookOnlyPatch(body);
+    if (actorRole !== "admin" && !instructorOverbookOnly) {
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
 
@@ -359,6 +374,56 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const item = courseResp.Item;
     if (!item) {
       return { statusCode: 404, body: JSON.stringify({ error: "Course not found" }) };
+    }
+
+    const existingCapacity = item.capacity?.N ? Number.parseInt(item.capacity.N, 10) : 0;
+    const existingOverbookLimit = item.overbookLimit?.N
+      ? Number.parseInt(item.overbookLimit.N, 10)
+      : 0;
+
+    if (instructorOverbookOnly) {
+      if (overbookLimit == null) {
+        return { statusCode: 400, body: JSON.stringify({ error: "No updatable fields provided" }) };
+      }
+      const overbookError = validateOverbookLimit(existingCapacity, overbookLimit);
+      if (overbookError) {
+        return { statusCode: 400, body: JSON.stringify({ error: overbookError }) };
+      }
+      const existingCourseUid = item.courseUid?.S?.trim() || generateCourseUid();
+      const nextId = item.id?.N ? Number.parseInt(item.id.N, 10) : Number.parseInt(courseId, 10);
+      await client.send(
+        new PutItemCommand({
+          TableName: coursesTable,
+          Item: {
+            ...item,
+            courseUid: { S: existingCourseUid },
+            overbookLimit: { N: String(overbookLimit) },
+            actorUserId: { S: actorUserId },
+          },
+        }),
+      );
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          id: Number.isFinite(nextId) ? nextId : 0,
+          courseId,
+          courseUid: existingCourseUid,
+          name: item.name?.S,
+          weekday: item.weekday?.S,
+          time: item.time?.S,
+          capacity: existingCapacity,
+          overbookLimit,
+          status: item.status?.S ?? "active",
+          participants: item.participants?.L?.map((p) => p.S).filter(Boolean) ?? [],
+        }),
+      };
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "overbookLimit")) {
+      const overbookError = validateOverbookLimit(capacity ?? existingCapacity, overbookLimit);
+      if (overbookError) {
+        return { statusCode: 400, body: JSON.stringify({ error: overbookError }) };
+      }
     }
 
     const currentStatus = item.status?.S ?? "active";
@@ -453,13 +518,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextName = name ?? item.name?.S ?? "";
     const nextWeekday = weekday ?? item.weekday?.S ?? "";
     const nextTime = time ?? item.time?.S ?? "";
-    const nextCapacity =
-      capacity ??
-      (item.capacity?.N ? Number.parseInt(item.capacity.N, 10) : 0);
+    const nextCapacity = capacity ?? existingCapacity;
+    const nextOverbookLimit = overbookLimit ?? existingOverbookLimit;
     const nextId = item.id?.N ? Number.parseInt(item.id.N, 10) : Number.parseInt(courseId, 10);
     const nextParticipants = participants
       ? participants.map((entry) => ({ S: entry }))
       : (item.participants?.L ?? []);
+    if (participants) {
+      const capacityError = validateParticipantListSize(nextParticipants.length, {
+        capacity: nextCapacity,
+        overbookLimit: nextOverbookLimit,
+      });
+      if (capacityError) {
+        return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+      }
+    }
     const nextPlanningMode = planningMode ?? item.planningMode?.S;
     const nextVisibilityMode = visibilityMode ?? item.visibilityMode?.S;
     const nextSeriesStartDate = seriesStartDate ?? item.seriesStartDate?.S;
@@ -624,6 +697,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       weekday: { S: nextWeekday },
       time: { S: nextTime },
       capacity: { N: String(nextCapacity) },
+      overbookLimit: { N: String(nextOverbookLimit) },
       status: { S: effectiveStatus },
       participants: { L: nextParticipants },
       dates: { L: nextDates.map((entry) => ({ S: entry })) },
@@ -761,6 +835,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         weekday: nextWeekday,
         time: nextTime,
         capacity: nextCapacity,
+        overbookLimit: nextOverbookLimit,
         status: effectiveStatus,
         planningMode: nextPlanningMode,
         visibilityMode: nextVisibilityMode,

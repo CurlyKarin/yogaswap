@@ -208,6 +208,45 @@ body {
   font-style: italic;
 }
 
+.chip.overbook-free {
+  background-color: #b2ebf2; /* Türkis für Überkapazität */
+  color: #0f4c5c;
+  font-style: italic;
+}
+
+.course-capacity-summary {
+  margin: 4px 0 8px;
+}
+
+.course-capacity-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 14px;
+  color: #374151;
+}
+
+.course-capacity-summary-line {
+  flex: 1;
+  min-width: 0;
+}
+
+.course-capacity-hint-popover .course-capacity-breakdown-list {
+  margin: 8px 0 0;
+}
+
+.course-capacity-breakdown-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.course-capacity-breakdown-list li + li {
+  margin-top: 4px;
+}
+
 
 .actions {
   display: flex;

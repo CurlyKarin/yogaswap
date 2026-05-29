@@ -69,6 +69,8 @@ export type Course = {
   weekday: string; // z.B. "Mon", "Tue", ...
   time: string;    // z.B. "18:30"
   capacity: number;
+  /** Zusätzliche Plätze über regulärer capacity (nur Admin/Trainerin). max = capacity + overbookLimit. */
+  overbookLimit?: number;
   status?: CourseStatus;
   planningMode?: CoursePlanningMode;
   visibilityMode?: CourseVisibilityMode;

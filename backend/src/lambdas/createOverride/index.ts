@@ -1,9 +1,10 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
+import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
 
 const client = dynamoClient;
 
@@ -52,6 +53,23 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const courseId_date = `${override.courseId}_${override.date}`;
     const legacyCourseId = override.courseId.toString();
+
+    const courseResp = await client.send(
+      new GetItemCommand({
+        TableName: coursesTable,
+        Key: { tenantId: { S: tenantId }, courseId: { S: legacyCourseId } },
+        ConsistentRead: true,
+      }),
+    );
+    if (!courseResp.Item) {
+      return { statusCode: 404, body: JSON.stringify({ error: 'Course not found' }) };
+    }
+    const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
+    const capacityError = validateParticipantsForCourse(participants, capacityFields);
+    if (capacityError) {
+      return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+    }
+
     const courseUid = await fetchCourseUidByLegacyCourseId(client, coursesTable, tenantId, legacyCourseId);
 
     const dynamoItem = {

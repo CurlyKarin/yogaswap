@@ -302,8 +302,8 @@ describe("CourseList", () => {
     await user.click(createButtons[createButtons.length - 1]);
     expect(screen.getByText(/Kursblock: z\. B\. Quartal/i)).toBeInTheDocument();
     await user.type(screen.getByLabelText("Kursname"), "Neuer Kurs");
-    await user.clear(screen.getByLabelText("Kapazität"));
-    await user.type(screen.getByLabelText("Kapazität"), "12");
+    await user.clear(screen.getByLabelText("Reguläre Kapazität"));
+    await user.type(screen.getByLabelText("Reguläre Kapazität"), "12");
     await user.click(screen.getByRole("button", { name: /^anlegen$/i }));
 
     await waitFor(() => {
@@ -318,7 +318,7 @@ describe("CourseList", () => {
     });
   });
 
-  it("zeigt Instructor-Aktionen deaktiviert", async () => {
+  it("zeigt für Instructor nur Überplanung aktiv, Admin-Aktionen deaktiviert", async () => {
     const instructorMembership: UserTenantMembership = {
       ...baseMembership,
       role: "instructor",
@@ -351,11 +351,9 @@ describe("CourseList", () => {
         .getAllByRole("button", { name: /kurs anlegen/i })
         .some((button) => button.hasAttribute("disabled")),
     ).toBe(true);
-    expect(
-      screen
-        .getAllByRole("button", { name: /kurs bearbeiten kurs a/i })
-        .some((button) => button.hasAttribute("disabled")),
-    ).toBe(true);
+    const overbookEdit = screen.getByRole("button", { name: /überplanung bearbeiten kurs a/i });
+    expect(overbookEdit).not.toHaveAttribute("disabled");
+    expect(screen.queryByRole("button", { name: /kurs bearbeiten kurs a/i })).toBeNull();
     expect(
       screen
         .getAllByRole("button", { name: /kurs löschen kurs a/i })

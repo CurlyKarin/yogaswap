@@ -17,6 +17,7 @@ import {
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
+import { resolveMaxCapacity, resolveOverbookLimit } from "shared/courseCapacity";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
 import type { SwapSettings } from "../types";
 
@@ -24,6 +25,7 @@ type Props = {
   course: Course;
   allCourses: Course[];
   currentUser: User;
+  showOverbookingDetails?: boolean;
   dates: Date[];
   overrides: CourseDateOverride[];
   swaps: Swap[];
@@ -49,6 +51,7 @@ export default function CourseCard({
   course,
   allCourses,
   currentUser,
+  showOverbookingDetails = false,
   dates,
   overrides,
   swaps,
@@ -87,7 +90,13 @@ export default function CourseCard({
   const participants = hasNoUpcomingDates ? course.participants : (override ? override.participants : course.participants);
   const swapped = hasNoUpcomingDates ? [] : (override?.swapped ?? []);
   const shortNotice = hasNoUpcomingDates ? [] : (override?.shortNoticeCancellations ?? []);
-  const freeSpots = course.capacity - participants.length;
+  const overbookLimit = resolveOverbookLimit(course);
+  const maxCapacity = resolveMaxCapacity(course);
+  const regularFreeSpots = Math.max(0, course.capacity - participants.length);
+  const overbookFreeSpots = Math.max(0, maxCapacity - Math.max(participants.length, course.capacity));
+  const visibleFreeSpots = showOverbookingDetails
+    ? regularFreeSpots + overbookFreeSpots
+    : regularFreeSpots;
   const waitlist = hasNoUpcomingDates ? [] : (override?.waitlist ?? []);
 
   const userNameLower = userName.toLowerCase();
@@ -271,8 +280,8 @@ export default function CourseCard({
       <div className="course-row">
         <div className="muted">Kapazität</div>
         <div>
-          {participants.length} / {course.capacity}
-          {freeSpots > 0 && <span className="free-slot"> · Platz frei!</span>}
+          {participants.length}/{course.capacity}
+          {showOverbookingDetails && overbookLimit > 0 && ` (+${overbookLimit})`}
         </div>
       </div>
 
@@ -324,10 +333,21 @@ export default function CourseCard({
               {name}
             </span>
           ))}
-          {freeSpots > 0 &&
-            Array.from({ length: freeSpots }).map((_, idx) => (
+          {visibleFreeSpots > 0 &&
+            Array.from({ length: regularFreeSpots }).map((_, idx) => (
               <span className="chip free" key={`free-${idx}`}>
                 frei
+              </span>
+            ))}
+          {showOverbookingDetails &&
+            overbookFreeSpots > 0 &&
+            Array.from({ length: overbookFreeSpots }).map((_, idx) => (
+              <span
+                className="chip overbook-free"
+                key={`overbook-free-${idx}`}
+                title="Platz in der Überplanung"
+              >
+                +frei
               </span>
             ))}
         </div>
