@@ -208,6 +208,16 @@ body {
   font-style: italic;
 }
 
+.chip.overbook-free {
+  background-color: #b2ebf2; /* Türkis für Überkapazität */
+  color: #0f4c5c;
+  font-style: italic;
+}
+
+.overbook-slot {
+  color: #0f4c5c;
+}
+
 
 .actions {
   display: flex;

@@ -897,6 +897,7 @@ export default function CourseList({
                 course={course}
                 allCourses={courses}
                 currentUser={currentUser}
+                showOverbookingDetails={canSeeCourseManagement}
                 dates={dates}
                 overrides={filteredOverrides}
                 swaps={swaps}
