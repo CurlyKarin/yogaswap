@@ -280,20 +280,8 @@ export default function CourseCard({
       <div className="course-row">
         <div className="muted">Kapazität</div>
         <div>
-          {participants.length} / {course.capacity}
-          {showOverbookingDetails && overbookLimit > 0 && (
-            <span className="muted small">
-              {" "}
-              (Überplanung +{overbookLimit}, max. {maxCapacity})
-            </span>
-          )}
-          {regularFreeSpots > 0 && <span className="free-slot"> · Platz frei!</span>}
-          {showOverbookingDetails && overbookFreeSpots > 0 && (
-            <span className="overbook-slot">
-              {" "}
-              · {overbookFreeSpots > 1 ? `${overbookFreeSpots} ` : ""}+frei
-            </span>
-          )}
+          {participants.length}/{course.capacity}
+          {showOverbookingDetails && overbookLimit > 0 && ` (+${overbookLimit})`}
         </div>
       </div>
 

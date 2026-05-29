@@ -302,8 +302,8 @@ describe("CourseList", () => {
     await user.click(createButtons[createButtons.length - 1]);
     expect(screen.getByText(/Kursblock: z\. B\. Quartal/i)).toBeInTheDocument();
     await user.type(screen.getByLabelText("Kursname"), "Neuer Kurs");
-    await user.clear(screen.getByLabelText("Kapazität"));
-    await user.type(screen.getByLabelText("Kapazität"), "12");
+    await user.clear(screen.getByLabelText("Reguläre Kapazität"));
+    await user.type(screen.getByLabelText("Reguläre Kapazität"), "12");
     await user.click(screen.getByRole("button", { name: /^anlegen$/i }));
 
     await waitFor(() => {

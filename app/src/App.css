@@ -214,8 +214,31 @@ body {
   font-style: italic;
 }
 
-.overbook-slot {
-  color: #0f4c5c;
+.course-capacity-breakdown {
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.course-capacity-breakdown-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.course-capacity-breakdown-list {
+  margin: 6px 0 0;
+  padding-left: 1.1rem;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.course-capacity-breakdown-list li + li {
+  margin-top: 4px;
 }
 
 

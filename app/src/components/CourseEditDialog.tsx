@@ -2,6 +2,7 @@ import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
 import CourseModalFrame from "./CourseModalFrame";
 import CoursePlannedEndField from "./CoursePlannedEndField";
+import CourseCapacityFields from "./CourseCapacityFields";
 
 type CourseEditorState = {
   id: number;
@@ -79,11 +80,6 @@ export default function CourseEditDialog({
             : "Stammdaten bearbeiten. Mitglieder und Termine werden im nächsten Schritt hier ergänzt."}
         </p>
         <div className="dialog-stack">
-          {overbookingOnlyMode && (
-            <p className="course-editor-inline-hint">
-              Reguläre Kapazität: <strong>{state.capacity}</strong> (nur Admin änderbar)
-            </p>
-          )}
           {!overbookingOnlyMode && (
           <input
             type="text"
@@ -119,30 +115,15 @@ export default function CourseEditDialog({
             className="dialog-field"
           />
           )}
-          {!overbookingOnlyMode && (
-          <input
-            type="number"
-            aria-label="Kapazität bearbeiten"
-            min={0}
-            value={state.capacity}
-            onChange={(event) => onChange({ ...state, capacity: event.target.value })}
-            disabled={saving}
-            className="dialog-field"
+          <CourseCapacityFields
+            capacity={state.capacity}
+            overbookLimit={state.overbookLimit}
+            saving={saving}
+            showCapacityInput={!overbookingOnlyMode}
+            capacityDisabled={overbookingOnlyMode}
+            onCapacityChange={(capacity) => onChange({ ...state, capacity })}
+            onOverbookLimitChange={(overbookLimit) => onChange({ ...state, overbookLimit })}
           />
-          )}
-          <input
-            type="number"
-            aria-label="Überplanung bearbeiten"
-            min={0}
-            value={state.overbookLimit}
-            onChange={(event) => onChange({ ...state, overbookLimit: event.target.value })}
-            disabled={saving}
-            className="dialog-field"
-          />
-          <p className="course-editor-inline-hint">
-            Max. Teilnehmer:{" "}
-            {Number.parseInt(state.capacity, 10) + Number.parseInt(state.overbookLimit || "0", 10)}.
-          </p>
           {!overbookingOnlyMode && (
             <>
               <select
