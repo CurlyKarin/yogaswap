@@ -178,6 +178,51 @@ test("skips stale first waitlist entry and promotes next valid pending swap", as
   expect(Array.isArray(body.overrides)).toBe(true);
 });
 
+test("does not promote from waitlist when regular capacity is full even with overbook headroom", async () => {
+  const pendingSwap = {
+    swapId: { S: "2025-10-01_1_2025-10-02_2" },
+    user: { S: "Alice" },
+    fromCourseId: { N: "1" },
+    fromDate: { S: "2025-10-01" },
+    toCourseId: { N: "2" },
+    toDate: { S: "2025-10-02" },
+    status: { S: "pending" },
+  };
+  const course = {
+    id: { N: "2" },
+    name: { S: "Yoga" },
+    weekday: { S: "Tuesday" },
+    time: { S: "10:00" },
+    capacity: { N: "2" },
+    overbookLimit: { N: "1" },
+    participants: { L: [] },
+    dates: { L: [{ S: "2025-10-02" }] },
+  };
+  const overrideAtRegularCapacity = {
+    courseId: { S: "2" },
+    date: { S: "2025-10-02" },
+    participants: { L: [{ S: "Bob" }, { S: "Carol" }] },
+    swapped: { L: [] },
+    waitlist: { L: [{ S: "Alice" }] },
+  };
+
+  ddbMock
+    .on(QueryCommand)
+    .resolvesOnce({ Items: [pendingSwap] })
+    .resolvesOnce({ Items: [course] })
+    .resolvesOnce({ Items: [overrideAtRegularCapacity] })
+    .resolvesOnce({ Items: [pendingSwap] })
+    .resolvesOnce({ Items: [overrideAtRegularCapacity] });
+
+  const event = makeEvent({ currentUser: "Alice" });
+  const result = await handler(event);
+
+  expect(result.statusCode).toBe(200);
+  const body = JSON.parse(result.body);
+  expect(body.promoted).toBe(0);
+  expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
+});
+
 test("does not promote when target term is inside cutoff window", async () => {
   // TEST_NOW = 2025-09-01T06:00:00.000Z; target 06:30 lies inside default 60-minute cutoff.
   const pendingSwap = {

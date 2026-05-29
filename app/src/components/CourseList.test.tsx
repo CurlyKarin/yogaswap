@@ -318,7 +318,7 @@ describe("CourseList", () => {
     });
   });
 
-  it("zeigt Instructor-Aktionen deaktiviert", async () => {
+  it("zeigt für Instructor nur Überplanung aktiv, Admin-Aktionen deaktiviert", async () => {
     const instructorMembership: UserTenantMembership = {
       ...baseMembership,
       role: "instructor",
@@ -351,11 +351,9 @@ describe("CourseList", () => {
         .getAllByRole("button", { name: /kurs anlegen/i })
         .some((button) => button.hasAttribute("disabled")),
     ).toBe(true);
-    expect(
-      screen
-        .getAllByRole("button", { name: /kurs bearbeiten kurs a/i })
-        .some((button) => button.hasAttribute("disabled")),
-    ).toBe(true);
+    const overbookEdit = screen.getByRole("button", { name: /überplanung bearbeiten kurs a/i });
+    expect(overbookEdit).not.toHaveAttribute("disabled");
+    expect(screen.queryByRole("button", { name: /kurs bearbeiten kurs a/i })).toBeNull();
     expect(
       screen
         .getAllByRole("button", { name: /kurs löschen kurs a/i })

@@ -17,6 +17,7 @@ import {
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
+import { resolveMaxCapacity, resolveOverbookLimit } from "shared/courseCapacity";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
 import type { SwapSettings } from "../types";
 
@@ -87,7 +88,9 @@ export default function CourseCard({
   const participants = hasNoUpcomingDates ? course.participants : (override ? override.participants : course.participants);
   const swapped = hasNoUpcomingDates ? [] : (override?.swapped ?? []);
   const shortNotice = hasNoUpcomingDates ? [] : (override?.shortNoticeCancellations ?? []);
-  const freeSpots = course.capacity - participants.length;
+  const overbookLimit = resolveOverbookLimit(course);
+  const maxCapacity = resolveMaxCapacity(course);
+  const freeSpots = maxCapacity - participants.length;
   const waitlist = hasNoUpcomingDates ? [] : (override?.waitlist ?? []);
 
   const userNameLower = userName.toLowerCase();
@@ -272,6 +275,12 @@ export default function CourseCard({
         <div className="muted">Kapazität</div>
         <div>
           {participants.length} / {course.capacity}
+          {overbookLimit > 0 && (
+            <span className="muted small">
+              {" "}
+              (Überplanung +{overbookLimit}, max. {maxCapacity})
+            </span>
+          )}
           {freeSpots > 0 && <span className="free-slot"> · Platz frei!</span>}
         </div>
       </div>

@@ -34,6 +34,7 @@ function mapItemToCourseResponse(
     weekday: item.weekday.S!,
     time: item.time.S!,
     capacity: Number(item.capacity.N!),
+    overbookLimit: item.overbookLimit?.N ? Number(item.overbookLimit.N) : 0,
     status: effectiveStatus,
     planningMode,
     visibilityMode,

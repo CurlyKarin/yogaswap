@@ -25,6 +25,7 @@ type CreateCourseBody = {
   weekday?: string;
   time?: string;
   capacity?: number;
+  overbookLimit?: number;
   status?: string;
   planningMode?: string;
   visibilityMode?: string;
@@ -103,6 +104,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const excludedDatesInput = normalizeDateListInput(body.excludedDates);
   const includedDatesInput = normalizeDateListInput(body.includedDates);
   const capacity = Number.isFinite(body.capacity) ? Number(body.capacity) : NaN;
+  const overbookLimit = Number.isFinite(body.overbookLimit) ? Number(body.overbookLimit) : 0;
 
   if (!name) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing course name" }) };
@@ -115,6 +117,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
   if (!Number.isInteger(capacity) || capacity < 0) {
     return { statusCode: 400, body: JSON.stringify({ error: "Capacity must be a non-negative integer" }) };
+  }
+  if (!Number.isInteger(overbookLimit) || overbookLimit < 0) {
+    return { statusCode: 400, body: JSON.stringify({ error: "Overbook limit must be a non-negative integer" }) };
   }
   if (!COURSE_STATUSES.has(status)) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid status value" }) };
@@ -243,6 +248,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       weekday: { S: weekday },
       time: { S: time },
       capacity: { N: String(capacity) },
+      overbookLimit: { N: String(overbookLimit) },
       status: { S: effectiveStatus },
       participants: { L: [] },
       dates: { L: visibleDates.map((entry) => ({ S: entry })) },
@@ -278,6 +284,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         weekday,
         time,
         capacity,
+        overbookLimit,
         status: effectiveStatus,
         planningMode,
         visibilityMode: effectiveVisibilityMode,

@@ -10,7 +10,7 @@ type CourseMembersDialogProps = {
   saving: boolean;
   courseName?: string;
   courseId?: number;
-  capacity: number;
+  maxCapacity: number;
   initialParticipants: string[];
   formError?: string | null;
   modalRef: RefObject<HTMLDivElement | null>;
@@ -24,7 +24,7 @@ export default function CourseMembersDialog({
   saving,
   courseName,
   courseId,
-  capacity,
+  maxCapacity,
   initialParticipants,
   formError,
   modalRef,
@@ -194,8 +194,8 @@ export default function CourseMembersDialog({
   const toggleParticipant = (userId: string) => {
     if (saving) return;
     const alreadySelected = selectedParticipants.some((entry) => entry.toLowerCase() === userId.toLowerCase());
-    if (!alreadySelected && selectedParticipants.length >= capacity) {
-      setLocalError(`Maximal ${capacity} Teilnehmer können zugeordnet werden.`);
+    if (!alreadySelected && selectedParticipants.length >= maxCapacity) {
+      setLocalError(`Maximal ${maxCapacity} Teilnehmer können zugeordnet werden.`);
       return;
     }
 
@@ -234,8 +234,8 @@ export default function CourseMembersDialog({
 
   const handleSave = async () => {
     if (!courseId) return;
-    if (selectedParticipants.length > capacity) {
-      setLocalError(`Maximal ${capacity} Teilnehmer können zugeordnet werden.`);
+    if (selectedParticipants.length > maxCapacity) {
+      setLocalError(`Maximal ${maxCapacity} Teilnehmer können zugeordnet werden.`);
       return;
     }
     await onSaveParticipants(courseId, selectedParticipants);
@@ -311,7 +311,7 @@ export default function CourseMembersDialog({
       </p>
       <div className="dialog-stack">
         <p className="course-editor-note" style={{ marginTop: 0 }}>
-          Zugeordnet: <strong>{selectedParticipants.length}</strong> / {capacity}
+          Zugeordnet: <strong>{selectedParticipants.length}</strong> / {maxCapacity}
         </p>
         <div>
           <p className="course-editor-note" style={{ marginBottom: 4 }}>
@@ -397,7 +397,7 @@ export default function CourseMembersDialog({
           >
             {filteredParticipants.map((entry, index) => {
               const checked = selectedParticipants.some((value) => value.toLowerCase() === entry.userId.toLowerCase());
-              const atCapacity = selectedParticipants.length >= capacity;
+              const atCapacity = selectedParticipants.length >= maxCapacity;
               const isActive = index === activeListIndex;
               const status = getStatusPresentation(entry.status);
               return (
@@ -461,7 +461,7 @@ export default function CourseMembersDialog({
             })}
           </div>
         )}
-        {selectedParticipants.length >= capacity && (
+        {selectedParticipants.length >= maxCapacity && (
           <p className="course-editor-note">Kapazität erreicht. Für weitere Auswahl zuerst abwählen.</p>
         )}
         {staleAssignments.length > 0 && (
@@ -509,7 +509,7 @@ export default function CourseMembersDialog({
           type="button"
           className="btn-primary modal-action-btn"
           onClick={handleSave}
-          disabled={saving || loadingParticipants || !courseId || selectedParticipants.length > capacity}
+          disabled={saving || loadingParticipants || !courseId || selectedParticipants.length > maxCapacity}
         >
           {saving ? "Speichere..." : "Mitglieder speichern"}
         </button>

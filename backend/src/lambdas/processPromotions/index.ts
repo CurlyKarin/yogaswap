@@ -4,6 +4,7 @@ import {
   Swap,
   CourseDateOverride,
   Course,
+  canPromoteFromWaitlist,
   resolveCancellationSwapCutoffMinutes,
 } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
@@ -216,6 +217,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         weekday: item.weekday.S!,
         time: item.time.S!,
         capacity: Number(item.capacity.N!),
+        overbookLimit: item.overbookLimit?.N ? Number(item.overbookLimit.N) : 0,
         participants: item.participants.L ? item.participants.L.map((p: any) => p.S) : [],
         dates: item.dates.L ? item.dates.L.map((d: any) => d.S) : [],
       }));
@@ -248,9 +250,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         const overrideCourse = courses.find((c) => c.id === override.courseId);
         if (!overrideCourse) continue;
 
-        const freeSpots = overrideCourse.capacity - override.participants.length;
-        console.log('freeSpots:', freeSpots);
-        if (freeSpots <= 0) continue;
+        const participantCount = override.participants.length;
+        console.log('waitlist promotion check:', {
+          participantCount,
+          capacity: overrideCourse.capacity,
+          overbookLimit: overrideCourse.overbookLimit ?? 0,
+        });
+        if (!canPromoteFromWaitlist(participantCount, overrideCourse)) continue;
 
         // Wähle promotedUser: currentUser priorisieren, sonst ersten Waitlist-Eintrag
         // mit passendem pending Swap (stale Waitlist-Einträge überspringen).

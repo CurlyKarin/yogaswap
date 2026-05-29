@@ -27,6 +27,7 @@ import {
   ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
 } from "shared/courseEditPolicy";
 import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
+import { resolveMaxCapacity, validateOverbookLimit } from "shared/courseCapacity";
 import { getSwaps } from "../api/swaps";
 import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
@@ -58,6 +59,7 @@ type CourseEditorState = {
   weekday: string;
   time: string;
   capacity: string;
+  overbookLimit: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
   plannedEndDate: string | null;
@@ -68,6 +70,7 @@ type CourseCreateState = {
   weekday: string;
   time: string;
   capacity: string;
+  overbookLimit: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
 };
@@ -185,6 +188,7 @@ function toEditorState(course: Course): CourseEditorState {
     weekday: course.weekday,
     time: course.time,
     capacity: String(course.capacity),
+    overbookLimit: String(course.overbookLimit ?? 0),
     status: course.status ?? "active",
     planningMode: course.planningMode ?? "bounded_series",
     plannedEndDate: course.plannedEndDate?.trim() ? course.plannedEndDate.trim() : null,
@@ -224,6 +228,7 @@ export default function CourseList({
     weekday: "Mon",
     time: "18:00",
     capacity: "10",
+    overbookLimit: "0",
     status: "draft",
     planningMode: "bounded_series",
   });
@@ -262,6 +267,8 @@ export default function CourseList({
   const isInstructor = resolvedRole === "instructor";
   const canSeeCourseManagement = isAdmin || isInstructor;
   const canManageCourses = isAdmin;
+  const canConfigureOverbooking = isAdmin || isInstructor;
+  const editOverbookingOnly = canConfigureOverbooking && !canManageCourses;
 
   const fetchData = useCallback(async () => {
     try {
@@ -375,6 +382,7 @@ export default function CourseList({
       weekday: "Mon",
       time: "18:00",
       capacity: "10",
+      overbookLimit: "0",
       status: "draft",
       planningMode: "bounded_series",
     });
@@ -408,6 +416,12 @@ export default function CourseList({
 
   const parseCapacity = (capacityText: string): number | null => {
     const parsed = Number.parseInt(capacityText, 10);
+    if (!Number.isInteger(parsed) || parsed < 0) return null;
+    return parsed;
+  };
+
+  const parseOverbookLimit = (overbookText: string): number | null => {
+    const parsed = Number.parseInt(overbookText, 10);
     if (!Number.isInteger(parsed) || parsed < 0) return null;
     return parsed;
   };
@@ -468,10 +482,13 @@ export default function CourseList({
 
   const createNameValid = createState.name.trim().length > 0;
   const createCapacityValid = parseCapacity(createState.capacity) != null;
-  const canSubmitCreate = canManageCourses && !saving && createNameValid && createCapacityValid;
+  const createOverbookValid = parseOverbookLimit(createState.overbookLimit) != null;
+  const canSubmitCreate =
+    canManageCourses && !saving && createNameValid && createCapacityValid && createOverbookValid;
 
   const editNameValid = (editState?.name.trim().length ?? 0) > 0;
   const editCapacityValid = editState ? parseCapacity(editState.capacity) != null : false;
+  const editOverbookValid = editState ? parseOverbookLimit(editState.overbookLimit) != null : false;
   const editChanged =
     !!editState &&
     !!editInitialState &&
@@ -479,10 +496,15 @@ export default function CourseList({
       editState.weekday !== editInitialState.weekday ||
       editState.time !== editInitialState.time ||
       editState.capacity !== editInitialState.capacity ||
+      editState.overbookLimit !== editInitialState.overbookLimit ||
       editState.status !== editInitialState.status ||
       editState.planningMode !== editInitialState.planningMode ||
       editState.plannedEndDate !== editInitialState.plannedEndDate);
-  const canSubmitEdit = canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
+  const editOverbookChanged =
+    !!editState && !!editInitialState && editState.overbookLimit !== editInitialState.overbookLimit;
+  const canSubmitEdit = editOverbookingOnly
+    ? canConfigureOverbooking && !saving && !!editState && editOverbookValid && editOverbookChanged
+    : canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
 
   const handleCreateDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     handleFocusTrap(event, createModalRef);
@@ -560,6 +582,16 @@ export default function CourseList({
       setFormError("Kapazität muss eine nicht-negative ganze Zahl sein.");
       return;
     }
+    const overbookLimit = parseOverbookLimit(createState.overbookLimit);
+    if (overbookLimit == null) {
+      setFormError("Überplanung muss eine nicht-negative ganze Zahl sein.");
+      return;
+    }
+    const overbookError = validateOverbookLimit(capacity, overbookLimit);
+    if (overbookError) {
+      setFormError(overbookError);
+      return;
+    }
 
     setSaving(true);
     setFormError(null);
@@ -569,6 +601,7 @@ export default function CourseList({
         weekday: createState.weekday,
         time: createState.time,
         capacity,
+        overbookLimit,
         status: createState.status,
         ...buildSchedulingFromMode(createState.planningMode),
       });
@@ -583,7 +616,39 @@ export default function CourseList({
   };
 
   const saveEditCourse = async () => {
-    if (!canManageCourses || !editState || !editChanged) return;
+    if (!editState) return;
+    if (editOverbookingOnly) {
+      if (!canConfigureOverbooking || !editOverbookChanged) return;
+      const overbookLimit = parseOverbookLimit(editState.overbookLimit);
+      if (overbookLimit == null) {
+        setFormError("Überplanung muss eine nicht-negative ganze Zahl sein.");
+        return;
+      }
+      const courseForEdit = visibleCourses.find((c) => c.id === editState.id);
+      if (!courseForEdit) {
+        setFormError("Kurs nicht gefunden.");
+        return;
+      }
+      const overbookError = validateOverbookLimit(courseForEdit.capacity, overbookLimit);
+      if (overbookError) {
+        setFormError(overbookError);
+        return;
+      }
+      setSaving(true);
+      setFormError(null);
+      try {
+        await updateCourse(courseApiPathKey(courseForEdit), { overbookLimit });
+        closeEditModal();
+        await fetchData();
+      } catch (err) {
+        console.error("Failed to update course overbooking", err);
+        setFormError(err instanceof Error ? err.message : "Überplanung konnte nicht gespeichert werden.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+    if (!canManageCourses || !editChanged) return;
     const trimmedName = editState.name.trim();
     if (!trimmedName) {
       setFormError("Bitte einen Kursnamen eingeben.");
@@ -592,6 +657,16 @@ export default function CourseList({
     const capacity = parseCapacity(editState.capacity);
     if (capacity == null) {
       setFormError("Kapazität muss eine nicht-negative ganze Zahl sein.");
+      return;
+    }
+    const overbookLimit = parseOverbookLimit(editState.overbookLimit);
+    if (overbookLimit == null) {
+      setFormError("Überplanung muss eine nicht-negative ganze Zahl sein.");
+      return;
+    }
+    const overbookError = validateOverbookLimit(capacity, overbookLimit);
+    if (overbookError) {
+      setFormError(overbookError);
       return;
     }
 
@@ -639,6 +714,7 @@ export default function CourseList({
         weekday: editState.weekday,
         time: editState.time,
         capacity,
+        overbookLimit,
         status: editState.status,
         ...(planningModeChanged ? buildSchedulingFromMode(editState.planningMode) : {}),
         ...(plannedEndChanged
@@ -722,7 +798,9 @@ export default function CourseList({
             <h3 className="course-management-title">Kurse verwalten</h3>
             {!canManageCourses && (
               <span className="muted" style={{ fontSize: 12 }}>
-                Nur Admin kann Kurse anlegen, bearbeiten oder löschen.
+                {canConfigureOverbooking
+                  ? "Trainerin: Überplanung pro Kurs bearbeiten; Anlegen/Löschen nur Admin."
+                  : "Nur Admin kann Kurse anlegen, bearbeiten oder löschen."}
               </span>
             )}
           </div>
@@ -786,9 +864,19 @@ export default function CourseList({
                     </button>
                     <button
                       type="button"
-                      title={canManageCourses ? "Kurs bearbeiten" : "Nur Admin kann Kurse bearbeiten"}
-                      aria-label={`Kurs bearbeiten ${course.name}`}
-                      disabled={!canManageCourses || saving}
+                      title={
+                        canManageCourses
+                          ? "Kurs bearbeiten"
+                          : canConfigureOverbooking
+                            ? "Überplanung bearbeiten"
+                            : "Nur Admin kann Kurse bearbeiten"
+                      }
+                      aria-label={
+                        canManageCourses
+                          ? `Kurs bearbeiten ${course.name}`
+                          : `Überplanung bearbeiten ${course.name}`
+                      }
+                      disabled={!(canManageCourses || canConfigureOverbooking) || saving}
                       onClick={() => openEditModal(course)}
                     >
                       <Pencil size={14} aria-hidden="true" />
@@ -874,6 +962,7 @@ export default function CourseList({
         }
         rollingInactiveHint={ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE}
         rollingPlanningHorizonWeeks={resolveRollingPlanningHorizonWeeks(tenant?.settings)}
+        overbookingOnlyMode={editOverbookingOnly}
         onKeyDown={handleEditDialogKeyDown}
         onClose={closeEditModal}
         onSave={saveEditCourse}
@@ -885,7 +974,9 @@ export default function CourseList({
         saving={saving}
         courseId={membersTargetCourse?.id}
         courseName={membersTargetCourse?.name}
-        capacity={membersTargetCourse?.capacity ?? 0}
+        maxCapacity={
+          membersTargetCourse ? resolveMaxCapacity(membersTargetCourse) : 0
+        }
         initialParticipants={membersTargetCourse?.participants ?? []}
         formError={formError}
         modalRef={membersModalRef}

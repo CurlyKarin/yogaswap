@@ -7,6 +7,7 @@ type CourseCreateState = {
   weekday: string;
   time: string;
   capacity: string;
+  overbookLimit: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
 };
@@ -95,6 +96,19 @@ export default function CourseCreateDialog({
             disabled={saving}
             className="dialog-field"
           />
+          <input
+            type="number"
+            aria-label="Überplanung"
+            min={0}
+            value={state.overbookLimit}
+            onChange={(event) => onChange({ ...state, overbookLimit: event.target.value })}
+            disabled={saving}
+            className="dialog-field"
+          />
+          <p className="course-editor-inline-hint">
+            Überplanung = zusätzliche Plätze über der regulären Kapazität (max.{" "}
+            {Number.parseInt(state.capacity || "0", 10) + Number.parseInt(state.overbookLimit || "0", 10)}).
+          </p>
           <select
             aria-label="Status"
             value={state.status}
