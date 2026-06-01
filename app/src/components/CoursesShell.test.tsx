@@ -8,6 +8,15 @@ vi.mock("./CourseList", () => ({
   default: () => <div>CourseList Mock</div>,
 }));
 
+vi.mock("../hooks/useCoursesData", () => ({
+  useCoursesData: () => ({
+    loading: false,
+    error: null,
+    weekCourseRows: [],
+    overrides: [],
+  }),
+}));
+
 vi.mock("./CourseWeekView", () => ({
   default: () => <div>CourseWeekView Mock</div>,
 }));

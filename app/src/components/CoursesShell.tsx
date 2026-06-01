@@ -4,6 +4,7 @@ import CourseList from "./CourseList";
 import CourseWeekView from "./CourseWeekView";
 import { User, Tenant, UserTenantMembership, DEFAULT_TENANT_ID } from "shared/types";
 import { addWeeks, formatWeekNavLabel, startOfWeekMonday } from "../lib/courseWeek";
+import { useCoursesData } from "../hooks/useCoursesData";
 
 export type CourseViewMode = "week" | "courses";
 
@@ -34,6 +35,25 @@ export default function CoursesShell({
 
   const [viewMode, setViewMode] = useState<CourseViewMode>("week");
   const [weekAnchor, setWeekAnchor] = useState(() => startOfWeekMonday(new Date()));
+
+  const {
+    loading,
+    error,
+    courses,
+    weekCourseRows,
+    overrides,
+    swaps,
+    confirmSwap,
+    requestSwap,
+    cancelSwap,
+    onToggleAbsence,
+  } = useCoursesData({
+    currentUser,
+    tenant,
+    membership,
+    forceParticipantView,
+    weekAnchor,
+  });
 
   useEffect(() => {
     if (!canSeeCourseManagement && viewMode === "courses") {
@@ -102,7 +122,23 @@ export default function CoursesShell({
           <p className="muted course-views-hint">
             Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
           </p>
-          <CourseWeekView weekAnchor={weekAnchor} onWeekAnchorChange={setWeekAnchor} />
+          <CourseWeekView
+            weekAnchor={weekAnchor}
+            onWeekAnchorChange={setWeekAnchor}
+            loading={loading}
+            error={error}
+            rows={weekCourseRows}
+            courses={courses}
+            overrides={overrides}
+            swaps={swaps}
+            currentUser={currentUser}
+            canSeeCourseManagement={canSeeCourseManagement}
+            tenantSettings={tenant?.settings}
+            onToggleAbsence={onToggleAbsence}
+            confirmSwap={confirmSwap}
+            requestSwap={requestSwap}
+            cancelSwap={cancelSwap}
+          />
         </>
       )}
 

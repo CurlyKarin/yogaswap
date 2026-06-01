@@ -36,6 +36,12 @@ type Props = {
   confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   requestSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   cancelSwap: (swap: Swap, clickedCourseId: number) => void;
+  /** Wochenansicht: vorausgewählter Termin beim Wechsel der Kalenderwoche. */
+  initialSelectedDate?: Date;
+  /** Wochenansicht: z. B. Kalenderwoche anpassen, wenn ein anderer Termin gewählt wird. */
+  onDateChange?: (date: Date) => void;
+  /** Wochenansicht: Termine der angezeigten KW auch in der Vergangenheit im Dropdown. */
+  includePastTermsInSelect?: boolean;
 };
 
 
@@ -61,6 +67,9 @@ export default function CourseCard({
   confirmSwap,
   requestSwap,
   cancelSwap,
+  initialSelectedDate,
+  onDateChange,
+  includePastTermsInSelect = false,
 }: Props) {
   const swapWindow: SwapSettings = useMemo(
     () => resolveSwapWindow(tenantSettings),
@@ -68,7 +77,7 @@ export default function CourseCard({
   );
 
   const [selectedDate, setSelectedDate] = useState<string>(
-    dates[0]?.toISOString() || ""
+    () => (initialSelectedDate ?? dates[0])?.toISOString() || "",
   );
   const [swapDateIso, setSwapDateIso] = useState<string | null>(null);
   const [swapDateIsoWaitlist, setSwapDateIsoWaitlist] = useState<string | null>(null);
@@ -246,10 +255,17 @@ export default function CourseCard({
     : null;
 
   useEffect(() => {
+    if (includePastTermsInSelect) return;
     if (showLastTermInSelect && lastOccurrenceDate) {
       setSelectedDate(lastOccurrenceDate.toISOString());
     }
-  }, [showLastTermInSelect, lastOccurrenceIso, course.time, lastOccurrenceDate]);
+  }, [includePastTermsInSelect, showLastTermInSelect, lastOccurrenceIso, course.time, lastOccurrenceDate]);
+
+  const initialSelectedTime = initialSelectedDate?.getTime();
+  useEffect(() => {
+    if (initialSelectedTime == null) return;
+    setSelectedDate(new Date(initialSelectedTime).toISOString());
+  }, [initialSelectedTime]);
 
   return (
     <div
@@ -289,7 +305,11 @@ export default function CourseCard({
         <div className="muted">Termine:</div>
         <select
           value={hasNoUpcomingDates && !showLastTermInSelect ? "" : selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
+          onChange={(e) => {
+            const next = new Date(e.target.value);
+            setSelectedDate(e.target.value);
+            onDateChange?.(next);
+          }}
           disabled={hasNoUpcomingDates && !showLastTermInSelect}
         >
           {showLastTermInSelect && lastOccurrenceDate ? (
@@ -299,13 +319,13 @@ export default function CourseCard({
           ) : hasNoUpcomingDates ? (
             <option value="">—</option>
           ) : (
-            dates
-              .filter((d) => d >= new Date())
-              .map((date, index) => (
+            (includePastTermsInSelect ? dates : dates.filter((d) => d >= new Date())).map(
+              (date, index) => (
                 <option key={index} value={date.toISOString()}>
                   {date.toLocaleDateString()}
                 </option>
-              ))
+              ),
+            )
           )}
         </select>
       </div>

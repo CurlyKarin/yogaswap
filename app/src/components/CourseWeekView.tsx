@@ -1,29 +1,128 @@
+import { useCallback } from "react";
+import type { Course, CourseDateOverride, Swap, TenantSettings, User } from "shared/types";
+import { isWithinPostCourseEndGrace } from "shared/courseStatus";
 import { weekAnchorForOccurrence } from "../lib/courseWeek";
+import {
+  getWeekViewCardDates,
+  preferredWeekCardDate,
+  type WeekCourseRow,
+} from "../lib/courseWeekOccurrences";
+import CourseCard from "./CourseCard";
 
 type Props = {
   weekAnchor: Date;
   onWeekAnchorChange: (weekStart: Date) => void;
+  loading: boolean;
+  error: string | null;
+  rows: WeekCourseRow[];
+  courses: Course[];
+  overrides: CourseDateOverride[];
+  swaps: Swap[];
+  currentUser: User;
+  canSeeCourseManagement: boolean;
+  tenantSettings?: TenantSettings;
+  onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
+  confirmSwap: (
+    fromCourse: Course,
+    fromDateIso: string,
+    toCourseId: number,
+    toDateIso: string,
+    userName: string,
+  ) => void;
+  requestSwap: (
+    fromCourse: Course,
+    fromDateIso: string,
+    toCourseId: number,
+    toDateIso: string,
+    userName: string,
+  ) => void;
+  cancelSwap: (swap: Swap, clickedCourseId: number) => void;
 };
 
-/**
- * Platzhalter für #164 — Termine pro Kalenderwoche, Absagen/Ausschlüsse, Swap-Kontext.
- */
-export default function CourseWeekView({ weekAnchor, onWeekAnchorChange }: Props) {
-  const handleStubOccurrenceClick = () => {
-    const outsideWeek = new Date(weekAnchor);
-    outsideWeek.setDate(outsideWeek.getDate() + 14);
-    onWeekAnchorChange(weekAnchorForOccurrence(outsideWeek, weekAnchor));
-  };
+export default function CourseWeekView({
+  weekAnchor,
+  onWeekAnchorChange,
+  loading,
+  error,
+  rows,
+  courses,
+  overrides,
+  swaps,
+  currentUser,
+  canSeeCourseManagement,
+  tenantSettings,
+  onToggleAbsence,
+  confirmSwap,
+  requestSwap,
+  cancelSwap,
+}: Props) {
+  const handleDateChange = useCallback(
+    (date: Date) => {
+      const nextAnchor = weekAnchorForOccurrence(date, weekAnchor);
+      if (nextAnchor.getTime() !== weekAnchor.getTime()) {
+        onWeekAnchorChange(nextAnchor);
+      }
+    },
+    [weekAnchor, onWeekAnchorChange],
+  );
+
+  if (loading) {
+    return (
+      <div className="course-week-view" role="status" aria-live="polite">
+        Loading...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="course-week-view" role="alert">
+        {error}
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="course-week-view muted" role="status" style={{ textAlign: "center", padding: "2rem" }}>
+        In dieser Kalenderwoche sind keine Termine sichtbar.
+      </div>
+    );
+  }
 
   return (
-    <div className="course-week-view course-week-view--stub" role="region" aria-label="Wochenansicht">
-      <p className="muted course-week-view-stub-note">
-        Wochenansicht (#164) — hier erscheinen Termine aller sichtbaren Kurse für die gewählte
-        Kalenderwoche (inkl. abgesagter und ausgeschlossener Termine).
-      </p>
-      <button type="button" className="modal-action-btn" onClick={handleStubOccurrenceClick}>
-        Stub: +2 Wochen springen
-      </button>
+    <div className="course-week-view grid" role="region" aria-label="Wochenansicht">
+      {rows.map(({ course }) => {
+        const cardDates = getWeekViewCardDates(course, weekAnchor);
+        const initialSelectedDate = preferredWeekCardDate(course, weekAnchor);
+
+        return (
+          <div key={`${course.id}-${weekAnchor.getTime()}`}>
+            <CourseCard
+              course={course}
+              allCourses={courses}
+              currentUser={currentUser}
+              showOverbookingDetails={canSeeCourseManagement}
+              dates={cardDates}
+              overrides={overrides}
+              swaps={swaps}
+              participantActionsLocked={
+                !canSeeCourseManagement &&
+                ((course.status ?? "active") === "inactive" ||
+                  isWithinPostCourseEndGrace(course, tenantSettings))
+              }
+              tenantSettings={tenantSettings}
+              initialSelectedDate={initialSelectedDate}
+              includePastTermsInSelect
+              onDateChange={handleDateChange}
+              onToggleAbsence={onToggleAbsence}
+              confirmSwap={confirmSwap}
+              requestSwap={requestSwap}
+              cancelSwap={cancelSwap}
+            />
+          </div>
+        );
+      })}
     </div>
   );
-};
+}

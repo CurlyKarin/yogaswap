@@ -113,16 +113,96 @@ body {
   margin: 0 0 16px;
 }
 
-.course-week-view--stub {
-  padding: 1.5rem;
-  border: 1px dashed #d1d5db;
-  border-radius: 8px;
-  background: #fafafa;
-  text-align: center;
+.course-week-view {
+  text-align: left;
 }
 
-.course-week-view-stub-note {
-  margin: 0 0 12px;
+.course-week-view-empty,
+.course-week-view-error {
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.course-week-view-error {
+  color: #b91c1c;
+}
+
+.course-week-day-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.course-week-day-title {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.course-week-occurrence-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.course-week-occurrence-btn {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.course-week-occurrence-btn:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.course-week-occurrence--excluded .course-week-occurrence-btn {
+  background: #f9fafb;
+  border-style: dashed;
+  opacity: 0.92;
+}
+
+.course-week-occurrence-time {
+  font-weight: 600;
+  min-width: 3rem;
+}
+
+.course-week-occurrence-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.course-week-occurrence-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.course-week-occurrence-meta {
+  font-size: 12px;
+  width: 100%;
 }
 
 .course-management-toolbar {
