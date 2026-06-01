@@ -79,6 +79,20 @@ Gemeinsame Leiste über dem Kursbereich (`App` oder `CoursesShell`):
 
 Hinweis-Text unter dem Header („Termin absagen“ / „Tauschen“) ggf. nur in der Wochenansicht oder ansichtsspezifisch.
 
+### Vergangenheit (Nachlauf)
+
+Gilt einheitlich in der **Wochenansicht** für alle Rollen (Verwaltung über **Kursübersicht**):
+
+| Regel | Verhalten |
+|--------|-----------|
+| **Sichtbarkeit** | Vergangene Kalenderwoche: nur Kurse noch im Kalender-Nachlauf (`inactiveGraceDaysAfterCourseEnd`, vgl. #149), mit Termin in dieser KW. |
+| **Navigation ‹** | Solange mindestens ein Kurs im Kalender-Nachlauf liegt: frühestens bis zur KW des Kursendes, `inactiveGraceDaysAfterCourseEnd` Tage zurück ab heute und mindestens die **vorige** KW (`computeEarliestWeekAnchor`). ‹ deaktiviert, wenn kein Kurs mehr im Nachlauf liegt. |
+| **Vergangener Termin** | Keine Absage, kein neuer Tausch — Hinweis „keine Änderungen mehr möglich“. |
+| **Rechtzeitig abgesagt (RC)** | Nur dann weiter „Anderen Termin wählen“ / offene Tauschanfragen verwalten. |
+| **Bestehende Swaps** | Abbrechen/verwalten am vergangenen Termin weiter möglich. |
+
+Code: `app/src/lib/courseTermActions.ts`, Filter in `useCoursesData`, `CourseCard` (`canUseFullTermActions` vs. `canSwapFromPastCancelled`).
+
 ---
 
 ## Abgrenzung

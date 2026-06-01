@@ -13,6 +13,7 @@ import { getCourses } from "../api/courses";
 import { getOverrides } from "../api/overrides";
 import { getSwaps, getSwapsByStatus } from "../api/swaps";
 import { getCourseDates } from "../lib/dates";
+import { canShowCourseInPastWeek, computeEarliestWeekAnchor } from "../lib/courseTermActions";
 import { collectWeekOccurrences, type WeekCourseRow } from "../lib/courseWeekOccurrences";
 import { useCourseSwaps } from "../components/useCourseSwaps";
 
@@ -163,6 +164,8 @@ export function useCoursesData({
       const occurrences = collectWeekOccurrences(course, weekAnchor);
       if (occurrences.length === 0) continue;
 
+      if (!canShowCourseInPastWeek(course, weekAnchor, tenant?.settings)) continue;
+
       if (!canSeeCourseManagement) {
         const hasUpcoming = getCourseDates(course).length > 0;
         const show = canShowParticipantCourseCard(membershipForPermissions, tenant?.settings, course, {
@@ -184,6 +187,11 @@ export function useCoursesData({
     courseContext,
   ]);
 
+  const earliestWeekAnchor = useMemo(
+    () => computeEarliestWeekAnchor(visibleCourses, tenant?.settings),
+    [visibleCourses, tenant?.settings],
+  );
+
   return {
     loading,
     error,
@@ -193,6 +201,7 @@ export function useCoursesData({
     swaps,
     visibleCourses,
     weekCourseRows,
+    earliestWeekAnchor,
     canSeeCourseManagement,
     membershipForPermissions,
     confirmSwap: swapHandlers.confirmSwap,

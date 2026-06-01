@@ -47,6 +47,7 @@ export default function CoursesShell({
     requestSwap,
     cancelSwap,
     onToggleAbsence,
+    earliestWeekAnchor,
   } = useCoursesData({
     currentUser,
     tenant,
@@ -62,6 +63,7 @@ export default function CoursesShell({
   }, [canSeeCourseManagement, viewMode]);
 
   const weekLabel = formatWeekNavLabel(weekAnchor);
+  const canGoToPreviousWeek = weekAnchor.getTime() > earliestWeekAnchor.getTime();
 
   return (
     <>
@@ -93,7 +95,13 @@ export default function CoursesShell({
               type="button"
               className="course-week-nav-btn"
               aria-label="Vorherige Woche"
-              onClick={() => setWeekAnchor((prev) => addWeeks(prev, -1))}
+              disabled={!canGoToPreviousWeek}
+              onClick={() =>
+                setWeekAnchor((prev) => {
+                  const next = addWeeks(prev, -1);
+                  return next.getTime() < earliestWeekAnchor.getTime() ? earliestWeekAnchor : next;
+                })
+              }
             >
               <ChevronLeft size={18} aria-hidden="true" />
             </button>

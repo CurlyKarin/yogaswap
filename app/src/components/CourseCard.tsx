@@ -19,6 +19,10 @@ import {
 } from "shared/cancellationSwapCutoff";
 import { resolveMaxCapacity, resolveOverbookLimit } from "shared/courseCapacity";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
+import {
+  canRequestSwapFromPastCancelledOrigin,
+  isOccurrenceInPast,
+} from "../lib/courseTermActions";
 import type { SwapSettings } from "../types";
 
 type Props = {
@@ -241,8 +245,26 @@ export default function CourseCard({
       ),
     [swaps, userName, course.id],
   );
-  const canUseTermActions =
-    !participantActionsLocked && hasUpcomingDates && (isParticipant || originallyParticipant);
+  const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
+  const canUseFullTermActions =
+    !participantActionsLocked &&
+    hasUpcomingDates &&
+    (isParticipant || originallyParticipant) &&
+    !isPastOccurrence;
+  const canSwapFromPastCancelled = canRequestSwapFromPastCancelledOrigin({
+    isoDate: selectedDateKey,
+    courseTime: course.time,
+    tenantSettings,
+    override,
+    userName,
+    participants,
+    originallyParticipant,
+  });
+  const showPastTermSwapActions =
+    !participantActionsLocked &&
+    isPastOccurrence &&
+    (isParticipant || originallyParticipant || hasCancelled) &&
+    (swapForThisTerm != null || canSwapFromPastCancelled);
 
   const inactiveNotice = participantActionsLocked
     ? showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
@@ -401,7 +423,7 @@ export default function CourseCard({
         </div>
       )}
 
-      {canUseTermActions ? (
+      {canUseFullTermActions ? (
         <div className="actions">
           {swapForThisTerm ? (
             <>
@@ -504,6 +526,49 @@ export default function CourseCard({
               )}
         </div>
 
+      ) : showPastTermSwapActions ? (
+        <div className="actions">
+          {swapForThisTerm ? (
+            <button
+              className="secondary danger"
+              onClick={() => cancelSwap(swapForThisTerm, course.id)}
+            >
+              {swapForThisTerm.status === "pending"
+                ? "Tauschanfragen abbrechen"
+                : "Tausch abbrechen"}
+            </button>
+          ) : canSwapFromPastCancelled ? (
+            <>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setSwapDateIso(null);
+                  setSwapDateIsoWaitlist(null);
+                  setShowSwapModal(true);
+                }}
+              >
+                Anderen Termin wählen
+              </button>
+              {hasPendingRequestsFromOrigin && (
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    setSwapDateIso(null);
+                    setSwapDateIsoWaitlist(null);
+                    setShowSwapModal(true);
+                  }}
+                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
+                >
+                  Weitere Tauschanfrage
+                </button>
+              )}
+            </>
+          ) : null}
+        </div>
+      ) : isPastOccurrence && !participantActionsLocked ? (
+        <p className="muted small course-past-term-note" role="status">
+          Vergangener Termin — keine Änderungen mehr möglich.
+        </p>
       ) : !participantActionsLocked && !hasNoUpcomingDates ? (
         <>
           {swapForWaitlist ? (
@@ -570,7 +635,7 @@ export default function CourseCard({
         </div>
       )}
       {/* Swap-Modal */}
-      {canUseTermActions && showSwapModal && (
+      {(canUseFullTermActions || canSwapFromPastCancelled) && showSwapModal && (
         <div className="modal-backdrop">
           <div className="modal">
             <h4>

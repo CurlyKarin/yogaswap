@@ -1,0 +1,171 @@
+import {
+  canCreateSwapFromOrigin,
+  isRegularCancellation,
+} from "shared/cancellationSwapCutoff";
+import {
+  addCalendarDaysIsoUtc,
+  buildCourseOccurrenceLocal,
+  courseEndDateIso,
+  DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
+  isWithinPostCourseEndGrace,
+  toIsoDateUtc,
+} from "shared/courseStatus";
+import type { Course, CourseDateOverride, TenantSettings } from "shared/types";
+import { addWeeks, startOfWeekMonday } from "./courseWeek";
+import { isWeekEntirelyInPast } from "./courseWeekOccurrences";
+
+function resolveGraceDays(settings?: TenantSettings): number {
+  const value = settings?.inactiveGraceDaysAfterCourseEnd;
+  return typeof value === "number" && value > 0 ? value : DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+}
+
+/** Kalendertage nach Kursende — gleiche Basis wie `canSeeCourse` für inaktive Kurse (#149). */
+export function isWithinParticipantGraceCalendar(
+  course: Pick<Course, "dates" | "time" | "seriesEndDate" | "visibleUntil" | "status" | "plannedEndDate">,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  const endIso = courseEndDateIso(course);
+  if (!endIso) return false;
+  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, resolveGraceDays(settings));
+  return toIsoDateUtc(now) <= lastGraceInclusiveIso;
+}
+
+/**
+ * Kurs gilt als „im Nachlauf“ für Wochenrückblick: innerhalb Grace-Tage nach Ende,
+ * ohne weitere Zukunftstermine (außer `inactive` — dort reicht Kalender-Nachlauf).
+ */
+export function isCourseInParticipantGrace(
+  course: Course,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  if (!isWithinParticipantGraceCalendar(course, settings, now)) return false;
+  const status = course.status ?? "active";
+  if (status === "inactive") return true;
+  return isWithinPostCourseEndGrace(course, settings, now);
+}
+
+/** Kalender-Nachlauf für ‹-Navigation und Sichtbarkeit vergangener KWs (vgl. #149). */
+export function isCourseInNavigationGrace(
+  course: Course,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  return isWithinParticipantGraceCalendar(course, settings, now);
+}
+
+/** Vergangene KW: Kurs nur im Nachlauf anzeigen (alle Rollen in der Wochenansicht). */
+export function canShowCourseInPastWeek(
+  course: Course,
+  weekStart: Date,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  if (!isWeekEntirelyInPast(weekStart, now)) return true;
+  return isCourseInNavigationGrace(course, settings, now);
+}
+
+/**
+ * Früheste navigierbare KW für ‹ :
+ * - pro Kurs im Nachlauf: Woche des Kursendes
+ * - zusätzlich: bis zu `inactiveGraceDaysAfterCourseEnd` Kalendertage zurück ab heute,
+ *   damit man zu Wochenanfang noch in die vorige KW wechseln kann, solange Nachlauf läuft
+ */
+export function computeEarliestWeekAnchor(
+  courses: Course[],
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): Date {
+  const todayWeek = startOfWeekMonday(now);
+  const previousWeek = addWeeks(todayWeek, -1);
+  const graceDays = resolveGraceDays(settings);
+
+  const lookback = new Date(now);
+  lookback.setDate(lookback.getDate() - graceDays);
+  const lookbackWeek = startOfWeekMonday(lookback);
+
+  let earliest: Date | null = null;
+  let hasNavigationGrace = false;
+
+  for (const course of courses) {
+    if (!isCourseInNavigationGrace(course, settings, now)) continue;
+    hasNavigationGrace = true;
+    const endIso = courseEndDateIso(course);
+    if (!endIso) continue;
+    const endWeek = startOfWeekMonday(new Date(`${endIso}T12:00:00.000Z`));
+    if (!earliest || endWeek.getTime() < earliest.getTime()) {
+      earliest = endWeek;
+    }
+  }
+
+  if (!hasNavigationGrace) {
+    return todayWeek;
+  }
+
+  if (!earliest) {
+    return previousWeek;
+  }
+
+  let result = earliest;
+  if (lookbackWeek.getTime() < result.getTime()) {
+    result = lookbackWeek;
+  }
+  // Kursende in dieser KW: lookback kann noch dieselbe KW sein — mindestens eine Woche zurück
+  if (previousWeek.getTime() < result.getTime()) {
+    result = previousWeek;
+  }
+  return result;
+}
+
+export function earliestAllowedWeekStart(
+  courses: Course[],
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): Date {
+  return computeEarliestWeekAnchor(courses, settings, now);
+}
+
+export function isOccurrenceInPast(
+  isoDate: string,
+  courseTime: string,
+  now: Date = new Date(),
+): boolean {
+  const occurrence = buildCourseOccurrenceLocal(isoDate, courseTime);
+  return occurrence != null && occurrence < now;
+}
+
+/** Vergangener Termin: nur Tausch aus rechtzeitiger Absage (RC), nicht Kurzfrist. */
+export function canRequestSwapFromPastCancelledOrigin(input: {
+  isoDate: string;
+  courseTime: string;
+  tenantSettings?: TenantSettings;
+  override?: CourseDateOverride;
+  userName: string;
+  participants: string[];
+  originallyParticipant: boolean;
+  now?: Date;
+}): boolean {
+  const now = input.now ?? new Date();
+  if (!isOccurrenceInPast(input.isoDate, input.courseTime, now)) return false;
+  if (
+    !isRegularCancellation(
+      input.originallyParticipant,
+      input.override,
+      input.participants,
+      input.userName,
+    )
+  ) {
+    return false;
+  }
+  return canCreateSwapFromOrigin({
+    isoDate: input.isoDate,
+    courseTime: input.courseTime,
+    tenantSettings: input.tenantSettings,
+    override: input.override,
+    userName: input.userName,
+    participants: input.participants,
+    originallyParticipant: input.originallyParticipant,
+    now,
+  });
+}
