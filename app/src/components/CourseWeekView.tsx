@@ -94,16 +94,6 @@ export default function CourseWeekView({
 
   return (
     <div className="course-week-view" role="region" aria-label="Wochenansicht">
-      <div className="course-week-view-legend" aria-label="Status-Legende Wochenansicht">
-        <span className="course-week-view-legend-item">
-          <span className="course-term-visual-marker course-term-visual-marker--past" aria-hidden="true">N</span>
-          <span>Nachlauf</span>
-        </span>
-        <span className="course-week-view-legend-item">
-          <span className="course-term-visual-marker course-term-visual-marker--cutoff" aria-hidden="true">C</span>
-          <span>Cutoff</span>
-        </span>
-      </div>
       {hiddenPastCourseCount > 0 && (
         <p className="course-week-view-faded-hint muted" role="status">
           {hiddenPastCourseCount} weitere
