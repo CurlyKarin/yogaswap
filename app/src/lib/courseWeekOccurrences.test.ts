@@ -84,8 +84,31 @@ describe("getWeekViewCardDates", () => {
     };
     const now = new Date(2026, 5, 10, 12, 0, 0);
     const weekStart = new Date(2026, 4, 25);
-    const keys = getWeekViewCardDates(course, weekStart, now).map((d) => toLocalDateIso(d));
+    const keys = getWeekViewCardDates(course, weekStart, undefined, now).map((d) => toLocalDateIso(d));
     expect(keys).toContain("2026-05-26");
+    expect(keys).toContain("2026-06-15");
+  });
+
+  it("includes past grace dates from previous week for term jump", () => {
+    const course: Course = {
+      id: 1,
+      name: "Test",
+      weekday: "Mon",
+      time: "10:00",
+      capacity: 8,
+      participants: [],
+      dates: ["2026-05-18", "2026-06-15"],
+      excludedDates: [],
+    };
+    const now = new Date(2026, 4, 22, 12, 0, 0);
+    const weekStart = new Date(2026, 4, 25);
+    const keys = getWeekViewCardDates(
+      course,
+      weekStart,
+      { inactiveGraceDaysAfterCourseEnd: 7 },
+      now,
+    ).map((d) => toLocalDateIso(d));
+    expect(keys).toContain("2026-05-18");
     expect(keys).toContain("2026-06-15");
   });
 });

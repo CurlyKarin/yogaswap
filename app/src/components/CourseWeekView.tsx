@@ -103,7 +103,7 @@ export default function CourseWeekView({
       )}
       <div className="grid">
         {rows.map(({ course }) => {
-          const cardDates = getWeekViewCardDates(course, weekAnchor);
+          const cardDates = getWeekViewCardDates(course, weekAnchor, tenantSettings);
           const initialSelectedDate = preferredWeekCardDate(course, weekAnchor);
 
           return (

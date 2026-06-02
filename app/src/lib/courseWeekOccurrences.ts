@@ -1,5 +1,9 @@
-import { buildCourseOccurrenceLocal } from "shared/courseStatus";
-import type { Course } from "shared/types";
+import {
+  addCalendarDaysIsoUtc,
+  buildCourseOccurrenceLocal,
+  DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
+} from "shared/courseStatus";
+import type { Course, TenantSettings } from "shared/types";
 import { getCourseDates } from "./dates";
 
 export type WeekOccurrenceKind = "scheduled" | "excluded";
@@ -77,12 +81,23 @@ export function isWeekEntirelyInPast(weekStart: Date, now: Date = new Date()): b
 export function getWeekViewCardDates(
   course: Course,
   weekStart: Date,
+  settings?: TenantSettings,
   now: Date = new Date(),
 ): Date[] {
   const future = getCourseDates(course, now);
   const inWeek = weekOccurrenceDates(course, weekStart);
+  const todayIso = toLocalDateIso(now);
+  const graceDays =
+    typeof settings?.inactiveGraceDaysAfterCourseEnd === "number" &&
+    settings.inactiveGraceDaysAfterCourseEnd > 0
+      ? settings.inactiveGraceDaysAfterCourseEnd
+      : DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+  const pastGrace = (course.dates ?? [])
+    .filter((iso) => iso < todayIso && todayIso <= addCalendarDaysIsoUtc(iso, graceDays))
+    .map((iso) => buildCourseOccurrenceLocal(iso, course.time))
+    .filter((d): d is Date => d !== null);
   const merged = new Map<string, Date>();
-  for (const d of [...future, ...inWeek]) {
+  for (const d of [...future, ...inWeek, ...pastGrace]) {
     merged.set(toLocalDateIso(d), d);
   }
   return Array.from(merged.values()).sort((a, b) => a.getTime() - b.getTime());
