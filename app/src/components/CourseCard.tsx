@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Clock3, History } from "lucide-react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
   buildCourseOccurrenceLocal,
@@ -246,6 +247,8 @@ export default function CourseCard({
     [swaps, userName, course.id],
   );
   const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
+  const showPastGraceMarker = includePastTermsInSelect && isPastOccurrence;
+  const showCutoffMarker = includePastTermsInSelect && !isPastOccurrence && originInCutoff;
   const canUseFullTermActions =
     !participantActionsLocked &&
     hasUpcomingDates &&
@@ -300,19 +303,41 @@ export default function CourseCard({
             {course.weekday} · {course.time}
           </div>
         </div>
-        {participantActionsLocked && (
-          <span
-            className={`course-status-badge ${
-              showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
-                ? "course-status-badge--auto"
-                : "course-status-badge--inactive"
-            }`}
-          >
-            {showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
-              ? "Automatisch inaktiv"
-              : "Inaktiv"}
-          </span>
-        )}
+        <div className="course-head-meta">
+          {(showPastGraceMarker || showCutoffMarker) && (
+            <div className="course-term-visual-markers" role="status">
+              {showPastGraceMarker && (
+                <span
+                  className="course-term-visual-marker course-term-visual-marker--past"
+                  title="Vergangener Termin im Nachlauf"
+                >
+                  <History size={12} aria-hidden="true" />
+                </span>
+              )}
+              {showCutoffMarker && (
+                <span
+                  className="course-term-visual-marker course-term-visual-marker--cutoff"
+                  title="Kurz vor Termin (Cutoff)"
+                >
+                  <Clock3 size={12} aria-hidden="true" />
+                </span>
+              )}
+            </div>
+          )}
+          {participantActionsLocked && (
+            <span
+              className={`course-status-badge ${
+                showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
+                  ? "course-status-badge--auto"
+                  : "course-status-badge--inactive"
+              }`}
+            >
+              {showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
+                ? "Automatisch inaktiv"
+                : "Inaktiv"}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="course-row">

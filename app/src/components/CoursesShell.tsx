@@ -41,6 +41,7 @@ export default function CoursesShell({
     error,
     courses,
     weekCourseRows,
+    hiddenPastCourseCount,
     overrides,
     swaps,
     confirmSwap,
@@ -136,6 +137,7 @@ export default function CoursesShell({
             loading={loading}
             error={error}
             rows={weekCourseRows}
+            hiddenPastCourseCount={hiddenPastCourseCount}
             courses={courses}
             overrides={overrides}
             swaps={swaps}

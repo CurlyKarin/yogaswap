@@ -158,13 +158,17 @@ export function useCoursesData({
     );
   }, [courses, membershipForPermissions, tenant?.settings, courseContext]);
 
-  const weekCourseRows = useMemo((): WeekCourseRow[] => {
+  const weekCourseRows = useMemo((): { rows: WeekCourseRow[]; hiddenPastCourses: number } => {
     const rows: WeekCourseRow[] = [];
+    let hiddenPastCourses = 0;
     for (const course of visibleCourses) {
       const occurrences = collectWeekOccurrences(course, weekAnchor);
       if (occurrences.length === 0) continue;
 
-      if (!canShowCourseInPastWeek(course, weekAnchor, tenant?.settings)) continue;
+      if (!canShowCourseInPastWeek(course, weekAnchor, tenant?.settings)) {
+        hiddenPastCourses += 1;
+        continue;
+      }
 
       if (!canSeeCourseManagement) {
         const hasUpcoming = getCourseDates(course).length > 0;
@@ -177,7 +181,10 @@ export function useCoursesData({
 
       rows.push({ course, occurrences });
     }
-    return rows.sort((a, b) => sortCoursesForDisplay(a.course, b.course));
+    return {
+      rows: rows.sort((a, b) => sortCoursesForDisplay(a.course, b.course)),
+      hiddenPastCourses,
+    };
   }, [
     visibleCourses,
     weekAnchor,
@@ -200,7 +207,8 @@ export function useCoursesData({
     overrides: swapHandlers.overrides,
     swaps,
     visibleCourses,
-    weekCourseRows,
+    weekCourseRows: weekCourseRows.rows,
+    hiddenPastCourseCount: weekCourseRows.hiddenPastCourses,
     earliestWeekAnchor,
     canSeeCourseManagement,
     membershipForPermissions,

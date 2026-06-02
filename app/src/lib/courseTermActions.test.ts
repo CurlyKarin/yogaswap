@@ -72,14 +72,19 @@ describe("canShowCourseInPastWeek", () => {
 
   it("shows course in grace in a past week", () => {
     const pastWeek = startOfWeekMonday(new Date(2026, 4, 11));
-    const now = new Date(2026, 4, 22, 12, 0, 0);
-    expect(canShowCourseInPastWeek(endedCourse, pastWeek, { inactiveGraceDaysAfterCourseEnd: 7 }, now)).toBe(
-      true,
-    );
+    const now = new Date(2026, 4, 18, 12, 0, 0);
+    const courseInWeek: Course = {
+      ...endedCourse,
+      dates: ["2026-05-12"],
+      seriesEndDate: "2026-05-12",
+    };
+    expect(
+      canShowCourseInPastWeek(courseInWeek, pastWeek, { inactiveGraceDaysAfterCourseEnd: 7 }, now),
+    ).toBe(true);
   });
 
   it("shows course in past week during calendar grace even with stale future dates", () => {
-    const pastWeek = startOfWeekMonday(new Date(2026, 4, 11));
+    const pastWeek = startOfWeekMonday(new Date(2026, 4, 18));
     const now = new Date(2026, 4, 22, 12, 0, 0);
     const withStaleFuture: Course = {
       ...endedCourse,
@@ -92,6 +97,34 @@ describe("canShowCourseInPastWeek", () => {
     expect(
       canShowCourseInPastWeek(withStaleFuture, pastWeek, { inactiveGraceDaysAfterCourseEnd: 7 }, now),
     ).toBe(true);
+  });
+
+  it("hides past week when the occurrence is older than grace for ongoing course", () => {
+    const pastWeek = startOfWeekMonday(new Date(2026, 4, 11));
+    const now = new Date(2026, 4, 22, 12, 0, 0);
+    const notEndedYet: Course = {
+      ...endedCourse,
+      dates: ["2026-05-12", "2026-06-15"],
+      seriesEndDate: "2026-06-30",
+      status: "active",
+    };
+    expect(
+      canShowCourseInPastWeek(notEndedYet, pastWeek, { inactiveGraceDaysAfterCourseEnd: 7 }, now),
+    ).toBe(false);
+  });
+
+  it("hides week occurrence that is older than grace window", () => {
+    const oldWeek = startOfWeekMonday(new Date(2026, 4, 4));
+    const now = new Date(2026, 4, 22, 12, 0, 0);
+    const oldCourse: Course = {
+      ...endedCourse,
+      dates: ["2026-05-05"],
+      seriesEndDate: "2026-05-05",
+      status: "inactive",
+    };
+    expect(canShowCourseInPastWeek(oldCourse, oldWeek, { inactiveGraceDaysAfterCourseEnd: 5 }, now)).toBe(
+      false,
+    );
   });
 });
 
@@ -147,6 +180,22 @@ describe("computeEarliestWeekAnchor", () => {
     );
     expect(earliest.getTime()).toBeLessThan(startOfWeekMonday(now).getTime());
   });
+
+  it("keeps previous-week navigation available for ongoing weekly courses", () => {
+    const now = new Date(2026, 4, 22, 12, 0, 0);
+    const ongoing: Course = {
+      ...endedCourse,
+      dates: ["2026-05-20", "2026-05-27"],
+      seriesEndDate: "2026-06-30",
+      status: "active",
+    };
+    const earliest = computeEarliestWeekAnchor(
+      [ongoing],
+      { inactiveGraceDaysAfterCourseEnd: 7 },
+      now,
+    );
+    expect(earliest.getTime()).toBeLessThan(startOfWeekMonday(now).getTime());
+  });
 });
 
 describe("canRequestSwapFromPastCancelledOrigin", () => {
@@ -181,6 +230,22 @@ describe("canRequestSwapFromPastCancelledOrigin", () => {
         courseTime: "10:00",
         userName: "maya",
         participants: ["maya"],
+        originallyParticipant: true,
+        now,
+      }),
+    ).toBe(false);
+  });
+
+  it("denies swap when past term is outside grace window", () => {
+    const now = new Date(2026, 4, 25, 12, 0, 0);
+    expect(
+      canRequestSwapFromPastCancelledOrigin({
+        isoDate: "2026-05-18",
+        courseTime: "10:00",
+        tenantSettings: { inactiveGraceDaysAfterCourseEnd: 5 },
+        override,
+        userName: "maya",
+        participants: [],
         originallyParticipant: true,
         now,
       }),

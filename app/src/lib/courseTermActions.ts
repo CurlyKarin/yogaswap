@@ -12,7 +12,7 @@ import {
 } from "shared/courseStatus";
 import type { Course, CourseDateOverride, TenantSettings } from "shared/types";
 import { addWeeks, startOfWeekMonday } from "./courseWeek";
-import { isWeekEntirelyInPast } from "./courseWeekOccurrences";
+import { isWeekEntirelyInPast, weekRangeKeys } from "./courseWeekOccurrences";
 
 function resolveGraceDays(settings?: TenantSettings): number {
   const value = settings?.inactiveGraceDaysAfterCourseEnd;
@@ -27,8 +27,17 @@ export function isWithinParticipantGraceCalendar(
 ): boolean {
   const endIso = courseEndDateIso(course);
   if (!endIso) return false;
+  const todayIso = toIsoDateUtc(now);
+  if (todayIso < endIso) return false;
   const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, resolveGraceDays(settings));
-  return toIsoDateUtc(now) <= lastGraceInclusiveIso;
+  return todayIso <= lastGraceInclusiveIso;
+}
+
+function isIsoWithinGraceWindow(isoDate: string, settings: TenantSettings | undefined, now: Date): boolean {
+  const todayIso = toIsoDateUtc(now);
+  if (isoDate > todayIso) return false;
+  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(isoDate, resolveGraceDays(settings));
+  return todayIso <= lastGraceInclusiveIso;
 }
 
 /**
@@ -52,6 +61,9 @@ export function isCourseInNavigationGrace(
   settings?: TenantSettings,
   now: Date = new Date(),
 ): boolean {
+  const todayIso = toIsoDateUtc(now);
+  const validPastDates = (course.dates ?? []).filter((iso) => iso <= todayIso);
+  if (validPastDates.some((iso) => isIsoWithinGraceWindow(iso, settings, now))) return true;
   return isWithinParticipantGraceCalendar(course, settings, now);
 }
 
@@ -63,7 +75,10 @@ export function canShowCourseInPastWeek(
   now: Date = new Date(),
 ): boolean {
   if (!isWeekEntirelyInPast(weekStart, now)) return true;
-  return isCourseInNavigationGrace(course, settings, now);
+  const { start, end } = weekRangeKeys(weekStart);
+  const weekDates = (course.dates ?? []).filter((iso) => iso >= start && iso <= end);
+  if (weekDates.length === 0) return false;
+  return weekDates.some((iso) => isIsoWithinGraceWindow(iso, settings, now));
 }
 
 /**
@@ -91,11 +106,22 @@ export function computeEarliestWeekAnchor(
   for (const course of courses) {
     if (!isCourseInNavigationGrace(course, settings, now)) continue;
     hasNavigationGrace = true;
+    const candidateIsos = (course.dates ?? []).filter((iso) => isIsoWithinGraceWindow(iso, settings, now));
+    if (candidateIsos.length > 0) {
+      for (const iso of candidateIsos) {
+        const isoWeek = startOfWeekMonday(new Date(`${iso}T12:00:00.000Z`));
+        if (!earliest || isoWeek.getTime() < earliest.getTime()) {
+          earliest = isoWeek;
+        }
+      }
+      continue;
+    }
     const endIso = courseEndDateIso(course);
-    if (!endIso) continue;
-    const endWeek = startOfWeekMonday(new Date(`${endIso}T12:00:00.000Z`));
-    if (!earliest || endWeek.getTime() < earliest.getTime()) {
-      earliest = endWeek;
+    if (endIso) {
+      const endWeek = startOfWeekMonday(new Date(`${endIso}T12:00:00.000Z`));
+      if (!earliest || endWeek.getTime() < earliest.getTime()) {
+        earliest = endWeek;
+      }
     }
   }
 
@@ -148,6 +174,12 @@ export function canRequestSwapFromPastCancelledOrigin(input: {
 }): boolean {
   const now = input.now ?? new Date();
   if (!isOccurrenceInPast(input.isoDate, input.courseTime, now)) return false;
+  const todayIso = toIsoDateUtc(now);
+  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(
+    input.isoDate,
+    resolveGraceDays(input.tenantSettings),
+  );
+  if (todayIso > lastGraceInclusiveIso) return false;
   if (
     !isRegularCancellation(
       input.originallyParticipant,

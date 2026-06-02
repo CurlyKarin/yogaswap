@@ -15,6 +15,7 @@ type Props = {
   loading: boolean;
   error: string | null;
   rows: WeekCourseRow[];
+  hiddenPastCourseCount?: number;
   courses: Course[];
   overrides: CourseDateOverride[];
   swaps: Swap[];
@@ -45,6 +46,7 @@ export default function CourseWeekView({
   loading,
   error,
   rows,
+  hiddenPastCourseCount = 0,
   courses,
   overrides,
   swaps,
@@ -91,38 +93,57 @@ export default function CourseWeekView({
   }
 
   return (
-    <div className="course-week-view grid" role="region" aria-label="Wochenansicht">
-      {rows.map(({ course }) => {
-        const cardDates = getWeekViewCardDates(course, weekAnchor);
-        const initialSelectedDate = preferredWeekCardDate(course, weekAnchor);
+    <div className="course-week-view" role="region" aria-label="Wochenansicht">
+      <div className="course-week-view-legend" aria-label="Status-Legende Wochenansicht">
+        <span className="course-week-view-legend-item">
+          <span className="course-term-visual-marker course-term-visual-marker--past" aria-hidden="true">N</span>
+          <span>Nachlauf</span>
+        </span>
+        <span className="course-week-view-legend-item">
+          <span className="course-term-visual-marker course-term-visual-marker--cutoff" aria-hidden="true">C</span>
+          <span>Cutoff</span>
+        </span>
+      </div>
+      {hiddenPastCourseCount > 0 && (
+        <p className="course-week-view-faded-hint muted" role="status">
+          {hiddenPastCourseCount} weitere
+          {hiddenPastCourseCount === 1 ? "r Kurs" : " Kurse"} in dieser Woche
+          {hiddenPastCourseCount === 1 ? " ist" : " sind"} bereits abgelaufen und nicht mehr im Nachlauf.
+        </p>
+      )}
+      <div className="grid">
+        {rows.map(({ course }) => {
+          const cardDates = getWeekViewCardDates(course, weekAnchor);
+          const initialSelectedDate = preferredWeekCardDate(course, weekAnchor);
 
-        return (
-          <div key={`${course.id}-${weekAnchor.getTime()}`}>
-            <CourseCard
-              course={course}
-              allCourses={courses}
-              currentUser={currentUser}
-              showOverbookingDetails={canSeeCourseManagement}
-              dates={cardDates}
-              overrides={overrides}
-              swaps={swaps}
-              participantActionsLocked={
-                !canSeeCourseManagement &&
-                ((course.status ?? "active") === "inactive" ||
-                  isWithinPostCourseEndGrace(course, tenantSettings))
-              }
-              tenantSettings={tenantSettings}
-              initialSelectedDate={initialSelectedDate}
-              includePastTermsInSelect
-              onDateChange={handleDateChange}
-              onToggleAbsence={onToggleAbsence}
-              confirmSwap={confirmSwap}
-              requestSwap={requestSwap}
-              cancelSwap={cancelSwap}
-            />
-          </div>
-        );
-      })}
+          return (
+            <div key={`${course.id}-${weekAnchor.getTime()}`}>
+              <CourseCard
+                course={course}
+                allCourses={courses}
+                currentUser={currentUser}
+                showOverbookingDetails={canSeeCourseManagement}
+                dates={cardDates}
+                overrides={overrides}
+                swaps={swaps}
+                participantActionsLocked={
+                  !canSeeCourseManagement &&
+                  ((course.status ?? "active") === "inactive" ||
+                    isWithinPostCourseEndGrace(course, tenantSettings))
+                }
+                tenantSettings={tenantSettings}
+                initialSelectedDate={initialSelectedDate}
+                includePastTermsInSelect
+                onDateChange={handleDateChange}
+                onToggleAbsence={onToggleAbsence}
+                confirmSwap={confirmSwap}
+                requestSwap={requestSwap}
+                cancelSwap={cancelSwap}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

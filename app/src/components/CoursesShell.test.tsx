@@ -13,6 +13,7 @@ vi.mock("../hooks/useCoursesData", () => ({
     loading: false,
     error: null,
     weekCourseRows: [],
+    hiddenPastCourseCount: 0,
     overrides: [],
     earliestWeekAnchor: new Date(2026, 0, 5),
   }),

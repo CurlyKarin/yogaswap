@@ -37,6 +37,7 @@ const baseProps = {
   loading: false,
   error: null as string | null,
   courses: [sampleCourse],
+  hiddenPastCourseCount: 0,
   overrides: [],
   swaps: [],
   currentUser: baseUser,
@@ -66,9 +67,12 @@ describe("CourseWeekView", () => {
       />,
     );
 
-    expect(screen.getByRole("region", { name: /wochenansicht/i })).toHaveClass("grid");
+    const weekRegion = screen.getByRole("region", { name: /wochenansicht/i });
+    expect(weekRegion).toBeInTheDocument();
+    expect(weekRegion.querySelector(".grid")).toBeTruthy();
     expect(screen.getByTestId("course-card-mock")).toBeInTheDocument();
-    expect(courseCardMock).toHaveBeenCalledWith(
+    const firstCallProps = courseCardMock.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(firstCallProps).toEqual(
       expect.objectContaining({
         course: sampleCourse,
         onDateChange: expect.any(Function),
@@ -96,5 +100,16 @@ describe("CourseWeekView", () => {
   it("shows empty state when no courses in week", () => {
     render(<CourseWeekView {...baseProps} rows={[]} />);
     expect(screen.getByText("In dieser Kalenderwoche sind keine Termine sichtbar.")).toBeInTheDocument();
+  });
+
+  it("shows hint when past courses are hidden outside grace", () => {
+    render(
+      <CourseWeekView
+        {...baseProps}
+        hiddenPastCourseCount={2}
+        rows={[{ course: sampleCourse, occurrences: [{ dateIso: "2099-06-08", kind: "scheduled" }] }]}
+      />,
+    );
+    expect(screen.getByText(/2 weitere Kurse/i)).toBeInTheDocument();
   });
 });
