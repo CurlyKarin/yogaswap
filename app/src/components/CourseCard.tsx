@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { Clock3, History } from "lucide-react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
@@ -55,6 +55,37 @@ function sameDayUTC(a: Date, b: Date) {
     a.getUTCFullYear() === b.getUTCFullYear() &&
     a.getUTCMonth() === b.getUTCMonth() &&
     a.getUTCDate() === b.getUTCDate()
+  );
+}
+
+function SwapModalHint({ label, children }: { label: string; children: ReactNode }) {
+  const hintId = useId();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="swap-modal-hint-wrap">
+      <button
+        type="button"
+        className="studio-field-hint"
+        title={label}
+        aria-expanded={open}
+        aria-controls={hintId}
+        aria-label={`Hilfe: ${label}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen((prev) => !prev);
+        }}
+      >
+        ?
+      </button>
+      {open && (
+        <div id={hintId} role="note" className="studio-field-hint-popover swap-modal-hint-popover">
+          {children}
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -673,58 +704,97 @@ export default function CourseCard({
               · {course.name}
             </p>
 
-            {availableSwapDates.length > 0 ? (
+            {availableSwapDates.length > 0 || waitlistDates.length > 0 ? (
               <>
-                <p className="muted">
-                  Es stehen {availableSwapDates.length} freie Termin(e) zur Auswahl.
-                </p>
-                <select
-                  value={swapDateIso ?? ""} // 
-                  onChange={(e) => {
-                    setSwapDateIso(e.target.value || null);
-                    setSwapDateIsoWaitlist(null) // andere Auswahl zuruecksetzen
-                  }}
-                >
-                  <option value="" disabled>
-                    Bitte freien Termin auswählen…
-                  </option>
-                  {availableSwapDates.map((swapDate, idx) => (
-                    <option key={idx} value={swapDate.date.toISOString()}>
-                      {new Intl.DateTimeFormat("de-DE", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }).format(swapDate.date)}
-                    </option>
-                  ))}
-                </select>
-                <p className="muted" style={{ marginTop: "1em" }}>
-                  Oder Wunsch auf die Warteliste setzen ({waitlistDates.length} mögliche):
-                </p>
-                <select
-                  value={swapDateIsoWaitlist ?? ""}
-                  onChange={(e) => {
-                    setSwapDateIsoWaitlist(e.target.value || null);
-                    setSwapDateIso(null); // andere Auswahl zurücksetzen
-                  }}
-                >
-                  <option value="" disabled>
-                    Bitte belegten Termin wählen…
-                  </option>
-                  {waitlistDates.map((waitlistDate, idx) => (
-                    <option key={idx} value={waitlistDate.date.toISOString()}>
-                      {new Intl.DateTimeFormat("de-DE", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }).format(waitlistDate.date)}
-                    </option>
-                  ))}
-                </select>
+                <div className="swap-modal-section-head">
+                  <span className="swap-modal-section-title">Freie Termine</span>
+                  <SwapModalHint label="Freie Tauschtermine">
+                    <p>
+                      Termine mit freien Plätzen zwischen{" "}
+                      <strong>
+                        {swapWindow.minOffsetDays} und {swapWindow.maxOffsetDays} Tagen
+                      </strong>{" "}
+                      nach deinem Kurstermin (nur in der Zukunft). Mit der Bestätigung eines Zieltermins
+                      meldest du dich gleichzeitig von deinem aktuellen Termin ab.
+                    </p>
+                  </SwapModalHint>
+                </div>
+                {availableSwapDates.length > 0 ? (
+                  <>
+                    <p className="muted">
+                      Es stehen {availableSwapDates.length} freie Termin(e) zur Auswahl.
+                    </p>
+                    <select
+                      value={swapDateIso ?? ""}
+                      onChange={(e) => {
+                        setSwapDateIso(e.target.value || null);
+                        setSwapDateIsoWaitlist(null);
+                      }}
+                    >
+                      <option value="" disabled>
+                        Bitte freien Termin auswählen…
+                      </option>
+                      {availableSwapDates.map((swapDate, idx) => (
+                        <option key={idx} value={swapDate.date.toISOString()}>
+                          {new Intl.DateTimeFormat("de-DE", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }).format(swapDate.date)}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <p className="muted">Derzeit keine freien Termine im Tauschfenster.</p>
+                )}
+
+                <div className="swap-modal-section-head">
+                  <span className="swap-modal-section-title">Warteliste</span>
+                  <SwapModalHint label="Warteliste im Tauschdialog">
+                    <p>
+                      Ausgebuchte Termine im gleichen Zeitfenster (
+                      <strong>
+                        {swapWindow.minOffsetDays} bis {swapWindow.maxOffsetDays} Tage
+                      </strong>{" "}
+                      nach deinem Kurstermin). Die Anfrage landet auf der Warteliste — noch ohne feste
+                      Buchung.
+                    </p>
+                  </SwapModalHint>
+                </div>
+                {waitlistDates.length > 0 ? (
+                  <>
+                    <p className="muted">
+                      {waitlistDates.length} belegte Termin(e) mit Wartelisten-Option:
+                    </p>
+                    <select
+                      value={swapDateIsoWaitlist ?? ""}
+                      onChange={(e) => {
+                        setSwapDateIsoWaitlist(e.target.value || null);
+                        setSwapDateIso(null);
+                      }}
+                    >
+                      <option value="" disabled>
+                        Bitte belegten Termin wählen…
+                      </option>
+                      {waitlistDates.map((waitlistDate, idx) => (
+                        <option key={idx} value={waitlistDate.date.toISOString()}>
+                          {new Intl.DateTimeFormat("de-DE", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }).format(waitlistDate.date)}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <p className="muted">Derzeit keine belegten Termine mit Wartelisten-Option.</p>
+                )}
               </>
             ) : (
               <p className="muted">Keine passenden Ersatztermine verfügbar</p>

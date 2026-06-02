@@ -1107,6 +1107,32 @@ a:focus-visible {
   cursor: help;
 }
 
+.swap-modal-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+  margin-bottom: 0.2rem;
+}
+
+.swap-modal-section-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.swap-modal-hint-wrap {
+  display: inline-flex;
+  align-items: flex-start;
+}
+
+.swap-modal-hint-popover {
+  max-width: 22rem;
+}
+
+.swap-modal-hint-popover p {
+  margin: 0;
+}
+
 /* Responsive */
 @media (max-width: 1023px) {
   .grid { grid-template-columns: repeat(2, 1fr); }

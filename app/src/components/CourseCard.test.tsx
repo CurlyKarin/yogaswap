@@ -193,6 +193,12 @@ describe("CourseCard", () => {
 
     // Es gibt mindestens einen freien Ersatztermin
     expect(screen.getByText(/Es stehen 1 freie Termin\(e\) zur Auswahl\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hilfe: Freie Tauschtermine/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hilfe: Warteliste im Tauschdialog/i })).toBeInTheDocument();
+
+    const freeSlotsHint = screen.getByRole("button", { name: /Hilfe: Freie Tauschtermine/i });
+    fireEvent.click(freeSlotsHint);
+    expect(screen.getByRole("note")).toHaveTextContent(/gleichzeitig von deinem aktuellen Termin ab/i);
 
     // Button ist deaktiviert und bleibt es auch, da keine Auswahl möglich ist
     const confirmButton = screen.getByRole("button", { name: /Bestätigen/i });
