@@ -278,6 +278,9 @@ export default function CourseCard({
         ? `Dieser Kurs ist inaktiv. Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
         : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten."
     : null;
+  const notEnrolledInTermHint = (
+    <div className="muted">Nicht in diesem Termin eingetragen</div>
+  );
 
   useEffect(() => {
     if (includePastTermsInSelect) return;
@@ -436,12 +439,6 @@ export default function CourseCard({
         </div>
       </div>
 
-      {hasNoUpcomingDates && !participantActionsLocked && (
-        <div className="course-row">
-          <span className="muted small">Zur Zeit sind keine zukünftigen Termine für diesen Kurs geplant.</span>
-        </div>
-      )}
-
       {inactiveNotice && (
         <div className="course-row course-inactive-notice" role="status">
           <span className="muted small">{inactiveNotice}</span>
@@ -511,7 +508,7 @@ export default function CourseCard({
                   Absage zurücknehmen
                 </button>
               ) : hasCancelled ? null : (
-                <div className="muted">Nicht in diesem Termin eingetragen</div>
+                notEnrolledInTermHint
               )}
 
               {canSwapFromOrigin && (
@@ -606,7 +603,7 @@ export default function CourseCard({
               </button>
             </div>
           ) : (
-            <div className="muted">Nicht in diesem Termin eingetragen</div>
+            notEnrolledInTermHint
           )}
         </>
       ) : null}

@@ -88,7 +88,7 @@ describe("CourseCard", () => {
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
   });
 
-  it("zeigt Hinweis, wenn keine zukünftigen Termine vorhanden sind", () => {
+  it("deaktiviert Datumsauswahl, wenn keine zukünftigen Termine vorhanden sind", () => {
     const courseWithoutFutureDates: Course = {
       ...baseCourse,
       dates: ["2000-01-01"],
@@ -100,9 +100,6 @@ describe("CourseCard", () => {
       overrides: [],
     });
 
-    expect(
-      screen.getByText(/Zur Zeit sind keine zukünftigen Termine für diesen Kurs geplant\./i),
-    ).toBeInTheDocument();
     const select = screen.getByRole("combobox");
     expect(select).toBeDisabled();
   });
