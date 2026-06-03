@@ -6,16 +6,16 @@ import App from "./App";
 import { getActingForUserId, setActingForUserId, setActorUserId } from "./api/delegation";
 import { canManageParticipants } from "shared/permissions";
 
-const courseListMock = vi.fn<(props: unknown) => void>();
+const coursesShellMock = vi.fn<(props: unknown) => void>();
 
 vi.mock("./components/Login", () => ({
   default: () => <div>Login Mock</div>,
 }));
 
-vi.mock("./components/CourseList", () => ({
+vi.mock("./components/CoursesShell", () => ({
   default: (props: unknown) => {
-    courseListMock(props);
-    return <div>CourseList Mock</div>;
+    coursesShellMock(props);
+    return <div>CoursesShell Mock</div>;
   },
 }));
 
@@ -78,7 +78,7 @@ describe("App delegation mode", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
-    courseListMock.mockClear();
+    coursesShellMock.mockClear();
     vi.mocked(canManageParticipants).mockReturnValue(true);
     setActingForUserId(null);
     setActorUserId(null);
@@ -131,7 +131,7 @@ describe("App delegation mode", () => {
     expect(screen.getByText(/vertretung aktiv:/i)).toBeInTheDocument();
     expect(screen.getByText(/du handelst im auftrag von/i)).toBeInTheDocument();
     expect(screen.queryByText(/AdminPanel Mock/i)).not.toBeInTheDocument();
-    expect(courseListMock).toHaveBeenLastCalledWith(
+    expect(coursesShellMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ forceParticipantView: true }),
     );
 

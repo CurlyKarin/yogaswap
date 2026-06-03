@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import "./App.css";
 import Login from "./components/Login";
-import CourseList from "./components/CourseList";
+import CoursesShell from "./components/CoursesShell";
 import AdminPanel from "./components/AdminPanel";
 import Invite from "./components/Invite";
 import ForgotPassword from "./components/ForgotPassword";
@@ -247,10 +247,7 @@ function MainApp() {
         <section
           className={`main-section main-section-courses${actingForUserIdState ? " is-delegation-active" : ""}`}
         >
-          <p className="muted" style={{ textAlign: "center", marginBottom: 16 }}>
-            Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
-          </p>
-          <CourseList
+          <CoursesShell
             currentUser={effectiveUser}
             tenant={tenant ?? undefined}
             membership={membership ?? undefined}

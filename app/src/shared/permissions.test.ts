@@ -302,16 +302,19 @@ describe("permissions", () => {
 
     it("zeigt aktiven Kurs nur mit sichtbaren Terminen", () => {
       const withDate = { ...dummyCourse, dates: ["2026-06-01"] };
+      const now = new Date(Date.UTC(2026, 4, 15, 12, 0, 0));
       expect(
         canShowParticipantCourseCard(participantMembership, defaultSettings, withDate, {
           ...baseCtx,
           hasVisibleCourseDates: true,
+          now,
         }),
       ).toBe(true);
       expect(
         canShowParticipantCourseCard(participantMembership, defaultSettings, withDate, {
           ...baseCtx,
           hasVisibleCourseDates: false,
+          now,
         }),
       ).toBe(false);
     });

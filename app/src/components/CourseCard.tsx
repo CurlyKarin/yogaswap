@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { CalendarX, Clock3, History } from "lucide-react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
   buildCourseOccurrenceLocal,
@@ -19,6 +20,11 @@ import {
 } from "shared/cancellationSwapCutoff";
 import { resolveMaxCapacity, resolveOverbookLimit } from "shared/courseCapacity";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
+import {
+  canRequestSwapFromPastCancelledOrigin,
+  isOccurrenceInPast,
+} from "../lib/courseTermActions";
+import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import type { SwapSettings } from "../types";
 
 type Props = {
@@ -36,6 +42,12 @@ type Props = {
   confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   requestSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   cancelSwap: (swap: Swap, clickedCourseId: number) => void;
+  /** Wochenansicht: vorausgewählter Termin beim Wechsel der Kalenderwoche. */
+  initialSelectedDate?: Date;
+  /** Wochenansicht: z. B. Kalenderwoche anpassen, wenn ein anderer Termin gewählt wird. */
+  onDateChange?: (date: Date) => void;
+  /** Wochenansicht: Termine der angezeigten KW auch in der Vergangenheit im Dropdown. */
+  includePastTermsInSelect?: boolean;
 };
 
 
@@ -44,6 +56,37 @@ function sameDayUTC(a: Date, b: Date) {
     a.getUTCFullYear() === b.getUTCFullYear() &&
     a.getUTCMonth() === b.getUTCMonth() &&
     a.getUTCDate() === b.getUTCDate()
+  );
+}
+
+function SwapModalHint({ label, children }: { label: string; children: ReactNode }) {
+  const hintId = useId();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="swap-modal-hint-wrap">
+      <button
+        type="button"
+        className="studio-field-hint"
+        title={label}
+        aria-expanded={open}
+        aria-controls={hintId}
+        aria-label={`Hilfe: ${label}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen((prev) => !prev);
+        }}
+      >
+        ?
+      </button>
+      {open && (
+        <div id={hintId} role="note" className="studio-field-hint-popover swap-modal-hint-popover">
+          {children}
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -61,6 +104,9 @@ export default function CourseCard({
   confirmSwap,
   requestSwap,
   cancelSwap,
+  initialSelectedDate,
+  onDateChange,
+  includePastTermsInSelect = false,
 }: Props) {
   const swapWindow: SwapSettings = useMemo(
     () => resolveSwapWindow(tenantSettings),
@@ -68,7 +114,7 @@ export default function CourseCard({
   );
 
   const [selectedDate, setSelectedDate] = useState<string>(
-    dates[0]?.toISOString() || ""
+    () => (initialSelectedDate ?? dates[0])?.toISOString() || "",
   );
   const [swapDateIso, setSwapDateIso] = useState<string | null>(null);
   const [swapDateIsoWaitlist, setSwapDateIsoWaitlist] = useState<string | null>(null);
@@ -232,8 +278,40 @@ export default function CourseCard({
       ),
     [swaps, userName, course.id],
   );
-  const canUseTermActions =
-    !participantActionsLocked && hasUpcomingDates && (isParticipant || originallyParticipant);
+  const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
+  const isSelectedTermExcluded = isExcludedCourseDate(course, selectedDateKey);
+  const showPastGraceMarker =
+    includePastTermsInSelect && isPastOccurrence && !isSelectedTermExcluded;
+  const showCutoffMarker =
+    includePastTermsInSelect &&
+    !isPastOccurrence &&
+    !isSelectedTermExcluded &&
+    originInCutoff;
+  const showExcludedTermMarker = includePastTermsInSelect && isSelectedTermExcluded;
+  const canUseFullTermActions =
+    !participantActionsLocked &&
+    hasUpcomingDates &&
+    (isParticipant || originallyParticipant) &&
+    !isPastOccurrence &&
+    !isSelectedTermExcluded;
+  const canSwapFromPastCancelled = canRequestSwapFromPastCancelledOrigin({
+    isoDate: selectedDateKey,
+    courseTime: course.time,
+    tenantSettings,
+    override,
+    userName,
+    participants,
+    originallyParticipant,
+  });
+  const showPastTermSwapActions =
+    !participantActionsLocked &&
+    !isSelectedTermExcluded &&
+    isPastOccurrence &&
+    (isParticipant || originallyParticipant || hasCancelled) &&
+    (swapForThisTerm != null || canSwapFromPastCancelled);
+  const excludedTermNotice = showExcludedTermMarker
+    ? "Dieser Termin entfällt — vom Studio abgesagt."
+    : null;
 
   const inactiveNotice = participantActionsLocked
     ? showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
@@ -244,12 +322,22 @@ export default function CourseCard({
         ? `Dieser Kurs ist inaktiv. Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
         : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten."
     : null;
+  const notEnrolledInTermHint = (
+    <div className="muted">Nicht in diesem Termin eingetragen</div>
+  );
 
   useEffect(() => {
+    if (includePastTermsInSelect) return;
     if (showLastTermInSelect && lastOccurrenceDate) {
       setSelectedDate(lastOccurrenceDate.toISOString());
     }
-  }, [showLastTermInSelect, lastOccurrenceIso, course.time, lastOccurrenceDate]);
+  }, [includePastTermsInSelect, showLastTermInSelect, lastOccurrenceIso, course.time, lastOccurrenceDate]);
+
+  const initialSelectedTime = initialSelectedDate?.getTime();
+  useEffect(() => {
+    if (initialSelectedTime == null) return;
+    setSelectedDate(new Date(initialSelectedTime).toISOString());
+  }, [initialSelectedTime]);
 
   return (
     <div
@@ -262,26 +350,62 @@ export default function CourseCard({
             {course.weekday} · {course.time}
           </div>
         </div>
-        {participantActionsLocked && (
-          <span
-            className={`course-status-badge ${
-              showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
-                ? "course-status-badge--auto"
-                : "course-status-badge--inactive"
-            }`}
-          >
-            {showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
-              ? "Automatisch inaktiv"
-              : "Inaktiv"}
-          </span>
-        )}
+        <div className="course-head-meta">
+          {(showPastGraceMarker || showCutoffMarker || showExcludedTermMarker) && (
+            <div className="course-term-visual-markers" role="status">
+              {showExcludedTermMarker && (
+                <span
+                  className="course-term-visual-marker course-term-visual-marker--excluded"
+                  title="Termin entfällt (vom Studio abgesagt)"
+                >
+                  <CalendarX size={12} aria-hidden="true" />
+                </span>
+              )}
+              {showPastGraceMarker && (
+                <span
+                  className="course-term-visual-marker course-term-visual-marker--past"
+                  title="Vergangener Termin im Nachlauf"
+                >
+                  <History size={12} aria-hidden="true" />
+                </span>
+              )}
+              {showCutoffMarker && (
+                <span
+                  className="course-term-visual-marker course-term-visual-marker--cutoff"
+                  title="Kurz vor Termin (Cutoff)"
+                >
+                  <Clock3 size={12} aria-hidden="true" />
+                </span>
+              )}
+            </div>
+          )}
+          {participantActionsLocked && (
+            <span
+              className={`course-status-badge ${
+                showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
+                  ? "course-status-badge--auto"
+                  : "course-status-badge--inactive"
+              }`}
+            >
+              {showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
+                ? "Automatisch inaktiv"
+                : "Inaktiv"}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="course-row">
         <div className="muted">Kapazität</div>
         <div>
-          {participants.length}/{course.capacity}
-          {showOverbookingDetails && overbookLimit > 0 && ` (+${overbookLimit})`}
+          {showExcludedTermMarker ? (
+            <span className="muted">entfällt</span>
+          ) : (
+            <>
+              {participants.length}/{course.capacity}
+              {showOverbookingDetails && overbookLimit > 0 && ` (+${overbookLimit})`}
+            </>
+          )}
         </div>
       </div>
 
@@ -289,7 +413,11 @@ export default function CourseCard({
         <div className="muted">Termine:</div>
         <select
           value={hasNoUpcomingDates && !showLastTermInSelect ? "" : selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
+          onChange={(e) => {
+            const next = new Date(e.target.value);
+            setSelectedDate(e.target.value);
+            onDateChange?.(next);
+          }}
           disabled={hasNoUpcomingDates && !showLastTermInSelect}
         >
           {showLastTermInSelect && lastOccurrenceDate ? (
@@ -299,13 +427,18 @@ export default function CourseCard({
           ) : hasNoUpcomingDates ? (
             <option value="">—</option>
           ) : (
-            dates
-              .filter((d) => d >= new Date())
-              .map((date, index) => (
-                <option key={index} value={date.toISOString()}>
-                  {date.toLocaleDateString()}
-                </option>
-              ))
+            (includePastTermsInSelect ? dates : dates.filter((d) => d >= new Date())).map(
+              (date, index) => {
+                const dateIso = toDateKey(date);
+                const excludedLabel = isExcludedCourseDate(course, dateIso) ? " (entfällt)" : "";
+                return (
+                  <option key={index} value={date.toISOString()}>
+                    {date.toLocaleDateString()}
+                    {excludedLabel}
+                  </option>
+                );
+              },
+            )
           )}
         </select>
       </div>
@@ -313,43 +446,54 @@ export default function CourseCard({
       <div className="course-row list-row">
         <div className="label muted">Teilnehmer</div>
         <div className="chips">
-          {participants.length === 0 && <span className="chip">—</span>}
-          {participants.map((name) => (
-            <span
-              className={`chip ${
-                shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
-                  ? "short-notice"
-                  : swapped.includes(name)
-                    ? "swapped"
-                    : ""
-              }`}
-              key={name}
-              title={
-                shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
-                  ? "Kurzfristig abgesagt — Platz bleibt belegt"
-                  : undefined
-              }
-            >
-              {name}
-            </span>
-          ))}
-          {visibleFreeSpots > 0 &&
-            Array.from({ length: regularFreeSpots }).map((_, idx) => (
-              <span className="chip free" key={`free-${idx}`}>
-                frei
-              </span>
-            ))}
-          {showOverbookingDetails &&
-            overbookFreeSpots > 0 &&
-            Array.from({ length: overbookFreeSpots }).map((_, idx) => (
-              <span
-                className="chip overbook-free"
-                key={`overbook-free-${idx}`}
-                title="Platz in der Überplanung"
-              >
-                +frei
-              </span>
-            ))}
+          {showExcludedTermMarker ? (
+            <span className="chip muted small">—</span>
+          ) : (
+            <>
+              {participants.length === 0 && <span className="chip">—</span>}
+              {participants.map((name) => {
+                const isSelf = name.toLowerCase() === userNameLower;
+                const isSn = shortNotice.some((n) => n.toLowerCase() === name.toLowerCase());
+                const isSwapped = swapped.includes(name);
+                return (
+                  <span
+                    className={`chip${isSelf ? " chip-self" : ""}${
+                      isSn ? " short-notice" : isSwapped ? " swapped" : ""
+                    }`}
+                    key={name}
+                    title={
+                      isSn && isSelf
+                        ? "Du — kurzfristig abgesagt, Platz bleibt belegt"
+                        : isSn
+                          ? "Kurzfristig abgesagt — Platz bleibt belegt"
+                          : isSelf
+                            ? "Du"
+                            : undefined
+                    }
+                  >
+                    {name}
+                  </span>
+                );
+              })}
+              {visibleFreeSpots > 0 &&
+                Array.from({ length: regularFreeSpots }).map((_, idx) => (
+                  <span className="chip free" key={`free-${idx}`}>
+                    frei
+                  </span>
+                ))}
+              {showOverbookingDetails &&
+                overbookFreeSpots > 0 &&
+                Array.from({ length: overbookFreeSpots }).map((_, idx) => (
+                  <span
+                    className="chip overbook-free"
+                    key={`overbook-free-${idx}`}
+                    title="Platz in der Überplanung"
+                  >
+                    +frei
+                  </span>
+                ))}
+            </>
+          )}
         </div>
       </div>
 
@@ -357,23 +501,26 @@ export default function CourseCard({
       <div className="course-row list-row">
         <div className="label muted">Warteliste</div>
         <div className="chips">
-          {waitlist.length === 0 ? (
+          {showExcludedTermMarker ? (
+            <span className="chip muted small">—</span>
+          ) : waitlist.length === 0 ? (
             <span className="chip muted small">Keine Anfragen</span>
           ) : (
-            waitlist.map((name) => (
-              <span className="chip wait" key={name}>
-                {name}
-              </span>
-            ))
+            waitlist.map((name) => {
+              const isSelf = name.toLowerCase() === userNameLower;
+              return (
+                <span
+                  className={`chip wait${isSelf ? " chip-self" : ""}`}
+                  key={name}
+                  title={isSelf ? "Du (Warteliste)" : undefined}
+                >
+                  {name}
+                </span>
+              );
+            })
           )}
         </div>
       </div>
-
-      {hasNoUpcomingDates && !participantActionsLocked && (
-        <div className="course-row">
-          <span className="muted small">Zur Zeit sind keine zukünftigen Termine für diesen Kurs geplant.</span>
-        </div>
-      )}
 
       {inactiveNotice && (
         <div className="course-row course-inactive-notice" role="status">
@@ -381,7 +528,13 @@ export default function CourseCard({
         </div>
       )}
 
-      {canUseTermActions ? (
+      {excludedTermNotice && (
+        <div className="course-row course-excluded-term-notice" role="status">
+          <span className="muted small">{excludedTermNotice}</span>
+        </div>
+      )}
+
+      {canUseFullTermActions ? (
         <div className="actions">
           {swapForThisTerm ? (
             <>
@@ -444,7 +597,7 @@ export default function CourseCard({
                   Absage zurücknehmen
                 </button>
               ) : hasCancelled ? null : (
-                <div className="muted">Nicht in diesem Termin eingetragen</div>
+                notEnrolledInTermHint
               )}
 
               {canSwapFromOrigin && (
@@ -484,6 +637,62 @@ export default function CourseCard({
               )}
         </div>
 
+      ) : showPastTermSwapActions ? (
+        <div className="actions">
+          {swapForThisTerm ? (
+            <button
+              className="secondary danger"
+              onClick={() => cancelSwap(swapForThisTerm, course.id)}
+            >
+              {swapForThisTerm.status === "pending"
+                ? "Tauschanfragen abbrechen"
+                : "Tausch abbrechen"}
+            </button>
+          ) : canSwapFromPastCancelled ? (
+            <>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setSwapDateIso(null);
+                  setSwapDateIsoWaitlist(null);
+                  setShowSwapModal(true);
+                }}
+              >
+                Anderen Termin wählen
+              </button>
+              {hasPendingRequestsFromOrigin && (
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    setSwapDateIso(null);
+                    setSwapDateIsoWaitlist(null);
+                    setShowSwapModal(true);
+                  }}
+                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
+                >
+                  Weitere Tauschanfrage
+                </button>
+              )}
+            </>
+          ) : null}
+        </div>
+      ) : isSelectedTermExcluded && includePastTermsInSelect ? (
+        swapForThisTerm ? (
+          <div className="actions">
+            <button
+              className="secondary danger"
+              onClick={() => cancelSwap(swapForThisTerm, course.id)}
+            >
+              {swapForThisTerm.status === "pending"
+                ? "Tauschanfrage abbrechen"
+                : "Tausch abbrechen"}
+            </button>
+          </div>
+        ) : null
+      ) : isPastOccurrence && !participantActionsLocked ? (
+        <p className="muted small course-past-term-note" role="status">
+          Vergangener Termin — keine Änderungen mehr möglich.
+        </p>
       ) : !participantActionsLocked && !hasNoUpcomingDates ? (
         <>
           {swapForWaitlist ? (
@@ -496,7 +705,7 @@ export default function CourseCard({
               </button>
             </div>
           ) : (
-            <div className="muted">Nicht in diesem Termin eingetragen</div>
+            notEnrolledInTermHint
           )}
         </>
       ) : null}
@@ -550,13 +759,11 @@ export default function CourseCard({
         </div>
       )}
       {/* Swap-Modal */}
-      {canUseTermActions && showSwapModal && (
+      {(canUseFullTermActions || canSwapFromPastCancelled) && showSwapModal && (
         <div className="modal-backdrop">
           <div className="modal">
             <h4>
-              {hasCancelled
-                ? "Freien Termin auswählen (folgt)"
-                : "Tauschanfrage starten"}
+              {hasCancelled ? "Anderen Termin wählen" : "Tauschanfrage starten"}
             </h4>
             <p>
               Ausgewählter Termin:{" "}
@@ -566,58 +773,97 @@ export default function CourseCard({
               · {course.name}
             </p>
 
-            {availableSwapDates.length > 0 ? (
+            {availableSwapDates.length > 0 || waitlistDates.length > 0 ? (
               <>
-                <p className="muted">
-                  Es stehen {availableSwapDates.length} freie Termin(e) zur Auswahl.
-                </p>
-                <select
-                  value={swapDateIso ?? ""} // 
-                  onChange={(e) => {
-                    setSwapDateIso(e.target.value || null);
-                    setSwapDateIsoWaitlist(null) // andere Auswahl zuruecksetzen
-                  }}
-                >
-                  <option value="" disabled>
-                    Bitte freien Termin auswählen…
-                  </option>
-                  {availableSwapDates.map((swapDate, idx) => (
-                    <option key={idx} value={swapDate.date.toISOString()}>
-                      {new Intl.DateTimeFormat("de-DE", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }).format(swapDate.date)}
-                    </option>
-                  ))}
-                </select>
-                <p className="muted" style={{ marginTop: "1em" }}>
-                  Oder Wunsch auf die Warteliste setzen ({waitlistDates.length} mögliche):
-                </p>
-                <select
-                  value={swapDateIsoWaitlist ?? ""}
-                  onChange={(e) => {
-                    setSwapDateIsoWaitlist(e.target.value || null);
-                    setSwapDateIso(null); // andere Auswahl zurücksetzen
-                  }}
-                >
-                  <option value="" disabled>
-                    Bitte belegten Termin wählen…
-                  </option>
-                  {waitlistDates.map((waitlistDate, idx) => (
-                    <option key={idx} value={waitlistDate.date.toISOString()}>
-                      {new Intl.DateTimeFormat("de-DE", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }).format(waitlistDate.date)}
-                    </option>
-                  ))}
-                </select>
+                <div className="swap-modal-section-head">
+                  <span className="swap-modal-section-title">Freie Termine</span>
+                  <SwapModalHint label="Freie Tauschtermine">
+                    <p>
+                      Termine mit freien Plätzen zwischen{" "}
+                      <strong>
+                        {swapWindow.minOffsetDays} und {swapWindow.maxOffsetDays} Tagen
+                      </strong>{" "}
+                      nach deinem Kurstermin (nur in der Zukunft). Mit der Bestätigung eines Zieltermins
+                      meldest du dich gleichzeitig von deinem aktuellen Termin ab.
+                    </p>
+                  </SwapModalHint>
+                </div>
+                {availableSwapDates.length > 0 ? (
+                  <>
+                    <p className="muted">
+                      Es stehen {availableSwapDates.length} freie Termin(e) zur Auswahl.
+                    </p>
+                    <select
+                      value={swapDateIso ?? ""}
+                      onChange={(e) => {
+                        setSwapDateIso(e.target.value || null);
+                        setSwapDateIsoWaitlist(null);
+                      }}
+                    >
+                      <option value="" disabled>
+                        Bitte freien Termin auswählen…
+                      </option>
+                      {availableSwapDates.map((swapDate, idx) => (
+                        <option key={idx} value={swapDate.date.toISOString()}>
+                          {new Intl.DateTimeFormat("de-DE", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }).format(swapDate.date)}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <p className="muted">Derzeit keine freien Termine im Tauschfenster.</p>
+                )}
+
+                <div className="swap-modal-section-head">
+                  <span className="swap-modal-section-title">Warteliste</span>
+                  <SwapModalHint label="Warteliste im Tauschdialog">
+                    <p>
+                      Ausgebuchte Termine im gleichen Zeitfenster (
+                      <strong>
+                        {swapWindow.minOffsetDays} bis {swapWindow.maxOffsetDays} Tage
+                      </strong>{" "}
+                      nach deinem Kurstermin). Die Anfrage landet auf der Warteliste — noch ohne feste
+                      Buchung.
+                    </p>
+                  </SwapModalHint>
+                </div>
+                {waitlistDates.length > 0 ? (
+                  <>
+                    <p className="muted">
+                      {waitlistDates.length} belegte Termin(e) mit Wartelisten-Option:
+                    </p>
+                    <select
+                      value={swapDateIsoWaitlist ?? ""}
+                      onChange={(e) => {
+                        setSwapDateIsoWaitlist(e.target.value || null);
+                        setSwapDateIso(null);
+                      }}
+                    >
+                      <option value="" disabled>
+                        Bitte belegten Termin wählen…
+                      </option>
+                      {waitlistDates.map((waitlistDate, idx) => (
+                        <option key={idx} value={waitlistDate.date.toISOString()}>
+                          {new Intl.DateTimeFormat("de-DE", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }).format(waitlistDate.date)}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <p className="muted">Derzeit keine belegten Termine mit Wartelisten-Option.</p>
+                )}
               </>
             ) : (
               <p className="muted">Keine passenden Ersatztermine verfügbar</p>

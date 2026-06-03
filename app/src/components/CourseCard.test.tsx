@@ -68,6 +68,54 @@ describe("CourseCard", () => {
     cleanup();
   });
 
+  it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {
+    const overrideSn: CourseDateOverride = {
+      ...baseOverride,
+      participants: ["alice"],
+      shortNoticeCancellations: ["alice"],
+    };
+
+    const { container } = renderCourseCard({ overrides: [overrideSn] });
+
+    const selfSn = container.querySelector(".chip.chip-self.short-notice");
+    expect(selfSn).toHaveTextContent("alice");
+    expect(selfSn?.getAttribute("title")).toMatch(/Du — kurzfristig abgesagt/i);
+  });
+
+  it("zeigt getauschte und kurzfristig abgesagte andere Teilnehmer dezenter als den eigenen Chip", () => {
+    const overrideMixed: CourseDateOverride = {
+      ...baseOverride,
+      participants: ["alice", "bob", "carol"],
+      swapped: ["bob"],
+      shortNoticeCancellations: ["carol"],
+    };
+
+    const { container } = renderCourseCard({ overrides: [overrideMixed] });
+
+    expect(container.querySelector(".chip.chip-self")).toHaveTextContent("alice");
+    expect(screen.getByText("bob").closest(".chip")).toHaveClass("swapped");
+    expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
+    expect(screen.getByText("carol").closest(".chip")).toHaveClass("short-notice");
+    expect(screen.getByText("carol").closest(".chip")).not.toHaveClass("chip-self");
+  });
+
+  it("hebt den eigenen Chip in Teilnehmer- und Warteliste grün hervor", () => {
+    const overrideWithWaitlist: CourseDateOverride = {
+      ...baseOverride,
+      participants: ["alice", "bob"],
+      waitlist: ["alice"],
+    };
+
+    const { container } = renderCourseCard({ overrides: [overrideWithWaitlist] });
+
+    const selfChips = container.querySelectorAll(".chip.chip-self");
+    expect(selfChips).toHaveLength(2);
+    expect(selfChips[0]).toHaveTextContent("alice");
+    expect(selfChips[0]).toHaveAttribute("title", "Du");
+    expect(container.querySelector(".chip.wait.chip-self")).toHaveAttribute("title", "Du (Warteliste)");
+    expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
+  });
+
   it("zeigt Badge und Hinweis bei gesperrter Teilnehmer-Ansicht für inaktiven Kurs", () => {
     const inactiveCourse: Course = {
       ...baseCourse,
@@ -88,7 +136,28 @@ describe("CourseCard", () => {
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
   });
 
-  it("zeigt Hinweis, wenn keine zukünftigen Termine vorhanden sind", () => {
+  it("kennzeichnet vom Studio abgesagte Termine in der Wochenansicht", () => {
+    const weekCourse: Course = {
+      ...baseCourse,
+      dates: ["2099-06-16", "2099-06-18"],
+      excludedDates: ["2099-06-16"],
+    };
+
+    renderCourseCard({
+      course: weekCourse,
+      dates: [new Date("2099-06-16T10:00:00Z"), new Date("2099-06-18T10:00:00Z")],
+      includePastTermsInSelect: true,
+      initialSelectedDate: new Date("2099-06-16T10:00:00Z"),
+    });
+
+    expect(screen.getByTitle(/Termin entfällt/i)).toBeInTheDocument();
+    expect(screen.getByText(/vom Studio abgesagt/i)).toBeInTheDocument();
+    expect(screen.getByText("entfällt")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /6\/16\/2099 \(entfällt\)/i })).toBeInTheDocument();
+  });
+
+  it("deaktiviert Datumsauswahl, wenn keine zukünftigen Termine vorhanden sind", () => {
     const courseWithoutFutureDates: Course = {
       ...baseCourse,
       dates: ["2000-01-01"],
@@ -100,9 +169,6 @@ describe("CourseCard", () => {
       overrides: [],
     });
 
-    expect(
-      screen.getByText(/Zur Zeit sind keine zukünftigen Termine für diesen Kurs geplant\./i),
-    ).toBeInTheDocument();
     const select = screen.getByRole("combobox");
     expect(select).toBeDisabled();
   });
@@ -161,6 +227,32 @@ describe("CourseCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("zeigt im Swap-Modal den Titel „Anderen Termin wählen“ nach eigener Absage", () => {
+    const cancelledOverride: CourseDateOverride = {
+      courseId: 1,
+      date: "2099-06-16",
+      participants: [],
+      swapped: [],
+      waitlist: [],
+    };
+    const alternativeCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Abend",
+      dates: ["2099-06-20"],
+      participants: [],
+    };
+
+    renderCourseCard({
+      allCourses: [baseCourse, alternativeCourse],
+      overrides: [cancelledOverride],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Anderen Termin wählen/i }));
+    expect(screen.getByRole("heading", { name: /Anderen Termin wählen/i })).toBeInTheDocument();
+    expect(screen.queryByText(/folgt/i)).not.toBeInTheDocument();
+  });
+
   it("öffnet das Swap-Modal und ruft confirmSwap bzw. requestSwap korrekt auf", () => {
     const confirmSwap = vi.fn();
     const requestSwap = vi.fn();
@@ -196,6 +288,12 @@ describe("CourseCard", () => {
 
     // Es gibt mindestens einen freien Ersatztermin
     expect(screen.getByText(/Es stehen 1 freie Termin\(e\) zur Auswahl\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hilfe: Freie Tauschtermine/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hilfe: Warteliste im Tauschdialog/i })).toBeInTheDocument();
+
+    const freeSlotsHint = screen.getByRole("button", { name: /Hilfe: Freie Tauschtermine/i });
+    fireEvent.click(freeSlotsHint);
+    expect(screen.getByRole("note")).toHaveTextContent(/gleichzeitig von deinem aktuellen Termin ab/i);
 
     // Button ist deaktiviert und bleibt es auch, da keine Auswahl möglich ist
     const confirmButton = screen.getByRole("button", { name: /Bestätigen/i });
