@@ -751,9 +751,7 @@ export default function CourseCard({
         <div className="modal-backdrop">
           <div className="modal">
             <h4>
-              {hasCancelled
-                ? "Freien Termin auswählen (folgt)"
-                : "Tauschanfrage starten"}
+              {hasCancelled ? "Anderen Termin wählen" : "Tauschanfrage starten"}
             </h4>
             <p>
               Ausgewählter Termin:{" "}

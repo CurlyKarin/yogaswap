@@ -179,6 +179,32 @@ describe("CourseCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("zeigt im Swap-Modal den Titel „Anderen Termin wählen“ nach eigener Absage", () => {
+    const cancelledOverride: CourseDateOverride = {
+      courseId: 1,
+      date: "2099-06-16",
+      participants: [],
+      swapped: [],
+      waitlist: [],
+    };
+    const alternativeCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Abend",
+      dates: ["2099-06-20"],
+      participants: [],
+    };
+
+    renderCourseCard({
+      allCourses: [baseCourse, alternativeCourse],
+      overrides: [cancelledOverride],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Anderen Termin wählen/i }));
+    expect(screen.getByRole("heading", { name: /Anderen Termin wählen/i })).toBeInTheDocument();
+    expect(screen.queryByText(/folgt/i)).not.toBeInTheDocument();
+  });
+
   it("öffnet das Swap-Modal und ruft confirmSwap bzw. requestSwap korrekt auf", () => {
     const confirmSwap = vi.fn();
     const requestSwap = vi.fn();
