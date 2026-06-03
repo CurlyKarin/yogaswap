@@ -339,6 +339,12 @@ body {
   color: #92400e;
 }
 
+.course-term-visual-marker--excluded {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
 .course-status-badge {
   flex-shrink: 0;
   font-size: 11px;

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { Clock3, History } from "lucide-react";
+import { CalendarX, Clock3, History } from "lucide-react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
   buildCourseOccurrenceLocal,
@@ -24,6 +24,7 @@ import {
   canRequestSwapFromPastCancelledOrigin,
   isOccurrenceInPast,
 } from "../lib/courseTermActions";
+import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import type { SwapSettings } from "../types";
 
 type Props = {
@@ -278,13 +279,21 @@ export default function CourseCard({
     [swaps, userName, course.id],
   );
   const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
-  const showPastGraceMarker = includePastTermsInSelect && isPastOccurrence;
-  const showCutoffMarker = includePastTermsInSelect && !isPastOccurrence && originInCutoff;
+  const isSelectedTermExcluded = isExcludedCourseDate(course, selectedDateKey);
+  const showPastGraceMarker =
+    includePastTermsInSelect && isPastOccurrence && !isSelectedTermExcluded;
+  const showCutoffMarker =
+    includePastTermsInSelect &&
+    !isPastOccurrence &&
+    !isSelectedTermExcluded &&
+    originInCutoff;
+  const showExcludedTermMarker = includePastTermsInSelect && isSelectedTermExcluded;
   const canUseFullTermActions =
     !participantActionsLocked &&
     hasUpcomingDates &&
     (isParticipant || originallyParticipant) &&
-    !isPastOccurrence;
+    !isPastOccurrence &&
+    !isSelectedTermExcluded;
   const canSwapFromPastCancelled = canRequestSwapFromPastCancelledOrigin({
     isoDate: selectedDateKey,
     courseTime: course.time,
@@ -296,9 +305,13 @@ export default function CourseCard({
   });
   const showPastTermSwapActions =
     !participantActionsLocked &&
+    !isSelectedTermExcluded &&
     isPastOccurrence &&
     (isParticipant || originallyParticipant || hasCancelled) &&
     (swapForThisTerm != null || canSwapFromPastCancelled);
+  const excludedTermNotice = showExcludedTermMarker
+    ? "Dieser Termin entfällt — vom Studio abgesagt."
+    : null;
 
   const inactiveNotice = participantActionsLocked
     ? showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
@@ -338,8 +351,16 @@ export default function CourseCard({
           </div>
         </div>
         <div className="course-head-meta">
-          {(showPastGraceMarker || showCutoffMarker) && (
+          {(showPastGraceMarker || showCutoffMarker || showExcludedTermMarker) && (
             <div className="course-term-visual-markers" role="status">
+              {showExcludedTermMarker && (
+                <span
+                  className="course-term-visual-marker course-term-visual-marker--excluded"
+                  title="Termin entfällt (vom Studio abgesagt)"
+                >
+                  <CalendarX size={12} aria-hidden="true" />
+                </span>
+              )}
               {showPastGraceMarker && (
                 <span
                   className="course-term-visual-marker course-term-visual-marker--past"
@@ -377,8 +398,14 @@ export default function CourseCard({
       <div className="course-row">
         <div className="muted">Kapazität</div>
         <div>
-          {participants.length}/{course.capacity}
-          {showOverbookingDetails && overbookLimit > 0 && ` (+${overbookLimit})`}
+          {showExcludedTermMarker ? (
+            <span className="muted">entfällt</span>
+          ) : (
+            <>
+              {participants.length}/{course.capacity}
+              {showOverbookingDetails && overbookLimit > 0 && ` (+${overbookLimit})`}
+            </>
+          )}
         </div>
       </div>
 
@@ -401,11 +428,16 @@ export default function CourseCard({
             <option value="">—</option>
           ) : (
             (includePastTermsInSelect ? dates : dates.filter((d) => d >= new Date())).map(
-              (date, index) => (
-                <option key={index} value={date.toISOString()}>
-                  {date.toLocaleDateString()}
-                </option>
-              ),
+              (date, index) => {
+                const dateIso = toDateKey(date);
+                const excludedLabel = isExcludedCourseDate(course, dateIso) ? " (entfällt)" : "";
+                return (
+                  <option key={index} value={date.toISOString()}>
+                    {date.toLocaleDateString()}
+                    {excludedLabel}
+                  </option>
+                );
+              },
             )
           )}
         </select>
@@ -414,43 +446,49 @@ export default function CourseCard({
       <div className="course-row list-row">
         <div className="label muted">Teilnehmer</div>
         <div className="chips">
-          {participants.length === 0 && <span className="chip">—</span>}
-          {participants.map((name) => (
-            <span
-              className={`chip ${
-                shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
-                  ? "short-notice"
-                  : swapped.includes(name)
-                    ? "swapped"
-                    : ""
-              }`}
-              key={name}
-              title={
-                shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
-                  ? "Kurzfristig abgesagt — Platz bleibt belegt"
-                  : undefined
-              }
-            >
-              {name}
-            </span>
-          ))}
-          {visibleFreeSpots > 0 &&
-            Array.from({ length: regularFreeSpots }).map((_, idx) => (
-              <span className="chip free" key={`free-${idx}`}>
-                frei
-              </span>
-            ))}
-          {showOverbookingDetails &&
-            overbookFreeSpots > 0 &&
-            Array.from({ length: overbookFreeSpots }).map((_, idx) => (
-              <span
-                className="chip overbook-free"
-                key={`overbook-free-${idx}`}
-                title="Platz in der Überplanung"
-              >
-                +frei
-              </span>
-            ))}
+          {showExcludedTermMarker ? (
+            <span className="chip muted small">—</span>
+          ) : (
+            <>
+              {participants.length === 0 && <span className="chip">—</span>}
+              {participants.map((name) => (
+                <span
+                  className={`chip ${
+                    shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
+                      ? "short-notice"
+                      : swapped.includes(name)
+                        ? "swapped"
+                        : ""
+                  }`}
+                  key={name}
+                  title={
+                    shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
+                      ? "Kurzfristig abgesagt — Platz bleibt belegt"
+                      : undefined
+                  }
+                >
+                  {name}
+                </span>
+              ))}
+              {visibleFreeSpots > 0 &&
+                Array.from({ length: regularFreeSpots }).map((_, idx) => (
+                  <span className="chip free" key={`free-${idx}`}>
+                    frei
+                  </span>
+                ))}
+              {showOverbookingDetails &&
+                overbookFreeSpots > 0 &&
+                Array.from({ length: overbookFreeSpots }).map((_, idx) => (
+                  <span
+                    className="chip overbook-free"
+                    key={`overbook-free-${idx}`}
+                    title="Platz in der Überplanung"
+                  >
+                    +frei
+                  </span>
+                ))}
+            </>
+          )}
         </div>
       </div>
 
@@ -458,7 +496,9 @@ export default function CourseCard({
       <div className="course-row list-row">
         <div className="label muted">Warteliste</div>
         <div className="chips">
-          {waitlist.length === 0 ? (
+          {showExcludedTermMarker ? (
+            <span className="chip muted small">—</span>
+          ) : waitlist.length === 0 ? (
             <span className="chip muted small">Keine Anfragen</span>
           ) : (
             waitlist.map((name) => (
@@ -473,6 +513,12 @@ export default function CourseCard({
       {inactiveNotice && (
         <div className="course-row course-inactive-notice" role="status">
           <span className="muted small">{inactiveNotice}</span>
+        </div>
+      )}
+
+      {excludedTermNotice && (
+        <div className="course-row course-excluded-term-notice" role="status">
+          <span className="muted small">{excludedTermNotice}</span>
         </div>
       )}
 
@@ -618,6 +664,19 @@ export default function CourseCard({
             </>
           ) : null}
         </div>
+      ) : isSelectedTermExcluded && includePastTermsInSelect ? (
+        swapForThisTerm ? (
+          <div className="actions">
+            <button
+              className="secondary danger"
+              onClick={() => cancelSwap(swapForThisTerm, course.id)}
+            >
+              {swapForThisTerm.status === "pending"
+                ? "Tauschanfrage abbrechen"
+                : "Tausch abbrechen"}
+            </button>
+          </div>
+        ) : null
       ) : isPastOccurrence && !participantActionsLocked ? (
         <p className="muted small course-past-term-note" role="status">
           Vergangener Termin — keine Änderungen mehr möglich.

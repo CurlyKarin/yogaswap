@@ -61,6 +61,18 @@ describe("preferredWeekCardDate", () => {
     expect(picked && toLocalDateIso(picked)).toBe("2026-05-25");
   });
 
+  it("skips excluded dates when picking the default term in a week", () => {
+    const courseWithExcluded: Course = {
+      ...course,
+      dates: ["2026-05-25", "2026-05-26", "2026-06-08"],
+      excludedDates: ["2026-05-26"],
+    };
+    const now = new Date(2026, 4, 20, 12, 0, 0);
+    const weekStart = new Date(2026, 4, 25);
+    const picked = preferredWeekCardDate(courseWithExcluded, weekStart, now);
+    expect(picked && toLocalDateIso(picked)).toBe("2026-05-25");
+  });
+
   it("uses the last occurrence when the week is entirely in the past", () => {
     const now = new Date(2026, 5, 10, 12, 0, 0);
     const weekStart = new Date(2026, 4, 25);

@@ -88,6 +88,27 @@ describe("CourseCard", () => {
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
   });
 
+  it("kennzeichnet vom Studio abgesagte Termine in der Wochenansicht", () => {
+    const weekCourse: Course = {
+      ...baseCourse,
+      dates: ["2099-06-16", "2099-06-18"],
+      excludedDates: ["2099-06-16"],
+    };
+
+    renderCourseCard({
+      course: weekCourse,
+      dates: [new Date("2099-06-16T10:00:00Z"), new Date("2099-06-18T10:00:00Z")],
+      includePastTermsInSelect: true,
+      initialSelectedDate: new Date("2099-06-16T10:00:00Z"),
+    });
+
+    expect(screen.getByTitle(/Termin entfällt/i)).toBeInTheDocument();
+    expect(screen.getByText(/vom Studio abgesagt/i)).toBeInTheDocument();
+    expect(screen.getByText("entfällt")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /6\/16\/2099 \(entfällt\)/i })).toBeInTheDocument();
+  });
+
   it("deaktiviert Datumsauswahl, wenn keine zukünftigen Termine vorhanden sind", () => {
     const courseWithoutFutureDates: Course = {
       ...baseCourse,

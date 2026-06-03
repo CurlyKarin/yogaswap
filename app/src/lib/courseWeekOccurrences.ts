@@ -30,6 +30,13 @@ export function isIsoDateInWeek(iso: string, start: string, end: string): boolea
   return iso >= start && iso <= end;
 }
 
+export function isExcludedCourseDate(
+  course: Pick<Course, "excludedDates">,
+  dateIso: string,
+): boolean {
+  return (course.excludedDates ?? []).includes(dateIso);
+}
+
 /** Sichtbare und ausgeschlossene Termine der Kalenderwoche (lokales Mo–So). */
 export function collectWeekOccurrences(
   course: Pick<Course, "dates" | "excludedDates">,
@@ -107,18 +114,55 @@ export function getWeekViewCardDates(
  * Vorauswahl passend zur angezeigten KW: bei vergangener Woche letzter Termin dort,
  * sonst erster künftiger Termin in der Woche, sonst erster Termin in der Woche.
  */
+function occurrenceDatesSorted(
+  occurrences: WeekOccurrence[],
+  course: Course,
+): Date[] {
+  return occurrences
+    .map((o) => buildCourseOccurrenceLocal(o.dateIso, course.time))
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+}
+
+function pickPreferredFromWeekDates(
+  dates: Date[],
+  occurrences: WeekOccurrence[],
+  weekStart: Date,
+  now: Date,
+): Date | undefined {
+  if (dates.length === 0) return undefined;
+  const excludedSet = new Set(
+    occurrences.filter((o) => o.kind === "excluded").map((o) => o.dateIso),
+  );
+  const isScheduled = (d: Date) => !excludedSet.has(toLocalDateIso(d));
+  const scheduled = dates.filter(isScheduled);
+
+  if (isWeekEntirelyInPast(weekStart, now)) {
+    const pool = scheduled.length > 0 ? scheduled : dates;
+    return pool[pool.length - 1];
+  }
+
+  const future = dates.filter((d) => d >= now);
+  const futureScheduled = future.filter(isScheduled);
+  if (futureScheduled.length > 0) return futureScheduled[0];
+  if (future.length > 0) return future[0];
+  if (scheduled.length > 0) return scheduled[0];
+  return dates[0];
+}
+
 export function preferredWeekCardDate(
   course: Course,
   weekStart: Date,
   now: Date = new Date(),
 ): Date | undefined {
-  const inWeek = weekOccurrenceDates(course, weekStart);
-  if (inWeek.length > 0) {
-    if (isWeekEntirelyInPast(weekStart, now)) {
-      return inWeek[inWeek.length - 1];
-    }
-    const futureInWeek = inWeek.filter((d) => d >= now);
-    return futureInWeek[0] ?? inWeek[0];
+  const occurrences = collectWeekOccurrences(course, weekStart);
+  if (occurrences.length > 0) {
+    return pickPreferredFromWeekDates(
+      occurrenceDatesSorted(occurrences, course),
+      occurrences,
+      weekStart,
+      now,
+    );
   }
   return getCourseDates(course, now)[0];
 }
