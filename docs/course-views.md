@@ -90,7 +90,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 
 - Default **Wochenansicht** für alle Rollen mit Kurszugang.
 - Hinweis unter der Toolbar in der Wochenansicht (Absagen/Tauschen).
-- **Noch nicht:** URL-Parameter, `localStorage` für letzte Ansicht, globales `selectedOccurrence` im Shell-State.
+- **Noch nicht:** Persistenz der KW beim Reload ([#187](https://github.com/CurlyKarin/yogaswap/issues/187): `sessionStorage` in der Tab-Session, Vertretung in gleicher KW), URL-Parameter, globales `selectedOccurrence` im Shell-State.
 
 ### Vergangenheit (Nachlauf)
 
@@ -137,7 +137,8 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 - [ ] Layout-Polish Kacheln [#182](https://github.com/CurlyKarin/yogaswap/issues/182)
 - [ ] Meilenstein Post-rollout: Kachel Status/Tausch-Ursprung [#185](https://github.com/CurlyKarin/yogaswap/issues/185)
 - [ ] Meilenstein Post-rollout: Übersicht „Meine Termine“ [#186](https://github.com/CurlyKarin/yogaswap/issues/186) (`groupWeekRowsByDay` vorbereitet, UI noch nicht)
-- [ ] Optional: URL-Parameter, `localStorage`, Tagesgruppierung in der Wochenansicht
+- [ ] KW in Tab-Session behalten + Vertretung ([#187](https://github.com/CurlyKarin/yogaswap/issues/187))
+- [ ] Optional: URL-Parameter, Tagesgruppierung in der Wochenansicht
 
 ---
 
@@ -148,3 +149,4 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 - [#182](https://github.com/CurlyKarin/yogaswap/issues/182) — Layout Kurskacheln
 - [#185](https://github.com/CurlyKarin/yogaswap/issues/185) — Tausch-Ursprung / eigene Absagen in der Kachel
 - [#186](https://github.com/CurlyKarin/yogaswap/issues/186) — Terminübersicht nach Woche
+- [#187](https://github.com/CurlyKarin/yogaswap/issues/187) — `weekAnchor` in Session, Vertretung in gleicher KW
