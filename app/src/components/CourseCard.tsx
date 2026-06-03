@@ -451,25 +451,30 @@ export default function CourseCard({
           ) : (
             <>
               {participants.length === 0 && <span className="chip">—</span>}
-              {participants.map((name) => (
-                <span
-                  className={`chip ${
-                    shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
-                      ? "short-notice"
-                      : swapped.includes(name)
-                        ? "swapped"
-                        : ""
-                  }`}
-                  key={name}
-                  title={
-                    shortNotice.some((n) => n.toLowerCase() === name.toLowerCase())
-                      ? "Kurzfristig abgesagt — Platz bleibt belegt"
-                      : undefined
-                  }
-                >
-                  {name}
-                </span>
-              ))}
+              {participants.map((name) => {
+                const isSelf = name.toLowerCase() === userNameLower;
+                const isSn = shortNotice.some((n) => n.toLowerCase() === name.toLowerCase());
+                const isSwapped = swapped.includes(name);
+                return (
+                  <span
+                    className={`chip${isSelf ? " chip-self" : ""}${
+                      isSn ? " short-notice" : isSwapped ? " swapped" : ""
+                    }`}
+                    key={name}
+                    title={
+                      isSn && isSelf
+                        ? "Du — kurzfristig abgesagt, Platz bleibt belegt"
+                        : isSn
+                          ? "Kurzfristig abgesagt — Platz bleibt belegt"
+                          : isSelf
+                            ? "Du"
+                            : undefined
+                    }
+                  >
+                    {name}
+                  </span>
+                );
+              })}
               {visibleFreeSpots > 0 &&
                 Array.from({ length: regularFreeSpots }).map((_, idx) => (
                   <span className="chip free" key={`free-${idx}`}>
@@ -501,11 +506,18 @@ export default function CourseCard({
           ) : waitlist.length === 0 ? (
             <span className="chip muted small">Keine Anfragen</span>
           ) : (
-            waitlist.map((name) => (
-              <span className="chip wait" key={name}>
-                {name}
-              </span>
-            ))
+            waitlist.map((name) => {
+              const isSelf = name.toLowerCase() === userNameLower;
+              return (
+                <span
+                  className={`chip wait${isSelf ? " chip-self" : ""}`}
+                  key={name}
+                  title={isSelf ? "Du (Warteliste)" : undefined}
+                >
+                  {name}
+                </span>
+              );
+            })
           )}
         </div>
       </div>

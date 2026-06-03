@@ -68,6 +68,54 @@ describe("CourseCard", () => {
     cleanup();
   });
 
+  it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {
+    const overrideSn: CourseDateOverride = {
+      ...baseOverride,
+      participants: ["alice"],
+      shortNoticeCancellations: ["alice"],
+    };
+
+    const { container } = renderCourseCard({ overrides: [overrideSn] });
+
+    const selfSn = container.querySelector(".chip.chip-self.short-notice");
+    expect(selfSn).toHaveTextContent("alice");
+    expect(selfSn?.getAttribute("title")).toMatch(/Du — kurzfristig abgesagt/i);
+  });
+
+  it("zeigt getauschte und kurzfristig abgesagte andere Teilnehmer dezenter als den eigenen Chip", () => {
+    const overrideMixed: CourseDateOverride = {
+      ...baseOverride,
+      participants: ["alice", "bob", "carol"],
+      swapped: ["bob"],
+      shortNoticeCancellations: ["carol"],
+    };
+
+    const { container } = renderCourseCard({ overrides: [overrideMixed] });
+
+    expect(container.querySelector(".chip.chip-self")).toHaveTextContent("alice");
+    expect(screen.getByText("bob").closest(".chip")).toHaveClass("swapped");
+    expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
+    expect(screen.getByText("carol").closest(".chip")).toHaveClass("short-notice");
+    expect(screen.getByText("carol").closest(".chip")).not.toHaveClass("chip-self");
+  });
+
+  it("hebt den eigenen Chip in Teilnehmer- und Warteliste grün hervor", () => {
+    const overrideWithWaitlist: CourseDateOverride = {
+      ...baseOverride,
+      participants: ["alice", "bob"],
+      waitlist: ["alice"],
+    };
+
+    const { container } = renderCourseCard({ overrides: [overrideWithWaitlist] });
+
+    const selfChips = container.querySelectorAll(".chip.chip-self");
+    expect(selfChips).toHaveLength(2);
+    expect(selfChips[0]).toHaveTextContent("alice");
+    expect(selfChips[0]).toHaveAttribute("title", "Du");
+    expect(container.querySelector(".chip.wait.chip-self")).toHaveAttribute("title", "Du (Warteliste)");
+    expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
+  });
+
   it("zeigt Badge und Hinweis bei gesperrter Teilnehmer-Ansicht für inaktiven Kurs", () => {
     const inactiveCourse: Course = {
       ...baseCourse,

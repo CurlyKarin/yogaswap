@@ -416,16 +416,39 @@ body {
   padding: 4px 8px;
   font-size: 12px;
 }
-.chip.swapped {
-  background-color: #ffd54f; /* Gelb für Tausch */
+.chip.swapped:not(.chip-self) {
+  background-color: #fff9c4; /* Dezentes Gelb — getauschte andere Teilnehmer */
+  color: #5d4e37;
 }
-.chip.short-notice {
-  background-color: #ffccbc; /* Kurzfristig abgesagt, Platz bleibt belegt */
+.chip.swapped.chip-self {
+  background-color: #ffd54f;
+  color: inherit;
+  font-weight: 600;
+}
+/* Kurzfristig abgesagt (SN): andere = blass rot, eigener Chip = kräftig rot */
+.chip.short-notice:not(.chip-self) {
+  background-color: #ffebee;
+  color: #8d4a4a;
   text-decoration: line-through;
+  text-decoration-color: #c62828;
+}
+.chip.short-notice.chip-self {
+  background-color: #c62828;
+  color: #fff;
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
 }
 .chip.free {
   background-color: #c8e6c9; /* Grün für frei */
   font-style: italic;
+}
+
+/* Eingeloggte:r User in Teilnehmer- oder Warteliste (intensiver als „frei“) */
+.chip.chip-self:not(.short-notice):not(.swapped) {
+  background-color: #2e7d32;
+  color: #fff;
+  font-weight: 600;
 }
 
 .chip.overbook-free {
