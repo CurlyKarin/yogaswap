@@ -79,6 +79,14 @@ describe("updateOverride", () => {
       { headers: { "x-acting-for-user-id": "maya" } },
     );
   });
+
+  it("wirft bei API-Fehler", async () => {
+    vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
+
+    await expect(
+      updateOverride(1, "2025-06-16", { participants: ["alice"] }),
+    ).rejects.toThrow("Network error");
+  });
 });
 
 describe("deleteOverride", () => {
@@ -141,5 +149,17 @@ describe("createOverride", () => {
     expect(axios.post).toHaveBeenCalledWith("/course-overrides", newOverride, {
       headers: { "x-acting-for-user-id": "maya" },
     });
+  });
+
+  it("wirft bei API-Fehler", async () => {
+    vi.mocked(axios.post).mockRejectedValueOnce(new Error("Network error"));
+    const newOverride: CourseDateOverride = {
+      courseId: 1,
+      date: "2025-06-16",
+      participants: ["alice"],
+      waitlist: [],
+    };
+
+    await expect(createOverride(newOverride)).rejects.toThrow("Network error");
   });
 });

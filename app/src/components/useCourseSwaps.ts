@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
 import { getEffectiveWaitlist } from "../lib/waitlist";
-import { sameDayUTC } from "../lib/dates";
 import { overrideCourseUidFields, swapCourseUidFields } from "../lib/courseUid";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
@@ -15,6 +14,46 @@ import {
 import { hasBookingCapacity, resolveMaxCapacity } from "shared/courseCapacity";
 import { createSwap, deleteSwap, processPromotions } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
+
+function findOverrideIndex(
+  list: CourseDateOverride[],
+  courseId: number,
+  dateIso: string,
+): number {
+  return list.findIndex((o) => o.courseId === courseId && o.date === dateIso);
+}
+
+function upsertCourseDateOverride(
+  prev: CourseDateOverride[],
+  next: CourseDateOverride,
+  courseId: number,
+  dateIso: string,
+): CourseDateOverride[] {
+  const idx = findOverrideIndex(prev, courseId, dateIso);
+  if (idx >= 0) {
+    const updated = [...prev];
+    updated[idx] = next;
+    return updated;
+  }
+  return [...prev, next];
+}
+
+async function persistCourseDateOverride(
+  courseId: number,
+  dateIso: string,
+  next: CourseDateOverride,
+  exists: boolean,
+): Promise<void> {
+  const payload = {
+    participants: next.participants,
+    shortNoticeCancellations: next.shortNoticeCancellations ?? [],
+  };
+  if (exists) {
+    await updateOverride(courseId, dateIso, payload);
+  } else {
+    await createOverride({ ...next, courseId, date: dateIso });
+  }
+}
 
 /** Behält shortNotice, falls API-Antwort das Feld (noch) nicht liefert. */
 function mergeOverridesPreservingShortNotice(
@@ -245,73 +284,46 @@ export function useCourseSwaps(
         }
       }
 
-      const persistOverride = (
-        courseId: number,
-        dateKey: string,
-        nextOverride: CourseDateOverride,
-        idx: number,
-        prev: CourseDateOverride[],
-      ) => {
-        const updated = [...prev];
-        const payload = {
-          participants: nextOverride.participants,
-          shortNoticeCancellations: nextOverride.shortNoticeCancellations ?? [],
-        };
-        if (idx >= 0) {
-          updated[idx] = nextOverride;
-          updateOverride(courseId, dateKey, payload);
-        } else {
-          updated.push(nextOverride);
-          createOverride(nextOverride);
+      const existingIndex = findOverrideIndex(filteredOverrides, course.id, dateIso);
+      const baseOverride: CourseDateOverride =
+        existingIndex >= 0
+          ? { ...filteredOverrides[existingIndex] }
+          : {
+              courseId: course.id,
+              date: dateIso,
+              participants: [...course.participants],
+              swapped: [],
+              waitlist: [],
+              shortNoticeCancellations: [],
+              ...overrideCourseUidFields(course),
+            };
+
+      const maxCapacity = resolveMaxCapacity(course);
+      let nextParticipants = [...baseOverride.participants];
+      let nextShortNotice = [...(baseOverride.shortNoticeCancellations ?? [])];
+
+      if (isSn) {
+        nextShortNotice = removeUserCaseInsensitive(nextShortNotice, userName);
+      } else if (isIn && inCutoff) {
+        nextShortNotice = addUserUniqueCaseInsensitive(nextShortNotice, userName);
+      } else if (isIn) {
+        nextParticipants = removeUserCaseInsensitive(nextParticipants, userName);
+      } else {
+        if (nextParticipants.length >= maxCapacity) {
+          alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
+          return;
         }
-        return updated;
+        nextParticipants = addUserUniqueCaseInsensitive(nextParticipants, userName);
+      }
+
+      const nextOverride: CourseDateOverride = {
+        ...baseOverride,
+        participants: nextParticipants,
+        shortNoticeCancellations: nextShortNotice,
       };
 
-      setOverrides((prev: CourseDateOverride[]) => {
-        const date = new Date(dateIso);
-        const idx = prev.findIndex(
-          (o: CourseDateOverride) => o.courseId === course.id && sameDayUTC(new Date(o.date), date),
-        );
-
-        const baseOverride: CourseDateOverride =
-          idx >= 0
-            ? { ...prev[idx] }
-            : {
-                courseId: course.id,
-                date: dateIso,
-                participants: [...course.participants],
-                swapped: [],
-                waitlist: [],
-                shortNoticeCancellations: [],
-                ...overrideCourseUidFields(course),
-              };
-
-        const maxCapacity = resolveMaxCapacity(course);
-        let nextParticipants = [...baseOverride.participants];
-        let nextShortNotice = [...(baseOverride.shortNoticeCancellations ?? [])];
-
-        if (isSn) {
-          nextShortNotice = removeUserCaseInsensitive(nextShortNotice, userName);
-        } else if (isIn && inCutoff) {
-          nextShortNotice = addUserUniqueCaseInsensitive(nextShortNotice, userName);
-        } else if (isIn) {
-          nextParticipants = removeUserCaseInsensitive(nextParticipants, userName);
-        } else {
-          if (nextParticipants.length >= maxCapacity) {
-            alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
-            return prev;
-          }
-          nextParticipants = addUserUniqueCaseInsensitive(nextParticipants, userName);
-        }
-
-        const nextOverride: CourseDateOverride = {
-          ...baseOverride,
-          participants: nextParticipants,
-          shortNoticeCancellations: nextShortNotice,
-        };
-
-        return persistOverride(course.id, dateIso, nextOverride, idx, prev);
-      });
+      await persistCourseDateOverride(course.id, dateIso, nextOverride, existingIndex >= 0);
+      setOverrides((prev) => upsertCourseDateOverride(prev, nextOverride, course.id, dateIso));
 
       if (isIn && !isSn && inCutoff) {
         await cleanupPendingSwapsFromOrigin(course.id, dateIso, userName);
@@ -331,6 +343,8 @@ export function useCourseSwaps(
 
     } catch (err) {
         console.error('Error in onToggleAbsence:', err);
+        alert("Fehler beim Speichern der Absage. Bitte erneut versuchen.");
+        await fetchData();
       }
     },
     // courses, currentUser.nickname kept so callback updates when they change
@@ -604,27 +618,31 @@ export function useCourseSwaps(
           const nextShortNotice = isSn
             ? removeUserCaseInsensitive(baseOverride.shortNoticeCancellations ?? [], swap.user)
             : addUserUniqueCaseInsensitive(baseOverride.shortNoticeCancellations ?? [], swap.user);
+          const nextParticipants = includesUserCaseInsensitive(baseOverride.participants, swap.user)
+            ? baseOverride.participants
+            : addUserUniqueCaseInsensitive(baseOverride.participants, swap.user);
 
           const nextOverride: CourseDateOverride = {
             ...baseOverride,
+            participants: nextParticipants,
             shortNoticeCancellations: nextShortNotice,
           };
-          const idx = filteredOverrides.findIndex(
-            (o) => o.courseId === swap.toCourseId && o.date === swap.toDate,
-          );
-          setOverrides((prev) => {
-            const updated = [...prev];
-            if (idx >= 0) {
-              updated[idx] = nextOverride;
-              updateOverride(swap.toCourseId, swap.toDate, {
-                shortNoticeCancellations: nextShortNotice,
-              });
-            } else {
-              updated.push(nextOverride);
-              createOverride(nextOverride);
-            }
-            return updated;
-          });
+          const idx = findOverrideIndex(filteredOverrides, swap.toCourseId, swap.toDate);
+          try {
+            await persistCourseDateOverride(
+              swap.toCourseId,
+              swap.toDate,
+              nextOverride,
+              idx >= 0,
+            );
+            setOverrides((prev) =>
+              upsertCourseDateOverride(prev, nextOverride, swap.toCourseId, swap.toDate),
+            );
+          } catch (err) {
+            console.error("Error in cancelSwap (cutoff SN):", err);
+            alert("Fehler beim Speichern der Absage. Bitte erneut versuchen.");
+            await fetchData();
+          }
           return;
         }
 

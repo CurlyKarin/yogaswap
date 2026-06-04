@@ -47,6 +47,18 @@ describe("cutoffOverrideValidation", () => {
     expect(error).toBe("Kurzfristige Absage ist nur kurz vor Kursbeginn möglich.");
   });
 
+  it("erlaubt SN-Setzen innerhalb des Cutoff bei bestehendem participants-Eintrag", () => {
+    const before = makeOverride();
+    const after = makeOverride({ shortNoticeCancellations: ["alice"] });
+    const error = validateSelfServiceOverrideTransition({
+      ...baseInput,
+      before,
+      after,
+      now: new Date(2099, 5, 15, 9, 30),
+    });
+    expect(error).toBeNull();
+  });
+
   it("erlaubt SN-Rücknahme innerhalb des Cutoff", () => {
     const before = makeOverride({ shortNoticeCancellations: ["alice"] });
     const after = makeOverride({ shortNoticeCancellations: [] });
