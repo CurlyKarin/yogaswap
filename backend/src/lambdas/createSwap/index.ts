@@ -1,6 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { canCreateSwapFromOrigin, validateParticipantListSize } from '@yogaswap/shared';
+import {
+  canCreateSwapFromOrigin,
+  hasRegularBookingCapacity,
+  isSwapTargetInCutoffWindow,
+  validateParticipantListSize,
+} from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
@@ -50,6 +55,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     const courseTime = courseResp.Item.time?.S ?? '';
     const baseParticipants = mapStringList(courseResp.Item.participants);
+    const tenantSettings = tenantsTable
+      ? await loadTenantSettings(client, tenantsTable, tenantId)
+      : undefined;
 
     let override;
     if (overridesTable) {
@@ -69,10 +77,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const originallyParticipant = baseParticipants.some(
       (p) => p.toLowerCase() === swap.user.toLowerCase(),
     );
-    const tenantSettings = tenantsTable
-      ? await loadTenantSettings(client, tenantsTable, tenantId)
-      : undefined;
-
     if (
       !canCreateSwapFromOrigin({
         isoDate: swap.fromDate,
@@ -103,6 +107,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!toCourseResp.Item) {
       return { statusCode: 404, body: JSON.stringify({ error: 'Target course not found' }) };
     }
+    const targetCourseTime = toCourseResp.Item.time?.S ?? '';
+    if (isSwapTargetInCutoffWindow(swap.toDate, targetCourseTime, tenantSettings)) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: 'Für diesen Zieltermin ist keine Tauschanfrage mehr möglich (kurz vor Kursbeginn).',
+        }),
+      };
+    }
     const toCapacity = {
       capacity: toCourseResp.Item.capacity?.N ? Number.parseInt(toCourseResp.Item.capacity.N, 10) : 0,
       overbookLimit: toCourseResp.Item.overbookLimit?.N
@@ -129,6 +142,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ? targetParticipants.length
       : targetParticipants.length + 1;
     if (swap.status === 'active') {
+      if (!userOnTarget && !hasRegularBookingCapacity(targetParticipants.length, toCapacity)) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({
+            error: 'Der Zieltermin ist regulär voll. Überplanungsplätze sind per Tausch nicht buchbar.',
+          }),
+        };
+      }
       const targetCapacityError = validateParticipantListSize(countAfterSwap, toCapacity);
       if (targetCapacityError) {
         return {

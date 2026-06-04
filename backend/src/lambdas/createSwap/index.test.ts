@@ -63,11 +63,34 @@ describe("createSwap capacity guard", () => {
     expect(PutItemCommand).not.toHaveBeenCalled();
   });
 
-  it("allows active swap when target has overbook headroom", async () => {
+  it("rejects active swap when target is only overbook headroom", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: baseCourseItem("1", "2", "0", ["alice"]) })
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ Item: baseCourseItem("2", "2", "1", ["b1", "b2"]) })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        user: "alice",
+        fromCourseId: 1,
+        fromDate: "2099-06-16",
+        toCourseId: 2,
+        toDate: "2099-06-17",
+        status: "active",
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/regulär voll/i);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+  });
+
+  it("allows active swap when target has regular capacity headroom", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: baseCourseItem("1", "2", "0", ["alice"]) })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: baseCourseItem("2", "2", "1", ["b1"]) })
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ Item: { courseUid: { S: "uid-1" } } })
       .mockResolvedValueOnce({ Item: { courseUid: { S: "uid-2" } } })
@@ -86,5 +109,33 @@ describe("createSwap capacity guard", () => {
 
     expect(result.statusCode).toBe(200);
     expect(PutItemCommand).toHaveBeenCalled();
+  });
+
+  it("rejects pending swap when target term is inside cutoff window", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2025-09-01T06:15:00.000Z"));
+    mockSend
+      .mockResolvedValueOnce({ Item: baseCourseItem("1", "2", "0", ["alice"]) })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Item: { ...baseCourseItem("2", "2", "0", ["b1"]), time: { S: "06:30" } },
+      });
+
+    const result = await handler(
+      makeEvent({
+        user: "alice",
+        fromCourseId: 1,
+        fromDate: "2099-06-16",
+        toCourseId: 2,
+        toDate: "2025-09-01",
+        status: "pending",
+      }),
+    );
+
+    jest.useRealTimers();
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Zieltermin/i);
+    expect(mockSend).toHaveBeenCalledTimes(3);
   });
 });

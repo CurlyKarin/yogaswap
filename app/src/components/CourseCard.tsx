@@ -203,18 +203,34 @@ export default function CourseCard({
 
   const availableSwapDates = useMemo(
     () =>
-      getAvailableDates(allCourses, overrides, currentUser, swapWindow, new Date(selectedDate))
+      getAvailableDates(
+        allCourses,
+        overrides,
+        currentUser,
+        swapWindow,
+        new Date(selectedDate),
+        undefined,
+        tenantSettings,
+      )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow]
+    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings]
   );
 
   const waitlistDates = useMemo(
     () =>
-      getWaitlistDates(allCourses, overrides, currentUser, swapWindow, new Date(selectedDate))
+      getWaitlistDates(
+        allCourses,
+        overrides,
+        currentUser,
+        swapWindow,
+        new Date(selectedDate),
+        undefined,
+        tenantSettings,
+      )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow]
+    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings]
   );
 
   const swapForThisTerm = useMemo(

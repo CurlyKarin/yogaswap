@@ -50,6 +50,8 @@ RC-Rücknahme ist möglich (auch im Cutoff), wenn noch Platz frei ist. Vor dem A
 
 Beim Laden (`getSwaps`, `getSwapsByStatus`): `pending`-Swaps, deren **Ursprung** im Cutoff liegt, werden entfernt und Wartelisten am Ziel bereinigt (`swapCutoffReconcile`).
 
+**Ziel im Cutoff:** keine neuen Tauschanfragen oder Wartelisten-Einträge (UI `getAvailableDates`/`getWaitlistDates`, `requestSwap`/`confirmSwap`, API `createSwap`) — konsistent mit `processPromotions`, das in diesem Fenster nicht nachrückt.
+
 Bei kurzfristiger Absage am Ursprung: dieselbe Bereinigung in der App (`cleanupPendingSwapsFromOrigin`).
 
 ## UI

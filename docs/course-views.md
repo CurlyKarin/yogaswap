@@ -74,7 +74,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 
 - Zieltermine: `getAvailableDates` / `getWaitlistDates` (weiterhin keine Ziele in der Vergangenheit; Swap-Fenster `SwapSettings`).
 - Modal mit Hilfe-Texten zu freien Terminen und Warteliste.
-- Bekannte Bugs: [#183](https://github.com/CurlyKarin/yogaswap/issues/183) (Überplanung + Cutoff-Ziel), [#184](https://github.com/CurlyKarin/yogaswap/issues/184) (SN-Persistenz im Cutoff).
+- Bekannte Bugs: [#184](https://github.com/CurlyKarin/yogaswap/issues/184) (SN-Persistenz im Cutoff, behoben in #190).
 
 **Code:** `app/src/components/CourseWeekView.tsx`, `CourseCard.tsx` (`includePastTermsInSelect`), `app/src/lib/courseTermActions.ts`.
 
@@ -133,7 +133,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 ### Offen / Follow-up
 
 - [ ] [#164](https://github.com/CurlyKarin/yogaswap/issues/164) schließen nach QA + Merge
-- [ ] Bugs [#183](https://github.com/CurlyKarin/yogaswap/issues/183), [#184](https://github.com/CurlyKarin/yogaswap/issues/184)
+- [ ] Bug [#183](https://github.com/CurlyKarin/yogaswap/issues/183) (Tausch nur reguläre Zielkapazität)
 - [ ] Layout-Polish Kacheln [#182](https://github.com/CurlyKarin/yogaswap/issues/182)
 - [ ] Meilenstein Post-rollout: Kachel Status/Tausch-Ursprung [#185](https://github.com/CurlyKarin/yogaswap/issues/185)
 - [ ] Meilenstein Post-rollout: Übersicht „Meine Termine“ [#186](https://github.com/CurlyKarin/yogaswap/issues/186) (`groupWeekRowsByDay` vorbereitet, UI noch nicht)

@@ -7,11 +7,12 @@ import {
   canCreateSwapFromOrigin,
   includesUserCaseInsensitive,
   isShortNoticeCancelled,
+  isSwapTargetInCutoffWindow,
   isWithinCancellationSwapCutoff,
   removeUserCaseInsensitive,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
-import { hasBookingCapacity, resolveMaxCapacity } from "shared/courseCapacity";
+import { hasRegularBookingCapacity, resolveMaxCapacity } from "shared/courseCapacity";
 import { createSwap, deleteSwap, processPromotions } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
 
@@ -386,6 +387,16 @@ export function useCourseSwaps(
     return true;
   };
 
+  const assertSwapTargetNotInCutoff = (targetCourse: Course, toDateIso: string): boolean => {
+    if (isSwapTargetInCutoffWindow(toDateIso, targetCourse.time, tenantSettings)) {
+      alert(
+        "Für diesen Zieltermin ist keine Tauschanfrage mehr möglich (kurz vor Kursbeginn).",
+      );
+      return false;
+    }
+    return true;
+  };
+
   const confirmSwap = useCallback(
     async (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => {
       try {
@@ -411,6 +422,8 @@ export function useCourseSwaps(
           alert("Zielkurs nicht gefunden.");
           return;
         }
+        if (!assertSwapTargetNotInCutoff(targetCourse, toDateIso)) return;
+
         const existingTargetOverride = filteredOverrides.find(
           (o) => o.courseId === toCourseId && o.date === toDateIso
         );
@@ -430,7 +443,7 @@ export function useCourseSwaps(
           ? existingTargetOverride.participants
           : targetCourse.participants;
 
-        if (!hasBookingCapacity(effectiveTargetParticipants.length, targetCourse)) {
+        if (!hasRegularBookingCapacity(effectiveTargetParticipants.length, targetCourse)) {
           alert("Der gewählte Ersatztermin ist inzwischen voll.");
           return;
         }
@@ -784,6 +797,7 @@ export function useCourseSwaps(
           alert("Zielkurs nicht gefunden.");
           return;
         }
+        if (!assertSwapTargetNotInCutoff(targetCourse, toDateIso)) return;
 
         // 3) in Overrides die Warteliste ergänzen
         setOverrides((prev) => {
