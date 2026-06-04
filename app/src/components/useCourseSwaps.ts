@@ -7,6 +7,7 @@ import {
   canCreateSwapFromOrigin,
   includesUserCaseInsensitive,
   isShortNoticeCancelled,
+  isSwapTargetInCutoffWindow,
   isWithinCancellationSwapCutoff,
   removeUserCaseInsensitive,
   resolveCancellationSwapCutoffMinutes,
@@ -386,6 +387,16 @@ export function useCourseSwaps(
     return true;
   };
 
+  const assertSwapTargetNotInCutoff = (targetCourse: Course, toDateIso: string): boolean => {
+    if (isSwapTargetInCutoffWindow(toDateIso, targetCourse.time, tenantSettings)) {
+      alert(
+        "Für diesen Zieltermin ist keine Tauschanfrage mehr möglich (kurz vor Kursbeginn).",
+      );
+      return false;
+    }
+    return true;
+  };
+
   const confirmSwap = useCallback(
     async (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => {
       try {
@@ -411,6 +422,8 @@ export function useCourseSwaps(
           alert("Zielkurs nicht gefunden.");
           return;
         }
+        if (!assertSwapTargetNotInCutoff(targetCourse, toDateIso)) return;
+
         const existingTargetOverride = filteredOverrides.find(
           (o) => o.courseId === toCourseId && o.date === toDateIso
         );
@@ -784,6 +797,7 @@ export function useCourseSwaps(
           alert("Zielkurs nicht gefunden.");
           return;
         }
+        if (!assertSwapTargetNotInCutoff(targetCourse, toDateIso)) return;
 
         // 3) in Overrides die Warteliste ergänzen
         setOverrides((prev) => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useCourseSwaps } from "./useCourseSwaps";
 import type { Course, CourseDateOverride, Swap, User } from "shared/types";
@@ -57,9 +57,14 @@ const pendingSwap: Swap = {
 
 describe("useCourseSwaps", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     (updateOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (createOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("onToggleAbsence persistiert kurzfristige Absage im Cutoff vor processPromotions", async () => {
@@ -180,6 +185,55 @@ describe("useCourseSwaps", () => {
     const [swapArg] = (createSwap as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect((swapArg as Swap).status).toBe("pending");
     expect(processPromotions).toHaveBeenCalledTimes(1);
+  });
+
+  it("requestSwap blockiert Zieltermin im Cutoff", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2099, 5, 17, 9, 30));
+
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn();
+    const setSwaps = vi.fn();
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    const targetCourse: Course = {
+      ...course,
+      id: 2,
+      time: "10:00",
+      capacity: 2,
+      participants: ["bob"],
+      dates: ["2099-06-17"],
+    };
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course, targetCourse],
+        [{ ...baseOverride, date: "2099-06-20" }],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+        { cancellationSwapCutoffMinutesBeforeStart: 60 },
+      ),
+    );
+
+    await act(async () => {
+      await result.current.requestSwap(course, "2099-06-20", 2, "2099-06-17", baseUser.nickname);
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Für diesen Zieltermin ist keine Tauschanfrage mehr möglich (kurz vor Kursbeginn).",
+    );
+    expect(createSwap).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+    vi.useRealTimers();
   });
 
   it("confirmSwap bricht ab, wenn nur Überplanungs-Freiraum am Ziel", async () => {

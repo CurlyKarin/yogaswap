@@ -65,6 +65,17 @@ export function hasEffectiveCancellation(
   );
 }
 
+/** Zieltermin im Kurzfrist-Fenster — keine neuen Tauschanfragen/Warteliste (vgl. processPromotions). */
+export function isSwapTargetInCutoffWindow(
+  isoDate: string,
+  courseTime: string,
+  tenantSettings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
+  return isWithinCancellationSwapCutoff(isoDate, courseTime, cutoffMinutes, now);
+}
+
 export function canCreateSwapFromOrigin(input: {
   isoDate: string;
   courseTime: string;

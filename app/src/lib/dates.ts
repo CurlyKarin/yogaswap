@@ -1,6 +1,7 @@
 // lib/dates.ts
-import { CourseDateOverride, Course, User } from "shared/types";
+import { CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
+import { isSwapTargetInCutoffWindow } from "shared/cancellationSwapCutoff";
 import { buildCourseOccurrenceLocal } from "shared/courseStatus";
 import type { SwapSettings } from "../types";
 
@@ -51,7 +52,8 @@ function collectCourseDates(
   currentUser: User,
   settings: SwapSettings,
   referenceDate: Date,
-  now: Date = new Date()
+  now: Date = new Date(),
+  tenantSettings?: TenantSettings,
 ) {
   if (isNaN(referenceDate.getTime())) return []; // ungültiges Datum → keine Termine
 
@@ -91,6 +93,12 @@ function collectCourseDates(
         const count = participants.length;
         const regularFull = isAtRegularCapacity(count, course);
         const maxFull = isAtMaxCapacity(count, course);
+        const targetInCutoff = isSwapTargetInCutoffWindow(
+          toDateKey(courseTime),
+          course.time,
+          tenantSettings,
+          now,
+        );
         const currentUserLower = currentUser.nickname.toLowerCase();
         const userAlreadyInThisCourse =
           participants.some((p) => p.toLowerCase() === currentUserLower) ||
@@ -102,6 +110,7 @@ function collectCourseDates(
           time: course.time,
           regularFull,
           maxFull,
+          targetInCutoff,
           userAlreadyInThisCourse,
         };
       });
@@ -115,7 +124,8 @@ export function getAvailableDates(
   currentUser: User,
   settings: SwapSettings,
   referenceDate: Date,
-  now: Date = new Date()
+  now: Date = new Date(),
+  tenantSettings?: TenantSettings,
 ) {
   return collectCourseDates(
     allCourses,
@@ -123,9 +133,10 @@ export function getAvailableDates(
     currentUser,
     settings,
     referenceDate,
-    now
+    now,
+    tenantSettings,
   )
-    .filter((x) => !x.regularFull && !x.userAlreadyInThisCourse)
+    .filter((x) => !x.regularFull && !x.userAlreadyInThisCourse && !x.targetInCutoff)
     .map(({ course, date, time }) => ({ course, date, time }));
 }
 
@@ -136,7 +147,8 @@ export function getWaitlistDates(
   currentUser: User,
   settings: SwapSettings,
   referenceDate: Date,
-  now: Date = new Date()
+  now: Date = new Date(),
+  tenantSettings?: TenantSettings,
 ) {
   return collectCourseDates(
     allCourses,
@@ -144,8 +156,11 @@ export function getWaitlistDates(
     currentUser,
     settings,
     referenceDate,
-    now
+    now,
+    tenantSettings,
   )
-    .filter((x) => x.regularFull && !x.maxFull && !x.userAlreadyInThisCourse)
+    .filter(
+      (x) => x.regularFull && !x.maxFull && !x.userAlreadyInThisCourse && !x.targetInCutoff,
+    )
     .map(({ course, date, time }) => ({ course, date, time }));
 }

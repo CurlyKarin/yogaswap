@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canCreateSwapFromOrigin,
   isShortNoticeCancelled,
+  isSwapTargetInCutoffWindow,
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
@@ -57,6 +58,15 @@ describe("cancellationSwapCutoff", () => {
         now: new Date(2099, 5, 15, 8, 0),
       }),
     ).toBe(false);
+  });
+
+  it("isSwapTargetInCutoffWindow mirrors cutoff window on target term", () => {
+    const isoDate = "2099-06-15";
+    const time = "10:00";
+    const inWindow = new Date(2099, 5, 15, 9, 30);
+    const beforeWindow = new Date(2099, 5, 15, 8, 0);
+    expect(isSwapTargetInCutoffWindow(isoDate, time, undefined, inWindow)).toBe(true);
+    expect(isSwapTargetInCutoffWindow(isoDate, time, undefined, beforeWindow)).toBe(false);
   });
 
   it("isShortNoticeCancelled is case-insensitive", () => {

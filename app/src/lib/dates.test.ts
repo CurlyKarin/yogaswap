@@ -270,4 +270,41 @@ describe("getAvailableDates / getWaitlistDates", () => {
     expect(fullAtMax).toHaveLength(0);
     expect(noWaitlistAtMax).toHaveLength(0);
   });
+
+  it("excludes targets inside cutoff from available and waitlist", () => {
+    const referenceDate = new Date("2025-06-14");
+    const nowInCutoff = new Date(2025, 5, 15, 9, 30);
+    const cutoffCourse: Course = {
+      ...course,
+      id: 21,
+      time: "10:00",
+      capacity: 2,
+      overbookLimit: 1,
+      participants: ["a", "b"],
+      dates: ["2025-06-15"],
+    };
+    const tenantSettings = { cancellationSwapCutoffMinutesBeforeStart: 60 };
+
+    const available = getAvailableDates(
+      [cutoffCourse],
+      [],
+      currentUser,
+      swapSettings,
+      referenceDate,
+      nowInCutoff,
+      tenantSettings,
+    );
+    const waitlist = getWaitlistDates(
+      [cutoffCourse],
+      [],
+      currentUser,
+      swapSettings,
+      referenceDate,
+      nowInCutoff,
+      tenantSettings,
+    );
+
+    expect(available).toHaveLength(0);
+    expect(waitlist).toHaveLength(0);
+  });
 });
