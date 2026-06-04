@@ -81,6 +81,11 @@ export function validateSelfServiceOverrideTransition(input: {
     return null;
   }
 
+  // SN setzen im Cutoff: Teilnehmer bleibt in participants (Platz belegt).
+  if (!wasSn && isSn && isParticipant && inCutoff) {
+    return null;
+  }
+
   if (!wasSn && isSn && !inCutoff) {
     return "Kurzfristige Absage ist nur kurz vor Kursbeginn möglich.";
   }

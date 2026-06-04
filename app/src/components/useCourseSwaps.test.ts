@@ -19,7 +19,7 @@ vi.mock("../lib/waitlist", () => ({
 }));
 
 const { createSwap, deleteSwap, processPromotions } = await import("../api/swaps");
-const { updateOverride } = await import("../api/overrides");
+const { createOverride, updateOverride } = await import("../api/overrides");
 
 const baseUser: User = {
   nickname: "alice",
@@ -58,6 +58,53 @@ const pendingSwap: Swap = {
 describe("useCourseSwaps", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (updateOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (createOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  });
+
+  it("onToggleAbsence persistiert kurzfristige Absage im Cutoff vor processPromotions", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2099, 5, 16, 9, 30));
+
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([baseOverride]),
+    );
+    const setSwaps = vi.fn();
+    (updateOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (processPromotions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      swaps: [],
+      overrides: [{ ...baseOverride, shortNoticeCancellations: [] }],
+    });
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course],
+        [baseOverride],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.onToggleAbsence(course, "2099-06-16", baseUser.nickname);
+    });
+
+    expect(updateOverride).toHaveBeenCalledWith(1, "2099-06-16", {
+      participants: ["alice"],
+      shortNoticeCancellations: ["alice"],
+    });
+    expect(processPromotions).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   it("onToggleAbsence aktualisiert Overrides und ruft processPromotions auf", async () => {

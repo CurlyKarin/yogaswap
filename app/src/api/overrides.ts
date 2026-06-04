@@ -31,6 +31,7 @@ export async function updateOverride(
     console.log('API Overrides Response (updates):', updates);
   } catch (error) {
     console.error('Fehler beim Updaten des Overrides', error);
+    throw error;
   }
 }
 
@@ -61,5 +62,6 @@ export async function createOverride(newOverride: CourseDateOverride): Promise<v
     console.log('API Overrides Response (newOverride):', newOverride);
   } catch (error) {
     console.error('Fehler beim Anlegen des Overrides', error);
+    throw error;
   }
 }

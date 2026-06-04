@@ -119,7 +119,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const touchesCutoffFields =
       updates.participants !== undefined || updates.shortNoticeCancellations !== undefined;
 
-    if (touchesCutoffFields && userId && tenantsTable) {
+    const subjectNickname = actingForUserId ?? userId;
+    if (touchesCutoffFields && subjectNickname && tenantsTable) {
       const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
       const merged = mergeOverrideUpdate(before, baseParticipants, updates);
       merged.courseId = Number(legacyCourseId);
@@ -131,7 +132,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
 
       const transitionError = validateSelfServiceOverrideTransition({
-        actorNickname: userId,
+        actorNickname: subjectNickname,
         courseTime,
         dateIso: date,
         tenantSettings,
