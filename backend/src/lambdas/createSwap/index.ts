@@ -1,6 +1,10 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { canCreateSwapFromOrigin, validateParticipantListSize } from '@yogaswap/shared';
+import {
+  canCreateSwapFromOrigin,
+  hasRegularBookingCapacity,
+  validateParticipantListSize,
+} from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
@@ -129,6 +133,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ? targetParticipants.length
       : targetParticipants.length + 1;
     if (swap.status === 'active') {
+      if (!userOnTarget && !hasRegularBookingCapacity(targetParticipants.length, toCapacity)) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({
+            error: 'Der Zieltermin ist regulär voll. Überplanungsplätze sind per Tausch nicht buchbar.',
+          }),
+        };
+      }
       const targetCapacityError = validateParticipantListSize(countAfterSwap, toCapacity);
       if (targetCapacityError) {
         return {

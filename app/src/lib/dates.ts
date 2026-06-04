@@ -1,5 +1,6 @@
 // lib/dates.ts
 import { CourseDateOverride, Course, User } from "shared/types";
+import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
 import { buildCourseOccurrenceLocal } from "shared/courseStatus";
 import type { SwapSettings } from "../types";
 
@@ -87,12 +88,9 @@ function collectCourseDates(
         );
         const participants = override ? override.participants : course.participants;
 
-        const maxCapacity =
-          course.capacity +
-          (typeof course.overbookLimit === "number" && course.overbookLimit >= 0
-            ? course.overbookLimit
-            : 0);
-        const isFull = participants.length >= maxCapacity;
+        const count = participants.length;
+        const regularFull = isAtRegularCapacity(count, course);
+        const maxFull = isAtMaxCapacity(count, course);
         const currentUserLower = currentUser.nickname.toLowerCase();
         const userAlreadyInThisCourse =
           participants.some((p) => p.toLowerCase() === currentUserLower) ||
@@ -102,14 +100,15 @@ function collectCourseDates(
           course,
           date: courseTime,
           time: course.time,
-          isFull,
+          regularFull,
+          maxFull,
           userAlreadyInThisCourse,
         };
       });
   });
 }
 
-/** freie Termine */
+/** freie Termine (nur reguläre Kapazität, keine Überplanungs-Slots) */
 export function getAvailableDates(
   allCourses: Course[],
   overrides: CourseDateOverride[],
@@ -126,11 +125,11 @@ export function getAvailableDates(
     referenceDate,
     now
   )
-    .filter((x) => !x.isFull && !x.userAlreadyInThisCourse)
+    .filter((x) => !x.regularFull && !x.userAlreadyInThisCourse)
     .map(({ course, date, time }) => ({ course, date, time }));
 }
 
-/** volle Termine → Warteliste */
+/** regulär volle Termine mit Überplanungs-Freiraum → Warteliste; bei maxCapacity ausgeschlossen */
 export function getWaitlistDates(
   allCourses: Course[],
   overrides: CourseDateOverride[],
@@ -147,6 +146,6 @@ export function getWaitlistDates(
     referenceDate,
     now
   )
-    .filter((x) => x.isFull && !x.userAlreadyInThisCourse)
+    .filter((x) => x.regularFull && !x.maxFull && !x.userAlreadyInThisCourse)
     .map(({ course, date, time }) => ({ course, date, time }));
 }

@@ -12,7 +12,8 @@ Anzeige in der Kurskarte: `Teilnehmer/regulär` und für Management optional `(+
 
 ## Regeln
 
-- **Tausch / direkte Buchung:** bis `maxCapacity` (API: `validateParticipantListSize`, App: `hasBookingCapacity`).
+- **Tausch (Self-Service):** nur reguläre Plätze (`capacity`); Überplanungszone nicht als Ziel wählbar (App: `hasRegularBookingCapacity`, `getAvailableDates`; API: `createSwap` active).
+- **Raumgrenze / Admin-Zuweisung:** bis `maxCapacity` (API: `validateParticipantListSize`, App: `hasBookingCapacity`).
 - **Wartelisten-Nachrücken:** nur wenn `participants.length < capacity` und noch unter `maxCapacity` (`canPromoteFromWaitlist`).
 - **Ringtausch:** unverändert; Zieltermine unterliegen derselben Obergrenze.
 - **Teilnehmer (Stammdaten):** Admin-Mitglieder-Dialog begrenzt auf `maxCapacity`.

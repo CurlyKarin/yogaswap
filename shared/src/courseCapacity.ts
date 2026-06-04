@@ -29,6 +29,14 @@ export function hasBookingCapacity(participantCount: number, course: CourseCapac
   return participantCount < resolveMaxCapacity(course);
 }
 
+/** Self-Service-Tausch: nur reguläre Plätze, nicht die Überplanungszone. */
+export function hasRegularBookingCapacity(
+  participantCount: number,
+  course: CourseCapacityFields,
+): boolean {
+  return participantCount < course.capacity;
+}
+
 /**
  * Wartelisten-Nachrücken nur, wenn die Teilnehmerzahl unter die reguläre capacity fällt
  * (nicht allein weil Überbuchungszone noch Platz hätte).

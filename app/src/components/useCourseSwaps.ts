@@ -11,7 +11,7 @@ import {
   removeUserCaseInsensitive,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
-import { hasBookingCapacity, resolveMaxCapacity } from "shared/courseCapacity";
+import { hasRegularBookingCapacity, resolveMaxCapacity } from "shared/courseCapacity";
 import { createSwap, deleteSwap, processPromotions } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
 
@@ -430,7 +430,7 @@ export function useCourseSwaps(
           ? existingTargetOverride.participants
           : targetCourse.participants;
 
-        if (!hasBookingCapacity(effectiveTargetParticipants.length, targetCourse)) {
+        if (!hasRegularBookingCapacity(effectiveTargetParticipants.length, targetCourse)) {
           alert("Der gewählte Ersatztermin ist inzwischen voll.");
           return;
         }

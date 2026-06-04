@@ -182,6 +182,51 @@ describe("useCourseSwaps", () => {
     expect(processPromotions).toHaveBeenCalledTimes(1);
   });
 
+  it("confirmSwap bricht ab, wenn nur Überplanungs-Freiraum am Ziel", async () => {
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
+      updater([baseOverride]),
+    );
+    const setSwaps = vi.fn();
+
+    const overbookTarget: Course = {
+      ...course,
+      id: 2,
+      capacity: 2,
+      overbookLimit: 1,
+      participants: ["bob", "carol"],
+      dates: ["2099-06-17"],
+    };
+
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course, overbookTarget],
+        [baseOverride],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.confirmSwap(course, "2099-06-16", 2, "2099-06-17", baseUser.nickname);
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith("Der gewählte Ersatztermin ist inzwischen voll.");
+    expect(createSwap).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
   it("confirmSwap bricht ab, wenn der Zieltermin inzwischen voll ist", async () => {
     const fetchData = vi.fn().mockResolvedValue(undefined);
     const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>

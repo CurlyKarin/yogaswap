@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canPromoteFromWaitlist,
   hasBookingCapacity,
+  hasRegularBookingCapacity,
   resolveMaxCapacity,
   resolveOverbookLimit,
   validateOverbookLimit,
@@ -25,6 +26,12 @@ describe("courseCapacity", () => {
   it("hasBookingCapacity allows up to max", () => {
     expect(hasBookingCapacity(11, course)).toBe(true);
     expect(hasBookingCapacity(12, course)).toBe(false);
+  });
+
+  it("hasRegularBookingCapacity allows only below regular capacity", () => {
+    expect(hasRegularBookingCapacity(9, course)).toBe(true);
+    expect(hasRegularBookingCapacity(10, course)).toBe(false);
+    expect(hasRegularBookingCapacity(11, course)).toBe(false);
   });
 
   it("canPromoteFromWaitlist only below regular capacity", () => {

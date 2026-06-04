@@ -212,7 +212,7 @@ describe("getAvailableDates / getWaitlistDates", () => {
     expect(available.map((entry) => entry.course.id)).toEqual([11]);
   });
 
-  it("treats term as full only at maxCapacity including overbookLimit", () => {
+  it("excludes overbook-only slots from swap targets; waitlist until maxCapacity", () => {
     const referenceDate = new Date("2025-06-15");
     const overbookCourse: Course = {
       ...course,
@@ -232,7 +232,15 @@ describe("getAvailableDates / getWaitlistDates", () => {
       },
     ];
 
-    const stillAvailable = getAvailableDates(
+    const atRegularCapacity = getAvailableDates(
+      [overbookCourse],
+      [],
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
+    const waitlistWithOverbookHeadroom = getWaitlistDates(
       [overbookCourse],
       [],
       currentUser,
@@ -248,8 +256,18 @@ describe("getAvailableDates / getWaitlistDates", () => {
       referenceDate,
       TEST_NOW,
     );
+    const noWaitlistAtMax = getWaitlistDates(
+      [overbookCourse],
+      fullOverride,
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
 
-    expect(stillAvailable).toHaveLength(1);
+    expect(atRegularCapacity).toHaveLength(0);
+    expect(waitlistWithOverbookHeadroom).toHaveLength(1);
     expect(fullAtMax).toHaveLength(0);
+    expect(noWaitlistAtMax).toHaveLength(0);
   });
 });
