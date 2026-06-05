@@ -123,17 +123,24 @@ body {
   display: inline-flex;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  overflow: hidden;
   background: #fff;
+  padding: 4px;
+  gap: 0;
 }
 
 .course-views-toggle-btn {
   border: none;
   background: transparent;
-  padding: 8px 14px;
+  padding: 6px 12px;
   font-size: 14px;
   cursor: pointer;
   color: #374151;
+  border-radius: 4px;
+}
+
+.course-views-toggle-btn:focus-visible {
+  position: relative;
+  z-index: 1;
 }
 
 .course-views-toggle-btn.is-active {
@@ -184,6 +191,20 @@ body {
 .course-week-nav-btn:hover,
 .course-week-nav-today:hover {
   background: #f3f4f6;
+}
+
+.course-week-nav-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.course-week-nav-btn:disabled:hover {
+  background: #fff;
+}
+
+.course-week-panel,
+.course-list-panel {
+  margin: 0;
 }
 
 .course-views-hint {
