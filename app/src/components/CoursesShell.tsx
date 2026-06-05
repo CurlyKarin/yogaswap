@@ -68,7 +68,7 @@ export default function CoursesShell({
 
   return (
     <>
-      <div className="course-views-toolbar">
+      <div id="course-toolbar" className="course-views-toolbar">
         {canSeeCourseManagement && (
           <div className="course-views-toggle" role="group" aria-label="Kursansicht">
             <button
