@@ -71,7 +71,7 @@ export default function CourseWeekView({
   if (loading) {
     return (
       <div className="course-week-view" role="status" aria-live="polite">
-        Loading...
+        Kurse werden geladen…
       </div>
     );
   }

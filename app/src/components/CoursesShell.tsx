@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import CourseList from "./CourseList";
 import CourseWeekView from "./CourseWeekView";
@@ -65,6 +65,21 @@ export default function CoursesShell({
 
   const weekLabel = formatWeekNavLabel(weekAnchor);
   const canGoToPreviousWeek = weekAnchor.getTime() > earliestWeekAnchor.getTime();
+  const prevWeekBtnRef = useRef<HTMLButtonElement>(null);
+  const nextWeekBtnRef = useRef<HTMLButtonElement>(null);
+  const [weekLimitAnnouncement, setWeekLimitAnnouncement] = useState("");
+
+  useEffect(() => {
+    if (canGoToPreviousWeek) {
+      setWeekLimitAnnouncement("");
+      return;
+    }
+    const prevBtn = prevWeekBtnRef.current;
+    if (prevBtn && document.activeElement === prevBtn) {
+      setWeekLimitAnnouncement("Früheste sichtbare Kalenderwoche erreicht.");
+      nextWeekBtnRef.current?.focus();
+    }
+  }, [canGoToPreviousWeek, weekAnchor]);
 
   return (
     <>
@@ -75,6 +90,7 @@ export default function CoursesShell({
               type="button"
               className={`course-views-toggle-btn${viewMode === "week" ? " is-active" : ""}`}
               aria-pressed={viewMode === "week"}
+              aria-controls="course-week-panel"
               onClick={() => setViewMode("week")}
             >
               Wochenansicht
@@ -83,6 +99,7 @@ export default function CoursesShell({
               type="button"
               className={`course-views-toggle-btn${viewMode === "courses" ? " is-active" : ""}`}
               aria-pressed={viewMode === "courses"}
+              aria-controls="course-list-panel"
               onClick={() => setViewMode("courses")}
             >
               Kursübersicht
@@ -92,11 +109,25 @@ export default function CoursesShell({
 
         {viewMode === "week" && (
           <nav className="course-week-nav" aria-label="Kalenderwoche">
+            <span
+              id="course-week-nav-limit-status"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="visually-hidden"
+            >
+              {weekLimitAnnouncement}
+            </span>
+            <span id="course-week-nav-prev-limit" className="visually-hidden">
+              Früheste sichtbare Kalenderwoche erreicht
+            </span>
             <button
+              ref={prevWeekBtnRef}
               type="button"
               className="course-week-nav-btn"
               aria-label="Vorherige Woche"
               disabled={!canGoToPreviousWeek}
+              aria-describedby={!canGoToPreviousWeek ? "course-week-nav-prev-limit" : undefined}
               onClick={() =>
                 setWeekAnchor((prev) => {
                   const next = addWeeks(prev, -1);
@@ -106,8 +137,16 @@ export default function CoursesShell({
             >
               <ChevronLeft size={18} aria-hidden="true" />
             </button>
-            <span className="course-week-nav-label">{weekLabel}</span>
+            <span
+              id="course-week-nav-label"
+              className="course-week-nav-label"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {weekLabel}
+            </span>
             <button
+              ref={nextWeekBtnRef}
               type="button"
               className="course-week-nav-btn"
               aria-label="Nächste Woche"
@@ -118,6 +157,7 @@ export default function CoursesShell({
             <button
               type="button"
               className="course-week-nav-today"
+              aria-label="Zur aktuellen Kalenderwoche springen"
               onClick={() => setWeekAnchor(startOfWeekMonday(new Date()))}
             >
               Heute
@@ -127,9 +167,14 @@ export default function CoursesShell({
       </div>
 
       {viewMode === "week" && (
-        <>
-          <p className="muted course-views-hint">
-            Klicke in deinen Kursen auf <em>„Termin absagen“</em> oder <em>„Tauschen anfragen“</em>.
+        <section
+          id="course-week-panel"
+          className="course-week-panel"
+          aria-label="Wochenansicht"
+          aria-describedby="course-views-hint"
+        >
+          <p id="course-views-hint" className="muted course-views-hint">
+            In deinen Kursen: „Termin absagen“ oder „Tauschen anfragen“ wählen.
           </p>
           <CourseWeekView
             weekAnchor={weekAnchor}
@@ -149,16 +194,18 @@ export default function CoursesShell({
             requestSwap={requestSwap}
             cancelSwap={cancelSwap}
           />
-        </>
+        </section>
       )}
 
       {viewMode === "courses" && canSeeCourseManagement && (
-        <CourseList
-          currentUser={currentUser}
-          tenant={tenant}
-          membership={membership}
-          forceParticipantView={forceParticipantView}
-        />
+        <section id="course-list-panel" className="course-list-panel" aria-label="Kursübersicht">
+          <CourseList
+            currentUser={currentUser}
+            tenant={tenant}
+            membership={membership}
+            forceParticipantView={forceParticipantView}
+          />
+        </section>
       )}
     </>
   );
