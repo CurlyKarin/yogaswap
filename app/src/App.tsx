@@ -177,6 +177,38 @@ function MainApp() {
     setPendingActingForUserId(null);
   };
 
+  const FOCUSABLE_SELECTOR =
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  const focusFirstIn = (root: HTMLElement | null) => {
+    if (!root) return;
+    const firstFocusable = root.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+    firstFocusable?.focus({ preventScroll: true });
+  };
+
+  const handleSkipToMenu = () => {
+    const nav = document.getElementById("site-nav");
+    if (nav) {
+      focusFirstIn(nav);
+      return;
+    }
+    focusFirstIn(document.getElementById("main-content"));
+  };
+
+  const handleSkipToContent = () => {
+    const target = document.getElementById("course-toolbar") ?? document.getElementById("main-content");
+    if (!target) return;
+    target.scrollIntoView({ block: "start" });
+    focusFirstIn(target);
+  };
+
+  const handleSkipToFooter = () => {
+    const footerNav = document.getElementById("site-footer-nav");
+    if (!footerNav) return;
+    footerNav.scrollIntoView({ block: "end" });
+    focusFirstIn(footerNav);
+  };
+
   const effectiveUser: User | null = currentUser
     ? actingForUserIdState
       ? {
@@ -189,13 +221,30 @@ function MainApp() {
 
   return (
     <div className="app-container">
+      <nav className="skip-links" aria-label="Seitenüberspringen">
+        <button type="button" className="skip-link" onClick={handleSkipToMenu}>
+          Zum Menü
+        </button>
+        <button type="button" className="skip-link" onClick={handleSkipToContent}>
+          Zum Inhalt
+        </button>
+        <button type="button" className="skip-link" onClick={handleSkipToFooter}>
+          Zum Fußbereich
+        </button>
+      </nav>
       <header className="app-top">
         <h1>YogaSwap</h1>
         {currentUser && (
-          <div className="userbox">
+          <nav id="site-nav" className="userbox" aria-label="Benutzer-Menü">
             <span>Hi, {currentUser.nickname}</span>
             <div className="header-action-group">
-              <button className="header-action-btn" onClick={handleLogout} disabled={isLoading}>
+              <button
+                id="logout-btn"
+                type="button"
+                className="header-action-btn"
+                onClick={handleLogout}
+                disabled={isLoading}
+              >
                 {isLoading ? "..." : "Logout"}
               </button>
               {canDelegate && (
@@ -212,12 +261,12 @@ function MainApp() {
                 </button>
               )}
             </div>
-          </div>
+          </nav>
         )}
       </header>
 
       {error && (
-        <div className="error" style={{ color: "red", textAlign: "center", margin: "1rem" }}>
+        <div className="app-error" role="alert">
           {error}
         </div>
       )}
@@ -241,30 +290,42 @@ function MainApp() {
         </div>
       )}
 
-      {!effectiveUser ? (
-        <Login onLogin={handleLogin} />
-      ) : (
-        <section
-          className={`main-section main-section-courses${actingForUserIdState ? " is-delegation-active" : ""}`}
-        >
-          <CoursesShell
-            currentUser={effectiveUser}
-            tenant={tenant ?? undefined}
-            membership={membership ?? undefined}
-            forceParticipantView={Boolean(actingForUserIdState)}
-          />
-        </section>
-      )}
+      <main>
+        {!effectiveUser ? (
+          <section id="main-content" className="main-section" aria-label="Anmeldung">
+            <Login onLogin={handleLogin} />
+          </section>
+        ) : (
+          <section
+            id="main-content"
+            className={`main-section main-section-courses${actingForUserIdState ? " is-delegation-active" : ""}`}
+            aria-labelledby="courses-heading"
+          >
+            <h2 id="courses-heading" className="visually-hidden">
+              Kurse
+            </h2>
+            <CoursesShell
+              currentUser={effectiveUser}
+              tenant={tenant ?? undefined}
+              membership={membership ?? undefined}
+              forceParticipantView={Boolean(actingForUserIdState)}
+            />
+          </section>
+        )}
 
-      {currentUser && canInvite && !actingForUserIdState && (
-        <section className="main-section main-section-admin">
-          <AdminPanel
-            canEditRoles={(membership?.role ?? currentUser.role) === "admin"}
-            tenant={tenant}
-            onTenantUpdated={(updated) => setTenant(updated)}
-          />
-        </section>
-      )}
+        {currentUser && canInvite && !actingForUserIdState && (
+          <section className="main-section main-section-admin" aria-labelledby="admin-heading">
+            <h2 id="admin-heading" className="visually-hidden">
+              Verwaltung
+            </h2>
+            <AdminPanel
+              canEditRoles={(membership?.role ?? currentUser.role) === "admin"}
+              tenant={tenant}
+              onTenantUpdated={(updated) => setTenant(updated)}
+            />
+          </section>
+        )}
+      </main>
 
       {pendingActingForUserId && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Vertretung bestätigen">
@@ -300,12 +361,17 @@ function MainApp() {
 
       <footer className="app-footer">
         <span className="copyright">© {new Date().getFullYear()} Karin Schrader</span>
-        <span className="sep">·</span>
-        <Link to="/impressum">Impressum</Link>
-        <span className="sep">·</span>
-        <Link to="/datenschutz">Datenschutz</Link>
-        <span className="sep">·</span>
-        <Link to="/open-source-lizenzen">Open-Source-Lizenzen</Link>
+        <nav id="site-footer-nav" className="app-footer-nav" aria-label="Rechtliches und Lizenzen">
+          <Link to="/impressum">Impressum</Link>
+          <span className="sep" aria-hidden="true">
+            ·
+          </span>
+          <Link to="/datenschutz">Datenschutz</Link>
+          <span className="sep" aria-hidden="true">
+            ·
+          </span>
+          <Link to="/open-source-lizenzen">Open-Source-Lizenzen</Link>
+        </nav>
       </footer>
     </div>
   );

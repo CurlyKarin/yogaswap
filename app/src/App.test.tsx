@@ -8,6 +8,16 @@ import { canManageParticipants } from "shared/permissions";
 
 const coursesShellMock = vi.fn<(props: unknown) => void>();
 
+const { createMockUseAppAuth } = vi.hoisted(() => ({
+  createMockUseAppAuth: (overrides?: { error?: string | null; isLoading?: boolean }) => ({
+    user: null,
+    isLoading: overrides?.isLoading ?? false,
+    error: overrides?.error ?? null,
+    login: vi.fn().mockResolvedValue(false),
+    logout: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 vi.mock("./components/Login", () => ({
   default: () => <div>Login Mock</div>,
 }));
@@ -15,12 +25,30 @@ vi.mock("./components/Login", () => ({
 vi.mock("./components/CoursesShell", () => ({
   default: (props: unknown) => {
     coursesShellMock(props);
-    return <div>CoursesShell Mock</div>;
+    return (
+      <div>
+        <div id="course-toolbar">
+          <button type="button" aria-label="Vorherige Woche">
+            Prev
+          </button>
+          <select aria-label="Kurstermin">
+            <option>Termin</option>
+          </select>
+        </div>
+        <span>CoursesShell Mock</span>
+      </div>
+    );
   },
 }));
 
 vi.mock("./components/AdminPanel", () => ({
-  default: () => <div>AdminPanel Mock</div>,
+  default: () => (
+    <div>
+      <input aria-label="Studioname" />
+      <input aria-label="Teilnehmer suchen" />
+      <span>AdminPanel Mock</span>
+    </div>
+  ),
 }));
 
 vi.mock("./components/Invite", () => ({
@@ -44,11 +72,7 @@ vi.mock("./components/OpenSourceLicenses", () => ({
 }));
 
 vi.mock("./auth/useAppAuth", () => ({
-  useAppAuth: () => ({
-    logout: vi.fn().mockResolvedValue(undefined),
-    isLoading: false,
-    error: null,
-  }),
+  useAppAuth: vi.fn(() => createMockUseAppAuth()),
 }));
 
 vi.mock("aws-amplify/auth", () => ({
@@ -73,6 +97,145 @@ vi.mock("shared/permissions", () => ({
   canInviteParticipants: vi.fn(() => true),
   canManageParticipants: vi.fn(() => true),
 }));
+
+async function renderLoggedInAdmin() {
+  const { fetchAuthSession } = await import("aws-amplify/auth");
+  const { getTenantContext } = await import("./api/tenantContext");
+  const { getParticipants } = await import("./api/participants");
+
+  vi.mocked(fetchAuthSession).mockResolvedValue({
+    tokens: {
+      idToken: {
+        payload: {
+          nickname: "admin",
+          email: "admin@example.com",
+          "custom:role": "admin",
+        },
+      },
+    },
+  } as unknown as never);
+
+  vi.mocked(getTenantContext).mockResolvedValue({
+    tenant: { tenantId: "default-tenant", name: "Default" },
+    membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+  } as unknown as never);
+
+  vi.mocked(getParticipants).mockResolvedValue([] as unknown as never);
+
+  render(
+    <MemoryRouter>
+      <App />
+    </MemoryRouter>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText(/hi, admin/i)).toBeInTheDocument();
+  });
+}
+
+describe("App shell a11y", () => {
+  beforeEach(async () => {
+    cleanup();
+    vi.clearAllMocks();
+    coursesShellMock.mockClear();
+    vi.mocked(canManageParticipants).mockReturnValue(true);
+    setActingForUserId(null);
+    setActorUserId(null);
+    const { useAppAuth } = await import("./auth/useAppAuth");
+    vi.mocked(useAppAuth).mockReturnValue(createMockUseAppAuth());
+  });
+
+  it("bietet Skip-Link und main-Landmark mit Kurs- und Verwaltungsbereich", async () => {
+    await renderLoggedInAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText("AdminPanel Mock")).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("navigation", { name: /seitenüberspringen/i })).toBeInTheDocument();
+    const skipControl = screen.getByRole("button", { name: /zum inhalt/i });
+    expect(skipControl).toHaveAttribute("type", "button");
+
+    const main = screen.getByRole("main");
+    const coursesSection = document.getElementById("main-content");
+    expect(coursesSection).not.toHaveAttribute("tabindex");
+    expect(main).toContainElement(coursesSection);
+    expect(screen.getByRole("navigation", { name: /benutzer-menü/i })).toBeInTheDocument();
+    expect(main).toContainElement(screen.getByRole("heading", { level: 2, name: /kurse/i }));
+    expect(main).toContainElement(document.getElementById("admin-heading"));
+    expect(main).toContainElement(screen.getByText("CoursesShell Mock"));
+    expect(main).toContainElement(screen.getByText("AdminPanel Mock"));
+  });
+
+  it("springt mit Leertaste zur Wochennavigation im Kursbereich", async () => {
+    await renderLoggedInAdmin();
+
+    const toolbar = document.getElementById("course-toolbar");
+    expect(toolbar).not.toBeNull();
+    const weekButton = screen.getByRole("button", { name: /vorherige woche/i });
+    const scrollIntoView = vi.fn();
+    const focus = vi.fn();
+    toolbar!.scrollIntoView = scrollIntoView;
+    weekButton.focus = focus;
+
+    const skipControl = screen.getByRole("button", { name: /zum inhalt/i });
+    skipControl.focus();
+    await userEvent.keyboard(" ");
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  it("Tab-Reihenfolge: Skip-Links, Menü, Kurse, Verwaltung, Footer", async () => {
+    const user = userEvent.setup();
+    await renderLoggedInAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText("AdminPanel Mock")).toBeInTheDocument();
+    });
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: /zum menü/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: /zum inhalt/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: /zum fußbereich/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: /logout/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: /vertretung/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: /vorherige woche/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("combobox", { name: /kurstermin/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("textbox", { name: /studioname/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("textbox", { name: /teilnehmer suchen/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("link", { name: /impressum/i })).toHaveFocus();
+  });
+
+  it("meldet Auth-Fehler als Alert", async () => {
+    const { useAppAuth } = await import("./auth/useAppAuth");
+    vi.mocked(useAppAuth).mockReturnValue(
+      createMockUseAppAuth({ error: "Sitzung abgelaufen" }),
+    );
+
+    await renderLoggedInAdmin();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Sitzung abgelaufen");
+  });
+});
 
 describe("App delegation mode", () => {
   beforeEach(() => {
