@@ -32,6 +32,7 @@ import { getSwaps } from "../api/swaps";
 import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
 import { getCourseDates } from "../lib/dates";
+import { WEEKDAY_OPTIONS } from "../lib/weekdayLabels";
 import {
   createCourse,
   deleteCourse,
@@ -91,16 +92,6 @@ const WEEKDAY_ORDER: Record<string, number> = {
   Sun: 7,
   Sunday: 7,
 };
-
-const WEEKDAY_OPTIONS = [
-  { value: "Mon", label: "Montag" },
-  { value: "Tue", label: "Dienstag" },
-  { value: "Wed", label: "Mittwoch" },
-  { value: "Thu", label: "Donnerstag" },
-  { value: "Fri", label: "Freitag" },
-  { value: "Sat", label: "Samstag" },
-  { value: "Sun", label: "Sonntag" },
-] as const;
 
 const STATUS_OPTIONS: Array<{ value: CourseStatus; label: string }> = [
   { value: "inactive", label: "Inaktiv" },
@@ -821,7 +812,7 @@ export default function CourseList({
         </div>
       )}
 
-      <div className="grid">
+      <div className="grid" role="region" aria-label="Kursübersicht">
         {coursesToRender.map((course) => {
           const dates = getCourseDates(course);
           const hasUpcomingDates = dates.length > 0;
