@@ -60,6 +60,10 @@ function sameDayUTC(a: Date, b: Date) {
   );
 }
 
+function courseActionLabel(courseName: string, action: string): string {
+  return `${action} für ${courseName}`;
+}
+
 function SwapModalHint({ label, children }: { label: string; children: ReactNode }) {
   const hintId = useId();
   const [open, setOpen] = useState(false);
@@ -359,6 +363,9 @@ export default function CourseCard({
   const titleId = useId();
   const scheduleDescId = useId();
   const termSelectId = useId();
+  const termSelectDisabledHintId = useId();
+  const termSelectDisabled = hasNoUpcomingDates && !showLastTermInSelect;
+  const actionLabel = (action: string) => courseActionLabel(course.name, action);
 
   return (
     <article
@@ -444,18 +451,24 @@ export default function CourseCard({
       </div>
 
       <div className="course-row">
+        {termSelectDisabled && (
+          <span id={termSelectDisabledHintId} className="visually-hidden">
+            Keine anstehenden Termine für {course.name}.
+          </span>
+        )}
         <label htmlFor={termSelectId} className="muted course-row-label">
-          Termine:
+          Termin für {course.name}
         </label>
         <select
           id={termSelectId}
-          value={hasNoUpcomingDates && !showLastTermInSelect ? "" : selectedDate}
+          value={termSelectDisabled ? "" : selectedDate}
           onChange={(e) => {
             const next = new Date(e.target.value);
             setSelectedDate(e.target.value);
             onDateChange?.(next);
           }}
-          disabled={hasNoUpcomingDates && !showLastTermInSelect}
+          disabled={termSelectDisabled}
+          aria-describedby={termSelectDisabled ? termSelectDisabledHintId : undefined}
         >
           {showLastTermInSelect && lastOccurrenceDate ? (
             <option value={lastOccurrenceDate.toISOString()}>
@@ -577,78 +590,103 @@ export default function CourseCard({
             <>
               {/* Falls User den Ursprungstermin noch nicht abgesagt hat → Absage-Button trotzdem anzeigen */}
               {swapForThisTerm.status === "pending" &&
-                originallyParticipant && (
-                  <button
-                    className="danger"
-                    onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
-                  >
-                    {hasCancelled ? "Absage zuruecknehmen" : "Termin absagen"}
-                  </button>
-                
-              )}
+                originallyParticipant && (() => {
+                  const absenceAction = hasCancelled ? "Absage zurücknehmen" : "Termin absagen";
+                  return (
+                    <button
+                      type="button"
+                      className="danger"
+                      aria-label={actionLabel(absenceAction)}
+                      onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
+                    >
+                      {absenceAction}
+                    </button>
+                  );
+                })()}
 
-              <button
-                className="secondary danger"
-                onClick={() => cancelSwap(swapForThisTerm, course.id)}
-              >
-                {swapForThisTerm.status === "pending"
-                  ? "Tauschanfragen abbrechen"
-                  : swapForThisTerm.status === "active" &&
-                      swapForThisTerm.toCourseId === course.id &&
-                      isWithinCancellationSwapCutoff(
-                        swapForThisTerm.toDate,
-                        allCourses.find((c) => c.id === swapForThisTerm.toCourseId)?.time ?? "",
-                        cutoffMinutes,
-                      )
-                    ? isShortNoticeCancelled(
-                        overrides.find(
-                          (o) =>
-                            o.courseId === swapForThisTerm.toCourseId &&
-                            o.date === swapForThisTerm.toDate,
-                        ),
-                        userName,
-                      )
-                      ? "Tauschabsage zurücknehmen"
-                      : "Am Zieltermin kurzfristig absagen"
-                    : "Tausch abbrechen"}
-              </button>
+              {(() => {
+                const cancelSwapAction =
+                  swapForThisTerm.status === "pending"
+                    ? "Tauschanfragen abbrechen"
+                    : swapForThisTerm.status === "active" &&
+                        swapForThisTerm.toCourseId === course.id &&
+                        isWithinCancellationSwapCutoff(
+                          swapForThisTerm.toDate,
+                          allCourses.find((c) => c.id === swapForThisTerm.toCourseId)?.time ?? "",
+                          cutoffMinutes,
+                        )
+                      ? isShortNoticeCancelled(
+                          overrides.find(
+                            (o) =>
+                              o.courseId === swapForThisTerm.toCourseId &&
+                              o.date === swapForThisTerm.toDate,
+                          ),
+                          userName,
+                        )
+                        ? "Tauschabsage zurücknehmen"
+                        : "Am Zieltermin kurzfristig absagen"
+                      : "Tausch abbrechen";
+                return (
+                  <button
+                    type="button"
+                    className="secondary danger"
+                    aria-label={actionLabel(cancelSwapAction)}
+                    onClick={() => cancelSwap(swapForThisTerm, course.id)}
+                  >
+                    {cancelSwapAction}
+                  </button>
+                );
+              })()}
             </>
           ) : (
             <>
               {isShortNotice ? (
                 <button
+                  type="button"
                   className="danger"
+                  aria-label={actionLabel("Absage zurücknehmen")}
                   onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
                 >
                   Absage zurücknehmen
                 </button>
               ) : isParticipant ? (
                 <button
+                  type="button"
                   className="danger"
+                  aria-label={actionLabel("Termin absagen")}
                   onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
                 >
                   Termin absagen
                 </button>
               ) : canUndoRegularAbsence ? (
-                <button onClick={() => onToggleAbsence(course, selectedDateKey, userName)}>
+                <button
+                  type="button"
+                  aria-label={actionLabel("Absage zurücknehmen")}
+                  onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
+                >
                   Absage zurücknehmen
                 </button>
               ) : hasCancelled ? null : (
                 notEnrolledInTermHint
               )}
 
-              {canSwapFromOrigin && (
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    setSwapDateIso(null);
-                    setSwapDateIsoWaitlist(null);
-                    setShowSwapModal(true);
-                  }}
-                >
-                  {hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
-                </button>
-              )}
+              {canSwapFromOrigin && (() => {
+                const swapAction = hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen";
+                return (
+                  <button
+                    type="button"
+                    className="secondary"
+                    aria-label={actionLabel(swapAction)}
+                    onClick={() => {
+                      setSwapDateIso(null);
+                      setSwapDateIsoWaitlist(null);
+                      setShowSwapModal(true);
+                    }}
+                  >
+                    {swapAction}
+                  </button>
+                );
+              })()}
               {originInCutoff && (originallyParticipant || hasCancelled) && !canSwapFromOrigin && (
                 <p className="muted small" role="status">
                   Weniger als {cutoffMinutes} Minuten vor Termin — kein Tausch mehr möglich.
@@ -660,9 +698,12 @@ export default function CourseCard({
           {/* 🆕 Wenn schon pending-Requests existieren: zusätzlicher Button */}
               {hasPendingRequestsFromOrigin && canSwapFromOrigin && (
                 <button
+                  type="button"
                   className="secondary"
+                  aria-label={actionLabel(
+                    `Weitere Tauschanfrage (${pendingCount} offene Anfragen)`,
+                  )}
                   onClick={() => {
-                    // zwinge Nutzer zur bewussten Auswahl: nichts vorauswählen
                     setSwapDateIso(null);
                     setSwapDateIsoWaitlist(null);
                     setShowSwapModal(true);
@@ -676,19 +717,27 @@ export default function CourseCard({
 
       ) : showPastTermSwapActions ? (
         <div className="actions">
-          {swapForThisTerm ? (
-            <button
-              className="secondary danger"
-              onClick={() => cancelSwap(swapForThisTerm, course.id)}
-            >
-              {swapForThisTerm.status === "pending"
+          {swapForThisTerm ? (() => {
+            const cancelAction =
+              swapForThisTerm.status === "pending"
                 ? "Tauschanfragen abbrechen"
-                : "Tausch abbrechen"}
-            </button>
-          ) : canSwapFromPastCancelled ? (
+                : "Tausch abbrechen";
+            return (
+              <button
+                type="button"
+                className="secondary danger"
+                aria-label={actionLabel(cancelAction)}
+                onClick={() => cancelSwap(swapForThisTerm, course.id)}
+              >
+                {cancelAction}
+              </button>
+            );
+          })() : canSwapFromPastCancelled ? (
             <>
               <button
+                type="button"
                 className="secondary"
+                aria-label={actionLabel("Anderen Termin wählen")}
                 onClick={() => {
                   setSwapDateIso(null);
                   setSwapDateIsoWaitlist(null);
@@ -699,7 +748,11 @@ export default function CourseCard({
               </button>
               {hasPendingRequestsFromOrigin && (
                 <button
+                  type="button"
                   className="secondary"
+                  aria-label={actionLabel(
+                    `Weitere Tauschanfrage (${pendingCount} offene Anfragen)`,
+                  )}
                   onClick={() => {
                     setSwapDateIso(null);
                     setSwapDateIsoWaitlist(null);
@@ -714,18 +767,24 @@ export default function CourseCard({
           ) : null}
         </div>
       ) : isSelectedTermExcluded && includePastTermsInSelect ? (
-        swapForThisTerm ? (
-          <div className="actions">
-            <button
-              className="secondary danger"
-              onClick={() => cancelSwap(swapForThisTerm, course.id)}
-            >
-              {swapForThisTerm.status === "pending"
-                ? "Tauschanfrage abbrechen"
-                : "Tausch abbrechen"}
-            </button>
-          </div>
-        ) : null
+        swapForThisTerm ? (() => {
+          const cancelAction =
+            swapForThisTerm.status === "pending"
+              ? "Tauschanfrage abbrechen"
+              : "Tausch abbrechen";
+          return (
+            <div className="actions">
+              <button
+                type="button"
+                className="secondary danger"
+                aria-label={actionLabel(cancelAction)}
+                onClick={() => cancelSwap(swapForThisTerm, course.id)}
+              >
+                {cancelAction}
+              </button>
+            </div>
+          );
+        })() : null
       ) : isPastOccurrence && !participantActionsLocked ? (
         <p className="muted small course-past-term-note" role="status">
           Vergangener Termin — keine Änderungen mehr möglich.
@@ -735,7 +794,9 @@ export default function CourseCard({
           {swapForWaitlist ? (
             <div className="actions">
               <button
+                type="button"
                 className="secondary danger"
+                aria-label={actionLabel("Tauschanfrage abbrechen")}
                 onClick={() => cancelSwap(swapForWaitlist, course.id)}
               >
                 Tauschanfrage abbrechen
@@ -751,13 +812,20 @@ export default function CourseCard({
         <div className="actions course-inactive-swap-actions">
           {userSwapsOnCourse.map((swap) => (
             <div key={`${swap.fromCourseId}-${swap.fromDate}-${swap.toCourseId}-${swap.toDate}-${swap.status}`}>
-              <button
-                type="button"
-                className="secondary danger"
-                onClick={() => cancelSwap(swap, course.id)}
-              >
-                {swap.status === "pending" ? "Tauschanfrage abbrechen" : "Tausch abbrechen"}
-              </button>
+              {(() => {
+                const cancelAction =
+                  swap.status === "pending" ? "Tauschanfrage abbrechen" : "Tausch abbrechen";
+                return (
+                  <button
+                    type="button"
+                    className="secondary danger"
+                    aria-label={actionLabel(cancelAction)}
+                    onClick={() => cancelSwap(swap, course.id)}
+                  >
+                    {cancelAction}
+                  </button>
+                );
+              })()}
             </div>
           ))}
         </div>
