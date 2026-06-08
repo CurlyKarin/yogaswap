@@ -68,6 +68,28 @@ describe("CourseCard", () => {
     cleanup();
   });
 
+  it("rendert Kurskarte als article mit Kurs-Kontext im Namen", () => {
+    renderCourseCard();
+
+    const article = screen.getByRole("article", { name: /kurs:\s*yoga basic/i });
+    expect(article).toHaveClass("course-card");
+    const heading = screen.getByRole("heading", { name: /kurs:\s*yoga basic/i, level: 3 });
+    expect(heading).toHaveTextContent("Yoga Basic");
+    expect(article).toHaveAttribute("aria-labelledby", heading.id);
+    expect(article).toHaveAttribute("aria-describedby");
+    const scheduleDescId = article.getAttribute("aria-describedby");
+    const schedule = document.getElementById(scheduleDescId!);
+    expect(schedule).toHaveTextContent(/monday · 10:00/i);
+    expect(schedule).toHaveAttribute("aria-label", "Montag · 10:00");
+  });
+
+  it("verknüpft Terminauswahl mit Label", () => {
+    renderCourseCard();
+
+    const select = screen.getByRole("combobox", { name: /termine/i });
+    expect(screen.getByLabelText("Termine:")).toBe(select);
+  });
+
   it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {
     const overrideSn: CourseDateOverride = {
       ...baseOverride,

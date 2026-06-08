@@ -404,6 +404,15 @@ body {
   min-width: 0;
 }
 
+.course-head-primary {
+  min-width: 0;
+  flex: 1;
+}
+
+.course-head-schedule {
+  margin-top: 2px;
+}
+
 .course-head-meta {
   display: inline-flex;
   flex-direction: column;
@@ -1336,6 +1345,10 @@ a:focus-visible {
     gap: 0.5rem;
   }
   .course-head-title {
+    flex: unset;
+    min-width: 0;
+  }
+  .course-head-primary {
     flex: 1;
     min-width: 0;
   }

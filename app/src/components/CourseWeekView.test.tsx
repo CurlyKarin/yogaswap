@@ -99,7 +99,16 @@ describe("CourseWeekView", () => {
 
   it("shows empty state when no courses in week", () => {
     render(<CourseWeekView {...baseProps} rows={[]} />);
-    expect(screen.getByText("In dieser Kalenderwoche sind keine Termine sichtbar.")).toBeInTheDocument();
+    const emptyState = screen.getByText("In dieser Kalenderwoche sind keine Termine sichtbar.");
+    expect(emptyState).toBeInTheDocument();
+    expect(emptyState.closest('[role="status"]')).toBeTruthy();
+  });
+
+  it("exposes loading state as status region", () => {
+    render(<CourseWeekView {...baseProps} loading rows={[]} />);
+    const loadingStatus = screen.getByRole("status");
+    expect(loadingStatus).toHaveTextContent(/kurse werden geladen/i);
+    expect(loadingStatus).toHaveAttribute("aria-live", "polite");
   });
 
   it("shows hint when past courses are hidden outside grace", () => {

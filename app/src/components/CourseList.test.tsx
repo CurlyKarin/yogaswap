@@ -140,6 +140,34 @@ describe("CourseList", () => {
     });
   });
 
+  it("strukturiert geladene Kurse als region mit article-Karten", async () => {
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Yoga Basic",
+        weekday: "Monday",
+        time: "10:00",
+        capacity: 10,
+        participants: ["alice"],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+
+    render(
+      <CourseList currentUser={baseUser} tenant={baseTenant} membership={baseMembership} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: /kursübersicht/i })).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: /kurs:\s*yoga basic/i })).toBeInTheDocument();
+    });
+  });
+
   it("zeigt Empty-State, wenn keine sichtbaren zukünftigen Termine vorhanden sind", async () => {
     const pastOnlyCourses: Course[] = [
       {
@@ -163,7 +191,9 @@ describe("CourseList", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Aktuell keine Kurse in dieser Ansicht/i)).toBeInTheDocument();
+      const emptyState = screen.getByText(/Aktuell keine Kurse in dieser Ansicht/i);
+      expect(emptyState).toBeInTheDocument();
+      expect(emptyState.closest('[role="status"]')).toBeTruthy();
     });
   });
 

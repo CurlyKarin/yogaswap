@@ -25,6 +25,7 @@ import {
   isOccurrenceInPast,
 } from "../lib/courseTermActions";
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
+import { weekdayLabelDe } from "../lib/weekdayLabels";
 import type { SwapSettings } from "../types";
 
 type Props = {
@@ -355,15 +356,32 @@ export default function CourseCard({
     setSelectedDate(new Date(initialSelectedTime).toISOString());
   }, [initialSelectedTime]);
 
+  const titleId = useId();
+  const scheduleDescId = useId();
+  const termSelectId = useId();
+
   return (
-    <div
+    <article
       className={`course-card${participantActionsLocked ? " course-card--inactive-participant" : ""}`}
+      aria-labelledby={titleId}
+      aria-describedby={scheduleDescId}
     >
       <div className="course-head">
-        <div className="course-head-title">
-          <h3>{course.name}</h3>
-          <div className="muted">
-            {course.weekday} · {course.time}
+        <div className="course-head-primary">
+          <div className="course-head-title">
+            <h3 id={titleId}>
+              <span className="visually-hidden">Kurs: </span>
+              {course.name}
+            </h3>
+          </div>
+          <div
+            className="course-head-schedule muted"
+            id={scheduleDescId}
+            aria-label={`${weekdayLabelDe(course.weekday)} · ${course.time}`}
+          >
+            <span aria-hidden="true">
+              {course.weekday} · {course.time}
+            </span>
           </div>
         </div>
         <div className="course-head-meta">
@@ -426,8 +444,11 @@ export default function CourseCard({
       </div>
 
       <div className="course-row">
-        <div className="muted">Termine:</div>
+        <label htmlFor={termSelectId} className="muted course-row-label">
+          Termine:
+        </label>
         <select
+          id={termSelectId}
           value={hasNoUpcomingDates && !showLastTermInSelect ? "" : selectedDate}
           onChange={(e) => {
             const next = new Date(e.target.value);
@@ -916,6 +937,6 @@ export default function CourseCard({
           </div>
         </div>
       )}
-    </div>
+    </article>
   );
 }
