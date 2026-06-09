@@ -285,7 +285,7 @@ export default function CourseCard({
       ? getInactiveGraceLastDayIso(course, tenantSettings)
       : undefined;
   const lastActualOccurrenceIso = useMemo(
-    () => lastScheduledOccurrenceIso(course),
+    () => lastScheduledOccurrenceIso({ dates: course.dates }),
     [course.dates],
   );
   const lastOccurrenceDate =
