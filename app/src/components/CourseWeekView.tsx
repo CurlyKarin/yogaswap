@@ -22,7 +22,7 @@ type Props = {
   currentUser: User;
   canSeeCourseManagement: boolean;
   tenantSettings?: TenantSettings;
-  onToggleAbsence: (course: Course, dateIso: string, userName: string) => void;
+  onToggleAbsence: (course: Course, dateIso: string, userName: string) => Promise<boolean>;
   confirmSwap: (
     fromCourse: Course,
     fromDateIso: string,

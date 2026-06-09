@@ -223,7 +223,7 @@ export function useCourseSwaps(
 
       if (hasActiveSwapFromOrigin) {
         alert("Absagen nicht möglich, solange ein aktiver Tausch vom Ursprungstermin besteht.");
-        return;
+        return false;
       }
 
       const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
@@ -245,7 +245,7 @@ export function useCourseSwaps(
             `Achtung: Für diesen Termin existiert eine Warteliste (${waitlist.length} Person(en)). ` +
               `Deine Absage hat direkte Auswirkungen – jemand rückt automatisch nach. Möchtest du fortfahren?`,
           );
-          if (!proceed) return;
+          if (!proceed) return false;
         }
       }
 
@@ -266,7 +266,7 @@ export function useCourseSwaps(
       if (!isIn && !isSn) {
         if (activePastCount > 0) {
           alert("Diese Absage kann nicht mehr zurückgenommen werden, weil ein aktiver Tausch in der Vergangenheit liegt.");
-          return;
+          return false;
         }
         const warningParts: string[] = [
           "Absage zurücknehmen und wieder am Termin teilnehmen?",
@@ -279,7 +279,7 @@ export function useCourseSwaps(
           warningParts.push(`Aktive zukünftige Tausche (${activeFutureCount}) werden aufgehoben.`);
         }
         const proceed = confirm(warningParts.join(" "));
-        if (!proceed) return;
+        if (!proceed) return false;
         if (originSwaps.length > 0) {
           await cleanupAllSwapsFromOrigin(course.id, dateIso, userName);
         }
@@ -312,7 +312,7 @@ export function useCourseSwaps(
       } else {
         if (nextParticipants.length >= maxCapacity) {
           alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
-          return;
+          return false;
         }
         nextParticipants = addUserUniqueCaseInsensitive(nextParticipants, userName);
       }
@@ -342,10 +342,12 @@ export function useCourseSwaps(
         await fetchData();
       }
 
+      return true;
     } catch (err) {
         console.error('Error in onToggleAbsence:', err);
         alert("Fehler beim Speichern der Absage. Bitte erneut versuchen.");
         await fetchData();
+        return false;
       }
     },
     // courses, currentUser.nickname kept so callback updates when they change

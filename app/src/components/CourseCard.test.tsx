@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach } from "vitest";
 import CourseCard from "./CourseCard";
@@ -39,6 +39,9 @@ const baseSwap: Swap = {
   status: "pending",
 };
 
+const selectedTermActionName = (action: string) =>
+  new RegExp(`${action}, yoga basic, 16\\.06\\.2099`, "i");
+
 function renderCourseCard(overrides: Partial<React.ComponentProps<typeof CourseCard>> = {}) {
   const now = new Date("2099-06-10T10:00:00Z");
   const dates = [new Date("2099-06-16T10:00:00Z")];
@@ -50,7 +53,7 @@ function renderCourseCard(overrides: Partial<React.ComponentProps<typeof CourseC
     dates,
     overrides: [baseOverride],
     swaps: [],
-    onToggleAbsence: vi.fn(),
+    onToggleAbsence: vi.fn().mockResolvedValue(true),
     confirmSwap: vi.fn(),
     requestSwap: vi.fn(),
     cancelSwap: vi.fn(),
@@ -83,11 +86,14 @@ describe("CourseCard", () => {
     expect(schedule).toHaveAttribute("aria-label", "Montag · 10:00");
   });
 
-  it("verknüpft Terminauswahl mit Label", () => {
+  it("verknüpft Terminauswahl mit kursbezogenem Label", () => {
     renderCourseCard();
 
-    const select = screen.getByRole("combobox", { name: /termine/i });
-    expect(screen.getByLabelText("Termine:")).toBe(select);
+    const select = screen.getByRole("combobox", { name: /termin für yoga basic/i });
+    const visibleLabel = screen.getByText("Termine");
+    expect(visibleLabel.tagName).toBe("LABEL");
+    expect(visibleLabel).toHaveAttribute("for", select.id);
+    expect(visibleLabel).toHaveAttribute("aria-label", "Termin für Yoga Basic");
   });
 
   it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {
@@ -179,6 +185,33 @@ describe("CourseCard", () => {
     expect(screen.getByRole("option", { name: /6\/16\/2099 \(entfällt\)/i })).toBeInTheDocument();
   });
 
+  it("zeigt keinen Phantom-Termin bei leerem dates trotz seriesEndDate", () => {
+    const phantomCourse: Course = {
+      ...baseCourse,
+      weekday: "Tue",
+      seriesStartDate: "2026-06-07",
+      seriesEndDate: "2026-06-07",
+      dates: [],
+      status: "active",
+      planningMode: "bounded_series",
+    };
+
+    vi.setSystemTime(new Date("2026-06-10T12:00:00Z"));
+    renderCourseCard({
+      course: phantomCourse,
+      dates: [],
+      overrides: [],
+    });
+
+    const select = screen.getByRole("combobox", { name: /termin für yoga basic/i });
+    expect(select).toBeDisabled();
+    expect(screen.queryByText(/letzter termin/i)).not.toBeInTheDocument();
+    const hintId = select.getAttribute("aria-describedby");
+    expect(document.getElementById(hintId!)).toHaveTextContent(
+      /kein termin im kurszeitraum für yoga basic/i,
+    );
+  });
+
   it("deaktiviert Datumsauswahl, wenn keine zukünftigen Termine vorhanden sind", () => {
     const courseWithoutFutureDates: Course = {
       ...baseCourse,
@@ -191,23 +224,98 @@ describe("CourseCard", () => {
       overrides: [],
     });
 
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /termin für yoga basic/i });
     expect(select).toBeDisabled();
+    const hintId = select.getAttribute("aria-describedby");
+    expect(hintId).toBeTruthy();
+    expect(document.getElementById(hintId!)).toHaveTextContent(
+      /keine anstehenden termine für yoga basic/i,
+    );
   });
 
-  it("ruft onToggleAbsence auf, wenn 'Termin absagen' geklickt wird", () => {
-    const onToggleAbsence = vi.fn();
+  it("benennt Kernaktionen mit Termin- und Kurskontext für Screenreader", () => {
+    renderCourseCard();
+
+    expect(
+      screen.getByRole("button", { name: selectedTermActionName("Termin absagen") }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: selectedTermActionName("Tauschen anfragen") }),
+    ).toBeInTheDocument();
+  });
+
+  it("enthält Tausch-Status im aria-label der Aktion", () => {
+    const targetCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Advanced",
+    };
+
+    renderCourseCard({
+      swaps: [baseSwap],
+      allCourses: [baseCourse, targetCourse],
+    });
+
+    const cancelButton = screen.getByRole("button", {
+      name: selectedTermActionName("Tauschanfragen abbrechen"),
+    });
+    expect(cancelButton.getAttribute("aria-label")).toMatch(
+      /Tauschanfrage für 17\.06\.2099 · Yoga Advanced/i,
+    );
+  });
+
+  it("ruft onToggleAbsence auf, wenn 'Termin absagen' geklickt wird", async () => {
+    const onToggleAbsence = vi.fn().mockResolvedValue(true);
 
     const { props } = renderCourseCard({ onToggleAbsence });
 
-    const button = screen.getByRole("button", { name: /Termin absagen/i });
+    const button = screen.getByRole("button", { name: selectedTermActionName("Termin absagen") });
     fireEvent.click(button);
 
-    expect(onToggleAbsence).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onToggleAbsence).toHaveBeenCalledTimes(1);
+    });
     const [courseArg, dateIsoArg, userNameArg] = onToggleAbsence.mock.calls[0];
     expect(courseArg).toEqual(props.course);
     expect(userNameArg).toBe("alice");
     expect(typeof dateIsoArg).toBe("string");
+  });
+
+  it("meldet erfolgreiche Terminabsage über aria-live", async () => {
+    const onToggleAbsence = vi.fn().mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(true), 0)),
+    );
+
+    renderCourseCard({ onToggleAbsence });
+
+    fireEvent.click(screen.getByRole("button", { name: selectedTermActionName("Termin absagen") }));
+
+    expect(screen.getByText(/speichere absage/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText(/termin abgesagt für yoga basic, 16\.06\.2099/i)).toBeInTheDocument();
+    });
+  });
+
+  it("meldet Absage-Rücknahme über aria-live", async () => {
+    const cancelledOverride: CourseDateOverride = {
+      ...baseOverride,
+      participants: [],
+    };
+
+    renderCourseCard({
+      overrides: [cancelledOverride],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: selectedTermActionName("Absage zurücknehmen") }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/absage zurückgenommen für yoga basic, 16\.06\.2099/i),
+      ).toBeInTheDocument();
+    });
   });
 
   it("ruft cancelSwap auf, wenn 'Tauschanfragen abbrechen' geklickt wird", () => {
@@ -216,7 +324,9 @@ describe("CourseCard", () => {
 
     renderCourseCard({ swaps, cancelSwap });
 
-    const button = screen.getByRole("button", { name: /Tauschanfragen abbrechen/i });
+    const button = screen.getByRole("button", {
+      name: selectedTermActionName("Tauschanfragen abbrechen"),
+    });
     fireEvent.click(button);
 
     expect(cancelSwap).toHaveBeenCalledTimes(1);
@@ -270,7 +380,7 @@ describe("CourseCard", () => {
       overrides: [cancelledOverride],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Anderen Termin wählen/i }));
+    fireEvent.click(screen.getByRole("button", { name: selectedTermActionName("Anderen Termin wählen") }));
     expect(screen.getByRole("heading", { name: /Anderen Termin wählen/i })).toBeInTheDocument();
     expect(screen.queryByText(/folgt/i)).not.toBeInTheDocument();
   });
@@ -303,7 +413,9 @@ describe("CourseCard", () => {
     });
 
     // Swap-Modal öffnen (es kann mehrere gleich benannte Buttons geben)
-    const [swapButton] = screen.getAllByRole("button", { name: /Tauschen anfragen/i });
+    const [swapButton] = screen.getAllByRole("button", {
+      name: selectedTermActionName("Tauschen anfragen"),
+    });
     fireEvent.click(swapButton);
 
     expect(screen.getByText(/Tauschanfrage starten/i)).toBeInTheDocument();
@@ -362,7 +474,9 @@ describe("CourseCard", () => {
       overrides: [baseOverride],
     });
 
-    const swapButtons = screen.getAllByRole("button", { name: /Weitere Tauschanfrage/i });
+    const swapButtons = screen.getAllByRole("button", {
+      name: selectedTermActionName("Weitere Tauschanfrage"),
+    });
     fireEvent.click(swapButtons[swapButtons.length - 1]);
 
     expect(screen.getByText(/Tauschanfrage starten/i)).toBeInTheDocument();
