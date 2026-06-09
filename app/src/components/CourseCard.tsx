@@ -456,8 +456,12 @@ export default function CourseCard({
             Keine anstehenden Termine für {course.name}.
           </span>
         )}
-        <label htmlFor={termSelectId} className="muted course-row-label">
-          Termin für {course.name}
+        <label
+          htmlFor={termSelectId}
+          className="muted course-row-label"
+          aria-label={`Termin für ${course.name}`}
+        >
+          Termine
         </label>
         <select
           id={termSelectId}

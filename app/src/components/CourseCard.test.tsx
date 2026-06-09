@@ -87,7 +87,10 @@ describe("CourseCard", () => {
     renderCourseCard();
 
     const select = screen.getByRole("combobox", { name: /termin für yoga basic/i });
-    expect(screen.getByLabelText("Termin für Yoga Basic")).toBe(select);
+    const visibleLabel = screen.getByText("Termine");
+    expect(visibleLabel.tagName).toBe("LABEL");
+    expect(visibleLabel).toHaveAttribute("for", select.id);
+    expect(visibleLabel).toHaveAttribute("aria-label", "Termin für Yoga Basic");
   });
 
   it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {
