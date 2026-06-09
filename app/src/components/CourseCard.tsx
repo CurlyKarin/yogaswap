@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { CalendarX, Clock3, History } from "lucide-react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
@@ -94,36 +94,45 @@ type CourseTermActionButtonProps = {
   labelExtras?: string[];
   className?: string;
   title?: string;
-  disabled?: boolean;
+  inactive?: boolean;
   busy?: boolean;
   onClick: () => void;
 };
 
-function CourseTermActionButton({
-  action,
-  courseName,
-  termIso,
-  labelExtras = [],
-  className,
-  title,
-  disabled,
-  busy,
-  onClick,
-}: CourseTermActionButtonProps) {
-  return (
-    <button
-      type="button"
-      className={className}
-      aria-label={courseTermActionLabel(courseName, action, termIso, labelExtras)}
-      aria-busy={busy || undefined}
-      disabled={disabled}
-      title={title}
-      onClick={onClick}
-    >
-      {action}
-    </button>
-  );
-}
+const CourseTermActionButton = forwardRef<HTMLButtonElement, CourseTermActionButtonProps>(
+  function CourseTermActionButton(
+    {
+      action,
+      courseName,
+      termIso,
+      labelExtras = [],
+      className,
+      title,
+      inactive,
+      busy,
+      onClick,
+    },
+    ref,
+  ) {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        className={className}
+        aria-label={courseTermActionLabel(courseName, action, termIso, labelExtras)}
+        aria-busy={busy || undefined}
+        aria-disabled={inactive || undefined}
+        title={title}
+        onClick={() => {
+          if (inactive) return;
+          onClick();
+        }}
+      >
+        {action}
+      </button>
+    );
+  },
+);
 
 type AbsenceToggleOutcome = "cancelled" | "shortNoticeCancelled" | "undo";
 
@@ -209,6 +218,8 @@ export default function CourseCard({
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [absenceSaving, setAbsenceSaving] = useState(false);
   const [absenceAnnouncement, setAbsenceAnnouncement] = useState("");
+  const absenceButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreAbsenceFocusRef = useRef(false);
 
   const userName = currentUser.nickname;
   const selectedDateKey = toDateKey(new Date(selectedDate));
@@ -480,8 +491,41 @@ export default function CourseCard({
   const cutoffExtras = cutoffStatusLabel ? [cutoffStatusLabel] : undefined;
   const termActionExtras = [...(swapStatusExtras ?? []), ...(cutoffExtras ?? [])];
 
+  const swapPendingAbsenceAction = useMemo((): {
+    action: string;
+    outcome: AbsenceToggleOutcome;
+  } | null => {
+    if (swapForThisTerm?.status === "pending" && originallyParticipant) {
+      return {
+        action: hasCancelled ? "Absage zurücknehmen" : "Termin absagen",
+        outcome: hasCancelled ? "undo" : "cancelled",
+      };
+    }
+    return null;
+  }, [swapForThisTerm, originallyParticipant, hasCancelled]);
+
+  const primaryAbsenceAction = useMemo((): {
+    action: string;
+    outcome: AbsenceToggleOutcome;
+  } | null => {
+    if (isShortNotice) {
+      return { action: "Absage zurücknehmen", outcome: "undo" };
+    }
+    if (isParticipant) {
+      return {
+        action: "Termin absagen",
+        outcome: originInCutoff ? "shortNoticeCancelled" : "cancelled",
+      };
+    }
+    if (canUndoRegularAbsence) {
+      return { action: "Absage zurücknehmen", outcome: "undo" };
+    }
+    return null;
+  }, [isShortNotice, isParticipant, canUndoRegularAbsence, originInCutoff]);
+
   const handleToggleAbsence = useCallback(
     async (outcome: AbsenceToggleOutcome) => {
+      if (absenceSaving) return;
       setAbsenceSaving(true);
       setAbsenceAnnouncement(formatAbsenceAnnouncement(course.name, selectedDateKey, "saving"));
       try {
@@ -490,6 +534,7 @@ export default function CourseCard({
           setAbsenceAnnouncement("");
           return;
         }
+        restoreAbsenceFocusRef.current = true;
         setAbsenceAnnouncement(
           formatAbsenceAnnouncement(course.name, selectedDateKey, outcome),
         );
@@ -499,12 +544,18 @@ export default function CourseCard({
         setAbsenceSaving(false);
       }
     },
-    [course, onToggleAbsence, selectedDateKey, userName],
+    [absenceSaving, course, onToggleAbsence, selectedDateKey, userName],
   );
 
   useEffect(() => {
     setAbsenceAnnouncement("");
   }, [selectedDateKey]);
+
+  useEffect(() => {
+    if (!restoreAbsenceFocusRef.current) return;
+    absenceButtonRef.current?.focus();
+    restoreAbsenceFocusRef.current = false;
+  });
 
   return (
     <article
@@ -742,19 +793,17 @@ export default function CourseCard({
           {swapForThisTerm ? (
             <>
               {/* Falls User den Ursprungstermin noch nicht abgesagt hat → Absage-Button trotzdem anzeigen */}
-              {swapForThisTerm.status === "pending" &&
-                originallyParticipant && (
+              {swapPendingAbsenceAction && (
                   <CourseTermActionButton
-                    action={hasCancelled ? "Absage zurücknehmen" : "Termin absagen"}
+                    ref={absenceButtonRef}
+                    action={swapPendingAbsenceAction.action}
                     courseName={course.name}
                     termIso={selectedDateKey}
                     labelExtras={termActionExtras}
                     className="danger"
                     busy={absenceSaving}
-                    disabled={absenceSaving}
-                    onClick={() =>
-                      handleToggleAbsence(hasCancelled ? "undo" : "cancelled")
-                    }
+                    inactive={absenceSaving}
+                    onClick={() => handleToggleAbsence(swapPendingAbsenceAction.outcome)}
                   />
                 )}
 
@@ -794,41 +843,17 @@ export default function CourseCard({
             </>
           ) : (
             <>
-              {isShortNotice ? (
+              {primaryAbsenceAction ? (
                 <CourseTermActionButton
-                  action="Absage zurücknehmen"
+                  ref={absenceButtonRef}
+                  action={primaryAbsenceAction.action}
                   courseName={course.name}
                   termIso={selectedDateKey}
                   labelExtras={termActionExtras}
                   className="danger"
                   busy={absenceSaving}
-                  disabled={absenceSaving}
-                  onClick={() => handleToggleAbsence("undo")}
-                />
-              ) : isParticipant ? (
-                <CourseTermActionButton
-                  action="Termin absagen"
-                  courseName={course.name}
-                  termIso={selectedDateKey}
-                  labelExtras={termActionExtras}
-                  className="danger"
-                  busy={absenceSaving}
-                  disabled={absenceSaving}
-                  onClick={() =>
-                    handleToggleAbsence(
-                      originInCutoff ? "shortNoticeCancelled" : "cancelled",
-                    )
-                  }
-                />
-              ) : canUndoRegularAbsence ? (
-                <CourseTermActionButton
-                  action="Absage zurücknehmen"
-                  courseName={course.name}
-                  termIso={selectedDateKey}
-                  labelExtras={termActionExtras}
-                  busy={absenceSaving}
-                  disabled={absenceSaving}
-                  onClick={() => handleToggleAbsence("undo")}
+                  inactive={absenceSaving}
+                  onClick={() => handleToggleAbsence(primaryAbsenceAction.outcome)}
                 />
               ) : hasCancelled ? null : (
                 notEnrolledInTermHint
