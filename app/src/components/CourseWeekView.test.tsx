@@ -30,6 +30,7 @@ const sampleCourse: Course = {
 };
 
 const noop = () => {};
+const noopToggleAbsence = async () => true;
 
 const baseProps = {
   weekAnchor: new Date(2099, 5, 2),
@@ -42,7 +43,7 @@ const baseProps = {
   swaps: [],
   currentUser: baseUser,
   canSeeCourseManagement: false,
-  onToggleAbsence: noop,
+  onToggleAbsence: noopToggleAbsence,
   confirmSwap: noop,
   requestSwap: noop,
   cancelSwap: noop,

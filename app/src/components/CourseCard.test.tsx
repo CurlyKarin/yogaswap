@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach } from "vitest";
 import CourseCard from "./CourseCard";
@@ -53,7 +53,7 @@ function renderCourseCard(overrides: Partial<React.ComponentProps<typeof CourseC
     dates,
     overrides: [baseOverride],
     swaps: [],
-    onToggleAbsence: vi.fn(),
+    onToggleAbsence: vi.fn().mockResolvedValue(true),
     confirmSwap: vi.fn(),
     requestSwap: vi.fn(),
     cancelSwap: vi.fn(),
@@ -264,19 +264,58 @@ describe("CourseCard", () => {
     );
   });
 
-  it("ruft onToggleAbsence auf, wenn 'Termin absagen' geklickt wird", () => {
-    const onToggleAbsence = vi.fn();
+  it("ruft onToggleAbsence auf, wenn 'Termin absagen' geklickt wird", async () => {
+    const onToggleAbsence = vi.fn().mockResolvedValue(true);
 
     const { props } = renderCourseCard({ onToggleAbsence });
 
     const button = screen.getByRole("button", { name: selectedTermActionName("Termin absagen") });
     fireEvent.click(button);
 
-    expect(onToggleAbsence).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onToggleAbsence).toHaveBeenCalledTimes(1);
+    });
     const [courseArg, dateIsoArg, userNameArg] = onToggleAbsence.mock.calls[0];
     expect(courseArg).toEqual(props.course);
     expect(userNameArg).toBe("alice");
     expect(typeof dateIsoArg).toBe("string");
+  });
+
+  it("meldet erfolgreiche Terminabsage über aria-live", async () => {
+    const onToggleAbsence = vi.fn().mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(true), 0)),
+    );
+
+    renderCourseCard({ onToggleAbsence });
+
+    fireEvent.click(screen.getByRole("button", { name: selectedTermActionName("Termin absagen") }));
+
+    expect(screen.getByText(/speichere absage/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText(/termin abgesagt für yoga basic, 16\.06\.2099/i)).toBeInTheDocument();
+    });
+  });
+
+  it("meldet Absage-Rücknahme über aria-live", async () => {
+    const cancelledOverride: CourseDateOverride = {
+      ...baseOverride,
+      participants: [],
+    };
+
+    renderCourseCard({
+      overrides: [cancelledOverride],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: selectedTermActionName("Absage zurücknehmen") }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/absage zurückgenommen für yoga basic, 16\.06\.2099/i),
+      ).toBeInTheDocument();
+    });
   });
 
   it("ruft cancelSwap auf, wenn 'Tauschanfragen abbrechen' geklickt wird", () => {
