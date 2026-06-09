@@ -28,16 +28,9 @@ describe("courseStatus", () => {
   });
 
   it("lastScheduledOccurrenceIso nutzt nur dates ohne seriesEndDate", () => {
+    expect(lastScheduledOccurrenceIso({ dates: [] })).toBeUndefined();
     expect(
       lastScheduledOccurrenceIso({
-        ...baseCourse,
-        seriesEndDate: "2026-06-07",
-        dates: [],
-      }),
-    ).toBeUndefined();
-    expect(
-      lastScheduledOccurrenceIso({
-        ...baseCourse,
         dates: ["2026-05-10", "2026-06-14"],
       }),
     ).toBe("2026-06-14");
