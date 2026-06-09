@@ -35,6 +35,10 @@ body {
   border: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .skip-links {
   margin: 0;
   padding: 0;
@@ -644,6 +648,26 @@ button:focus-visible,
 a:focus-visible {
   outline: 3px solid #93c5fd;
   outline-offset: 2px;
+}
+
+/*
+ * Modals use a focus trap with programmatic .focus(), which often skips :focus-visible.
+ * Show rings on :focus inside .modal; hide again for pointer clicks on links/buttons.
+ */
+.modal :is(
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [tabindex]:not([tabindex="-1"])
+):focus {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.modal :is(button, a):focus:not(:focus-visible) {
+  outline: none;
 }
 
 .not-enrolled {
