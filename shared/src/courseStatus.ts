@@ -62,6 +62,18 @@ export function courseEndDateIso(
   return trimmed[0];
 }
 
+/** Letzter geplanter Termin nur aus `dates` (ohne seriesEndDate-Fallback). */
+export function lastScheduledOccurrenceIso(
+  course: Pick<Course, "dates">,
+): string | undefined {
+  const raw = course.dates ?? [];
+  const valid = raw.filter((d) => typeof d === "string" && ISO_DATE_ONLY.test(d.trim()));
+  if (valid.length === 0) return undefined;
+  const trimmed = valid.map((d) => d.trim());
+  trimmed.sort((a, b) => b.localeCompare(a));
+  return trimmed[0];
+}
+
 export function getInactiveGraceLastDayIso(
   course: Pick<Course, "seriesEndDate" | "visibleUntil" | "dates" | "status">,
   settings?: TenantSettings,

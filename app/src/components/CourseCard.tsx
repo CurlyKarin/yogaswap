@@ -3,8 +3,8 @@ import { CalendarX, Clock3, History } from "lucide-react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
   buildCourseOccurrenceLocal,
-  courseEndDateIso,
   formatCourseIsoDateDe,
+  lastScheduledOccurrenceIso,
   getInactiveGraceLastDayIso,
   isCourseInInactiveGracePeriod,
   isWithinPostCourseEndGrace,
@@ -284,10 +284,16 @@ export default function CourseCard({
     inPostEndGrace || inInactiveGrace
       ? getInactiveGraceLastDayIso(course, tenantSettings)
       : undefined;
-  const lastOccurrenceIso = courseEndDateIso(course);
+  const lastActualOccurrenceIso = useMemo(
+    () => lastScheduledOccurrenceIso(course),
+    [course.dates],
+  );
   const lastOccurrenceDate =
-    lastOccurrenceIso != null ? buildCourseOccurrenceLocal(lastOccurrenceIso, course.time) : null;
-  const showLastTermInSelect = hasNoUpcomingDates && lastOccurrenceDate != null && inPostEndGrace;
+    lastActualOccurrenceIso != null
+      ? buildCourseOccurrenceLocal(lastActualOccurrenceIso, course.time)
+      : null;
+  const showLastTermInSelect =
+    hasNoUpcomingDates && lastOccurrenceDate != null && inPostEndGrace;
   const showAutoInactiveBadge =
     participantActionsLocked && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
   const userSwapsOnCourse = useMemo(
@@ -352,7 +358,7 @@ export default function CourseCard({
     if (showLastTermInSelect && lastOccurrenceDate) {
       setSelectedDate(lastOccurrenceDate.toISOString());
     }
-  }, [includePastTermsInSelect, showLastTermInSelect, lastOccurrenceIso, course.time, lastOccurrenceDate]);
+  }, [includePastTermsInSelect, showLastTermInSelect, lastActualOccurrenceIso, course.time, lastOccurrenceDate]);
 
   const initialSelectedTime = initialSelectedDate?.getTime();
   useEffect(() => {
@@ -453,7 +459,9 @@ export default function CourseCard({
       <div className="course-row">
         {termSelectDisabled && (
           <span id={termSelectDisabledHintId} className="visually-hidden">
-            Keine anstehenden Termine für {course.name}.
+            {(course.dates ?? []).length === 0
+              ? `Kein Termin im Kurszeitraum für ${course.name}.`
+              : `Keine anstehenden Termine für ${course.name}.`}
           </span>
         )}
         <label

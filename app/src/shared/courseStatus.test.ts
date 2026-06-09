@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   courseEndDateIso,
+  lastScheduledOccurrenceIso,
   getInactiveGraceLastDayIso,
   hasUpcomingCourseOccurrences,
   isCourseInInactiveGracePeriod,
@@ -24,6 +25,22 @@ const baseCourse: Course = {
 describe("courseStatus", () => {
   it("ermittelt Kursende aus seriesEndDate", () => {
     expect(courseEndDateIso({ ...baseCourse, seriesEndDate: "2026-05-10" })).toBe("2026-05-10");
+  });
+
+  it("lastScheduledOccurrenceIso nutzt nur dates ohne seriesEndDate", () => {
+    expect(
+      lastScheduledOccurrenceIso({
+        ...baseCourse,
+        seriesEndDate: "2026-06-07",
+        dates: [],
+      }),
+    ).toBeUndefined();
+    expect(
+      lastScheduledOccurrenceIso({
+        ...baseCourse,
+        dates: ["2026-05-10", "2026-06-14"],
+      }),
+    ).toBe("2026-06-14");
   });
 
   it("prüft Nachlauf für inaktive Kurse", () => {

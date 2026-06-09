@@ -182,6 +182,33 @@ describe("CourseCard", () => {
     expect(screen.getByRole("option", { name: /6\/16\/2099 \(entfällt\)/i })).toBeInTheDocument();
   });
 
+  it("zeigt keinen Phantom-Termin bei leerem dates trotz seriesEndDate", () => {
+    const phantomCourse: Course = {
+      ...baseCourse,
+      weekday: "Tue",
+      seriesStartDate: "2026-06-07",
+      seriesEndDate: "2026-06-07",
+      dates: [],
+      status: "active",
+      planningMode: "bounded_series",
+    };
+
+    vi.setSystemTime(new Date("2026-06-10T12:00:00Z"));
+    renderCourseCard({
+      course: phantomCourse,
+      dates: [],
+      overrides: [],
+    });
+
+    const select = screen.getByRole("combobox", { name: /termin für yoga basic/i });
+    expect(select).toBeDisabled();
+    expect(screen.queryByText(/letzter termin/i)).not.toBeInTheDocument();
+    const hintId = select.getAttribute("aria-describedby");
+    expect(document.getElementById(hintId!)).toHaveTextContent(
+      /kein termin im kurszeitraum für yoga basic/i,
+    );
+  });
+
   it("deaktiviert Datumsauswahl, wenn keine zukünftigen Termine vorhanden sind", () => {
     const courseWithoutFutureDates: Course = {
       ...baseCourse,
