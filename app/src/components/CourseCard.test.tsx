@@ -42,6 +42,13 @@ const baseSwap: Swap = {
 const selectedTermActionName = (action: string) =>
   new RegExp(`${action}, yoga basic, 16\\.06\\.2099`, "i");
 
+function openSwapModal() {
+  const [swapButton] = screen.getAllByRole("button", {
+    name: selectedTermActionName("Tauschen anfragen"),
+  });
+  fireEvent.click(swapButton);
+}
+
 function renderCourseCard(overrides: Partial<React.ComponentProps<typeof CourseCard>> = {}) {
   const now = new Date("2099-06-10T10:00:00Z");
   const dates = [new Date("2099-06-16T10:00:00Z")];
@@ -385,6 +392,26 @@ describe("CourseCard", () => {
     expect(screen.queryByText(/folgt/i)).not.toBeInTheDocument();
   });
 
+  it("öffnet das Swap-Modal aus der Kurskarte", () => {
+    const alternativeCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Abend",
+      dates: ["2099-06-20"],
+      participants: [],
+    };
+
+    renderCourseCard({
+      allCourses: [baseCourse, alternativeCourse],
+    });
+
+    openSwapModal();
+
+    expect(
+      screen.getByRole("dialog", { name: /Tauschanfrage starten, Yoga Basic, 16\.06\.2099/i }),
+    ).toBeInTheDocument();
+  });
+
   it("öffnet das Swap-Modal und ruft confirmSwap bzw. requestSwap korrekt auf", () => {
     const confirmSwap = vi.fn();
     const requestSwap = vi.fn();
@@ -418,7 +445,8 @@ describe("CourseCard", () => {
     });
     fireEvent.click(swapButton);
 
-    expect(screen.getByText(/Tauschanfrage starten/i)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /Tauschanfrage starten, Yoga Basic, 16\.06\.2099/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Tauschanfrage starten/i })).toBeInTheDocument();
 
     // Es gibt mindestens einen freien Ersatztermin
     expect(screen.getByText(/Es stehen 1 freie Termin\(e\) zur Auswahl\./i)).toBeInTheDocument();
@@ -427,7 +455,9 @@ describe("CourseCard", () => {
 
     const freeSlotsHint = screen.getByRole("button", { name: /Hilfe: Freie Tauschtermine/i });
     fireEvent.click(freeSlotsHint);
-    expect(screen.getByRole("note")).toHaveTextContent(/gleichzeitig von deinem aktuellen Termin ab/i);
+    expect(screen.getByRole("region", { name: /Freie Tauschtermine/i })).toHaveTextContent(
+      /gleichzeitig von deinem aktuellen Termin ab/i,
+    );
 
     // Button ist deaktiviert und bleibt es auch, da keine Auswahl möglich ist
     const confirmButton = screen.getByRole("button", { name: /Bestätigen/i });
@@ -479,7 +509,8 @@ describe("CourseCard", () => {
     });
     fireEvent.click(swapButtons[swapButtons.length - 1]);
 
-    expect(screen.getByText(/Tauschanfrage starten/i)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /Tauschanfrage starten, Yoga Basic, 16\.06\.2099/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Tauschanfrage starten/i })).toBeInTheDocument();
     expect(document.querySelector('option[value^="2099-06-21T"]')).toBeInTheDocument();
     expect(document.querySelector('option[value^="2099-06-20T"]')).not.toBeInTheDocument();
   });

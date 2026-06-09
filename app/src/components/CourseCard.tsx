@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { CalendarX, Clock3, History } from "lucide-react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
@@ -27,6 +27,7 @@ import {
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import { weekdayLabelDe } from "../lib/weekdayLabels";
 import type { SwapSettings } from "../types";
+import CourseSwapModal from "./CourseSwapModal";
 
 type Props = {
   course: Course;
@@ -156,37 +157,6 @@ function formatAbsenceAnnouncement(
   }
 }
 
-function SwapModalHint({ label, children }: { label: string; children: ReactNode }) {
-  const hintId = useId();
-  const [open, setOpen] = useState(false);
-
-  return (
-    <span className="swap-modal-hint-wrap">
-      <button
-        type="button"
-        className="studio-field-hint"
-        title={label}
-        aria-expanded={open}
-        aria-controls={hintId}
-        aria-label={`Hilfe: ${label}`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setOpen((prev) => !prev);
-        }}
-      >
-        ?
-      </button>
-      {open && (
-        <div id={hintId} role="note" className="studio-field-hint-popover swap-modal-hint-popover">
-          {children}
-        </div>
-      )}
-    </span>
-  );
-}
-
 export default function CourseCard({
   course,
   allCourses,
@@ -213,8 +183,6 @@ export default function CourseCard({
   const [selectedDate, setSelectedDate] = useState<string>(
     () => (initialSelectedDate ?? dates[0])?.toISOString() || "",
   );
-  const [swapDateIso, setSwapDateIso] = useState<string | null>(null);
-  const [swapDateIsoWaitlist, setSwapDateIsoWaitlist] = useState<string | null>(null);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [absenceSaving, setAbsenceSaving] = useState(false);
   const [absenceAnnouncement, setAbsenceAnnouncement] = useState("");
@@ -557,6 +525,16 @@ export default function CourseCard({
     restoreAbsenceFocusRef.current = false;
   });
 
+  const openSwapModal = useCallback(() => {
+    setShowSwapModal(true);
+  }, []);
+
+  const closeSwapModal = useCallback(() => {
+    setShowSwapModal(false);
+  }, []);
+
+  const swapModalTitle = hasCancelled ? "Anderen Termin wählen" : "Tauschanfrage starten";
+
   return (
     <article
       className={`course-card${participantActionsLocked ? " course-card--inactive-participant" : ""}`}
@@ -866,11 +844,7 @@ export default function CourseCard({
                   termIso={selectedDateKey}
                   labelExtras={termActionExtras}
                   className="secondary"
-                  onClick={() => {
-                    setSwapDateIso(null);
-                    setSwapDateIsoWaitlist(null);
-                    setShowSwapModal(true);
-                  }}
+                  onClick={openSwapModal}
                 />
               )}
               {showCutoffHint && (
@@ -890,11 +864,7 @@ export default function CourseCard({
                   labelExtras={termActionExtras}
                   className="secondary"
                   title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
-                  onClick={() => {
-                    setSwapDateIso(null);
-                    setSwapDateIsoWaitlist(null);
-                    setShowSwapModal(true);
-                  }}
+                  onClick={openSwapModal}
                 />
               )}
         </div>
@@ -922,11 +892,7 @@ export default function CourseCard({
                 termIso={selectedDateKey}
                 labelExtras={termActionExtras}
                 className="secondary"
-                onClick={() => {
-                  setSwapDateIso(null);
-                  setSwapDateIsoWaitlist(null);
-                  setShowSwapModal(true);
-                }}
+                onClick={openSwapModal}
               />
               {hasPendingRequestsFromOrigin && (
                 <CourseTermActionButton
@@ -936,11 +902,7 @@ export default function CourseCard({
                   labelExtras={termActionExtras}
                   className="secondary"
                   title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
-                  onClick={() => {
-                    setSwapDateIso(null);
-                    setSwapDateIsoWaitlist(null);
-                    setShowSwapModal(true);
-                  }}
+                  onClick={openSwapModal}
                 />
               )}
             </>
@@ -1010,147 +972,23 @@ export default function CourseCard({
           ))}
         </div>
       )}
-      {/* Swap-Modal */}
       {(canUseFullTermActions || canSwapFromPastCancelled) && showSwapModal && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h4>
-              {hasCancelled ? "Anderen Termin wählen" : "Tauschanfrage starten"}
-            </h4>
-            <p>
-              Ausgewählter Termin:{" "}
-              <strong>
-                {new Date(selectedDate).toLocaleDateString()}
-              </strong>{" "}
-              · {course.name}
-            </p>
-
-            {availableSwapDates.length > 0 || waitlistDates.length > 0 ? (
-              <>
-                <div className="swap-modal-section-head">
-                  <span className="swap-modal-section-title">Freie Termine</span>
-                  <SwapModalHint label="Freie Tauschtermine">
-                    <p>
-                      Termine mit freien Plätzen zwischen{" "}
-                      <strong>
-                        {swapWindow.minOffsetDays} und {swapWindow.maxOffsetDays} Tagen
-                      </strong>{" "}
-                      nach deinem Kurstermin (nur in der Zukunft). Mit der Bestätigung eines Zieltermins
-                      meldest du dich gleichzeitig von deinem aktuellen Termin ab.
-                    </p>
-                  </SwapModalHint>
-                </div>
-                {availableSwapDates.length > 0 ? (
-                  <>
-                    <p className="muted">
-                      Es stehen {availableSwapDates.length} freie Termin(e) zur Auswahl.
-                    </p>
-                    <select
-                      value={swapDateIso ?? ""}
-                      onChange={(e) => {
-                        setSwapDateIso(e.target.value || null);
-                        setSwapDateIsoWaitlist(null);
-                      }}
-                    >
-                      <option value="" disabled>
-                        Bitte freien Termin auswählen…
-                      </option>
-                      {availableSwapDates.map((swapDate, idx) => (
-                        <option key={idx} value={swapDate.date.toISOString()}>
-                          {new Intl.DateTimeFormat("de-DE", {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }).format(swapDate.date)}
-                        </option>
-                      ))}
-                    </select>
-                  </>
-                ) : (
-                  <p className="muted">Derzeit keine freien Termine im Tauschfenster.</p>
-                )}
-
-                <div className="swap-modal-section-head">
-                  <span className="swap-modal-section-title">Warteliste</span>
-                  <SwapModalHint label="Warteliste im Tauschdialog">
-                    <p>
-                      Ausgebuchte Termine im gleichen Zeitfenster (
-                      <strong>
-                        {swapWindow.minOffsetDays} bis {swapWindow.maxOffsetDays} Tage
-                      </strong>{" "}
-                      nach deinem Kurstermin). Die Anfrage landet auf der Warteliste — noch ohne feste
-                      Buchung.
-                    </p>
-                  </SwapModalHint>
-                </div>
-                {waitlistDates.length > 0 ? (
-                  <>
-                    <p className="muted">
-                      {waitlistDates.length} belegte Termin(e) mit Wartelisten-Option:
-                    </p>
-                    <select
-                      value={swapDateIsoWaitlist ?? ""}
-                      onChange={(e) => {
-                        setSwapDateIsoWaitlist(e.target.value || null);
-                        setSwapDateIso(null);
-                      }}
-                    >
-                      <option value="" disabled>
-                        Bitte belegten Termin wählen…
-                      </option>
-                      {waitlistDates.map((waitlistDate, idx) => (
-                        <option key={idx} value={waitlistDate.date.toISOString()}>
-                          {new Intl.DateTimeFormat("de-DE", {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }).format(waitlistDate.date)}
-                        </option>
-                      ))}
-                    </select>
-                  </>
-                ) : (
-                  <p className="muted">Derzeit keine belegten Termine mit Wartelisten-Option.</p>
-                )}
-              </>
-            ) : (
-              <p className="muted">Keine passenden Ersatztermine verfügbar</p>
-            )}
-
-            <div className="modal-actions">
-              <button onClick={() => setShowSwapModal(false)}>Schließen</button>
-              <button
-                className="primary"
-                onClick={() => {
-                  // jetzt wird direkt in CourseList eingetragen/ausgetragen
-                  if (swapDateIso) {
-                    const target = availableSwapDates.find(
-                      (opt) => opt.date.toISOString() === swapDateIso
-                    );
-                    if (target) {
-                      confirmSwap(course, selectedDateKey, target.course.id, toDateKey(target.date), userName);
-                    }
-                  } else if (swapDateIsoWaitlist) {
-                    const target = waitlistDates.find(
-                      (opt) => opt.date.toISOString() === swapDateIsoWaitlist
-                    );
-                    if (target) {
-                      requestSwap(course, selectedDateKey, target.course.id, toDateKey(target.date), userName);
-                    }
-                  }
-                  setShowSwapModal(false);
-                }}
-                disabled={!swapDateIso && !swapDateIsoWaitlist} // 👉 Button erst aktiv nach Auswahl
-              >
-                Bestätigen
-              </button>
-            </div>
-          </div>
-        </div>
+        <CourseSwapModal
+          title={swapModalTitle}
+          courseName={course.name}
+          originTermIso={selectedDateKey}
+          originTermDisplay={new Date(selectedDate).toLocaleDateString()}
+          swapWindow={swapWindow}
+          availableSwapDates={availableSwapDates}
+          waitlistDates={waitlistDates}
+          onClose={closeSwapModal}
+          onConfirmFree={(targetCourseId, targetDateIso) =>
+            confirmSwap(course, selectedDateKey, targetCourseId, targetDateIso, userName)
+          }
+          onConfirmWaitlist={(targetCourseId, targetDateIso) =>
+            requestSwap(course, selectedDateKey, targetCourseId, targetDateIso, userName)
+          }
+        />
       )}
     </article>
   );

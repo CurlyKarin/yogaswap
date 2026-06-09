@@ -1,5 +1,6 @@
 import { useLayoutEffect } from "react";
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
+import { focusWithVisibleRing } from "../lib/focusWithVisibleRing";
 
 type CourseModalFrameProps = {
   ariaLabel: string;
@@ -21,7 +22,7 @@ export default function CourseModalFrame({
     if (!modalNode) return;
     const active = document.activeElement as Node | null;
     if (active && modalNode.contains(active)) return;
-    modalNode.focus();
+    focusWithVisibleRing(modalNode);
   }, [modalRef]);
 
   return (
