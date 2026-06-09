@@ -39,6 +39,9 @@ const baseSwap: Swap = {
   status: "pending",
 };
 
+const selectedTermActionName = (action: string) =>
+  new RegExp(`${action}, yoga basic, 16\\.06\\.2099`, "i");
+
 function renderCourseCard(overrides: Partial<React.ComponentProps<typeof CourseCard>> = {}) {
   const now = new Date("2099-06-10T10:00:00Z");
   const dates = [new Date("2099-06-16T10:00:00Z")];
@@ -230,15 +233,35 @@ describe("CourseCard", () => {
     );
   });
 
-  it("benennt Kernaktionen mit Kurskontext für Screenreader", () => {
+  it("benennt Kernaktionen mit Termin- und Kurskontext für Screenreader", () => {
     renderCourseCard();
 
     expect(
-      screen.getByRole("button", { name: /termin absagen für yoga basic/i }),
+      screen.getByRole("button", { name: selectedTermActionName("Termin absagen") }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /tauschen anfragen für yoga basic/i }),
+      screen.getByRole("button", { name: selectedTermActionName("Tauschen anfragen") }),
     ).toBeInTheDocument();
+  });
+
+  it("enthält Tausch-Status im aria-label der Aktion", () => {
+    const targetCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Advanced",
+    };
+
+    renderCourseCard({
+      swaps: [baseSwap],
+      allCourses: [baseCourse, targetCourse],
+    });
+
+    const cancelButton = screen.getByRole("button", {
+      name: selectedTermActionName("Tauschanfragen abbrechen"),
+    });
+    expect(cancelButton.getAttribute("aria-label")).toMatch(
+      /Tauschanfrage für 17\.06\.2099 · Yoga Advanced/i,
+    );
   });
 
   it("ruft onToggleAbsence auf, wenn 'Termin absagen' geklickt wird", () => {
@@ -246,7 +269,7 @@ describe("CourseCard", () => {
 
     const { props } = renderCourseCard({ onToggleAbsence });
 
-    const button = screen.getByRole("button", { name: /termin absagen für yoga basic/i });
+    const button = screen.getByRole("button", { name: selectedTermActionName("Termin absagen") });
     fireEvent.click(button);
 
     expect(onToggleAbsence).toHaveBeenCalledTimes(1);
@@ -262,7 +285,9 @@ describe("CourseCard", () => {
 
     renderCourseCard({ swaps, cancelSwap });
 
-    const button = screen.getByRole("button", { name: /tauschanfragen abbrechen für yoga basic/i });
+    const button = screen.getByRole("button", {
+      name: selectedTermActionName("Tauschanfragen abbrechen"),
+    });
     fireEvent.click(button);
 
     expect(cancelSwap).toHaveBeenCalledTimes(1);
@@ -316,7 +341,7 @@ describe("CourseCard", () => {
       overrides: [cancelledOverride],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /anderen termin wählen für yoga basic/i }));
+    fireEvent.click(screen.getByRole("button", { name: selectedTermActionName("Anderen Termin wählen") }));
     expect(screen.getByRole("heading", { name: /Anderen Termin wählen/i })).toBeInTheDocument();
     expect(screen.queryByText(/folgt/i)).not.toBeInTheDocument();
   });
@@ -349,7 +374,9 @@ describe("CourseCard", () => {
     });
 
     // Swap-Modal öffnen (es kann mehrere gleich benannte Buttons geben)
-    const [swapButton] = screen.getAllByRole("button", { name: /tauschen anfragen für yoga basic/i });
+    const [swapButton] = screen.getAllByRole("button", {
+      name: selectedTermActionName("Tauschen anfragen"),
+    });
     fireEvent.click(swapButton);
 
     expect(screen.getByText(/Tauschanfrage starten/i)).toBeInTheDocument();
@@ -409,7 +436,7 @@ describe("CourseCard", () => {
     });
 
     const swapButtons = screen.getAllByRole("button", {
-      name: /weitere tauschanfrage \(1 offene anfragen\) für yoga basic/i,
+      name: selectedTermActionName("Weitere Tauschanfrage"),
     });
     fireEvent.click(swapButtons[swapButtons.length - 1]);
 

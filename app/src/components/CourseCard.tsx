@@ -60,8 +60,63 @@ function sameDayUTC(a: Date, b: Date) {
   );
 }
 
-function courseActionLabel(courseName: string, action: string): string {
-  return `${action} für ${courseName}`;
+function courseTermActionLabel(
+  courseName: string,
+  action: string,
+  termIso: string,
+  extras: string[] = [],
+): string {
+  return [action, courseName, formatCourseIsoDateDe(termIso), ...extras].join(", ");
+}
+
+function formatSwapStatusLine(swap: Swap, courseId: number, allCourses: Course[]): string {
+  const courseName = (id: number) => allCourses.find((c) => c.id === id)?.name ?? "Kurs";
+  if (swap.status === "pending" && swap.fromCourseId === courseId) {
+    return `Tauschanfrage für ${formatCourseIsoDateDe(swap.toDate)} · ${courseName(swap.toCourseId)}`;
+  }
+  if (swap.status === "pending" && swap.toCourseId === courseId) {
+    return `Tauschanfrage zu ${formatCourseIsoDateDe(swap.fromDate)} · ${courseName(swap.fromCourseId)}`;
+  }
+  if (swap.fromCourseId === courseId) {
+    return `Getauscht mit ${formatCourseIsoDateDe(swap.toDate)} · ${courseName(swap.toCourseId)}`;
+  }
+  return `Getauscht von ${formatCourseIsoDateDe(swap.fromDate)} · ${courseName(swap.fromCourseId)}`;
+}
+
+function swapTermIsoForCourse(swap: Swap, courseId: number): string {
+  return swap.fromCourseId === courseId ? swap.fromDate : swap.toDate;
+}
+
+type CourseTermActionButtonProps = {
+  action: string;
+  courseName: string;
+  termIso: string;
+  labelExtras?: string[];
+  className?: string;
+  title?: string;
+  onClick: () => void;
+};
+
+function CourseTermActionButton({
+  action,
+  courseName,
+  termIso,
+  labelExtras = [],
+  className,
+  title,
+  onClick,
+}: CourseTermActionButtonProps) {
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-label={courseTermActionLabel(courseName, action, termIso, labelExtras)}
+      title={title}
+      onClick={onClick}
+    >
+      {action}
+    </button>
+  );
 }
 
 function SwapModalHint({ label, children }: { label: string; children: ReactNode }) {
@@ -371,7 +426,29 @@ export default function CourseCard({
   const termSelectId = useId();
   const termSelectDisabledHintId = useId();
   const termSelectDisabled = hasNoUpcomingDates && !showLastTermInSelect;
-  const actionLabel = (action: string) => courseActionLabel(course.name, action);
+
+  const swapStatusLines = useMemo(
+    () =>
+      hasNoUpcomingDates
+        ? []
+        : allSwapsForThisTerm.map((swap) => formatSwapStatusLine(swap, course.id, allCourses)),
+    [hasNoUpcomingDates, allSwapsForThisTerm, course.id, allCourses],
+  );
+
+  const showCutoffHint =
+    canUseFullTermActions &&
+    !swapForThisTerm &&
+    originInCutoff &&
+    (originallyParticipant || hasCancelled) &&
+    !canSwapFromOrigin;
+
+  const cutoffStatusLabel = showCutoffHint
+    ? `Weniger als ${cutoffMinutes} Minuten vor Termin, kein Tausch mehr möglich`
+    : undefined;
+
+  const swapStatusExtras = swapStatusLines.length > 0 ? swapStatusLines : undefined;
+  const cutoffExtras = cutoffStatusLabel ? [cutoffStatusLabel] : undefined;
+  const termActionExtras = [...(swapStatusExtras ?? []), ...(cutoffExtras ?? [])];
 
   return (
     <article
@@ -602,19 +679,16 @@ export default function CourseCard({
             <>
               {/* Falls User den Ursprungstermin noch nicht abgesagt hat → Absage-Button trotzdem anzeigen */}
               {swapForThisTerm.status === "pending" &&
-                originallyParticipant && (() => {
-                  const absenceAction = hasCancelled ? "Absage zurücknehmen" : "Termin absagen";
-                  return (
-                    <button
-                      type="button"
-                      className="danger"
-                      aria-label={actionLabel(absenceAction)}
-                      onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
-                    >
-                      {absenceAction}
-                    </button>
-                  );
-                })()}
+                originallyParticipant && (
+                  <CourseTermActionButton
+                    action={hasCancelled ? "Absage zurücknehmen" : "Termin absagen"}
+                    courseName={course.name}
+                    termIso={selectedDateKey}
+                    labelExtras={termActionExtras}
+                    className="danger"
+                    onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
+                  />
+                )}
 
               {(() => {
                 const cancelSwapAction =
@@ -639,68 +713,65 @@ export default function CourseCard({
                         : "Am Zieltermin kurzfristig absagen"
                       : "Tausch abbrechen";
                 return (
-                  <button
-                    type="button"
+                  <CourseTermActionButton
+                    action={cancelSwapAction}
+                    courseName={course.name}
+                    termIso={selectedDateKey}
+                    labelExtras={termActionExtras}
                     className="secondary danger"
-                    aria-label={actionLabel(cancelSwapAction)}
                     onClick={() => cancelSwap(swapForThisTerm, course.id)}
-                  >
-                    {cancelSwapAction}
-                  </button>
+                  />
                 );
               })()}
             </>
           ) : (
             <>
               {isShortNotice ? (
-                <button
-                  type="button"
+                <CourseTermActionButton
+                  action="Absage zurücknehmen"
+                  courseName={course.name}
+                  termIso={selectedDateKey}
+                  labelExtras={termActionExtras}
                   className="danger"
-                  aria-label={actionLabel("Absage zurücknehmen")}
                   onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
-                >
-                  Absage zurücknehmen
-                </button>
+                />
               ) : isParticipant ? (
-                <button
-                  type="button"
+                <CourseTermActionButton
+                  action="Termin absagen"
+                  courseName={course.name}
+                  termIso={selectedDateKey}
+                  labelExtras={termActionExtras}
                   className="danger"
-                  aria-label={actionLabel("Termin absagen")}
                   onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
-                >
-                  Termin absagen
-                </button>
+                />
               ) : canUndoRegularAbsence ? (
-                <button
-                  type="button"
-                  aria-label={actionLabel("Absage zurücknehmen")}
+                <CourseTermActionButton
+                  action="Absage zurücknehmen"
+                  courseName={course.name}
+                  termIso={selectedDateKey}
+                  labelExtras={termActionExtras}
                   onClick={() => onToggleAbsence(course, selectedDateKey, userName)}
-                >
-                  Absage zurücknehmen
-                </button>
+                />
               ) : hasCancelled ? null : (
                 notEnrolledInTermHint
               )}
 
-              {canSwapFromOrigin && (() => {
-                const swapAction = hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen";
-                return (
-                  <button
-                    type="button"
-                    className="secondary"
-                    aria-label={actionLabel(swapAction)}
-                    onClick={() => {
-                      setSwapDateIso(null);
-                      setSwapDateIsoWaitlist(null);
-                      setShowSwapModal(true);
-                    }}
-                  >
-                    {swapAction}
-                  </button>
-                );
-              })()}
-              {originInCutoff && (originallyParticipant || hasCancelled) && !canSwapFromOrigin && (
-                <p className="muted small" role="status">
+              {canSwapFromOrigin && (
+                <CourseTermActionButton
+                  action={hasCancelled ? "Anderen Termin wählen" : "Tauschen anfragen"}
+                  courseName={course.name}
+                  termIso={selectedDateKey}
+                  labelExtras={termActionExtras}
+                  className="secondary"
+                  onClick={() => {
+                    setSwapDateIso(null);
+                    setSwapDateIsoWaitlist(null);
+                    setShowSwapModal(true);
+                  }}
+                />
+              )}
+              {showCutoffHint && (
+                <p className="muted small" role="status" aria-hidden="true">
                   Weniger als {cutoffMinutes} Minuten vor Termin — kein Tausch mehr möglich.
                 </p>
               )}
@@ -709,94 +780,86 @@ export default function CourseCard({
           )}
           {/* 🆕 Wenn schon pending-Requests existieren: zusätzlicher Button */}
               {hasPendingRequestsFromOrigin && canSwapFromOrigin && (
-                <button
-                  type="button"
+                <CourseTermActionButton
+                  action="Weitere Tauschanfrage"
+                  courseName={course.name}
+                  termIso={selectedDateKey}
+                  labelExtras={termActionExtras}
                   className="secondary"
-                  aria-label={actionLabel(
-                    `Weitere Tauschanfrage (${pendingCount} offene Anfragen)`,
-                  )}
+                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
                   onClick={() => {
                     setSwapDateIso(null);
                     setSwapDateIsoWaitlist(null);
                     setShowSwapModal(true);
                   }}
-                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
-                >
-                  Weitere Tauschanfrage
-                </button>
+                />
               )}
         </div>
 
       ) : showPastTermSwapActions ? (
         <div className="actions">
-          {swapForThisTerm ? (() => {
-            const cancelAction =
-              swapForThisTerm.status === "pending"
-                ? "Tauschanfragen abbrechen"
-                : "Tausch abbrechen";
-            return (
-              <button
-                type="button"
-                className="secondary danger"
-                aria-label={actionLabel(cancelAction)}
-                onClick={() => cancelSwap(swapForThisTerm, course.id)}
-              >
-                {cancelAction}
-              </button>
-            );
-          })() : canSwapFromPastCancelled ? (
+          {swapForThisTerm ? (
+            <CourseTermActionButton
+              action={
+                swapForThisTerm.status === "pending"
+                  ? "Tauschanfragen abbrechen"
+                  : "Tausch abbrechen"
+              }
+              courseName={course.name}
+              termIso={selectedDateKey}
+              labelExtras={termActionExtras}
+              className="secondary danger"
+              onClick={() => cancelSwap(swapForThisTerm, course.id)}
+            />
+          ) : canSwapFromPastCancelled ? (
             <>
-              <button
-                type="button"
+              <CourseTermActionButton
+                action="Anderen Termin wählen"
+                courseName={course.name}
+                termIso={selectedDateKey}
+                labelExtras={termActionExtras}
                 className="secondary"
-                aria-label={actionLabel("Anderen Termin wählen")}
                 onClick={() => {
                   setSwapDateIso(null);
                   setSwapDateIsoWaitlist(null);
                   setShowSwapModal(true);
                 }}
-              >
-                Anderen Termin wählen
-              </button>
+              />
               {hasPendingRequestsFromOrigin && (
-                <button
-                  type="button"
+                <CourseTermActionButton
+                  action="Weitere Tauschanfrage"
+                  courseName={course.name}
+                  termIso={selectedDateKey}
+                  labelExtras={termActionExtras}
                   className="secondary"
-                  aria-label={actionLabel(
-                    `Weitere Tauschanfrage (${pendingCount} offene Anfragen)`,
-                  )}
+                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
                   onClick={() => {
                     setSwapDateIso(null);
                     setSwapDateIsoWaitlist(null);
                     setShowSwapModal(true);
                   }}
-                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
-                >
-                  Weitere Tauschanfrage
-                </button>
+                />
               )}
             </>
           ) : null}
         </div>
       ) : isSelectedTermExcluded && includePastTermsInSelect ? (
-        swapForThisTerm ? (() => {
-          const cancelAction =
-            swapForThisTerm.status === "pending"
-              ? "Tauschanfrage abbrechen"
-              : "Tausch abbrechen";
-          return (
-            <div className="actions">
-              <button
-                type="button"
-                className="secondary danger"
-                aria-label={actionLabel(cancelAction)}
-                onClick={() => cancelSwap(swapForThisTerm, course.id)}
-              >
-                {cancelAction}
-              </button>
-            </div>
-          );
-        })() : null
+        swapForThisTerm ? (
+          <div className="actions">
+            <CourseTermActionButton
+              action={
+                swapForThisTerm.status === "pending"
+                  ? "Tauschanfrage abbrechen"
+                  : "Tausch abbrechen"
+              }
+              courseName={course.name}
+              termIso={selectedDateKey}
+              labelExtras={termActionExtras}
+              className="secondary danger"
+              onClick={() => cancelSwap(swapForThisTerm, course.id)}
+            />
+          </div>
+        ) : null
       ) : isPastOccurrence && !participantActionsLocked ? (
         <p className="muted small course-past-term-note" role="status">
           Vergangener Termin — keine Änderungen mehr möglich.
@@ -805,14 +868,14 @@ export default function CourseCard({
         <>
           {swapForWaitlist ? (
             <div className="actions">
-              <button
-                type="button"
+              <CourseTermActionButton
+                action="Tauschanfrage abbrechen"
+                courseName={course.name}
+                termIso={selectedDateKey}
+                labelExtras={termActionExtras}
                 className="secondary danger"
-                aria-label={actionLabel("Tauschanfrage abbrechen")}
                 onClick={() => cancelSwap(swapForWaitlist, course.id)}
-              >
-                Tauschanfrage abbrechen
-              </button>
+              />
             </div>
           ) : (
             notEnrolledInTermHint
@@ -824,54 +887,23 @@ export default function CourseCard({
         <div className="actions course-inactive-swap-actions">
           {userSwapsOnCourse.map((swap) => (
             <div key={`${swap.fromCourseId}-${swap.fromDate}-${swap.toCourseId}-${swap.toDate}-${swap.status}`}>
-              {(() => {
-                const cancelAction =
-                  swap.status === "pending" ? "Tauschanfrage abbrechen" : "Tausch abbrechen";
-                return (
-                  <button
-                    type="button"
-                    className="secondary danger"
-                    aria-label={actionLabel(cancelAction)}
-                    onClick={() => cancelSwap(swap, course.id)}
-                  >
-                    {cancelAction}
-                  </button>
-                );
-              })()}
+              <CourseTermActionButton
+                action={swap.status === "pending" ? "Tauschanfrage abbrechen" : "Tausch abbrechen"}
+                courseName={course.name}
+                termIso={swapTermIsoForCourse(swap, course.id)}
+                labelExtras={[formatSwapStatusLine(swap, course.id, allCourses)]}
+                className="secondary danger"
+                onClick={() => cancelSwap(swap, course.id)}
+              />
             </div>
           ))}
         </div>
       )}
 
-      {/* Status-Text separat unter den Buttons */}
-      {!hasNoUpcomingDates && allSwapsForThisTerm.length > 0 && (
-        <div className="muted small status-text">
-          {allSwapsForThisTerm.map((swap, idx) => (
-            <div key={idx}>
-          {swap.status === "pending" && swap.fromCourseId === course.id
-            ? `Tauschanfrage für ${new Date(
-                swap.toDate
-              ).toLocaleDateString()} · ${
-                allCourses.find((c) => c.id === swap.toCourseId)?.name
-              }`
-            : swap.status === "pending" && swap.toCourseId === course.id
-            ? `Tauschanfrage zu ${new Date(
-                swap.fromDate
-              ).toLocaleDateString()} · ${
-                allCourses.find((c) => c.id === swap.toCourseId)?.name
-              }`
-            : swap.fromCourseId === course.id
-            ? `Getauscht mit ${new Date(
-                swap.toDate
-              ).toLocaleDateString()} · ${
-                allCourses.find((c) => c.id === swap.toCourseId)?.name
-              }`
-            : `Getauscht von ${new Date(
-                swap.fromDate
-              ).toLocaleDateString()} · ${
-                allCourses.find((c) => c.id === swap.fromCourseId)?.name
-              }`}
-            </div>
+      {swapStatusLines.length > 0 && (
+        <div className="muted small status-text" role="status" aria-hidden="true">
+          {swapStatusLines.map((line) => (
+            <div key={line}>{line}</div>
           ))}
         </div>
       )}
