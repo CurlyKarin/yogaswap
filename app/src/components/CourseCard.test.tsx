@@ -103,6 +103,21 @@ describe("CourseCard", () => {
     expect(visibleLabel).toHaveAttribute("aria-label", "Termin für Yoga Basic");
   });
 
+  it("verknüpft Teilnehmer-Chips mit beschrifteter Liste", () => {
+    renderCourseCard({
+      overrides: [
+        {
+          ...baseOverride,
+          participants: ["alice", "bob"],
+        },
+      ],
+    });
+
+    expect(screen.getByRole("list", { name: /Teilnehmer/i })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: /Warteliste/i })).toBeInTheDocument();
+    expect(screen.getByText("bob")).toHaveAttribute("aria-label", "bob, regulär eingetragen");
+  });
+
   it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {
     const overrideSn: CourseDateOverride = {
       ...baseOverride,
@@ -114,7 +129,10 @@ describe("CourseCard", () => {
 
     const selfSn = container.querySelector(".chip.chip-self.short-notice");
     expect(selfSn).toHaveTextContent("alice");
-    expect(selfSn?.getAttribute("title")).toMatch(/Du — kurzfristig abgesagt/i);
+    expect(selfSn).toHaveAttribute(
+      "aria-label",
+      "alice, du, kurzfristig abgesagt, Platz bleibt belegt",
+    );
   });
 
   it("zeigt getauschte und kurzfristig abgesagte andere Teilnehmer dezenter als den eigenen Chip", () => {
@@ -132,6 +150,12 @@ describe("CourseCard", () => {
     expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
     expect(screen.getByText("carol").closest(".chip")).toHaveClass("short-notice");
     expect(screen.getByText("carol").closest(".chip")).not.toHaveClass("chip-self");
+    expect(screen.getByText("bob").closest(".chip")).toHaveAttribute("aria-label", "bob, getauscht");
+    expect(screen.getByText("carol").closest(".chip")).toHaveAttribute(
+      "aria-label",
+      "carol, kurzfristig abgesagt, Platz bleibt belegt",
+    );
+    expect(container.querySelector(".chip.chip-self")).toHaveAttribute("aria-label", "alice, du");
   });
 
   it("hebt den eigenen Chip in Teilnehmer- und Warteliste grün hervor", () => {
@@ -146,8 +170,10 @@ describe("CourseCard", () => {
     const selfChips = container.querySelectorAll(".chip.chip-self");
     expect(selfChips).toHaveLength(2);
     expect(selfChips[0]).toHaveTextContent("alice");
-    expect(selfChips[0]).toHaveAttribute("title", "Du");
-    expect(container.querySelector(".chip.wait.chip-self")).toHaveAttribute("title", "Du (Warteliste)");
+    expect(container.querySelector(".chip.wait.chip-self")).toHaveAttribute(
+      "aria-label",
+      "alice, du auf der Warteliste",
+    );
     expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
   });
 
@@ -167,6 +193,7 @@ describe("CourseCard", () => {
     });
 
     expect(screen.getByText("Automatisch inaktiv")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kursstatus: Automatisch inaktiv")).toBeInTheDocument();
     expect(screen.getByText(/automatisch beendet/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
   });
@@ -185,9 +212,9 @@ describe("CourseCard", () => {
       initialSelectedDate: new Date("2099-06-16T10:00:00Z"),
     });
 
-    expect(screen.getByTitle(/Termin entfällt/i)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Termin entfällt \(vom Studio abgesagt\)/i })).toBeInTheDocument();
     expect(screen.getByText(/vom Studio abgesagt/i)).toBeInTheDocument();
-    expect(screen.getByText("entfällt")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kapazität entfällt")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
     expect(screen.getByRole("option", { name: /6\/16\/2099 \(entfällt\)/i })).toBeInTheDocument();
   });
