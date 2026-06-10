@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canCancelSwap,
   canCreateSwapFromOrigin,
   isShortNoticeCancelled,
   isSwapTargetInCutoffWindow,
@@ -73,5 +74,37 @@ describe("cancellationSwapCutoff", () => {
     expect(
       isShortNoticeCancelled({ shortNoticeCancellations: ["Alice"] }, "alice"),
     ).toBe(true);
+  });
+
+  it("canCancelSwap blocks cancel when origin and target are both past", () => {
+    const courses = [
+      { id: 1, time: "10:00" },
+      { id: 2, time: "10:00" },
+    ];
+    const now = new Date(2026, 0, 1, 12, 0);
+    const swap = {
+      fromCourseId: 1,
+      fromDate: "2020-01-06",
+      toCourseId: 2,
+      toDate: "2020-01-13",
+    };
+
+    expect(canCancelSwap(swap, courses, now)).toBe(false);
+  });
+
+  it("canCancelSwap allows cancel when target is still in the future", () => {
+    const courses = [
+      { id: 1, time: "10:00" },
+      { id: 2, time: "10:00" },
+    ];
+    const now = new Date(2020, 0, 10, 12, 0);
+    const swap = {
+      fromCourseId: 1,
+      fromDate: "2020-01-06",
+      toCourseId: 2,
+      toDate: "2099-06-20",
+    };
+
+    expect(canCancelSwap(swap, courses, now)).toBe(true);
   });
 });

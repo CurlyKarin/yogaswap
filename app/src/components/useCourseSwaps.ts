@@ -4,6 +4,7 @@ import { overrideCourseUidFields, swapCourseUidFields } from "../lib/courseUid";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
   addUserUniqueCaseInsensitive,
+  canCancelSwap,
   canCreateSwapFromOrigin,
   includesUserCaseInsensitive,
   isShortNoticeCancelled,
@@ -609,6 +610,12 @@ export function useCourseSwaps(
     async (swap: Swap, clickedCourseId: number) => {
       try {
         console.log("[cancelSwap use] START", { swap, clickedCourseId, swaps });
+        if (!canCancelSwap(swap, courses)) {
+          alert(
+            "Dieser Tausch kann nicht mehr abgebrochen werden — Ursprung und Zieltermin liegen in der Vergangenheit.",
+          );
+          return;
+        }
         const isOrigin = swap.fromCourseId === clickedCourseId;
         const targetCourse = courses.find((c) => c.id === swap.toCourseId);
         const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);

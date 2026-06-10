@@ -12,6 +12,7 @@ import {
 } from "shared/courseStatus";
 import { resolveSwapWindow } from "shared/tenantSettings";
 import {
+  canCancelSwap,
   canCreateSwapFromOrigin,
   hasEffectiveCancellation,
   isShortNoticeCancelled,
@@ -369,6 +370,10 @@ export default function CourseCard({
       ),
     [swaps, userName, course.id],
   );
+  const cancellableUserSwapsOnCourse = useMemo(
+    () => userSwapsOnCourse.filter((swap) => canCancelSwap(swap, allCourses)),
+    [userSwapsOnCourse, allCourses],
+  );
   const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
   const isSelectedTermExcluded = isExcludedCourseDate(course, selectedDateKey);
   const showPastGraceMarker =
@@ -394,12 +399,14 @@ export default function CourseCard({
     participants,
     originallyParticipant,
   });
+  const swapForThisTermCancellable =
+    swapForThisTerm != null && canCancelSwap(swapForThisTerm, allCourses);
   const showPastTermSwapActions =
     !participantActionsLocked &&
     !isSelectedTermExcluded &&
     isPastOccurrence &&
     (isParticipant || originallyParticipant || hasCancelled) &&
-    (swapForThisTerm != null || canSwapFromPastCancelled);
+    (swapForThisTermCancellable || canSwapFromPastCancelled);
   const excludedTermNotice = showExcludedTermMarker
     ? "Dieser Termin entfällt — vom Studio abgesagt."
     : null;
@@ -785,39 +792,40 @@ export default function CourseCard({
                   />
                 )}
 
-              {(() => {
-                const cancelSwapAction =
-                  swapForThisTerm.status === "pending"
-                    ? "Tauschanfragen abbrechen"
-                    : swapForThisTerm.status === "active" &&
-                        swapForThisTerm.toCourseId === course.id &&
-                        isWithinCancellationSwapCutoff(
-                          swapForThisTerm.toDate,
-                          allCourses.find((c) => c.id === swapForThisTerm.toCourseId)?.time ?? "",
-                          cutoffMinutes,
-                        )
-                      ? isShortNoticeCancelled(
-                          overrides.find(
-                            (o) =>
-                              o.courseId === swapForThisTerm.toCourseId &&
-                              o.date === swapForThisTerm.toDate,
-                          ),
-                          userName,
-                        )
-                        ? "Tauschabsage zurücknehmen"
-                        : "Am Zieltermin kurzfristig absagen"
-                      : "Tausch abbrechen";
-                return (
-                  <CourseTermActionButton
-                    action={cancelSwapAction}
-                    courseName={course.name}
-                    termIso={selectedDateKey}
-                    labelExtras={termActionExtras}
-                    className="secondary danger"
-                    onClick={() => cancelSwap(swapForThisTerm, course.id)}
-                  />
-                );
-              })()}
+              {swapForThisTermCancellable &&
+                (() => {
+                  const cancelSwapAction =
+                    swapForThisTerm.status === "pending"
+                      ? "Tauschanfragen abbrechen"
+                      : swapForThisTerm.status === "active" &&
+                          swapForThisTerm.toCourseId === course.id &&
+                          isWithinCancellationSwapCutoff(
+                            swapForThisTerm.toDate,
+                            allCourses.find((c) => c.id === swapForThisTerm.toCourseId)?.time ?? "",
+                            cutoffMinutes,
+                          )
+                        ? isShortNoticeCancelled(
+                            overrides.find(
+                              (o) =>
+                                o.courseId === swapForThisTerm.toCourseId &&
+                                o.date === swapForThisTerm.toDate,
+                            ),
+                            userName,
+                          )
+                          ? "Tauschabsage zurücknehmen"
+                          : "Am Zieltermin kurzfristig absagen"
+                        : "Tausch abbrechen";
+                  return (
+                    <CourseTermActionButton
+                      action={cancelSwapAction}
+                      courseName={course.name}
+                      termIso={selectedDateKey}
+                      labelExtras={termActionExtras}
+                      className="secondary danger"
+                      onClick={() => cancelSwap(swapForThisTerm, course.id)}
+                    />
+                  );
+                })()}
             </>
           ) : (
             <>
@@ -871,7 +879,7 @@ export default function CourseCard({
 
       ) : showPastTermSwapActions ? (
         <div className="actions">
-          {swapForThisTerm ? (
+          {swapForThisTermCancellable ? (
             <CourseTermActionButton
               action={
                 swapForThisTerm.status === "pending"
@@ -909,7 +917,7 @@ export default function CourseCard({
           ) : null}
         </div>
       ) : isSelectedTermExcluded && includePastTermsInSelect ? (
-        swapForThisTerm ? (
+        swapForThisTermCancellable ? (
           <div className="actions">
             <CourseTermActionButton
               action={
@@ -931,7 +939,7 @@ export default function CourseCard({
         </p>
       ) : !participantActionsLocked && !hasNoUpcomingDates ? (
         <>
-          {swapForWaitlist ? (
+          {swapForWaitlist && canCancelSwap(swapForWaitlist, allCourses) ? (
             <div className="actions">
               <CourseTermActionButton
                 action="Tauschanfrage abbrechen"
@@ -948,9 +956,9 @@ export default function CourseCard({
         </>
       ) : null}
 
-      {participantActionsLocked && userSwapsOnCourse.length > 0 && (
+      {participantActionsLocked && cancellableUserSwapsOnCourse.length > 0 && (
         <div className="actions course-inactive-swap-actions">
-          {userSwapsOnCourse.map((swap) => (
+          {cancellableUserSwapsOnCourse.map((swap) => (
             <div key={`${swap.fromCourseId}-${swap.fromDate}-${swap.toCourseId}-${swap.toDate}-${swap.status}`}>
               <CourseTermActionButton
                 action={swap.status === "pending" ? "Tauschanfrage abbrechen" : "Tausch abbrechen"}

@@ -366,6 +366,57 @@ describe("useCourseSwaps", () => {
     expect(processPromotions).toHaveBeenCalledTimes(1);
   });
 
+  it("cancelSwap blockiert Abbrechen bei vergangenem Ursprung und Ziel", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+
+    const targetCourse: Course = {
+      ...course,
+      id: 2,
+      dates: ["2020-01-13"],
+    };
+    const historicalSwap: Swap = {
+      ...pendingSwap,
+      fromDate: "2020-01-06",
+      toDate: "2020-01-13",
+      toCourseId: 2,
+      status: "active",
+    };
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn();
+    const setSwaps = vi.fn();
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course, targetCourse],
+        [baseOverride],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [historicalSwap],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.cancelSwap(historicalSwap, 1);
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Vergangenheit"),
+    );
+    expect(deleteSwap).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
   it("confirmSwap löst übrige pending Anfragen vom selben Ursprung auf", async () => {
     const fetchData = vi.fn().mockResolvedValue(undefined);
     const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>

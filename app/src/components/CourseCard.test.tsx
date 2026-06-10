@@ -325,6 +325,50 @@ describe("CourseCard", () => {
     });
   });
 
+  it("blendet Tausch abbrechen aus, wenn Ursprung und Ziel vergangen sind", () => {
+    const pastOrigin = "2020-01-06";
+    const pastTarget = "2020-01-13";
+    const course: Course = {
+      ...baseCourse,
+      dates: [pastOrigin],
+      participants: ["alice"],
+    };
+    const targetCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Advanced",
+      dates: [pastTarget],
+    };
+    const swaps: Swap[] = [
+      {
+        ...baseSwap,
+        fromDate: pastOrigin,
+        toDate: pastTarget,
+        toCourseId: 2,
+        status: "active",
+      },
+    ];
+
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    renderCourseCard({
+      course,
+      allCourses: [course, targetCourse],
+      dates: [new Date(`${pastOrigin}T12:00:00.000Z`)],
+      overrides: [
+        {
+          courseId: 1,
+          date: pastOrigin,
+          participants: [],
+          swapped: ["alice"],
+        },
+      ],
+      swaps,
+      includePastTermsInSelect: true,
+    });
+
+    expect(screen.queryByRole("button", { name: /Tausch abbrechen/i })).not.toBeInTheDocument();
+  });
+
   it("ruft cancelSwap auf, wenn 'Tauschanfragen abbrechen' geklickt wird", () => {
     const cancelSwap = vi.fn();
     const swaps: Swap[] = [baseSwap];

@@ -1,5 +1,5 @@
-import { buildCourseOccurrenceLocal } from "./courseStatus";
-import type { CourseDateOverride, TenantSettings } from "./types";
+import { buildCourseOccurrenceLocal, isOccurrenceInPast } from "./courseStatus";
+import type { Course, CourseDateOverride, Swap, TenantSettings } from "./types";
 
 export const DEFAULT_CANCELLATION_SWAP_CUTOFF_MINUTES = 60;
 const MAX_CUTOFF_MINUTES = 24 * 60;
@@ -103,4 +103,27 @@ export function addUserUniqueCaseInsensitive(list: string[], user: string): stri
 export function removeUserCaseInsensitive(list: string[], user: string): string[] {
   const needle = user.toLowerCase();
   return list.filter((entry) => entry.toLowerCase() !== needle);
+}
+
+function resolveCourseTime(courses: Pick<Course, "id" | "time">[], courseId: number): string {
+  return courses.find((course) => course.id === courseId)?.time ?? "";
+}
+
+/** Tausch nicht mehr abbrechen, wenn Ursprung und Ziel vergangen sind (#203). */
+export function canCancelSwap(
+  swap: Pick<Swap, "fromCourseId" | "fromDate" | "toCourseId" | "toDate">,
+  courses: Pick<Course, "id" | "time">[],
+  now: Date = new Date(),
+): boolean {
+  const originPast = isOccurrenceInPast(
+    swap.fromDate,
+    resolveCourseTime(courses, swap.fromCourseId),
+    now,
+  );
+  const targetPast = isOccurrenceInPast(
+    swap.toDate,
+    resolveCourseTime(courses, swap.toCourseId),
+    now,
+  );
+  return !(originPast && targetPast);
 }
