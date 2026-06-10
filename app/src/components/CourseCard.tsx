@@ -138,6 +138,29 @@ const CourseTermActionButton = forwardRef<HTMLButtonElement, CourseTermActionBut
 
 type AbsenceToggleOutcome = "cancelled" | "shortNoticeCancelled" | "undo";
 
+const TERM_MARKER_EXCLUDED_LABEL = "Termin entfällt (vom Studio abgesagt)";
+const TERM_MARKER_PAST_LABEL = "Vergangener Termin im Nachlauf";
+const TERM_MARKER_CUTOFF_LABEL = "Kurz vor Termin (Cutoff)";
+
+function courseStatusBadgeLabel(autoInactive: boolean): string {
+  return autoInactive ? "Kursstatus: Automatisch inaktiv" : "Kursstatus: Inaktiv";
+}
+
+function participantChipAriaLabel(
+  name: string,
+  { isSelf, isSn, isSwapped }: { isSelf: boolean; isSn: boolean; isSwapped: boolean },
+): string {
+  if (isSn && isSelf) return `${name}, du, kurzfristig abgesagt, Platz bleibt belegt`;
+  if (isSn) return `${name}, kurzfristig abgesagt, Platz bleibt belegt`;
+  if (isSwapped) return `${name}, getauscht`;
+  if (isSelf) return `${name}, du`;
+  return `${name}, regulär eingetragen`;
+}
+
+function waitlistChipAriaLabel(name: string, isSelf: boolean): string {
+  return isSelf ? `${name}, du auf der Warteliste` : `${name}, auf der Warteliste`;
+}
+
 function formatAbsenceAnnouncement(
   courseName: string,
   termIso: string,
@@ -441,6 +464,8 @@ export default function CourseCard({
   const scheduleDescId = useId();
   const termSelectId = useId();
   const termSelectDisabledHintId = useId();
+  const participantsLabelId = useId();
+  const waitlistLabelId = useId();
   const termSelectDisabled = hasNoUpcomingDates && !showLastTermInSelect;
 
   const swapStatusLines = useMemo(
@@ -541,6 +566,8 @@ export default function CourseCard({
   }, []);
 
   const swapModalTitle = hasCancelled ? "Anderen Termin wählen" : "Tauschanfrage starten";
+  const showAutoInactiveStatusBadge =
+    showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace);
 
   return (
     <article
@@ -580,7 +607,9 @@ export default function CourseCard({
               {showExcludedTermMarker && (
                 <span
                   className="course-term-visual-marker course-term-visual-marker--excluded"
-                  title="Termin entfällt (vom Studio abgesagt)"
+                  role="img"
+                  aria-label={TERM_MARKER_EXCLUDED_LABEL}
+                  title={TERM_MARKER_EXCLUDED_LABEL}
                 >
                   <CalendarX size={12} aria-hidden="true" />
                 </span>
@@ -588,7 +617,9 @@ export default function CourseCard({
               {showPastGraceMarker && (
                 <span
                   className="course-term-visual-marker course-term-visual-marker--past"
-                  title="Vergangener Termin im Nachlauf"
+                  role="img"
+                  aria-label={TERM_MARKER_PAST_LABEL}
+                  title={TERM_MARKER_PAST_LABEL}
                 >
                   <History size={12} aria-hidden="true" />
                 </span>
@@ -596,7 +627,9 @@ export default function CourseCard({
               {showCutoffMarker && (
                 <span
                   className="course-term-visual-marker course-term-visual-marker--cutoff"
-                  title="Kurz vor Termin (Cutoff)"
+                  role="img"
+                  aria-label={TERM_MARKER_CUTOFF_LABEL}
+                  title={TERM_MARKER_CUTOFF_LABEL}
                 >
                   <Clock3 size={12} aria-hidden="true" />
                 </span>
@@ -606,14 +639,13 @@ export default function CourseCard({
           {participantActionsLocked && (
             <span
               className={`course-status-badge ${
-                showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
+                showAutoInactiveStatusBadge
                   ? "course-status-badge--auto"
                   : "course-status-badge--inactive"
               }`}
+              aria-label={courseStatusBadgeLabel(showAutoInactiveStatusBadge)}
             >
-              {showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
-                ? "Automatisch inaktiv"
-                : "Inaktiv"}
+              {showAutoInactiveStatusBadge ? "Automatisch inaktiv" : "Inaktiv"}
             </span>
           )}
         </div>
@@ -623,7 +655,9 @@ export default function CourseCard({
         <div className="muted">Kapazität</div>
         <div>
           {showExcludedTermMarker ? (
-            <span className="muted">entfällt</span>
+            <span className="muted" aria-label="Kapazität entfällt">
+              entfällt
+            </span>
           ) : (
             <>
               {participants.length}/{course.capacity}
@@ -683,82 +717,87 @@ export default function CourseCard({
       </div>
 
       <div className="course-row list-row">
-        <div className="label muted">Teilnehmer</div>
-        <div className="chips">
+        <div id={participantsLabelId} className="label muted">
+          Teilnehmer
+        </div>
+        <ul className="chips" aria-labelledby={participantsLabelId}>
           {showExcludedTermMarker ? (
-            <span className="chip muted small">—</span>
+            <li className="chip muted small" aria-label="Keine Teilnehmer, Termin entfällt">
+              —
+            </li>
           ) : (
             <>
-              {participants.length === 0 && <span className="chip">—</span>}
+              {participants.length === 0 && (
+                <li className="chip" aria-label="Keine Teilnehmer eingetragen">
+                  —
+                </li>
+              )}
               {participants.map((name) => {
                 const isSelf = name.toLowerCase() === userNameLower;
                 const isSn = shortNotice.some((n) => n.toLowerCase() === name.toLowerCase());
                 const isSwapped = swapped.includes(name);
+                const chipLabel = participantChipAriaLabel(name, { isSelf, isSn, isSwapped });
                 return (
-                  <span
+                  <li
                     className={`chip${isSelf ? " chip-self" : ""}${
                       isSn ? " short-notice" : isSwapped ? " swapped" : ""
                     }`}
                     key={name}
-                    title={
-                      isSn && isSelf
-                        ? "Du — kurzfristig abgesagt, Platz bleibt belegt"
-                        : isSn
-                          ? "Kurzfristig abgesagt — Platz bleibt belegt"
-                          : isSelf
-                            ? "Du"
-                            : undefined
-                    }
+                    aria-label={chipLabel}
                   >
                     {name}
-                  </span>
+                  </li>
                 );
               })}
               {visibleFreeSpots > 0 &&
                 Array.from({ length: regularFreeSpots }).map((_, idx) => (
-                  <span className="chip free" key={`free-${idx}`}>
+                  <li className="chip free" key={`free-${idx}`} aria-label="Freier Platz">
                     frei
-                  </span>
+                  </li>
                 ))}
               {showOverbookingDetails &&
                 overbookFreeSpots > 0 &&
                 Array.from({ length: overbookFreeSpots }).map((_, idx) => (
-                  <span
+                  <li
                     className="chip overbook-free"
                     key={`overbook-free-${idx}`}
-                    title="Platz in der Überplanung"
+                    aria-label="Freier Überplanungsplatz"
                   >
                     +frei
-                  </span>
+                  </li>
                 ))}
             </>
           )}
-        </div>
+        </ul>
       </div>
 
       {/* Warteliste anzeigen */}
       <div className="course-row list-row">
-        <div className="label muted">Warteliste</div>
-        <div className="chips">
+        <div id={waitlistLabelId} className="label muted">
+          Warteliste
+        </div>
+        <ul className="chips" aria-labelledby={waitlistLabelId}>
           {showExcludedTermMarker ? (
-            <span className="chip muted small">—</span>
+            <li className="chip muted small" aria-label="Keine Warteliste, Termin entfällt">
+              —
+            </li>
           ) : waitlist.length === 0 ? (
-            <span className="chip muted small">Keine Anfragen</span>
+            <li className="chip muted small">Keine Anfragen</li>
           ) : (
             waitlist.map((name) => {
               const isSelf = name.toLowerCase() === userNameLower;
               return (
-                <span
+                <li
                   className={`chip wait${isSelf ? " chip-self" : ""}`}
                   key={name}
-                  title={isSelf ? "Du (Warteliste)" : undefined}
+                  aria-label={waitlistChipAriaLabel(name, isSelf)}
                 >
                   {name}
-                </span>
+                </li>
               );
             })
           )}
-        </div>
+        </ul>
       </div>
 
       {inactiveNotice && (
