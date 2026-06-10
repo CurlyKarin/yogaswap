@@ -4,12 +4,14 @@ import {
 } from "shared/cancellationSwapCutoff";
 import {
   addCalendarDaysIsoUtc,
-  buildCourseOccurrenceLocal,
   courseEndDateIso,
   DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
+  isOccurrenceInPast,
   isWithinPostCourseEndGrace,
   toIsoDateUtc,
 } from "shared/courseStatus";
+
+export { isOccurrenceInPast };
 import type { Course, CourseDateOverride, TenantSettings } from "shared/types";
 import { addWeeks, startOfWeekMonday } from "./courseWeek";
 import { isWeekEntirelyInPast, weekRangeKeys } from "./courseWeekOccurrences";
@@ -150,15 +152,6 @@ export function earliestAllowedWeekStart(
   now: Date = new Date(),
 ): Date {
   return computeEarliestWeekAnchor(courses, settings, now);
-}
-
-export function isOccurrenceInPast(
-  isoDate: string,
-  courseTime: string,
-  now: Date = new Date(),
-): boolean {
-  const occurrence = buildCourseOccurrenceLocal(isoDate, courseTime);
-  return occurrence != null && occurrence < now;
 }
 
 /** Vergangener Termin: nur Tausch aus rechtzeitiger Absage (RC), nicht Kurzfrist. */

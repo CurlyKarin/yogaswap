@@ -85,10 +85,11 @@ locals {
     "delete_swap" = {
       name             = "delete-swap"
       file_name        = "deleteSwap.zip"
-      dynamodb_actions = ["dynamodb:DeleteItem"]
-      table_arns       = [module.swaps_table.table_arn]
+      dynamodb_actions = ["dynamodb:DeleteItem", "dynamodb:GetItem"]
+      table_arns       = [module.swaps_table.table_arn, module.courses_table.table_arn]
       tables = {
-        "SWAPS_TABLE" = module.swaps_table.table_name
+        "SWAPS_TABLE"   = module.swaps_table.table_name
+        "COURSES_TABLE" = module.courses_table.table_name
       }
       s3_actions   = []
       s3_resources = []

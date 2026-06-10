@@ -15,6 +15,16 @@ export function buildCourseOccurrenceLocal(isoDate: string, time: string): Date 
   return new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
 }
 
+/** Termin (Datum + Uhrzeit) liegt in der Vergangenheit. */
+export function isOccurrenceInPast(
+  isoDate: string,
+  courseTime: string,
+  now: Date = new Date(),
+): boolean {
+  const occurrence = buildCourseOccurrenceLocal(isoDate, courseTime);
+  return occurrence != null && occurrence < now;
+}
+
 /** Mindestens ein Termin liegt in der Zukunft (Datum + Uhrzeit). */
 export function hasUpcomingCourseOccurrences(
   dateIsos: string[],
