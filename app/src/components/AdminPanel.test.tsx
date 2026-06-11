@@ -50,7 +50,7 @@ describe("AdminPanel", () => {
       expect(within(panel).getByText("alice")).toBeInTheDocument();
       expect(within(panel).getByText("Teilnehmerin")).toBeInTheDocument();
       expect(within(panel).getByText("alice@example.com")).toBeInTheDocument();
-      expect(within(panel).getByLabelText("Status: ohne Login")).toBeInTheDocument();
+      expect(within(panel).getByText("ohne Login")).toBeInTheDocument();
       expect(within(panel).getByLabelText("Einladen alice")).not.toBeDisabled();
       expect(within(panel).getByLabelText("Bearbeiten alice")).not.toBeDisabled();
       expect(within(panel).queryByLabelText("Löschen alice")).not.toBeInTheDocument();
@@ -1171,6 +1171,37 @@ describe("AdminPanel", () => {
       expect(mockedGetParticipants).toHaveBeenLastCalledWith({ search: "bob" });
       expect(within(panel).getByText("bob")).toBeInTheDocument();
     });
+  });
+
+  it("stellt Landmark und Tabellen-Semantik für die Teilnehmerverwaltung bereit", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+    ]);
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector<HTMLElement>(".admin-panel");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    const section = panel.querySelector<HTMLElement>('section[aria-labelledby="participants-heading"]');
+    if (!section) throw new Error("Participants section not found");
+    const scoped = within(section);
+    expect(scoped.getByRole("heading", { level: 3, name: /teilnehmer verwalten/i })).toBeInTheDocument();
+    expect(scoped.getByRole("table", { name: /teilnehmerliste/i })).toBeInTheDocument();
+    expect(scoped.getByRole("columnheader", { name: /nickname/i })).toBeInTheDocument();
+    expect(within(panel).getByLabelText("Teilnehmer suchen")).toBeInTheDocument();
+    expect(within(panel).getByLabelText("Neuer Teilnehmer")).toBeInTheDocument();
+    expect(scoped.getByLabelText("Auswählen alice")).toBeInTheDocument();
+    expect(scoped.getByLabelText("Einladen alice")).toBeInTheDocument();
   });
 });
 

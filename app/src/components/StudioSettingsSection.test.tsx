@@ -69,6 +69,12 @@ describe("StudioSettingsSection", () => {
     expect(onSaved).toHaveBeenCalledWith(updatedTenant);
   });
 
+  it("stellt Landmark und beschriftete Formularfelder bereit", () => {
+    render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expect(screen.getByRole("region", { name: /studio-einstellungen/i })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /studioname/i })).toBeInTheDocument();
+  });
+
   it("zeigt Validierungsfehler bei ungültigem Cutoff-Wert", async () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
     fireEvent.change(getCutoffInput(), { target: { value: "1500" } });
