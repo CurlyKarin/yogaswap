@@ -125,6 +125,8 @@ Dieser Abschnitt dokumentiert den aktuellen MVP-Stand von **Issue #139**.
 
 ## 📋 Projektübersicht
 
+**Manuelle A11y-QA (Hauptansicht):** [docs/a11y-main-view-qa.md](docs/a11y-main-view-qa.md) — Checkliste Tastatur/Screenreader nach Login ([#198](https://github.com/CurlyKarin/yogaswap/issues/198) / [#171](https://github.com/CurlyKarin/yogaswap/issues/171)).
+
 YogaSwap ist eine vollständige Serverless-Webanwendung bestehend aus:
 - **Frontend**: React/TypeScript SPA (Single Page Application)
 - **Backend**: AWS Lambda-Funktionen (Serverless)
