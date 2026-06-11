@@ -82,6 +82,13 @@ Auf einer Karte mit mindestens einem zukünftigen Termin und eingetragenem Teiln
 - [ ] Admin-Aktionen an einer Karte (Bearbeiten, Termine, …) per Tastatur erreichbar
 - [ ] Kein Fokus „stecken bleiben“ außerhalb bewusster Modale
 
+### A8 Optional: Verwaltung (Teilnehmer, Studio-Einstellungen)
+
+- [ ] Verwaltungsbereich unterhalb der Kursliste erreichbar (Landmark „Verwaltung“)
+- [ ] **Teilnehmer verwalten**: Suche, Sammelaktionen, Tabellenkopfzeilen per Screenreader erkennbar
+- [ ] Icon-Buttons (Einladen, Bearbeiten, Löschen) mit beschreibendem Namen
+- [ ] **Studio-Einstellungen** (Admin): Formularfelder mit Label, Speichern per Tastatur
+
 **Ergebnis A:** [ ] bestanden  [ ] mit Anmerkungen (unten)
 
 ---
@@ -128,7 +135,9 @@ cd app && npm test -- --run \
   src/components/CoursesShell.test.tsx \
   src/components/CourseWeekView.test.tsx \
   src/components/CourseCard.test.tsx \
-  src/components/CourseSwapModal.test.tsx
+  src/components/CourseSwapModal.test.tsx \
+  src/components/AdminPanel.test.tsx \
+  src/components/StudioSettingsSection.test.tsx
 ```
 
 - [ ] Alle genannten Tests grün
@@ -158,5 +167,5 @@ Issue anlegen oder an [#171](https://github.com/CurlyKarin/yogaswap/issues/171) 
 
 ## Siehe auch
 
-- [#199 — AdminPanel A11y (optional)](https://github.com/CurlyKarin/yogaswap/issues/199)
+- [#199 — AdminPanel A11y (optional)](https://github.com/CurlyKarin/yogaswap/issues/199) — Landmark, Tabellen-Semantik, Formular-Labels
 - Implementierte Teil-Tickets: #200 (Shell), #201 (Wochennavigation), #202 (Kurskarten), #196/#205 (Terminaktionen), #206 (Swap-Modal), #197/#209 (Chips/Badges)

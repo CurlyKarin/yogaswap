@@ -944,9 +944,11 @@ export default function AdminPanel({
         <StudioSettingsSection tenant={tenant} onSaved={onTenantUpdated} />
       ) : null}
       <div className="admin-panel">
-      <div>
+      <section aria-labelledby="participants-heading">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-          <h3 style={{ margin: 0 }}>Teilnehmer verwalten</h3>
+          <h3 id="participants-heading" style={{ margin: 0 }}>
+            Teilnehmer verwalten
+          </h3>
           <button
             type="button"
             title="Neuer Teilnehmer"
@@ -1011,8 +1013,13 @@ export default function AdminPanel({
         ) : (
           <div className="participants-table">
             <div className="participants-table-scroll">
-              <div className="participants-table-inner">
               <div
+                className="participants-table-inner"
+                role="table"
+                aria-label="Teilnehmerliste"
+              >
+              <div
+              role="row"
               style={{
                 display: "grid",
                 gridTemplateColumns: "36px 130px 110px 150px minmax(220px, 1fr) 220px",
@@ -1022,7 +1029,7 @@ export default function AdminPanel({
                 marginBottom: "0.5rem",
               }}
             >
-              <span style={{ display: "inline-flex", justifyContent: "center" }}>
+              <span role="columnheader" style={{ display: "inline-flex", justifyContent: "center" }}>
                 <input
                   type="checkbox"
                   aria-label="Alle (einladbar) auswählen"
@@ -1031,15 +1038,16 @@ export default function AdminPanel({
                   onChange={(e) => toggleSelectAllEligible(e.target.checked)}
                 />
               </span>
-              <span>Nickname</span>
-              <span>Rolle</span>
-              <span>Status</span>
-                  <span style={{ whiteSpace: "nowrap" }}>E-Mail</span>
-                  <span style={{ whiteSpace: "nowrap" }}>Aktion</span>
+              <span role="columnheader">Nickname</span>
+              <span role="columnheader">Rolle</span>
+              <span role="columnheader">Status</span>
+                  <span role="columnheader" style={{ whiteSpace: "nowrap" }}>E-Mail</span>
+                  <span role="columnheader" style={{ whiteSpace: "nowrap" }}>Aktion</span>
               </div>
               {safeParticipants.map((p) => (
                 <div
                   key={p.userId}
+                  role="row"
                   style={{
                     display: "grid",
                     gridTemplateColumns: "36px 130px 110px 150px minmax(220px, 1fr) 220px",
@@ -1048,7 +1056,7 @@ export default function AdminPanel({
                     padding: "0.25rem 0",
                   }}
                 >
-                  <span style={{ display: "inline-flex", justifyContent: "center" }}>
+                  <span role="cell" style={{ display: "inline-flex", justifyContent: "center" }}>
                     <input
                       type="checkbox"
                       aria-label={`Auswählen ${p.userId}`}
@@ -1064,14 +1072,18 @@ export default function AdminPanel({
                       onChange={(e) => toggleSelectedInviteUserId(p.userId, e.target.checked)}
                     />
                   </span>
-                  <span style={{ fontWeight: 600 }}>{p.userId}</span>
-                  <span style={{ color: "#374151" }}>{getRoleLabel(p.role)}</span>
+                  <span role="rowheader" style={{ fontWeight: 600 }}>
+                    {p.userId}
+                  </span>
+                  <span role="cell" style={{ color: "#374151" }}>
+                    {getRoleLabel(p.role)}
+                  </span>
                   <span
-                    title={getStatusPresentation(p.status).label}
-                    aria-label={`Status: ${getStatusPresentation(p.status).label}`}
+                    role="cell"
                     style={{ display: "inline-flex", justifyContent: "center", alignItems: "center", gap: 6 }}
                   >
                     <span
+                      aria-hidden="true"
                       style={{
                         width: 10,
                         height: 10,
@@ -1084,6 +1096,7 @@ export default function AdminPanel({
                     </span>
                   </span>
                   <span
+                    role="cell"
                     style={{
                       color: p.email ? "#111827" : "#9ca3af",
                       whiteSpace: "nowrap",
@@ -1091,11 +1104,11 @@ export default function AdminPanel({
                       textOverflow: "ellipsis",
                       minWidth: 0,
                     }}
-                    title={p.email ?? "-"}
                   >
                     {p.email ?? "-"}
                   </span>
                   <div
+                    role="cell"
                     style={{
                       display: "flex",
                       gap: "0.25rem",
@@ -1185,7 +1198,7 @@ export default function AdminPanel({
             </div>
           </div>
         )}
-      </div>
+      </section>
 
       {editingUserId && (
         <div
