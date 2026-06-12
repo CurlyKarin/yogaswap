@@ -107,6 +107,49 @@ describe("useCourseCardTermState", () => {
     expect(cancelled.current.swapModalTitle).toBe("Anderen Termin wählen");
   });
 
+  it("verbirgt Nachlauf-Tauschstart bei bestehendem Swap am Ursprungstermin", () => {
+    const pastOrigin = "2099-06-10";
+    const pastTarget = "2099-06-12";
+    const cancelledOverride: CourseDateOverride = {
+      ...baseOverride,
+      date: pastOrigin,
+      participants: [],
+    };
+    const activeSwap: Swap = {
+      user: "alice",
+      fromCourseId: 1,
+      fromDate: pastOrigin,
+      toCourseId: 2,
+      toDate: pastTarget,
+      status: "active",
+    };
+    const targetCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Advanced",
+      dates: [pastTarget],
+      participants: ["alice"],
+    };
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2099-06-14T10:00:00Z"));
+
+    const { result } = renderTermState({
+      course: { ...baseCourse, dates: [pastOrigin] },
+      allCourses: [baseCourse, targetCourse],
+      dates: [new Date(`${pastOrigin}T10:00:00Z`)],
+      overrides: [cancelledOverride],
+      swaps: [activeSwap],
+      includePastTermsInSelect: true,
+    });
+
+    expect(result.current.canSwapFromPastCancelled).toBe(false);
+    expect(result.current.swapForThisTermCancellable).toBe(false);
+    expect(result.current.showPastTermSwapActions).toBe(false);
+
+    vi.useRealTimers();
+  });
+
   it("findet pending Swap für den gewählten Termin", () => {
     const pendingSwap: Swap = {
       user: "alice",

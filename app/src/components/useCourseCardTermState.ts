@@ -262,15 +262,17 @@ export function useCourseCardTermState({
     (isParticipant || originallyParticipant) &&
     !isPastOccurrence &&
     !isSelectedTermExcluded;
-  const canSwapFromPastCancelled = canRequestSwapFromPastCancelledOrigin({
-    isoDate: selectedDateKey,
-    courseTime: course.time,
-    tenantSettings,
-    override,
-    userName,
-    participants,
-    originallyParticipant,
-  });
+  const canSwapFromPastCancelled =
+    swapForThisTerm == null &&
+    canRequestSwapFromPastCancelledOrigin({
+      isoDate: selectedDateKey,
+      courseTime: course.time,
+      tenantSettings,
+      override,
+      userName,
+      participants,
+      originallyParticipant,
+    });
   const swapForThisTermCancellable =
     swapForThisTerm != null && canCancelSwap(swapForThisTerm, allCourses);
   const showPastTermSwapActions =
