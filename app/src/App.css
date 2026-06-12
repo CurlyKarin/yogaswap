@@ -1122,6 +1122,11 @@ a:focus-visible {
   border-top: 1px solid #e8e8e8;
   font-size: 14px;
   color: #666;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
 }
 .app-footer a {
   color: #555;
@@ -1132,7 +1137,10 @@ a:focus-visible {
   text-decoration: underline;
 }
 .app-footer-nav {
-  display: inline;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
 }
 
 .app-footer .sep {
@@ -1225,6 +1233,66 @@ a:focus-visible {
   background: #fff;
   box-sizing: border-box;
   width: 100%;
+}
+
+.admin-panel-fallback {
+  min-height: 28rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.admin-panel-fallback-line {
+  height: 0.875rem;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+  background-size: 200% 100%;
+  animation: admin-panel-fallback-shimmer 1.4s ease-in-out infinite;
+}
+
+.admin-panel-fallback-line-title {
+  width: 40%;
+  height: 1.125rem;
+}
+
+.admin-panel-fallback-line-toolbar {
+  width: 55%;
+}
+
+.admin-panel-fallback-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem 1rem;
+  margin-top: 0.75rem;
+}
+
+.admin-panel-fallback-participants {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.admin-panel-fallback-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.legal-page-fallback {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+@keyframes admin-panel-fallback-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .studio-settings-section {

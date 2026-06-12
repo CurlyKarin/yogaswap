@@ -1,17 +1,14 @@
 // app/src/App.tsx
-import { useEffect, useMemo, useState } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, Routes, Route, useNavigate } from "react-router-dom";
 import "./App.css";
 import Login from "./components/Login";
 import CoursesShell from "./components/CoursesShell";
-import AdminPanel from "./components/AdminPanel";
+import AdminPanelFallback from "./components/AdminPanelFallback";
+import LegalPageFallback from "./components/LegalPageFallback";
 import Invite from "./components/Invite";
 import ForgotPassword from "./components/ForgotPassword";
-import Impressum from "./components/Impressum";
-import Datenschutz from "./components/Datenschutz";
-import OpenSourceLicenses from "./components/OpenSourceLicenses";
 import DelegationPickerDialog from "./components/DelegationPickerDialog";
-import { Link } from "react-router-dom";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
 import { User, UserRole, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
@@ -21,6 +18,15 @@ import { canInviteParticipants, canManageParticipants } from "shared/permissions
 import { getParticipants, type ParticipantWithStatus } from "./api/participants";
 import { setActingForUserId, setActorUserId } from "./api/delegation";
 import { filterParticipantsBySearch } from "./lib/participants";
+
+const AdminPanel = lazy(() => import("./components/AdminPanel"));
+const Impressum = lazy(() => import("./components/Impressum"));
+const Datenschutz = lazy(() => import("./components/Datenschutz"));
+const OpenSourceLicenses = lazy(() => import("./components/OpenSourceLicenses"));
+
+function LegalPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<LegalPageFallback />}>{children}</Suspense>;
+}
 
 // Checkmark Haupt-App als Komponente
 function MainApp() {
@@ -318,11 +324,13 @@ function MainApp() {
             <h2 id="admin-heading" className="visually-hidden">
               Verwaltung
             </h2>
-            <AdminPanel
-              canEditRoles={(membership?.role ?? currentUser.role) === "admin"}
-              tenant={tenant}
-              onTenantUpdated={(updated) => setTenant(updated)}
-            />
+            <Suspense fallback={<AdminPanelFallback />}>
+              <AdminPanel
+                canEditRoles={(membership?.role ?? currentUser.role) === "admin"}
+                tenant={tenant}
+                onTenantUpdated={(updated) => setTenant(updated)}
+              />
+            </Suspense>
           </section>
         )}
       </main>
@@ -396,9 +404,36 @@ export default function App() {
       <Route path="/invite" element={<InviteWithRedirect />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/login" element={<Login onLogin={() => {}} />} />
-      <Route path="/impressum" element={<div className="app-container"><Impressum /></div>} />
-      <Route path="/datenschutz" element={<div className="app-container"><Datenschutz /></div>} />
-      <Route path="/open-source-lizenzen" element={<div className="app-container"><OpenSourceLicenses /></div>} />
+      <Route
+        path="/impressum"
+        element={
+          <LegalPage>
+            <div className="app-container">
+              <Impressum />
+            </div>
+          </LegalPage>
+        }
+      />
+      <Route
+        path="/datenschutz"
+        element={
+          <LegalPage>
+            <div className="app-container">
+              <Datenschutz />
+            </div>
+          </LegalPage>
+        }
+      />
+      <Route
+        path="/open-source-lizenzen"
+        element={
+          <LegalPage>
+            <div className="app-container">
+              <OpenSourceLicenses />
+            </div>
+          </LegalPage>
+        }
+      />
       <Route path="*" element={<MainApp />} />
     </Routes>
   );
