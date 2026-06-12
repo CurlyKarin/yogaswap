@@ -425,3 +425,5 @@ export function useCourseCardTermState({
     swapModalTitle,
   };
 }
+
+export type CourseCardTermState = ReturnType<typeof useCourseCardTermState>;
