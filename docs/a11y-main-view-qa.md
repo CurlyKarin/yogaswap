@@ -4,7 +4,7 @@ Kurzer, wiederholbarer manueller Test für die **Hauptansicht nach Login** — T
 
 - **Parent:** [#171 — Barrierefreiheit: Hauptansicht](https://github.com/CurlyKarin/yogaswap/issues/171)
 - **Ticket:** [#198](https://github.com/CurlyKarin/yogaswap/issues/198)
-- **Stand:** nach #171.1–#171.6 (App-Shell, Wochennavigation, Kurskarten-Semantik, Terminaktionen, Swap-Modal, Chips/Badges)
+- **Stand:** nach #171.1–#171.8 (#192–#199: App-Shell, Wochennavigation, Kurskarten-Semantik, Terminaktionen, Swap-Modal, Chips/Badges, QA-Checkliste, AdminPanel)
 
 ---
 
@@ -168,4 +168,4 @@ Issue anlegen oder an [#171](https://github.com/CurlyKarin/yogaswap/issues/171) 
 ## Siehe auch
 
 - [#199 — AdminPanel A11y (optional)](https://github.com/CurlyKarin/yogaswap/issues/199) — Landmark, Tabellen-Semantik, Formular-Labels
-- Implementierte Teil-Tickets: #200 (Shell), #201 (Wochennavigation), #202 (Kurskarten), #196/#205 (Terminaktionen), #206 (Swap-Modal), #197/#209 (Chips/Badges)
+- Implementierte Teil-Tickets: #192/#200 (Shell), #193/#201 (Wochennavigation), #194/#202 (Kurskarten), #196/#205 (Terminaktionen), #195/#206 (Swap-Modal), #197/#209 (Chips/Badges), #198/#210 (QA-Checkliste), #199/#211 (AdminPanel)
