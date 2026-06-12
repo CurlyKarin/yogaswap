@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { CalendarX, Clock3, History } from "lucide-react";
 import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import {
@@ -29,6 +29,8 @@ import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import { weekdayLabelDe } from "../lib/weekdayLabels";
 import type { SwapSettings } from "../types";
 import CourseSwapModal from "./CourseSwapModal";
+import { formatSwapStatusLine, swapTermIsoForCourse } from "../lib/courseTermActionLabels";
+import CourseTermActionButton from "./CourseTermActionButton";
 
 type Props = {
   course: Course;
@@ -61,80 +63,6 @@ function sameDayUTC(a: Date, b: Date) {
     a.getUTCDate() === b.getUTCDate()
   );
 }
-
-function courseTermActionLabel(
-  courseName: string,
-  action: string,
-  termIso: string,
-  extras: string[] = [],
-): string {
-  return [action, courseName, formatCourseIsoDateDe(termIso), ...extras].join(", ");
-}
-
-function formatSwapStatusLine(swap: Swap, courseId: number, allCourses: Course[]): string {
-  const courseName = (id: number) => allCourses.find((c) => c.id === id)?.name ?? "Kurs";
-  if (swap.status === "pending" && swap.fromCourseId === courseId) {
-    return `Tauschanfrage für ${formatCourseIsoDateDe(swap.toDate)} · ${courseName(swap.toCourseId)}`;
-  }
-  if (swap.status === "pending" && swap.toCourseId === courseId) {
-    return `Tauschanfrage zu ${formatCourseIsoDateDe(swap.fromDate)} · ${courseName(swap.fromCourseId)}`;
-  }
-  if (swap.fromCourseId === courseId) {
-    return `Getauscht mit ${formatCourseIsoDateDe(swap.toDate)} · ${courseName(swap.toCourseId)}`;
-  }
-  return `Getauscht von ${formatCourseIsoDateDe(swap.fromDate)} · ${courseName(swap.fromCourseId)}`;
-}
-
-function swapTermIsoForCourse(swap: Swap, courseId: number): string {
-  return swap.fromCourseId === courseId ? swap.fromDate : swap.toDate;
-}
-
-type CourseTermActionButtonProps = {
-  action: string;
-  courseName: string;
-  termIso: string;
-  labelExtras?: string[];
-  className?: string;
-  title?: string;
-  inactive?: boolean;
-  busy?: boolean;
-  onClick: () => void;
-};
-
-const CourseTermActionButton = forwardRef<HTMLButtonElement, CourseTermActionButtonProps>(
-  function CourseTermActionButton(
-    {
-      action,
-      courseName,
-      termIso,
-      labelExtras = [],
-      className,
-      title,
-      inactive,
-      busy,
-      onClick,
-    },
-    ref,
-  ) {
-    return (
-      <button
-        ref={ref}
-        type="button"
-        className={className}
-        aria-label={courseTermActionLabel(courseName, action, termIso, labelExtras)}
-        aria-busy={busy || undefined}
-        aria-disabled={inactive || undefined}
-        title={title}
-        onClick={() => {
-          if (inactive) return;
-          onClick();
-        }}
-      >
-        {action}
-      </button>
-    );
-  },
-);
 
 type AbsenceToggleOutcome = "cancelled" | "shortNoticeCancelled" | "undo";
 
