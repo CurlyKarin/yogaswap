@@ -10,6 +10,31 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'build',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('aws-amplify') || id.includes('@aws-amplify')) {
+            return 'amplify';
+          }
+          if (id.includes('react-router') || id.includes('react-router-dom')) {
+            return 'react-router';
+          }
+          if (id.includes('react-dom')) {
+            return 'react-dom';
+          }
+          if (id.includes('/react/')) {
+            return 'react';
+          }
+          if (id.includes('lucide-react')) {
+            return 'lucide';
+          }
+          if (id.includes('axios')) {
+            return 'axios';
+          }
+        },
+      },
+    },
   },
   resolve: {
     alias: {
