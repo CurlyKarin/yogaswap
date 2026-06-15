@@ -3,6 +3,17 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CoursesShell from "./CoursesShell";
 import { User, Tenant, UserTenantMembership } from "shared/types";
+import { formatWeekNavLabel, startOfWeekMonday, addWeeks } from "../lib/courseWeek";
+import {
+  buildWeekAnchorStorageKey,
+  readStoredWeekAnchor,
+  writeStoredWeekAnchor,
+} from "../lib/weekNavPersistence";
+import { getActorUserId } from "../api/delegation";
+
+vi.mock("../api/delegation", () => ({
+  getActorUserId: vi.fn(() => "maya"),
+}));
 
 const { mockUseCoursesData, createCoursesDataMock } = vi.hoisted(() => {
   type MockCoursesData = {
@@ -92,11 +103,14 @@ const adminMembership: UserTenantMembership = {
 describe("CoursesShell", () => {
   beforeEach(() => {
     cleanup();
+    sessionStorage.clear();
+    vi.mocked(getActorUserId).mockReturnValue("maya");
     mockUseCoursesData.mockReturnValue(createCoursesDataMock());
   });
 
   afterEach(() => {
     cleanup();
+    sessionStorage.clear();
   });
 
   it("shows week view by default for participants without view toggle", () => {
@@ -239,13 +253,95 @@ describe("CoursesShell", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Netzwerkfehler");
   });
-});
 
-function startOfWeekMonday(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+  it("restores weekAnchor from sessionStorage on mount", () => {
+    const storedWeek = startOfWeekMonday(new Date(2099, 5, 14));
+    writeStoredWeekAnchor(buildWeekAnchorStorageKey("default-tenant", "maya"), storedWeek);
+
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    expect(screen.getByText(formatWeekNavLabel(storedWeek))).toBeInTheDocument();
+  });
+
+  it("persists week navigation in sessionStorage", async () => {
+    const user = userEvent.setup();
+    const storageKey = buildWeekAnchorStorageKey("default-tenant", "maya");
+    const initialWeek = startOfWeekMonday(new Date());
+    const expectedWeek = addWeeks(initialWeek, 1);
+
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    const nav = screen.getByRole("navigation", { name: /kalenderwoche/i });
+    await user.click(within(nav).getByRole("button", { name: /nächste woche/i }));
+
+    expect(within(nav).getByText(formatWeekNavLabel(expectedWeek))).toBeInTheDocument();
+    expect(readStoredWeekAnchor(storageKey)?.getTime()).toBe(expectedWeek.getTime());
+  });
+
+  it("keeps weekAnchor when switching into delegation view", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getActorUserId).mockReturnValue("admin");
+
+    const { rerender } = render(
+      <CoursesShell
+        currentUser={{ ...baseUser, nickname: "admin", role: "admin" }}
+        tenant={baseTenant}
+        membership={adminMembership}
+      />,
+    );
+
+    const nav = screen.getByRole("navigation", { name: /kalenderwoche/i });
+    await user.click(within(nav).getByRole("button", { name: /nächste woche/i }));
+    const labelAfterNav = within(nav).getByText(/^KW \d+ · /).textContent;
+
+    rerender(
+      <CoursesShell
+        currentUser={{ ...baseUser, nickname: "maya", role: "participant" }}
+        tenant={baseTenant}
+        membership={adminMembership}
+        forceParticipantView
+      />,
+    );
+
+    expect(within(screen.getByRole("navigation", { name: /kalenderwoche/i })).getByText(
+      /^KW \d+ · /,
+    ).textContent).toBe(labelAfterNav);
+  });
+
+  it("resets to current week via Heute and updates sessionStorage", async () => {
+    const user = userEvent.setup();
+    const storageKey = buildWeekAnchorStorageKey("default-tenant", "maya");
+    const currentWeek = startOfWeekMonday(new Date());
+    const futureWeek = addWeeks(currentWeek, 2);
+
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    const nav = screen.getByRole("navigation", { name: /kalenderwoche/i });
+    await user.click(within(nav).getByRole("button", { name: /nächste woche/i }));
+    await user.click(within(nav).getByRole("button", { name: /nächste woche/i }));
+    expect(within(nav).getByText(formatWeekNavLabel(futureWeek))).toBeInTheDocument();
+
+    await user.click(within(nav).getByRole("button", { name: /zur aktuellen kalenderwoche springen/i }));
+
+    expect(within(nav).getByText(formatWeekNavLabel(currentWeek))).toBeInTheDocument();
+    expect(readStoredWeekAnchor(storageKey)?.getTime()).toBe(currentWeek.getTime());
+  });
+});
