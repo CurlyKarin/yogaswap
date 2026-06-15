@@ -4,6 +4,7 @@ import React from "react";
 import { afterEach } from "vitest";
 import CourseCard from "./CourseCard";
 import type { Course, CourseDateOverride, Swap, User } from "shared/types";
+import { swapOptionKey } from "../lib/dates";
 
 const baseCourse: Course = {
   tenantId: "default-tenant",
@@ -582,8 +583,8 @@ describe("CourseCard", () => {
 
     expect(screen.getByRole("dialog", { name: /Tauschanfrage starten, Yoga Basic, 16\.06\.2099/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Tauschanfrage starten/i })).toBeInTheDocument();
-    expect(document.querySelector('option[value^="2099-06-21T"]')).toBeInTheDocument();
-    expect(document.querySelector('option[value^="2099-06-20T"]')).not.toBeInTheDocument();
+    expect(document.querySelector(`option[value="${swapOptionKey(3, new Date(2099, 5, 21, 10, 0, 0))}"]`)).toBeInTheDocument();
+    expect(document.querySelector(`option[value="${swapOptionKey(2, new Date(2099, 5, 20, 10, 0, 0))}"]`)).not.toBeInTheDocument();
   });
 });
 

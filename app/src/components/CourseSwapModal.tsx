@@ -1,7 +1,7 @@
 import { useCallback, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { formatCourseIsoDateDe } from "shared/courseStatus";
 import type { Course } from "shared/types";
-import { toDateKey } from "../lib/dates";
+import { parseSwapOptionKey, swapOptionKey, toDateKey } from "../lib/dates";
 import { focusWithVisibleRing } from "../lib/focusWithVisibleRing";
 import type { SwapSettings } from "../types";
 import CourseModalFrame from "./CourseModalFrame";
@@ -155,14 +155,25 @@ export default function CourseSwapModal({
     [onClose],
   );
 
+  const resolveTarget = (optionKey: string, options: SwapTargetOption[]) => {
+    const parsed = parseSwapOptionKey(optionKey);
+    if (!parsed) return null;
+    return (
+      options.find(
+        (opt) =>
+          opt.course.id === parsed.courseId && swapOptionKey(opt.course.id, opt.date) === optionKey,
+      ) ?? null
+    );
+  };
+
   const handleConfirm = () => {
     if (swapDateIso) {
-      const target = availableSwapDates.find((opt) => opt.date.toISOString() === swapDateIso);
+      const target = resolveTarget(swapDateIso, availableSwapDates);
       if (target) {
         onConfirmFree(target.course.id, toDateKey(target.date));
       }
     } else if (swapDateIsoWaitlist) {
-      const target = waitlistDates.find((opt) => opt.date.toISOString() === swapDateIsoWaitlist);
+      const target = resolveTarget(swapDateIsoWaitlist, waitlistDates);
       if (target) {
         onConfirmWaitlist(target.course.id, toDateKey(target.date));
       }
@@ -214,9 +225,19 @@ export default function CourseSwapModal({
                 <option value="" disabled>
                   Bitte freien Termin auswählen…
                 </option>
-                {availableSwapDates.map((swapDate, idx) => (
-                  <option key={idx} value={swapDate.date.toISOString()}>
+                {availableSwapDates.map((swapDate) => (
+                  <option
+                    key={swapOptionKey(swapDate.course.id, swapDate.date)}
+                    value={swapOptionKey(swapDate.course.id, swapDate.date)}
+                  >
                     {swapOptionLabel(swapDate.date)}
+                    {availableSwapDates.some(
+                      (other) =>
+                        other !== swapDate &&
+                        other.date.getTime() === swapDate.date.getTime(),
+                    )
+                      ? ` · ${swapDate.course.name}`
+                      : ""}
                   </option>
                 ))}
               </select>
@@ -255,9 +276,19 @@ export default function CourseSwapModal({
                 <option value="" disabled>
                   Bitte belegten Termin wählen…
                 </option>
-                {waitlistDates.map((waitlistDate, idx) => (
-                  <option key={idx} value={waitlistDate.date.toISOString()}>
+                {waitlistDates.map((waitlistDate) => (
+                  <option
+                    key={swapOptionKey(waitlistDate.course.id, waitlistDate.date)}
+                    value={swapOptionKey(waitlistDate.course.id, waitlistDate.date)}
+                  >
                     {swapOptionLabel(waitlistDate.date)}
+                    {waitlistDates.some(
+                      (other) =>
+                        other !== waitlistDate &&
+                        other.date.getTime() === waitlistDate.date.getTime(),
+                    )
+                      ? ` · ${waitlistDate.course.name}`
+                      : ""}
                   </option>
                 ))}
               </select>

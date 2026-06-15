@@ -1,6 +1,6 @@
 // lib/dates.ts
 import { CourseDateOverride, Course, User, TenantSettings } from "shared/types";
-import { isAtMaxCapacity, isAtRegularCapacity, resolveOverbookLimit } from "shared/courseCapacity";
+import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
 import { isSwapTargetInCutoffWindow } from "shared/cancellationSwapCutoff";
 import { buildCourseOccurrenceLocal } from "shared/courseStatus";
 import type { SwapSettings } from "../types";
@@ -41,7 +41,36 @@ export function sameInstant(a: Date | string, b: Date | string): boolean {
 
 export function toDateKey(date: Date): string {
   if (isNaN(date.getTime())) return ""; // ungültiges Datum → kein Crash
-  return date.toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Eindeutiger Select-Wert für Tauschziele (Kurs + lokales Datum). */
+export function swapOptionKey(courseId: number, date: Date): string {
+  return `${courseId}:${toDateKey(date)}`;
+}
+
+export function parseSwapOptionKey(
+  value: string,
+): { courseId: number; dateKey: string } | null {
+  const separator = value.indexOf(":");
+  if (separator <= 0) return null;
+  const courseId = Number(value.slice(0, separator));
+  const dateKey = value.slice(separator + 1);
+  if (!Number.isFinite(courseId) || !dateKey) return null;
+  return { courseId, dateKey };
+}
+
+export function findOverrideForCourseDate(
+  overrides: CourseDateOverride[],
+  courseId: number,
+  dateIso: string,
+): CourseDateOverride | undefined {
+  return overrides.find(
+    (o) => o.courseId === courseId && sameInstant(o.date, dateIso),
+  );
 }
 
 
@@ -117,41 +146,20 @@ function collectCourseDates(
   });
 }
 
-function hasExistingWaitlist(
-  overrides: CourseDateOverride[],
-  courseId: number,
-  date: Date,
-): boolean {
-  const override = overrides.find(
-    (o) => o.courseId === courseId && sameInstant(o.date, date),
-  );
-  return (override?.waitlist?.length ?? 0) > 0;
-}
-
 function isWaitlistSwapTarget(
   entry: {
-    course: Course;
-    date: Date;
     regularFull: boolean;
-    maxFull: boolean;
     userAlreadyInThisCourse: boolean;
     targetInCutoff: boolean;
   },
-  overrides: CourseDateOverride[],
 ): boolean {
   if (!entry.regularFull || entry.userAlreadyInThisCourse || entry.targetInCutoff) {
     return false;
   }
 
-  if (!entry.maxFull) {
-    return true;
-  }
-
-  if (resolveOverbookLimit(entry.course) === 0) {
-    return true;
-  }
-
-  return hasExistingWaitlist(overrides, entry.course.id, entry.date);
+  // Regulär volle Termine sind Wartelisten-Ziele — auch bei ausgeschöpfter Überplanung.
+  // Nachrücken erfolgt erst unter regulärer capacity (canPromoteFromWaitlist).
+  return true;
 }
 
 /** freie Termine (nur reguläre Kapazität, keine Überplanungs-Slots) */
@@ -196,6 +204,6 @@ export function getWaitlistDates(
     now,
     tenantSettings,
   )
-    .filter((entry) => isWaitlistSwapTarget(entry, overrides))
+    .filter((entry) => isWaitlistSwapTarget(entry))
     .map(({ course, date, time }) => ({ course, date, time }));
 }
