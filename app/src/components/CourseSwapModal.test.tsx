@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import CourseSwapModal from "./CourseSwapModal";
 import type { Course } from "shared/types";
+import { swapOptionKey } from "../lib/dates";
 
 const baseCourse: Course = {
   tenantId: "default-tenant",
@@ -151,11 +152,36 @@ describe("CourseSwapModal", () => {
     const { onConfirmFree, onClose } = renderSwapModal();
 
     fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: freeTargetDate.toISOString() },
+      target: { value: swapOptionKey(2, freeTargetDate) },
     });
     fireEvent.click(screen.getByRole("button", { name: /Bestätigen/i }));
 
     expect(onConfirmFree).toHaveBeenCalledWith(2, "2099-06-20");
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("unterscheidet zwei Kurse am selben Zeitpunkt in der Warteliste", () => {
+    const sharedDate = new Date(2099, 5, 20, 10, 0, 0);
+    const secondCourse: Course = {
+      ...alternativeCourse,
+      id: 3,
+      name: "Yoga Mittag",
+      dates: ["2099-06-20"],
+    };
+    const { onConfirmWaitlist } = renderSwapModal({
+      availableSwapDates: [],
+      waitlistDates: [
+        { course: alternativeCourse, date: sharedDate },
+        { course: secondCourse, date: sharedDate },
+      ],
+    });
+
+    const waitlistSelect = screen.getAllByRole("combobox")[0];
+    fireEvent.change(waitlistSelect, {
+      target: { value: swapOptionKey(3, sharedDate) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Bestätigen/i }));
+
+    expect(onConfirmWaitlist).toHaveBeenCalledWith(3, "2099-06-20");
   });
 });

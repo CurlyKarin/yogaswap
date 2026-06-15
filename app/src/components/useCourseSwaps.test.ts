@@ -366,6 +366,218 @@ describe("useCourseSwaps", () => {
     expect(processPromotions).toHaveBeenCalledTimes(1);
   });
 
+  it("cancelSwap vom Ursprung bereinigt Wartelisten aller pending Ziele", async () => {
+    const targetCourseA: Course = {
+      ...course,
+      id: 2,
+      name: "Yoga A",
+      dates: ["2099-06-17"],
+      participants: ["bob"],
+    };
+    const targetCourseB: Course = {
+      ...course,
+      id: 3,
+      name: "Yoga B",
+      dates: ["2099-06-17"],
+      participants: ["carol"],
+    };
+    const overrideA: CourseDateOverride = {
+      courseId: 2,
+      date: "2099-06-17",
+      participants: ["bob"],
+      swapped: [],
+      waitlist: ["alice"],
+    };
+    const overrideB: CourseDateOverride = {
+      courseId: 3,
+      date: "2099-06-17",
+      participants: ["carol"],
+      swapped: [],
+      waitlist: ["alice"],
+    };
+    const pendingToA: Swap = {
+      user: "alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 2,
+      toDate: "2099-06-17",
+      status: "pending",
+    };
+    const pendingToB: Swap = {
+      user: "alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 3,
+      toDate: "2099-06-17",
+      status: "pending",
+    };
+
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    let latestOverrides: CourseDateOverride[] = [baseOverride, overrideA, overrideB];
+    const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) => {
+      latestOverrides = updater(latestOverrides);
+    });
+    const setSwaps = vi.fn();
+
+    (processPromotions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      swaps: [],
+      overrides: [],
+    });
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course, targetCourseA, targetCourseB],
+        latestOverrides,
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [pendingToA, pendingToB],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.cancelSwap(pendingToA, 1);
+    });
+
+    expect(deleteSwap).toHaveBeenCalledTimes(2);
+    expect(updateOverride).toHaveBeenCalledWith(
+      2,
+      "2099-06-17",
+      expect.objectContaining({ waitlist: [] }),
+    );
+    expect(updateOverride).toHaveBeenCalledWith(
+      3,
+      "2099-06-17",
+      expect.objectContaining({ waitlist: [] }),
+    );
+  });
+
+  it("cancelSwap pending sendet nur Wartelisten-Patch bei vollem Termin", async () => {
+    const targetCourse: Course = {
+      ...course,
+      id: 2,
+      capacity: 2,
+      participants: ["bob", "carol"],
+      dates: ["2099-06-17"],
+    };
+    const fullOverride: CourseDateOverride = {
+      courseId: 2,
+      date: "2099-06-17",
+      participants: ["bob", "carol"],
+      swapped: [],
+      waitlist: ["alice"],
+    };
+    const pendingToTarget: Swap = {
+      ...pendingSwap,
+      toCourseId: 2,
+      toDate: "2099-06-17",
+    };
+
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn();
+    const setSwaps = vi.fn();
+
+    (processPromotions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      swaps: [],
+      overrides: [],
+    });
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course, targetCourse],
+        [baseOverride, fullOverride],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [pendingToTarget],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.cancelSwap(pendingToTarget, 1);
+    });
+
+    expect(updateOverride).toHaveBeenCalledWith(2, "2099-06-17", { waitlist: [] });
+    expect(updateOverride).not.toHaveBeenCalledWith(
+      2,
+      "2099-06-17",
+      expect.objectContaining({ participants: expect.anything() }),
+    );
+  });
+
+  it("requestSwap erstellt Swap erneut bei verwaistem Wartelisten-Eintrag", async () => {
+    const targetCourse: Course = {
+      ...course,
+      id: 2,
+      capacity: 2,
+      participants: ["bob", "carol"],
+      dates: ["2099-06-17"],
+    };
+    const orphanedOverride: CourseDateOverride = {
+      courseId: 2,
+      date: "2099-06-17",
+      participants: ["bob", "carol"],
+      swapped: [],
+      waitlist: ["alice"],
+    };
+
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn();
+    const setSwaps = vi.fn();
+
+    (processPromotions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      swaps: [
+        {
+          ...pendingSwap,
+          toCourseId: 2,
+          toDate: "2099-06-17",
+          status: "pending",
+        },
+      ],
+      overrides: [orphanedOverride],
+    });
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course, targetCourse],
+        [baseOverride, orphanedOverride],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.requestSwap(course, "2099-06-16", 2, "2099-06-17", baseUser.nickname);
+    });
+
+    expect(updateOverride).not.toHaveBeenCalled();
+    expect(createSwap).toHaveBeenCalledTimes(1);
+    expect(processPromotions).toHaveBeenCalledTimes(1);
+  });
+
   it("cancelSwap blockiert Abbrechen bei vergangenem Ursprung und Ziel", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 0, 1, 12, 0));

@@ -41,7 +41,36 @@ export function sameInstant(a: Date | string, b: Date | string): boolean {
 
 export function toDateKey(date: Date): string {
   if (isNaN(date.getTime())) return ""; // ungültiges Datum → kein Crash
-  return date.toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Eindeutiger Select-Wert für Tauschziele (Kurs + lokales Datum). */
+export function swapOptionKey(courseId: number, date: Date): string {
+  return `${courseId}:${toDateKey(date)}`;
+}
+
+export function parseSwapOptionKey(
+  value: string,
+): { courseId: number; dateKey: string } | null {
+  const separator = value.indexOf(":");
+  if (separator <= 0) return null;
+  const courseId = Number(value.slice(0, separator));
+  const dateKey = value.slice(separator + 1);
+  if (!Number.isFinite(courseId) || !dateKey) return null;
+  return { courseId, dateKey };
+}
+
+export function findOverrideForCourseDate(
+  overrides: CourseDateOverride[],
+  courseId: number,
+  dateIso: string,
+): CourseDateOverride | undefined {
+  return overrides.find(
+    (o) => o.courseId === courseId && sameInstant(o.date, dateIso),
+  );
 }
 
 
@@ -117,6 +146,22 @@ function collectCourseDates(
   });
 }
 
+function isWaitlistSwapTarget(
+  entry: {
+    regularFull: boolean;
+    userAlreadyInThisCourse: boolean;
+    targetInCutoff: boolean;
+  },
+): boolean {
+  if (!entry.regularFull || entry.userAlreadyInThisCourse || entry.targetInCutoff) {
+    return false;
+  }
+
+  // Regulär volle Termine sind Wartelisten-Ziele — auch bei ausgeschöpfter Überplanung.
+  // Nachrücken erfolgt erst unter regulärer capacity (canPromoteFromWaitlist).
+  return true;
+}
+
 /** freie Termine (nur reguläre Kapazität, keine Überplanungs-Slots) */
 export function getAvailableDates(
   allCourses: Course[],
@@ -140,7 +185,7 @@ export function getAvailableDates(
     .map(({ course, date, time }) => ({ course, date, time }));
 }
 
-/** regulär volle Termine mit Überplanungs-Freiraum → Warteliste; bei maxCapacity ausgeschlossen */
+/** regulär volle Termine als Wartelisten-Ziel (Nachrücken / Ringtausch-Vorbereitung) */
 export function getWaitlistDates(
   allCourses: Course[],
   overrides: CourseDateOverride[],
@@ -159,8 +204,6 @@ export function getWaitlistDates(
     now,
     tenantSettings,
   )
-    .filter(
-      (x) => x.regularFull && !x.maxFull && !x.userAlreadyInThisCourse && !x.targetInCutoff,
-    )
+    .filter((entry) => isWaitlistSwapTarget(entry))
     .map(({ course, date, time }) => ({ course, date, time }));
 }

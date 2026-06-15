@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   getCourseDates,
   toDateKey,
+  swapOptionKey,
+  parseSwapOptionKey,
+  findOverrideForCourseDate,
   sameDayUTC,
   sameInstant,
   getAvailableDates,
@@ -28,9 +31,39 @@ describe("toDateKey", () => {
     expect(toDateKey(new Date("2025-06-15T14:30:00Z"))).toBe("2025-06-15");
   });
 
+  it("nutzt lokales Kalenderdatum", () => {
+    expect(toDateKey(new Date(2025, 5, 15, 23, 30, 0))).toBe("2025-06-15");
+  });
+
   it("gibt leeren String für Invalid Date zurück (kein Crash)", () => {
     expect(toDateKey(new Date(""))).toBe("");
     expect(toDateKey(new Date(NaN))).toBe("");
+  });
+});
+
+describe("swapOptionKey", () => {
+  it("kombiniert Kurs-ID und lokales Datum", () => {
+    const date = new Date(2099, 5, 20, 10, 0, 0);
+    expect(swapOptionKey(2, date)).toBe("2:2099-06-20");
+    expect(parseSwapOptionKey("2:2099-06-20")).toEqual({ courseId: 2, dateKey: "2099-06-20" });
+  });
+});
+
+describe("findOverrideForCourseDate", () => {
+  it("findet Override per Kalendertag, nicht nur exaktem String", () => {
+    const overrides = [
+      {
+        courseId: 2,
+        date: "2025-06-16",
+        participants: ["bob"],
+        swapped: [],
+        waitlist: [],
+      },
+    ];
+    expect(findOverrideForCourseDate(overrides, 2, "2025-06-16")).toEqual(overrides[0]);
+    expect(findOverrideForCourseDate(overrides, 2, new Date(2025, 5, 16, 10, 0, 0).toISOString())).toEqual(
+      overrides[0],
+    );
   });
 });
 
@@ -212,7 +245,7 @@ describe("getAvailableDates / getWaitlistDates", () => {
     expect(available.map((entry) => entry.course.id)).toEqual([11]);
   });
 
-  it("excludes overbook-only slots from swap targets; waitlist until maxCapacity", () => {
+  it("excludes overbook-only slots from direct swap; waitlist for all regularly full targets", () => {
     const referenceDate = new Date("2025-06-15");
     const overbookCourse: Course = {
       ...course,
@@ -268,7 +301,97 @@ describe("getAvailableDates / getWaitlistDates", () => {
     expect(atRegularCapacity).toHaveLength(0);
     expect(waitlistWithOverbookHeadroom).toHaveLength(1);
     expect(fullAtMax).toHaveLength(0);
-    expect(noWaitlistAtMax).toHaveLength(0);
+    expect(noWaitlistAtMax).toHaveLength(1);
+  });
+
+  it("includes max-full overbooked courses without existing waitlist", () => {
+    const referenceDate = new Date("2025-06-15");
+    const overbookCourse: Course = {
+      ...course,
+      id: 24,
+      capacity: 2,
+      overbookLimit: 1,
+      participants: ["a", "b"],
+      dates: ["2025-06-16"],
+    };
+    const fullOverride: CourseDateOverride[] = [
+      {
+        courseId: 24,
+        date: "2025-06-16",
+        participants: ["a", "b", "c"],
+        swapped: [],
+        waitlist: [],
+      },
+    ];
+
+    const waitlist = getWaitlistDates(
+      [overbookCourse],
+      fullOverride,
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
+
+    expect(waitlist).toHaveLength(1);
+    expect(waitlist[0]?.course.id).toBe(24);
+  });
+
+  it("includes regularly full courses without overbookLimit as waitlist targets", () => {
+    const referenceDate = new Date("2025-06-15");
+    const fullCourse: Course = {
+      ...course,
+      id: 22,
+      capacity: 2,
+      overbookLimit: 0,
+      participants: ["a", "b"],
+      dates: ["2025-06-16"],
+    };
+
+    const waitlist = getWaitlistDates(
+      [fullCourse],
+      [],
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
+
+    expect(waitlist).toHaveLength(1);
+    expect(waitlist[0]?.course.id).toBe(22);
+  });
+
+  it("includes max-full courses with an existing waitlist when overbookLimit > 0", () => {
+    const referenceDate = new Date("2025-06-15");
+    const overbookCourse: Course = {
+      ...course,
+      id: 23,
+      capacity: 2,
+      overbookLimit: 1,
+      participants: ["a", "b"],
+      dates: ["2025-06-16"],
+    };
+    const fullOverride: CourseDateOverride[] = [
+      {
+        courseId: 23,
+        date: "2025-06-16",
+        participants: ["a", "b", "c"],
+        swapped: [],
+        waitlist: ["luna"],
+      },
+    ];
+
+    const waitlist = getWaitlistDates(
+      [overbookCourse],
+      fullOverride,
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
+
+    expect(waitlist).toHaveLength(1);
+    expect(waitlist[0]?.course.id).toBe(23);
   });
 
   it("excludes targets inside cutoff from available and waitlist", () => {

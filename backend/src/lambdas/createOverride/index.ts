@@ -1,10 +1,22 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
+import { mapOverrideItem, mapStringList } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
+
+function normalizedRoster(values: string[]): string[] {
+  return values.map((entry) => entry.trim().toLowerCase()).sort();
+}
+
+function sameParticipantRoster(a: string[], b: string[]): boolean {
+  const left = normalizedRoster(a);
+  const right = normalizedRoster(b);
+  return left.length === right.length && left.every((entry, index) => entry === right[index]);
+}
 
 const client = dynamoClient;
 
@@ -65,9 +77,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 404, body: JSON.stringify({ error: 'Course not found' }) };
     }
     const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
+    const baseParticipants = mapStringList(courseResp.Item.participants);
     const capacityError = validateParticipantsForCourse(participants, capacityFields);
-    if (capacityError) {
+    const waitlistEnrollmentOnly =
+      waitlist.length > 0 &&
+      swapped.length === 0 &&
+      sameParticipantRoster(participants, baseParticipants);
+    if (capacityError && !waitlistEnrollmentOnly) {
       return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+    }
+
+    const existingResp = await client.send(
+      new GetItemCommand({
+        TableName: tableName,
+        Key: {
+          tenantId: { S: tenantId },
+          courseId_date: { S: courseId_date },
+        },
+        ConsistentRead: true,
+      }),
+    );
+    if (existingResp.Item) {
+      return {
+        statusCode: 409,
+        body: JSON.stringify({
+          error: 'Override already exists',
+          override: mapOverrideItem(existingResp.Item),
+        }),
+      };
     }
 
     const courseUid = await fetchCourseUidByLegacyCourseId(client, coursesTable, tenantId, legacyCourseId);
@@ -86,7 +123,23 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ...(courseUid ? { courseUid: { S: courseUid } } : {}),
     };
 
-    await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));
+    try {
+      await client.send(
+        new PutItemCommand({
+          TableName: tableName,
+          Item: dynamoItem,
+          ConditionExpression: 'attribute_not_exists(courseId_date)',
+        }),
+      );
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        return {
+          statusCode: 409,
+          body: JSON.stringify({ error: 'Override already exists' }),
+        };
+      }
+      throw error;
+    }
     return { statusCode: 200, body: JSON.stringify({ message: 'Override created' }) };
   } catch (error) {
     console.error('Error creating override:', error);
