@@ -1,6 +1,6 @@
 // lib/dates.ts
 import { CourseDateOverride, Course, User, TenantSettings } from "shared/types";
-import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
+import { isAtMaxCapacity, isAtRegularCapacity, resolveOverbookLimit } from "shared/courseCapacity";
 import { isSwapTargetInCutoffWindow } from "shared/cancellationSwapCutoff";
 import { buildCourseOccurrenceLocal } from "shared/courseStatus";
 import type { SwapSettings } from "../types";
@@ -117,6 +117,43 @@ function collectCourseDates(
   });
 }
 
+function hasExistingWaitlist(
+  overrides: CourseDateOverride[],
+  courseId: number,
+  date: Date,
+): boolean {
+  const override = overrides.find(
+    (o) => o.courseId === courseId && sameInstant(o.date, date),
+  );
+  return (override?.waitlist?.length ?? 0) > 0;
+}
+
+function isWaitlistSwapTarget(
+  entry: {
+    course: Course;
+    date: Date;
+    regularFull: boolean;
+    maxFull: boolean;
+    userAlreadyInThisCourse: boolean;
+    targetInCutoff: boolean;
+  },
+  overrides: CourseDateOverride[],
+): boolean {
+  if (!entry.regularFull || entry.userAlreadyInThisCourse || entry.targetInCutoff) {
+    return false;
+  }
+
+  if (!entry.maxFull) {
+    return true;
+  }
+
+  if (resolveOverbookLimit(entry.course) === 0) {
+    return true;
+  }
+
+  return hasExistingWaitlist(overrides, entry.course.id, entry.date);
+}
+
 /** freie Termine (nur reguläre Kapazität, keine Überplanungs-Slots) */
 export function getAvailableDates(
   allCourses: Course[],
@@ -140,7 +177,7 @@ export function getAvailableDates(
     .map(({ course, date, time }) => ({ course, date, time }));
 }
 
-/** regulär volle Termine mit Überplanungs-Freiraum → Warteliste; bei maxCapacity ausgeschlossen */
+/** regulär volle Termine als Wartelisten-Ziel (Nachrücken / Ringtausch-Vorbereitung) */
 export function getWaitlistDates(
   allCourses: Course[],
   overrides: CourseDateOverride[],
@@ -159,8 +196,6 @@ export function getWaitlistDates(
     now,
     tenantSettings,
   )
-    .filter(
-      (x) => x.regularFull && !x.maxFull && !x.userAlreadyInThisCourse && !x.targetInCutoff,
-    )
+    .filter((entry) => isWaitlistSwapTarget(entry, overrides))
     .map(({ course, date, time }) => ({ course, date, time }));
 }

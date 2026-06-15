@@ -271,6 +271,63 @@ describe("getAvailableDates / getWaitlistDates", () => {
     expect(noWaitlistAtMax).toHaveLength(0);
   });
 
+  it("includes regularly full courses without overbookLimit as waitlist targets", () => {
+    const referenceDate = new Date("2025-06-15");
+    const fullCourse: Course = {
+      ...course,
+      id: 22,
+      capacity: 2,
+      overbookLimit: 0,
+      participants: ["a", "b"],
+      dates: ["2025-06-16"],
+    };
+
+    const waitlist = getWaitlistDates(
+      [fullCourse],
+      [],
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
+
+    expect(waitlist).toHaveLength(1);
+    expect(waitlist[0]?.course.id).toBe(22);
+  });
+
+  it("includes max-full courses with an existing waitlist when overbookLimit > 0", () => {
+    const referenceDate = new Date("2025-06-15");
+    const overbookCourse: Course = {
+      ...course,
+      id: 23,
+      capacity: 2,
+      overbookLimit: 1,
+      participants: ["a", "b"],
+      dates: ["2025-06-16"],
+    };
+    const fullOverride: CourseDateOverride[] = [
+      {
+        courseId: 23,
+        date: "2025-06-16",
+        participants: ["a", "b", "c"],
+        swapped: [],
+        waitlist: ["luna"],
+      },
+    ];
+
+    const waitlist = getWaitlistDates(
+      [overbookCourse],
+      fullOverride,
+      currentUser,
+      swapSettings,
+      referenceDate,
+      TEST_NOW,
+    );
+
+    expect(waitlist).toHaveLength(1);
+    expect(waitlist[0]?.course.id).toBe(23);
+  });
+
   it("excludes targets inside cutoff from available and waitlist", () => {
     const referenceDate = new Date("2025-06-14");
     const nowInCutoff = new Date(2025, 5, 15, 9, 30);
