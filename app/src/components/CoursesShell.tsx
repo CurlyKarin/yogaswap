@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import CourseList from "./CourseList";
 import CourseWeekView from "./CourseWeekView";
 import { User, Tenant, UserTenantMembership, DEFAULT_TENANT_ID } from "shared/types";
 import { addWeeks, formatWeekNavLabel, startOfWeekMonday } from "../lib/courseWeek";
+import {
+  buildWeekAnchorStorageKey,
+  clampWeekAnchor,
+  readStoredWeekAnchor,
+  resolveInitialWeekAnchor,
+  writeStoredWeekAnchor,
+} from "../lib/weekNavPersistence";
+import { getActorUserId } from "../api/delegation";
 import { useCoursesData } from "../hooks/useCoursesData";
 
 export type CourseViewMode = "week" | "courses";
@@ -33,8 +41,18 @@ export default function CoursesShell({
   const resolvedRole = effectiveMembership?.role ?? currentUser.role;
   const canSeeCourseManagement = resolvedRole === "admin" || resolvedRole === "instructor";
 
+  const weekAnchorStorageKey = useMemo(() => {
+    const tenantId = tenant?.tenantId ?? membership?.tenantId ?? DEFAULT_TENANT_ID;
+    const userId = getActorUserId() ?? currentUser.nickname;
+    return buildWeekAnchorStorageKey(tenantId, userId);
+  }, [tenant?.tenantId, membership?.tenantId, currentUser.nickname]);
+
   const [viewMode, setViewMode] = useState<CourseViewMode>("week");
-  const [weekAnchor, setWeekAnchor] = useState(() => startOfWeekMonday(new Date()));
+  const [weekAnchor, setWeekAnchorState] = useState(() => {
+    const stored = readStoredWeekAnchor(weekAnchorStorageKey);
+    return stored ?? startOfWeekMonday(new Date());
+  });
+  const prevWeekAnchorStorageKeyRef = useRef(weekAnchorStorageKey);
 
   const {
     loading,
@@ -56,6 +74,35 @@ export default function CoursesShell({
     forceParticipantView,
     weekAnchor,
   });
+
+  const setWeekAnchor = useCallback(
+    (update: Date | ((prev: Date) => Date)) => {
+      setWeekAnchorState((prev) => {
+        const next = typeof update === "function" ? update(prev) : update;
+        const clamped = clampWeekAnchor(next, earliestWeekAnchor);
+        writeStoredWeekAnchor(weekAnchorStorageKey, clamped);
+        return clamped;
+      });
+    },
+    [earliestWeekAnchor, weekAnchorStorageKey],
+  );
+
+  useEffect(() => {
+    if (prevWeekAnchorStorageKeyRef.current === weekAnchorStorageKey) return;
+    prevWeekAnchorStorageKeyRef.current = weekAnchorStorageKey;
+    const resolved = resolveInitialWeekAnchor(weekAnchorStorageKey, earliestWeekAnchor);
+    setWeekAnchorState(resolved);
+    writeStoredWeekAnchor(weekAnchorStorageKey, resolved);
+  }, [weekAnchorStorageKey, earliestWeekAnchor]);
+
+  useEffect(() => {
+    setWeekAnchorState((prev) => {
+      const clamped = clampWeekAnchor(prev, earliestWeekAnchor);
+      if (clamped.getTime() === prev.getTime()) return prev;
+      writeStoredWeekAnchor(weekAnchorStorageKey, clamped);
+      return clamped;
+    });
+  }, [earliestWeekAnchor, weekAnchorStorageKey]);
 
   useEffect(() => {
     if (!canSeeCourseManagement && viewMode === "courses") {
