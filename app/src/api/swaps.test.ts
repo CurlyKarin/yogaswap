@@ -6,6 +6,7 @@ import {
   deleteSwap,
   getSwapsByStatus,
   processPromotions,
+  processRingSwaps,
 } from "./swaps";
 import axios from "axios";
 import { setActingForUserId } from "./delegation";
@@ -225,5 +226,37 @@ describe("processPromotions", () => {
     vi.mocked(axios.post).mockRejectedValueOnce(new Error("Internal error"));
 
     await expect(processPromotions()).rejects.toThrow("Internal error");
+  });
+});
+
+describe("processRingSwaps", () => {
+  beforeEach(() => {
+    vi.mocked(axios.post).mockReset();
+  });
+
+  it("ruft POST /process-ring-swaps auf und gibt response.data zurück", async () => {
+    const payload = {
+      message: "Ring swap analysis complete",
+      diagnostics: {
+        pendingSwaps: 2,
+        graphNodes: 2,
+        graphEdges: 2,
+        detectedCycles: 1,
+        selectedCycles: 1,
+        droppedSwaps: 0,
+      },
+    };
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: payload });
+
+    const result = await processRingSwaps();
+
+    expect(axios.post).toHaveBeenCalledWith("/process-ring-swaps", {});
+    expect(result).toEqual(payload);
+  });
+
+  it("wirft bei Fehler den Fehler weiter", async () => {
+    vi.mocked(axios.post).mockRejectedValueOnce(new Error("Internal error"));
+
+    await expect(processRingSwaps()).rejects.toThrow("Internal error");
   });
 });

@@ -141,3 +141,33 @@ export async function processPromotions(): Promise<{
     throw error;
   }
 }
+
+export async function processRingSwaps(): Promise<{
+  message: string;
+  diagnostics: {
+    pendingSwaps: number;
+    graphNodes: number;
+    graphEdges: number;
+    detectedCycles: number;
+    selectedCycles: number;
+    droppedSwaps: number;
+  };
+}> {
+  try {
+    const response = await axios.post<{
+      message: string;
+      diagnostics: {
+        pendingSwaps: number;
+        graphNodes: number;
+        graphEdges: number;
+        detectedCycles: number;
+        selectedCycles: number;
+        droppedSwaps: number;
+      };
+    }>("/process-ring-swaps", {});
+    return response.data;
+  } catch (error) {
+    console.error("Failed to process ring swaps:", error);
+    throw error;
+  }
+}

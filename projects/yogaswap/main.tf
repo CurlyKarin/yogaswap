@@ -159,6 +159,17 @@ locals {
       s3_actions   = []
       s3_resources = []
     },
+    "process_ring_swaps" = {
+      name             = "process-ring-swaps"
+      file_name        = "processRingSwaps.zip"
+      table_arns       = [module.swaps_table.table_arn]
+      dynamodb_actions = ["dynamodb:Query"]
+      tables = {
+        "SWAPS_TABLE" = module.swaps_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+    },
     "get_courses" = {
       name             = "get-courses"
       file_name        = "getCourses.zip"
@@ -496,6 +507,7 @@ locals {
     "PUT /course-overrides/{courseId}/{date}"    = "update_override"
     "DELETE /course-overrides/{courseId}/{date}" = "delete_override"
     "POST /process-promotions"                   = "process_promotions"
+    "POST /process-ring-swaps"                   = "process_ring_swaps"
     "GET /courses"                               = "get_courses"
     "POST /courses"                              = "create_course"
     "PUT /courses/{courseId}"                    = "update_course"

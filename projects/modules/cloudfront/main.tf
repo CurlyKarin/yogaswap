@@ -147,6 +147,20 @@ resource "aws_cloudfront_distribution" "spa" {
     compress = true
   }
   ordered_cache_behavior {
+    path_pattern     = "/process-ring-swaps*"
+    allowed_methods  = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "api-gateway-backend"
+    viewer_protocol_policy = "redirect-to-https"
+    forwarded_values {
+      query_string = true
+      cookies {
+        forward = "none"
+      }
+    }
+    compress = true
+  }
+  ordered_cache_behavior {
     path_pattern     = "/courses*"
     allowed_methods  = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"]
     cached_methods   = ["GET", "HEAD"]

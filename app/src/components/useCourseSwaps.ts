@@ -16,7 +16,7 @@ import {
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
 import { hasRegularBookingCapacity, resolveMaxCapacity } from "shared/courseCapacity";
-import { createSwap, deleteSwap, processPromotions } from "../api/swaps";
+import { createSwap, deleteSwap, processPromotions, processRingSwaps } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
 
 function overrideMatchesCourseDate(
@@ -925,6 +925,15 @@ export function useCourseSwaps(
           ...swapCourseUidFields(fromCourse, targetCourse),
         };
         await createSwap(newSwap);
+
+        console.log("Calling processRingSwaps for requestSwap...");
+        try {
+          const ringResult = await processRingSwaps();
+          console.log("processRingSwaps response:", ringResult);
+        } catch (ringError) {
+          // Ringtausch-Analyse ist entkoppelt; Fehler blockieren den normalen Promotion-Flow nicht.
+          console.warn("processRingSwaps failed, continue with processPromotions", ringError);
+        }
 
         console.log('Calling processPromotions for requestSwap...');
         const response = await processPromotions();
