@@ -7,6 +7,7 @@ vi.mock("../api/swaps", () => ({
   createSwap: vi.fn(),
   deleteSwap: vi.fn(),
   processPromotions: vi.fn(),
+  processRingSwaps: vi.fn(),
 }));
 
 vi.mock("../api/overrides", () => ({
@@ -18,7 +19,7 @@ vi.mock("../lib/waitlist", () => ({
   getEffectiveWaitlist: vi.fn().mockReturnValue([]),
 }));
 
-const { createSwap, deleteSwap, processPromotions } = await import("../api/swaps");
+const { createSwap, deleteSwap, processPromotions, processRingSwaps } = await import("../api/swaps");
 const { createOverride, updateOverride } = await import("../api/overrides");
 
 const baseUser: User = {
@@ -61,6 +62,17 @@ describe("useCourseSwaps", () => {
     vi.clearAllMocks();
     (updateOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (createOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (processRingSwaps as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      message: "Ring swap analysis complete",
+      diagnostics: {
+        pendingSwaps: 0,
+        graphNodes: 0,
+        graphEdges: 0,
+        detectedCycles: 0,
+        selectedCycles: 0,
+        droppedSwaps: 0,
+      },
+    });
   });
 
   afterEach(() => {
@@ -147,7 +159,7 @@ describe("useCourseSwaps", () => {
     expect(processPromotions).toHaveBeenCalledTimes(1);
   });
 
-  it("requestSwap legt Swap mit Status 'pending' an und ruft processPromotions auf", async () => {
+  it("requestSwap legt Swap mit Status 'pending' an und ruft Ringtausch + Promotions auf", async () => {
     const fetchData = vi.fn().mockResolvedValue(undefined);
     const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
       updater([baseOverride]),
@@ -184,6 +196,7 @@ describe("useCourseSwaps", () => {
     expect(createSwap).toHaveBeenCalledTimes(1);
     const [swapArg] = (createSwap as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect((swapArg as Swap).status).toBe("pending");
+    expect(processRingSwaps).toHaveBeenCalledTimes(1);
     expect(processPromotions).toHaveBeenCalledTimes(1);
   });
 
