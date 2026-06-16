@@ -60,11 +60,11 @@ Pro Lauf werden feste Grenzen eingehalten:
 
 Bei Ueberschreitung: keine Teilanwendung, stattdessen sauber loggen und Lauf beenden.
 
-## Anwendung auf Daten (Abgrenzung)
+## Anwendung auf Daten
 
-- Diese Engine bestimmt gueltige Tauschzyklen.
-- Die atomare Mutation von `swaps`/`overrides` passiert in der Ausfuehrungsschicht
-  (Subticket #221).
+- `processRingSwaps` erkennt gueltige Zyklen und wendet sie atomar an (`TransactWriteItems` pro Zyklus).
+- Beteiligte Swaps werden von `pending` auf `active` gesetzt; Overrides (participants/swapped/waitlist) werden konsistent aktualisiert.
+- Schlaegt ein Zyklus fehl (Validierung oder Transaktionskonflikt), wird er verworfen — kein Halbzustand.
 - Normales Wartelisten-Nachruecken bleibt in `processPromotions` und wird nicht ersetzt.
 
 ## Ueberplanung und Ringtausch
