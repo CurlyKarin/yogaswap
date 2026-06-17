@@ -4,6 +4,7 @@ import React from "react";
 import CourseSwapModal from "./CourseSwapModal";
 import type { Course } from "shared/types";
 import { swapOptionKey } from "../lib/dates";
+import { DIRECT_SWAP_WARNINGS, SWAP_REQUEST_WARNINGS } from "../lib/swapRequestWarnings";
 
 const baseCourse: Course = {
   tenantId: "default-tenant",
@@ -146,6 +147,40 @@ describe("CourseSwapModal", () => {
     fireEvent.keyDown(dialog, { key: "Tab" });
     expect(document.activeElement).not.toBe(closeButton);
     expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it("zeigt Hinweise vor Bestätigung eines freien Termins", () => {
+    renderSwapModal();
+
+    expect(screen.queryByRole("note", { name: /Hinweise vor dem Tausch/i })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: swapOptionKey(2, freeTargetDate) },
+    });
+
+    const notice = screen.getByRole("note", { name: /Hinweise vor dem Tausch/i });
+    for (const warning of DIRECT_SWAP_WARNINGS) {
+      expect(notice).toHaveTextContent(warning);
+    }
+  });
+
+  it("zeigt Hinweise vor Bestätigung einer Wartelisten-Anfrage", () => {
+    const waitlistDate = new Date("2099-06-20T10:00:00Z");
+    renderSwapModal({
+      availableSwapDates: [],
+      waitlistDates: [{ course: alternativeCourse, date: waitlistDate }],
+    });
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: swapOptionKey(2, waitlistDate) },
+    });
+
+    const notice = screen.getByRole("note", { name: /Hinweise vor dem Tausch/i });
+    for (const warning of SWAP_REQUEST_WARNINGS) {
+      expect(notice).toHaveTextContent(warning);
+    }
+    expect(notice).toHaveTextContent(/automatisch ausgeführt/i);
+    expect(notice).toHaveTextContent(/E-Mail-Benachrichtigung/i);
   });
 
   it("ruft onConfirmFree nach Terminauswahl auf", () => {

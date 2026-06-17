@@ -2,6 +2,7 @@ import { useCallback, useId, useRef, useState, type KeyboardEvent, type ReactNod
 import { formatCourseIsoDateDe } from "shared/courseStatus";
 import type { Course } from "shared/types";
 import { parseSwapOptionKey, swapOptionKey, toDateKey } from "../lib/dates";
+import { DIRECT_SWAP_WARNINGS, SWAP_REQUEST_WARNINGS } from "../lib/swapRequestWarnings";
 import { focusWithVisibleRing } from "../lib/focusWithVisibleRing";
 import type { SwapSettings } from "../types";
 import CourseModalFrame from "./CourseModalFrame";
@@ -166,6 +167,12 @@ export default function CourseSwapModal({
     );
   };
 
+  const selectedWarnings = swapDateIsoWaitlist
+    ? SWAP_REQUEST_WARNINGS
+    : swapDateIso
+      ? DIRECT_SWAP_WARNINGS
+      : null;
+
   const handleConfirm = () => {
     if (swapDateIso) {
       const target = resolveTarget(swapDateIso, availableSwapDates);
@@ -299,6 +306,17 @@ export default function CourseSwapModal({
         </>
       ) : (
         <p className="muted">Keine passenden Ersatztermine verfügbar</p>
+      )}
+
+      {selectedWarnings && (
+        <div className="swap-modal-notice" role="note" aria-label="Hinweise vor dem Tausch">
+          <p className="swap-modal-notice-title">Bitte beachten:</p>
+          <ul>
+            {selectedWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="modal-actions">

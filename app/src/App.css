@@ -1375,6 +1375,30 @@ a:focus-visible {
   margin: 0;
 }
 
+.swap-modal-notice {
+  margin-top: 1rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid #e8d9a8;
+  background: #fff9e8;
+  color: #5c4a12;
+  font-size: 0.9rem;
+}
+
+.swap-modal-notice-title {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.swap-modal-notice ul {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.swap-modal-notice li + li {
+  margin-top: 0.35rem;
+}
+
 /* Responsive */
 @media (max-width: 1023px) {
   .grid { grid-template-columns: repeat(2, 1fr); }
