@@ -1,6 +1,6 @@
 import type { Course, Swap } from "@yogaswap/shared";
 import type { RingCycle } from "./ringSwapGraph";
-import { formatCycleChain, formatSwapLeg } from "./ringSwapLogging";
+import { formatCycleChain, formatSwapLeg, logRingSwapRun } from "./ringSwapLogging";
 
 const courses: Course[] = [
   {
@@ -54,5 +54,61 @@ describe("ringSwapLogging", () => {
       ],
     };
     expect(formatCycleChain(cycle)).toBe("Alice → Bob → Alice");
+  });
+
+  test("logRingSwapRun writes summary and executed JSON", () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    logRingSwapRun({
+      tenantId: "default-tenant",
+      diagnostics: {
+        pendingSwaps: 2,
+        graphNodes: 2,
+        graphEdges: 2,
+        detectedCycles: 1,
+        selectedCycles: 1,
+        executedCycles: 1,
+        rejectedCycles: 0,
+        droppedSwaps: 0,
+      },
+      executedRings: [
+        {
+          chain: "Alice → Bob → Alice",
+          activated: ["Alice: A @ d1 → B @ d2"],
+          deletedAlternates: [],
+          overridesUpdated: 2,
+        },
+      ],
+    });
+
+    expect(logSpy).toHaveBeenCalledTimes(2);
+    expect(logSpy.mock.calls[0]?.[0]).toContain("1 Ring ausgeführt");
+    expect(logSpy.mock.calls[1]?.[0]).toContain('"event":"ring_swap_executed"');
+
+    logSpy.mockRestore();
+  });
+
+  test("logRingSwapRun writes rejected JSON with reason", () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    logRingSwapRun({
+      tenantId: "default-tenant",
+      diagnostics: {
+        pendingSwaps: 2,
+        graphNodes: 2,
+        graphEdges: 2,
+        detectedCycles: 1,
+        selectedCycles: 1,
+        executedCycles: 0,
+        rejectedCycles: 1,
+        droppedSwaps: 0,
+      },
+      rejectedRings: [{ chain: "Alice → Bob → Alice", reason: "Target cutoff blocks swap for Alice" }],
+    });
+
+    expect(logSpy.mock.calls[0]?.[0]).toContain("Zyklus verworfen");
+    expect(logSpy.mock.calls[1]?.[0]).toContain('"event":"ring_swap_rejected"');
+
+    logSpy.mockRestore();
   });
 });

@@ -205,9 +205,19 @@ export function planRingCycleExecution(
     if (!course) {
       return { ok: false, reason: `Course ${override.courseId} missing for override ${key}` };
     }
-    const capacityError = validateParticipantListSize(override.participants.length, course);
-    if (capacityError) {
-      return { ok: false, reason: `${capacityError} (${key})` };
+    const beforeOverride = resolveOverrideState(
+      override.courseId,
+      override.date,
+      ctx.overrides,
+      ctx.courses,
+    );
+    const beforeCount = beforeOverride.participants.length;
+    const afterCount = override.participants.length;
+    if (afterCount > beforeCount) {
+      const capacityError = validateParticipantListSize(afterCount, course);
+      if (capacityError) {
+        return { ok: false, reason: `${capacityError} (${key})` };
+      }
     }
   }
 

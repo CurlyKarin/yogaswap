@@ -376,6 +376,7 @@ describe("useCourseSwaps", () => {
     });
 
     expect(deleteSwap).toHaveBeenCalledTimes(1);
+    expect(processRingSwaps).toHaveBeenCalledTimes(1);
     expect(processPromotions).toHaveBeenCalledTimes(1);
   });
 
