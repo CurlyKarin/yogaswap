@@ -67,9 +67,10 @@ function buildOutcome(log: RingSwapRunLog): string {
 export function logRingSwapRun(log: RingSwapRunLog): void {
   const actor = log.userId ? ` actor=${log.userId}` : "";
   const d = log.diagnostics;
-  const rings =
-    log.executedRings?.map((ring) => ring.chain).join("; ") ??
-    log.rejectedRings?.map((ring) => ring.chain).join("; ");
+  const rings = [
+    ...(log.executedRings?.map((ring) => ring.chain) ?? []),
+    ...(log.rejectedRings?.map((ring) => ring.chain) ?? []),
+  ].join("; ");
 
   const summary =
     `[processRingSwaps] tenant=${log.tenantId}${actor} | ${buildOutcome(log)}` +
@@ -86,6 +87,17 @@ export function logRingSwapRun(log: RingSwapRunLog): void {
         tenantId: log.tenantId,
         diagnostics: d,
         rings: log.executedRings,
+      }),
+    );
+  }
+
+  if (log.rejectedRings && log.rejectedRings.length > 0) {
+    console.log(
+      JSON.stringify({
+        event: "ring_swap_rejected",
+        tenantId: log.tenantId,
+        diagnostics: d,
+        rings: log.rejectedRings,
       }),
     );
   }

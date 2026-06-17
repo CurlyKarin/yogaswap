@@ -192,4 +192,95 @@ describe("ringSwapExecution", () => {
     expect(planned.plan.swapDeletions).toHaveLength(1);
     expect(planned.plan.swapDeletions[0]?.toCourseId).toBe(3);
   });
+
+  test("rejects when target is in cutoff window", () => {
+    const pendingSwaps = [
+      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+    ];
+    const graph = buildRingSwapGraph(pendingSwaps);
+    const [cycle] = selectDisjointCycles(findRingCycles(graph));
+
+    const planned = planRingCycleExecution(cycle!, {
+      courses,
+      overrides: [],
+      pendingSwaps,
+      now: new Date("2099-06-02T09:30:00"),
+    });
+
+    expect(planned.ok).toBe(false);
+    if (planned.ok) return;
+    expect(planned.reason).toMatch(/cutoff/i);
+  });
+
+  test("allows ring when slot was already over room capacity", () => {
+    const tightCourses: Course[] = [
+      courses[0]!,
+      { ...courses[1]!, capacity: 1, overbookLimit: 0, participants: ["Bob"] },
+    ];
+    const overrides: CourseDateOverride[] = [
+      {
+        courseId: 2,
+        date: "2099-06-02",
+        participants: ["Bob", "Extra"],
+        swapped: [],
+        waitlist: [],
+      },
+    ];
+    const pendingSwaps = [
+      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+    ];
+    const graph = buildRingSwapGraph(pendingSwaps);
+    const [cycle] = selectDisjointCycles(findRingCycles(graph));
+
+    const planned = planRingCycleExecution(cycle!, {
+      courses: tightCourses,
+      overrides,
+      pendingSwaps,
+      now: new Date("2099-01-01T10:00:00Z"),
+    });
+
+    expect(planned.ok).toBe(true);
+  });
+
+  test("rejects when ring increases participants beyond room capacity", () => {
+    const tightCourses: Course[] = [
+      { ...courses[0]!, participants: ["Alice"] },
+      { ...courses[1]!, capacity: 1, overbookLimit: 0, participants: ["Bob"] },
+    ];
+    const overrides: CourseDateOverride[] = [
+      {
+        courseId: 1,
+        date: "2099-06-01",
+        participants: ["Alice"],
+        swapped: [],
+        waitlist: [],
+      },
+      {
+        courseId: 2,
+        date: "2099-06-02",
+        participants: ["Bob"],
+        swapped: ["Carol"],
+        waitlist: [],
+      },
+    ];
+    const pendingSwaps = [
+      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ user: "Carol", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+    ];
+    const graph = buildRingSwapGraph(pendingSwaps);
+    const [cycle] = selectDisjointCycles(findRingCycles(graph));
+
+    const planned = planRingCycleExecution(cycle!, {
+      courses: tightCourses,
+      overrides,
+      pendingSwaps,
+      now: new Date("2099-01-01T10:00:00Z"),
+    });
+
+    expect(planned.ok).toBe(false);
+    if (planned.ok) return;
+    expect(planned.reason).toMatch(/Maximal/i);
+  });
 });

@@ -776,6 +776,12 @@ export function useCourseSwaps(
           setOverrides(nextOverrides);
         }
 
+        try {
+          await processRingSwaps();
+        } catch (ringError) {
+          console.warn("processRingSwaps failed after cancelSwap, continue with processPromotions", ringError);
+        }
+
         console.log('Calling processPromotions for cancelSwap...');
         const response = await processPromotions();
         console.log('processPromotions response:', response);

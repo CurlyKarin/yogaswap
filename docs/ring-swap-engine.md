@@ -8,17 +8,29 @@ gueltiger Zyklus aus pending Tauschanfragen existiert.
 Beispiel: A will zu B, B will zu C, C will zu A. Wenn alle drei Anfragen zueinander passen,
 kann der Tausch gleichzeitig aktiviert werden, obwohl kein direkter Einzeltausch moeglich ist.
 
-## Trigger
+## Trigger (Frontend)
 
-Der Graph wird nicht persistent gespeichert, sondern pro Lauf neu aufgebaut.
+`POST /process-ring-swaps` wird aktuell aufgerufen bei:
 
-Empfohlene Trigger:
-- neue pending Tauschanfrage
-- Abbruch/Loeschung einer pending Anfrage
-- relevante Statusaenderungen (`pending`/`active`) in Swap-Daten
+- **`requestSwap`** — nach dem Anlegen einer pending-Anfrage
+- **`cancelSwap`** — nach dem Loeschen einer pending-Anfrage (kann einen neuen Ring ermoeglichen)
 
-Dadurch bleibt die Berechnung robust gegen veraenderte Realitaet (Absagen, neue Anfragen,
-kurzfristige Aenderungen).
+Fehler bei `processRingSwaps` blockieren `processPromotions` nicht.
+
+## Abgrenzung zu `processPromotions`
+
+| | `processRingSwaps` | `processPromotions` |
+|---|---|---|
+| Eingabe | pending Swaps bilden Zyklen | Overrides mit Warteliste + freiem regulärem Platz |
+| Ausgabe | Ring aktiviert (`pending` → `active`) | Einzelner Nachruecker von Warteliste |
+| Kapazitaet | Nur wenn Ring Teilnehmerzahl erhöht und > max | Nur reguläre Plätze (`capacity`) |
+| Graph | Pro Lauf neu aufgebaut, nicht persistent | Kein Graph |
+
+## Nicht-Ziele
+
+- Kein Ersatz fuer direkten Einzeltausch (`confirmSwap`) oder Wartelisten-Nachruecken
+- Keine persistente Speicherung des Graphen
+- Keine Teil-Ausführung eines Zyklus bei Validierungsfehlern
 
 ## Datenmodell
 
@@ -35,65 +47,54 @@ keine offensichtlichen Inkonsistenzen).
 
 Die Erkennung erfolgt iterativ (expliziter Stack/Queue), nicht rekursiv.
 
-Gruende:
-- besser kontrollierbar bei groesseren Datenmengen
-- keine Stack-Overflow-Risiken
-- einfachere Betriebsgrenzen (Limits, Timeout, sauberes Abort-Verhalten)
-
 ## Auswahlregeln
 
 Wenn mehrere Zyklen gleichzeitig moeglich sind:
-- deterministische Reihenfolge (stabile Sortierung)
-- ein Swap darf pro Lauf nur in einem ausgefuehrten Zyklus vorkommen
-- ueberschneidende Zyklen werden konfliktfrei priorisiert
 
-Die konkrete Priorisierungsregel wird im Code dokumentiert und testbar gemacht.
+1. `findRingCycles` sortiert nach Zykluslaenge, dann lexikographisch (`cycleSignature`)
+2. `selectDisjointCycles` wählt in dieser Reihenfolge konfliktfreie Zyklen (kein Swap/Knoten doppelt)
 
 ## Sicherheitsgrenzen (Guardrails)
 
-Pro Lauf werden feste Grenzen eingehalten:
-- max. Knoten
-- max. Kanten
-- max. Zykluslaenge
-- max. Anzahl auszufuehrender Zyklen
-- Zeitlimit
+Pro Lauf: max. Knoten/Kanten/Zykluslaenge/Anzahl Zyklen (`DEFAULT_RING_GRAPH_LIMITS`).
 
-Bei Ueberschreitung: keine Teilanwendung, stattdessen sauber loggen und Lauf beenden.
+Bei Planungsfehler (Cutoff, fehlende Buchung am Ursprung): Zyklus komplett verworfen.
+
+Raumkapazität: nur ablehnen, wenn der Ring die Teilnehmerzahl an einem Slot **erhöht** und dadurch `capacity + overbookLimit` überschreitet. Bereits überfüllte Slots (z. B. nach Kapazitätsänderung) blockieren keinen Ring, solange er die Zahl nicht weiter erhöht.
 
 ## Anwendung auf Daten
 
 - `processRingSwaps` erkennt gueltige Zyklen und wendet sie atomar an (`TransactWriteItems` pro Zyklus).
-- Beteiligte Swaps werden von `pending` auf `active` gesetzt; Overrides (participants/swapped/waitlist) werden konsistent aktualisiert.
-- Schlaegt ein Zyklus fehl (Validierung oder Transaktionskonflikt), wird er verworfen — kein Halbzustand.
-- Normales Wartelisten-Nachruecken bleibt in `processPromotions` und wird nicht ersetzt.
+- Beteiligte Swaps werden von `pending` auf `active` gesetzt; Overrides werden konsistent aktualisiert.
+- Alternative pending Swaps desselben Nutzers vom selben Ursprung werden geloescht.
+- Normales Wartelisten-Nachruecken bleibt in `processPromotions`.
 
 ## Ueberplanung und Ringtausch
 
-Ringtausch ist fachlich unabhaengig von den Self-Service-Tauschregeln fuer ueberplante Kurse:
+- Direkter Einzeltausch: nur reguläre Plätze
+- Ringtausch: Überplanungszone nutzbar; harte Raumgrenze nur bei **Netto-Zuwachs** durch den Ring
 
-- Der direkte Einzeltausch (ohne Zyklus) bleibt auf regulaere Plaetze begrenzt.
-- Im Ringtausch darf jedoch auch ein aktuell ueberplanter Platz Teil eines gueltigen Zyklus sein.
-- Ein Platz in der Ueberplanung kann damit grundsaetzlich ueber Ringtausch weitergegeben werden,
-  sofern der gesamte Zyklus konsistent und atomar ausfuehrbar ist.
+## Testmatrix
 
-Diese Regel ist bei Zyklus-Validierung und Ausfuehrung explizit zu beruecksichtigen.
-
-## Teststrategie
-
-Mindestens folgende Faelle:
-- 2er-Zyklus (A <-> B)
-- 3er-Zyklus (A -> B -> C -> A)
-- ueberschneidende Zyklen (Konfliktaufloesung)
-- ungueltige/inkonsistente Kanten
-- Limit-/Abbruchverhalten
+| Fall | Modul |
+|---|---|
+| 2er-/3er-Zyklus | `ringSwapGraph.test.ts`, `ringSwapExecution.test.ts` |
+| Überlappende Zyklen | `ringSwapGraph.test.ts`, `ringSwapPipeline.test.ts` |
+| Ungültige Kanten | `ringSwapGraph.test.ts` |
+| Cutoff / Raumkapazität | `ringSwapExecution.test.ts` |
+| Atomare Ausführung | `processRingSwaps/index.test.ts` |
+| Frontend-Trigger | `useCourseSwaps.test.ts` |
 
 ## Betrieb/Logging
 
-Jeder Lauf loggt strukturiert:
-- Anzahl geladener pending Swaps
-- Anzahl gueltiger Kanten
-- gefundene Zyklen
-- ausgewaehlte/verworfene Zyklen inkl. Grund
-- Laufzeit und ggf. Guardrail-Abbruch
+Pro Lambda-Lauf:
 
-Damit bleiben Entscheidungen nachvollziehbar und debugbar.
+1. **Summary-Zeile** — Outcome, Kennzahlen, Ringkette(n)
+2. **JSON bei Ausführung** — `event: ring_swap_executed` mit `activated`, `deletedAlternates`
+3. **JSON bei Verwerfung** — `event: ring_swap_rejected` mit `reason`
+4. **`console.warn`** — einzelne Verwerfungen/Konflikte während der Ausführung
+
+Beispiel Summary:
+```
+[processRingSwaps] tenant=default-tenant | 1 Ring ausgeführt | pending=3 ... | Skye → Ivy → Skye
+```
