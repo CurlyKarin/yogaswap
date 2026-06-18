@@ -513,6 +513,46 @@ body {
   padding-top: 0.2em;      /* Label etwas nach unten rücken */
 }
 
+.guest-seats-row {
+  align-items: center;
+}
+
+.guest-seats-label {
+  min-width: 90px;
+}
+
+.guest-seat-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.guest-seat-control-btn {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid #c5cae9;
+  border-radius: 4px;
+  background: #fff;
+  color: #3949ab;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.guest-seat-control-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.guest-seat-control-count {
+  min-width: 1rem;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3949ab;
+}
+
 .status-text {
   margin-top: 0.5rem;
   text-align: left; /* oder center, wenn du es mittig unter den Buttons willst */

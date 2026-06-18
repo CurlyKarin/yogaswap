@@ -882,5 +882,94 @@ describe("useCourseSwaps", () => {
     expect(processPromotions).not.toHaveBeenCalled();
     alertSpy.mockRestore();
   });
+
+  it("adjustGuestCount erhöht anonymousTrialCount per updateOverride", async () => {
+    const setOverrides = vi.fn();
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    (updateOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (processPromotions as ReturnType<typeof vi.fn>).mockResolvedValue({ overrides: [] });
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course],
+        [baseOverride],
+        setOverrides as unknown as (
+          value: CourseDateOverride[] | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        vi.fn(),
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.adjustGuestCount(course, "2099-06-16", 1);
+    });
+
+    expect(updateOverride).toHaveBeenCalledWith(1, "2099-06-16", { anonymousTrialCount: 1 });
+    expect(createOverride).not.toHaveBeenCalled();
+    expect(fetchData).toHaveBeenCalled();
+    expect(processPromotions).not.toHaveBeenCalled();
+  });
+
+  it("adjustGuestCount legt Override per createOverride an", async () => {
+    const setOverrides = vi.fn();
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    (createOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course],
+        [],
+        setOverrides as unknown as (
+          value: CourseDateOverride[] | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        vi.fn(),
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.adjustGuestCount(course, "2099-06-16", 1);
+    });
+
+    expect(createOverride).toHaveBeenCalledWith(
+      expect.objectContaining({ anonymousTrialCount: 1, participants: ["alice"] }),
+    );
+    expect(fetchData).toHaveBeenCalled();
+  });
+
+  it("adjustGuestCount reduziert Gäste und ruft processPromotions auf", async () => {
+    const setOverrides = vi.fn();
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    (updateOverride as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (processPromotions as ReturnType<typeof vi.fn>).mockResolvedValue({
+      overrides: [baseOverride],
+    });
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course],
+        [{ ...baseOverride, anonymousTrialCount: 1 }],
+        setOverrides as unknown as (
+          value: CourseDateOverride[] | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        vi.fn(),
+        baseUser,
+        fetchData,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.adjustGuestCount(course, "2099-06-16", -1);
+    });
+
+    expect(updateOverride).toHaveBeenCalledWith(1, "2099-06-16", { anonymousTrialCount: 0 });
+    expect(processPromotions).toHaveBeenCalled();
+  });
 });
 

@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { CalendarX, Clock3, History } from "lucide-react";
 import type { Course } from "shared/types";
-import { resolveGuestCount, resolveMaxCapacity, resolveOverbookLimit, resolveEffectiveOccupancy } from "shared/courseCapacity";
+import { resolveGuestCount, resolveMaxCapacity, resolveOverbookLimit, resolveEffectiveOccupancy, validateTermOccupancy } from "shared/courseCapacity";
 import { toDateKey } from "../lib/dates";
 import {
   courseStatusBadgeLabel,
@@ -21,11 +21,15 @@ import {
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import { weekdayLabelDe } from "../lib/weekdayLabels";
 import type { CourseCardTermState } from "./useCourseCardTermState";
+import GuestSeatControls from "./GuestSeatControls";
 
 type CourseCardDetailsProps = {
   course: Course;
   dates: Date[];
   showOverbookingDetails: boolean;
+  canManageGuestSeats?: boolean;
+  guestSeatSaving?: boolean;
+  onAdjustGuestCount?: (delta: 1 | -1) => void;
   includePastTermsInSelect: boolean;
   participantActionsLocked: boolean;
   termState: CourseCardTermState;
@@ -39,6 +43,9 @@ export default function CourseCardDetails({
   course,
   dates,
   showOverbookingDetails,
+  canManageGuestSeats = false,
+  guestSeatSaving = false,
+  onAdjustGuestCount,
   includePastTermsInSelect,
   participantActionsLocked,
   termState,
@@ -80,6 +87,11 @@ export default function CourseCardDetails({
   const visibleFreeSpots = showOverbookingDetails
     ? regularFreeSpots + overbookFreeSpots
     : regularFreeSpots;
+  const canAddGuest =
+    validateTermOccupancy(participants.length, course, guestCount + 1) === null;
+  const canRemoveGuest = guestCount > 0;
+  const showGuestControls =
+    canManageGuestSeats && !showExcludedTermMarker && !hasNoUpcomingDates && !!onAdjustGuestCount;
 
   return (
     <>
@@ -215,6 +227,20 @@ export default function CourseCardDetails({
           )}
         </select>
       </div>
+
+      {showGuestControls && (
+        <div className="course-row guest-seats-row">
+          <div className="muted guest-seats-label">Gäste</div>
+          <GuestSeatControls
+            guestCount={guestCount}
+            canAddGuest={canAddGuest}
+            canRemoveGuest={canRemoveGuest}
+            saving={guestSeatSaving}
+            onAddGuest={() => onAdjustGuestCount!(1)}
+            onRemoveGuest={() => onAdjustGuestCount!(-1)}
+          />
+        </div>
+      )}
 
       <div className="course-row list-row">
         <div id={participantsLabelId} className="label muted">

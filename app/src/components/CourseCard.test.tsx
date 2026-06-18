@@ -170,6 +170,26 @@ describe("CourseCard", () => {
     expect(screen.queryByLabelText("Freier Platz")).not.toBeInTheDocument();
   });
 
+  it("zeigt Gast-Steuerung nur für Management und ruft Handler auf", async () => {
+    const onAdjustGuestCount = vi.fn().mockResolvedValue(undefined);
+    renderCourseCard({
+      canManageGuestSeats: true,
+      onAdjustGuestCount,
+    });
+
+    expect(screen.getByRole("group", { name: /Gastplätze verwalten/i })).toBeInTheDocument();
+    expect(screen.getByText("Gäste")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Gastplatz hinzufügen/i }));
+    expect(onAdjustGuestCount).toHaveBeenCalledWith(baseCourse, "2099-06-16", 1);
+  });
+
+  it("blendet Gast-Steuerung für Teilnehmer aus", () => {
+    renderCourseCard({ canManageGuestSeats: false });
+
+    expect(screen.queryByText("Gäste")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /Gastplätze verwalten/i })).not.toBeInTheDocument();
+  });
+
   it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {
     const overrideSn: CourseDateOverride = {
       ...baseOverride,
