@@ -19,5 +19,9 @@ describe("courseCapacityDynamo", () => {
     expect(validateParticipantsForCourse(["a", "b", "c", "d", "e", "f", "g"], course)).toMatch(
       /Maximal 6/,
     );
+    expect(validateParticipantsForCourse(["a", "b", "c", "d"], course, 2)).toBeNull();
+    expect(validateParticipantsForCourse(["a", "b", "c", "d", "e"], course, 2)).toMatch(
+      /Maximal 6/,
+    );
   });
 });

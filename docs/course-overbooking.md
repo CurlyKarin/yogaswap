@@ -26,5 +26,5 @@ Anzeige in der Kurskarte: `Teilnehmer/regulär` und für Management optional `(+
 
 ## Follow-ups
 
-- #39 — Schnupperplätze am Termin vs. Überplanung
+- #39 — Gastplätze am Termin (`anonymousTrialCount`, siehe `docs/guest-seats.md`)
 - #180 — Vertretungsmodus: benannte Zuweisung in Überplanung (Post-Rollout)

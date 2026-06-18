@@ -118,10 +118,11 @@ function collectCourseDates(
           (o) => o.courseId === course.id && sameInstant(o.date, courseTime)
         );
         const participants = override ? override.participants : course.participants;
+        const guestCount = override?.anonymousTrialCount ?? 0;
 
         const count = participants.length;
-        const regularFull = isAtRegularCapacity(count, course);
-        const maxFull = isAtMaxCapacity(count, course);
+        const regularFull = isAtRegularCapacity(count, course, guestCount);
+        const maxFull = isAtMaxCapacity(count, course, guestCount);
         const targetInCutoff = isSwapTargetInCutoffWindow(
           toDateKey(courseTime),
           course.time,

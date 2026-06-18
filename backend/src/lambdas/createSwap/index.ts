@@ -4,7 +4,8 @@ import {
   canCreateSwapFromOrigin,
   hasRegularBookingCapacity,
   isSwapTargetInCutoffWindow,
-  validateParticipantListSize,
+  resolveGuestCount,
+  validateTermOccupancy,
 } from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
@@ -123,6 +124,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         : 0,
     };
     let targetParticipants = mapStringList(toCourseResp.Item.participants);
+    let targetGuestCount = 0;
     if (overridesTable) {
       const targetOverrideKey = `${toLegacyId}_${swap.toDate}`;
       const targetOverrideResp = await client.send(
@@ -133,7 +135,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }),
       );
       if (targetOverrideResp.Item) {
-        targetParticipants = mapOverrideItem(targetOverrideResp.Item).participants;
+        const targetOverride = mapOverrideItem(targetOverrideResp.Item);
+        targetParticipants = targetOverride.participants;
+        targetGuestCount = resolveGuestCount(targetOverride.anonymousTrialCount);
       }
     }
     const swapUserLower = swap.user.toLowerCase();
@@ -142,7 +146,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ? targetParticipants.length
       : targetParticipants.length + 1;
     if (swap.status === 'active') {
-      if (!userOnTarget && !hasRegularBookingCapacity(targetParticipants.length, toCapacity)) {
+      if (!userOnTarget && !hasRegularBookingCapacity(targetParticipants.length, toCapacity, targetGuestCount)) {
         return {
           statusCode: 400,
           body: JSON.stringify({
@@ -150,7 +154,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           }),
         };
       }
-      const targetCapacityError = validateParticipantListSize(countAfterSwap, toCapacity);
+      const targetCapacityError = validateTermOccupancy(countAfterSwap, toCapacity, targetGuestCount);
       if (targetCapacityError) {
         return {
           statusCode: 400,

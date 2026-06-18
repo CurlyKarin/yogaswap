@@ -1,5 +1,5 @@
 import type { CourseCapacityFields } from "@yogaswap/shared";
-import { validateParticipantListSize } from "@yogaswap/shared";
+import { validateTermOccupancy } from "@yogaswap/shared";
 
 type DynamoNumberField = { N?: string };
 
@@ -17,6 +17,7 @@ export function courseCapacityFromDynamoItem(
 export function validateParticipantsForCourse(
   participants: string[],
   course: CourseCapacityFields,
+  guestCount = 0,
 ): string | null {
-  return validateParticipantListSize(participants.length, course);
+  return validateTermOccupancy(participants.length, course, guestCount);
 }

@@ -11,8 +11,9 @@ import {
   validateShortNoticeParticipantsInvariant,
   type OverrideUpdateBody,
 } from '../shared/cutoffOverrideValidation';
-import { mapOverrideItem, mapStringList, stringListAttribute } from '../shared/overrideDynamo';
+import { mapOverrideItem, mapStringList, stringListAttribute, anonymousTrialCountAttribute } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
+import { validateAnonymousTrialCount } from '@yogaswap/shared';
 
 const client = dynamoClient;
 
@@ -59,7 +60,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       updates.participants !== undefined ||
       updates.swapped !== undefined ||
       updates.waitlist !== undefined ||
-      updates.shortNoticeCancellations !== undefined;
+      updates.shortNoticeCancellations !== undefined ||
+      updates.anonymousTrialCount !== undefined;
     if (!hasUpdatableField) {
       return { statusCode: 400, body: JSON.stringify({ error: 'No fields to update' }) };
     }
@@ -85,6 +87,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         updates.shortNoticeCancellations.some((w: unknown) => typeof w !== 'string')
       ) {
         return { statusCode: 400, body: JSON.stringify({ error: 'Invalid shortNoticeCancellations array' }) };
+      }
+    }
+    if (updates.anonymousTrialCount !== undefined) {
+      const guestCountError = validateAnonymousTrialCount(updates.anonymousTrialCount);
+      if (guestCountError) {
+        return { statusCode: 400, body: JSON.stringify({ error: guestCountError }) };
       }
     }
 
@@ -145,8 +153,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
-    if (updates.participants) {
-      const capacityError = validateParticipantsForCourse(updates.participants, capacityFields);
+    if (updates.participants !== undefined || updates.anonymousTrialCount !== undefined) {
+      const merged = mergeOverrideUpdate(before, baseParticipants, updates);
+      const capacityError = validateParticipantsForCourse(
+        merged.participants,
+        capacityFields,
+        merged.anonymousTrialCount ?? 0,
+      );
       if (capacityError) {
         return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
       }
@@ -178,6 +191,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       updateExpression += ' #shortNotice = :shortNotice,';
       expressionAttributeNames['#shortNotice'] = 'shortNoticeCancellations';
       expressionAttributeValues[':shortNotice'] = stringListAttribute(updates.shortNoticeCancellations);
+    }
+
+    if (updates.anonymousTrialCount !== undefined) {
+      updateExpression += ' #anonymousTrialCount = :anonymousTrialCount,';
+      expressionAttributeNames['#anonymousTrialCount'] = 'anonymousTrialCount';
+      expressionAttributeValues[':anonymousTrialCount'] =
+        updates.anonymousTrialCount > 0
+          ? anonymousTrialCountAttribute(updates.anonymousTrialCount)
+          : { N: '0' };
     }
 
     updateExpression += ' #actorUserId = :actorUserId, #actingForUserId = :actingForUserId,';
