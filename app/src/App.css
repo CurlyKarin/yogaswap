@@ -565,6 +565,12 @@ body {
   font-style: italic;
 }
 
+.chip.guest {
+  background-color: #e8eaf6;
+  color: #3949ab;
+  font-weight: 500;
+}
+
 /* Eingeloggte:r User in Teilnehmer- oder Warteliste (intensiver als „frei“) */
 .chip.chip-self:not(.short-notice):not(.swapped) {
   background-color: #2e7d32;

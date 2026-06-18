@@ -87,6 +87,7 @@ export function useCourseCardTermState({
   const swapped = hasNoUpcomingDates ? [] : (override?.swapped ?? []);
   const shortNotice = hasNoUpcomingDates ? [] : (override?.shortNoticeCancellations ?? []);
   const waitlist = hasNoUpcomingDates ? [] : (override?.waitlist ?? []);
+  const guestCount = hasNoUpcomingDates ? 0 : (override?.anonymousTrialCount ?? 0);
 
   const userNameLower = userName.toLowerCase();
   const isParticipant = participants.some((p) => p.toLowerCase() === userNameLower);
@@ -379,6 +380,7 @@ export function useCourseCardTermState({
     swapped,
     shortNotice,
     waitlist,
+    guestCount,
     userName,
     userNameLower,
     isParticipant,

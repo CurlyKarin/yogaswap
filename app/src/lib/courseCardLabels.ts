@@ -20,6 +20,12 @@ export function courseStatusBadgeText(autoInactive: boolean): string {
   return autoInactive ? "Automatisch inaktiv" : "Inaktiv";
 }
 
+export const GUEST_CHIP_LABEL = "Gast";
+
+export function guestChipAriaLabel(index: number, total: number): string {
+  return total === 1 ? "Gastplatz belegt" : `Gastplatz ${index} von ${total}`;
+}
+
 export function participantChipAriaLabel(
   name: string,
   { isSelf, isSn, isSwapped }: { isSelf: boolean; isSn: boolean; isSwapped: boolean },

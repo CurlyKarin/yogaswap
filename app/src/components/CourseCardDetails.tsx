@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { CalendarX, Clock3, History } from "lucide-react";
 import type { Course } from "shared/types";
-import { resolveMaxCapacity, resolveOverbookLimit } from "shared/courseCapacity";
+import { resolveGuestCount, resolveMaxCapacity, resolveOverbookLimit, resolveEffectiveOccupancy } from "shared/courseCapacity";
 import { toDateKey } from "../lib/dates";
 import {
   courseStatusBadgeLabel,
@@ -9,6 +9,8 @@ import {
   excludedTermOptionSuffix,
   lastTermOptionSuffix,
   participantChipAriaLabel,
+  guestChipAriaLabel,
+  GUEST_CHIP_LABEL,
   TERM_MARKER_CUTOFF_LABEL,
   TERM_MARKER_EXCLUDED_LABEL,
   TERM_MARKER_PAST_LABEL,
@@ -55,6 +57,7 @@ export default function CourseCardDetails({
     swapped,
     shortNotice,
     waitlist,
+    guestCount: rawGuestCount,
     userNameLower,
     hasNoUpcomingDates,
     showLastTermInSelect,
@@ -70,8 +73,10 @@ export default function CourseCardDetails({
 
   const overbookLimit = resolveOverbookLimit(course);
   const maxCapacity = resolveMaxCapacity(course);
-  const regularFreeSpots = Math.max(0, course.capacity - participants.length);
-  const overbookFreeSpots = Math.max(0, maxCapacity - Math.max(participants.length, course.capacity));
+  const guestCount = resolveGuestCount(rawGuestCount);
+  const effectiveOccupancy = resolveEffectiveOccupancy(participants.length, guestCount);
+  const regularFreeSpots = Math.max(0, course.capacity - effectiveOccupancy);
+  const overbookFreeSpots = Math.max(0, maxCapacity - Math.max(effectiveOccupancy, course.capacity));
   const visibleFreeSpots = showOverbookingDetails
     ? regularFreeSpots + overbookFreeSpots
     : regularFreeSpots;
@@ -155,7 +160,7 @@ export default function CourseCardDetails({
             </span>
           ) : (
             <>
-              {participants.length}/{course.capacity}
+              {effectiveOccupancy}/{course.capacity}
               {showOverbookingDetails && overbookLimit > 0 && ` (+${overbookLimit})`}
             </>
           )}
@@ -222,7 +227,7 @@ export default function CourseCardDetails({
             </li>
           ) : (
             <>
-              {participants.length === 0 && (
+              {participants.length === 0 && guestCount === 0 && (
                 <li className="chip" aria-label="Keine Teilnehmer eingetragen">
                   —
                 </li>
@@ -244,6 +249,16 @@ export default function CourseCardDetails({
                   </li>
                 );
               })}
+              {guestCount > 0 &&
+                Array.from({ length: guestCount }, (_, idx) => (
+                  <li
+                    className="chip guest"
+                    key={`guest-${idx}`}
+                    aria-label={guestChipAriaLabel(idx + 1, guestCount)}
+                  >
+                    {GUEST_CHIP_LABEL}
+                  </li>
+                ))}
               {visibleFreeSpots > 0 &&
                 Array.from({ length: regularFreeSpots }).map((_, idx) => (
                   <li className="chip free" key={`free-${idx}`} aria-label="Freier Platz">
