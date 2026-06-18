@@ -115,6 +115,63 @@ describe('createOverride Lambda', () => {
     expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(0);
   });
 
+  it('should persist anonymousTrialCount when within maxCapacity', async () => {
+    dynamoMock
+      .on(GetItemCommand)
+      .resolvesOnce({
+        Item: {
+          ...mockCourseItem,
+          capacity: { N: '8' },
+          overbookLimit: { N: '2' },
+          participants: { L: [{ S: 'A' }, { S: 'B' }] },
+        },
+      })
+      .resolvesOnce({ Item: undefined })
+      .resolvesOnce({ Item: mockCourseItem });
+    dynamoMock.on(PutItemCommand).resolves({});
+
+    const event: Partial<APIGatewayProxyEvent> = {
+      body: JSON.stringify({
+        courseId: 1,
+        date: '2025-10-01',
+        participants: ['A', 'B'],
+        swapped: [],
+        waitlist: [],
+        anonymousTrialCount: 2,
+      }),
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(200);
+    expect(dynamoMock.commandCalls(PutItemCommand)[0].args[0].input.Item?.anonymousTrialCount).toEqual({
+      N: '2',
+    });
+  });
+
+  it('should return 400 when participants plus guests exceed maxCapacity', async () => {
+    dynamoMock.on(GetItemCommand).resolves({
+      Item: { ...mockCourseItem, capacity: { N: '4' }, overbookLimit: { N: '0' } },
+    });
+
+    const event: Partial<APIGatewayProxyEvent> = {
+      body: JSON.stringify({
+        courseId: 1,
+        date: '2025-10-01',
+        participants: ['A', 'B', 'C'],
+        swapped: [],
+        waitlist: [],
+        anonymousTrialCount: 2,
+      }),
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Maximal 4/);
+    expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(0);
+  });
+
   it('should allow waitlist enrollment when roster matches course participants above capacity', async () => {
     dynamoMock
       .on(GetItemCommand)

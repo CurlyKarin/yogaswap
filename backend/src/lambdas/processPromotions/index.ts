@@ -141,6 +141,9 @@ async function createOverrideHelper(tenantId: string, override: CourseDateOverri
       shortNoticeCancellations: {
         L: (override.shortNoticeCancellations || []).map((w) => ({ S: w })),
       },
+      ...(override.anonymousTrialCount && override.anonymousTrialCount > 0
+        ? { anonymousTrialCount: { N: String(override.anonymousTrialCount) } }
+        : {}),
     },
   });
 
@@ -251,12 +254,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         if (!overrideCourse) continue;
 
         const participantCount = override.participants.length;
+        const guestCount = override.anonymousTrialCount ?? 0;
         console.log('waitlist promotion check:', {
           participantCount,
+          guestCount,
           capacity: overrideCourse.capacity,
           overbookLimit: overrideCourse.overbookLimit ?? 0,
         });
-        if (!canPromoteFromWaitlist(participantCount, overrideCourse)) continue;
+        if (!canPromoteFromWaitlist(participantCount, overrideCourse, guestCount)) continue;
 
         // Wähle promotedUser: currentUser priorisieren, sonst ersten Waitlist-Eintrag
         // mit passendem pending Swap (stale Waitlist-Einträge überspringen).

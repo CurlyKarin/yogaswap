@@ -156,6 +156,97 @@ describe('updateOverride Lambda', () => {
     expect(dynamoMock.calls()).toHaveLength(0);
   });
 
+  it('should update anonymousTrialCount successfully', async () => {
+    dynamoMock
+      .on(GetItemCommand)
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          courseId: { S: '1' },
+          time: { S: '10:00' },
+          capacity: { N: '8' },
+          overbookLimit: { N: '2' },
+          participants: { L: [{ S: 'Luna' }, { S: 'Kai' }] },
+        },
+      })
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          courseId_date: { S: '1_2025-10-01' },
+          courseId: { S: '1' },
+          date: { S: '2025-10-01' },
+          participants: { L: [{ S: 'Luna' }, { S: 'Kai' }] },
+        },
+      });
+    dynamoMock.on(UpdateItemCommand).resolves({});
+
+    const event: APIGatewayProxyEvent = {
+      pathParameters: { courseId: '1', date: '2025-10-01' },
+      body: JSON.stringify({ anonymousTrialCount: 2 }),
+      headers: {},
+      multiValueHeaders: {},
+      httpMethod: 'PUT',
+      isBase64Encoded: false,
+      path: '/overrides/1/2025-10-01',
+      queryStringParameters: null,
+      multiValueQueryStringParameters: null,
+      stageVariables: null,
+      resource: '',
+      requestContext: {} as any,
+    };
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(200);
+    const call = dynamoMock.commandCalls(UpdateItemCommand)[0].args[0].input as UpdateItemCommandInput;
+    expect(call.ExpressionAttributeValues?.[':anonymousTrialCount']).toEqual({ N: '2' });
+  });
+
+  it('should return 400 when guests exceed maxCapacity', async () => {
+    dynamoMock
+      .on(GetItemCommand)
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          courseId: { S: '1' },
+          time: { S: '10:00' },
+          capacity: { N: '4' },
+          overbookLimit: { N: '0' },
+          participants: { L: [{ S: 'Luna' }, { S: 'Kai' }, { S: 'Mia' }, { S: 'Noa' }] },
+        },
+      })
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          courseId_date: { S: '1_2025-10-01' },
+          courseId: { S: '1' },
+          date: { S: '2025-10-01' },
+          participants: { L: [{ S: 'Luna' }, { S: 'Kai' }, { S: 'Mia' }, { S: 'Noa' }] },
+        },
+      });
+
+    const event: APIGatewayProxyEvent = {
+      pathParameters: { courseId: '1', date: '2025-10-01' },
+      body: JSON.stringify({ anonymousTrialCount: 1 }),
+      headers: {},
+      multiValueHeaders: {},
+      httpMethod: 'PUT',
+      isBase64Encoded: false,
+      path: '/overrides/1/2025-10-01',
+      queryStringParameters: null,
+      multiValueQueryStringParameters: null,
+      stageVariables: null,
+      resource: '',
+      requestContext: {} as any,
+    };
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Maximal 4/);
+    expect(dynamoMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
+  });
+
   it('should handle DynamoDB errors gracefully', async () => {
     mockCourseAndOverrideLookup();
     dynamoMock.on(UpdateItemCommand).rejects(new Error('DynamoDB failure'));

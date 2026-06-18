@@ -10,6 +10,7 @@ export type OverrideUpdateBody = {
   swapped?: string[];
   waitlist?: string[];
   shortNoticeCancellations?: string[];
+  anonymousTrialCount?: number;
 };
 
 export function mergeOverrideUpdate(
@@ -32,6 +33,11 @@ export function mergeOverrideUpdate(
     waitlist: updates.waitlist ?? base.waitlist ?? [],
     shortNoticeCancellations:
       updates.shortNoticeCancellations ?? base.shortNoticeCancellations ?? [],
+    ...(updates.anonymousTrialCount !== undefined
+      ? { anonymousTrialCount: updates.anonymousTrialCount }
+      : base.anonymousTrialCount !== undefined
+        ? { anonymousTrialCount: base.anonymousTrialCount }
+        : {}),
   };
 }
 

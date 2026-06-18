@@ -5,7 +5,8 @@ import {
   includesUserCaseInsensitive,
   isSwapTargetInCutoffWindow,
   removeUserCaseInsensitive,
-  validateParticipantListSize,
+  resolveGuestCount,
+  validateTermOccupancy,
 } from "@yogaswap/shared";
 import type { RingCycle } from "./ringSwapGraph";
 
@@ -213,8 +214,9 @@ export function planRingCycleExecution(
     );
     const beforeCount = beforeOverride.participants.length;
     const afterCount = override.participants.length;
+    const guestCount = resolveGuestCount(override.anonymousTrialCount);
     if (afterCount > beforeCount) {
-      const capacityError = validateParticipantListSize(afterCount, course);
+      const capacityError = validateTermOccupancy(afterCount, course, guestCount);
       if (capacityError) {
         return { ok: false, reason: `${capacityError} (${key})` };
       }

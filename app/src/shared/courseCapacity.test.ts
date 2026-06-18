@@ -3,10 +3,15 @@ import {
   canPromoteFromWaitlist,
   hasBookingCapacity,
   hasRegularBookingCapacity,
+  isAtRegularCapacity,
+  resolveEffectiveOccupancy,
+  resolveGuestCount,
   resolveMaxCapacity,
   resolveOverbookLimit,
+  validateAnonymousTrialCount,
   validateOverbookLimit,
   validateParticipantListSize,
+  validateTermOccupancy,
 } from "shared/courseCapacity";
 
 describe("courseCapacity", () => {
@@ -40,6 +45,28 @@ describe("courseCapacity", () => {
     expect(canPromoteFromWaitlist(11, course)).toBe(false);
   });
 
+  it("counts guest seats toward maxCapacity and regular fullness", () => {
+    const small = { capacity: 8, overbookLimit: 2 };
+    expect(resolveEffectiveOccupancy(7, 1)).toBe(8);
+    expect(isAtRegularCapacity(7, small, 1)).toBe(true);
+    expect(hasRegularBookingCapacity(7, small, 1)).toBe(false);
+    expect(validateTermOccupancy(7, small, 1)).toBeNull();
+    expect(validateTermOccupancy(8, small, 3)).toMatch(/Maximal 10/);
+  });
+
+  it("canPromoteFromWaitlist blocks while guests fill regular capacity", () => {
+    const term = { capacity: 8, overbookLimit: 2 };
+    expect(canPromoteFromWaitlist(7, term, 1)).toBe(false);
+    expect(canPromoteFromWaitlist(6, term, 1)).toBe(true);
+    expect(canPromoteFromWaitlist(7, term, 0)).toBe(true);
+  });
+
+  it("validateAnonymousTrialCount rejects invalid values", () => {
+    expect(validateAnonymousTrialCount(-1)).toMatch(/nicht-negative/);
+    expect(validateAnonymousTrialCount(2)).toBeNull();
+    expect(resolveGuestCount(undefined)).toBe(0);
+  });
+
   it("validateOverbookLimit rejects invalid values", () => {
     expect(validateOverbookLimit(10, -1)).toMatch(/nicht-negative/);
     expect(validateOverbookLimit(10, 2)).toBeNull();
@@ -53,5 +80,7 @@ describe("courseCapacity", () => {
     expect(hasBookingCapacity(6, small)).toBe(false);
     expect(validateParticipantListSize(6, small)).toBeNull();
     expect(validateParticipantListSize(7, small)).toMatch(/Maximal 6/);
+    expect(validateTermOccupancy(5, small, 1)).toBeNull();
+    expect(validateTermOccupancy(5, small, 2)).toMatch(/Maximal 6/);
   });
 });
