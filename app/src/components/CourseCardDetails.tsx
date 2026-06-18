@@ -73,6 +73,7 @@ export default function CourseCardDetails({
     showPastGraceMarker,
     showCutoffMarker,
     showExcludedTermMarker,
+    isPastOccurrence,
     excludedTermNotice,
     inactiveNotice,
     termSelectDisabled,
@@ -91,7 +92,11 @@ export default function CourseCardDetails({
     validateTermOccupancy(participants.length, course, guestCount + 1) === null;
   const canRemoveGuest = guestCount > 0;
   const showGuestControls =
-    canManageGuestSeats && !showExcludedTermMarker && !hasNoUpcomingDates && !!onAdjustGuestCount;
+    canManageGuestSeats &&
+    !showExcludedTermMarker &&
+    !hasNoUpcomingDates &&
+    !isPastOccurrence &&
+    !!onAdjustGuestCount;
 
   return (
     <>
