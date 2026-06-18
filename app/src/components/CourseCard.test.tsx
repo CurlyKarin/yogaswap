@@ -119,6 +119,57 @@ describe("CourseCard", () => {
     expect(screen.getByText("bob")).toHaveAttribute("aria-label", "bob, regulär eingetragen");
   });
 
+  it("zeigt Gast-Chips für alle Rollen und zählt sie in der Kapazität", () => {
+    const { container } = renderCourseCard({
+      overrides: [
+        {
+          ...baseOverride,
+          participants: ["alice", "bob"],
+          anonymousTrialCount: 2,
+        },
+      ],
+    });
+
+    const guestChips = container.querySelectorAll(".chip.guest");
+    expect(guestChips).toHaveLength(2);
+    expect(guestChips[0]).toHaveTextContent("Gast");
+    expect(guestChips[0]).toHaveAttribute("aria-label", "Gastplatz 1 von 2");
+    expect(guestChips[1]).toHaveAttribute("aria-label", "Gastplatz 2 von 2");
+    expect(screen.getByText("4/10")).toBeInTheDocument();
+  });
+
+  it("zeigt nur Gast-Chips wenn keine benannten Teilnehmer eingetragen sind", () => {
+    const { container } = renderCourseCard({
+      overrides: [
+        {
+          ...baseOverride,
+          participants: [],
+          anonymousTrialCount: 1,
+        },
+      ],
+    });
+
+    expect(container.querySelectorAll(".chip.guest")).toHaveLength(1);
+    expect(screen.queryByLabelText("Keine Teilnehmer eingetragen")).not.toBeInTheDocument();
+    expect(screen.getByText("1/10")).toBeInTheDocument();
+  });
+
+  it("reduziert freie Plätze um Gastbelegung", () => {
+    renderCourseCard({
+      course: { ...baseCourse, capacity: 4 },
+      overrides: [
+        {
+          ...baseOverride,
+          participants: ["alice", "bob", "carol"],
+          anonymousTrialCount: 1,
+        },
+      ],
+    });
+
+    expect(screen.getByText("4/4")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Freier Platz")).not.toBeInTheDocument();
+  });
+
   it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {
     const overrideSn: CourseDateOverride = {
       ...baseOverride,
