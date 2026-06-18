@@ -15,7 +15,7 @@ import {
   removeUserCaseInsensitive,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
-import { hasRegularBookingCapacity, resolveMaxCapacity } from "shared/courseCapacity";
+import { hasRegularBookingCapacity, resolveMaxCapacity, validateTermOccupancy } from "shared/courseCapacity";
 import { createSwap, deleteSwap, processPromotions, processRingSwaps } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
 
@@ -964,6 +964,60 @@ export function useCourseSwaps(
 
   requestSwapRef.current = requestSwap;
 
+  const adjustGuestCount = useCallback(
+    async (course: Course, dateIso: string, delta: 1 | -1) => {
+      const existingIndex = findOverrideIndex(filteredOverrides, course.id, dateIso);
+      const existing = existingIndex >= 0 ? filteredOverrides[existingIndex] : null;
+      const participants = existing?.participants ?? [...course.participants];
+      const currentGuests = existing?.anonymousTrialCount ?? 0;
+      const nextGuests = currentGuests + delta;
+      if (nextGuests < 0) return;
+
+      const capacityError = validateTermOccupancy(participants.length, course, nextGuests);
+      if (capacityError) {
+        alert(capacityError);
+        return;
+      }
+
+      const nextOverride: CourseDateOverride = {
+        courseId: course.id,
+        date: dateIso,
+        participants,
+        swapped: existing?.swapped ?? [],
+        waitlist: existing?.waitlist ?? [],
+        shortNoticeCancellations: existing?.shortNoticeCancellations ?? [],
+        ...overrideCourseUidFields(course),
+        ...(nextGuests > 0 ? { anonymousTrialCount: nextGuests } : {}),
+      };
+
+      setOverrides((prev) => upsertCourseDateOverride(prev, nextOverride, course.id, dateIso));
+
+      try {
+        if (existing) {
+          await updateOverride(course.id, dateIso, { anonymousTrialCount: nextGuests });
+        } else {
+          await createOverride(nextOverride);
+        }
+
+        if (delta < 0) {
+          const response = await processPromotions();
+          if (response?.overrides) {
+            setOverrides((prev) => mergeOverridesPreservingShortNotice(prev, response.overrides!));
+          } else {
+            await fetchData();
+          }
+        } else {
+          await fetchData();
+        }
+      } catch (err) {
+        console.error("Error adjusting guest count:", err);
+        alert("Gastplatz konnte nicht gespeichert werden. Daten werden neu geladen.");
+        await fetchData();
+      }
+    },
+    [filteredOverrides, fetchData, setOverrides],
+  );
+
   console.log("return useCourseSwaps");
 
   return {
@@ -973,6 +1027,7 @@ export function useCourseSwaps(
     requestSwap,
     cancelSwap,
     onToggleAbsence,
+    adjustGuestCount,
   };
 
 }

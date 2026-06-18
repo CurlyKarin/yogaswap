@@ -29,6 +29,8 @@ type Props = {
   onDateChange?: (date: Date) => void;
   /** Wochenansicht: Termine der angezeigten KW auch in der Vergangenheit im Dropdown. */
   includePastTermsInSelect?: boolean;
+  canManageGuestSeats?: boolean;
+  onAdjustGuestCount?: (course: Course, dateIso: string, delta: 1 | -1) => Promise<void>;
 };
 
 export default function CourseCard({
@@ -48,6 +50,8 @@ export default function CourseCard({
   initialSelectedDate,
   onDateChange,
   includePastTermsInSelect = false,
+  canManageGuestSeats = false,
+  onAdjustGuestCount,
 }: Props) {
   const termState = useCourseCardTermState({
     course,
@@ -68,6 +72,21 @@ export default function CourseCard({
   const [absenceAnnouncement, setAbsenceAnnouncement] = useState("");
   const absenceButtonRef = useRef<HTMLButtonElement>(null);
   const restoreAbsenceFocusRef = useRef(false);
+
+  const [guestSeatSaving, setGuestSeatSaving] = useState(false);
+
+  const handleAdjustGuestCount = useCallback(
+    async (delta: 1 | -1) => {
+      if (!onAdjustGuestCount || guestSeatSaving) return;
+      setGuestSeatSaving(true);
+      try {
+        await onAdjustGuestCount(course, selectedDateKey, delta);
+      } finally {
+        setGuestSeatSaving(false);
+      }
+    },
+    [course, guestSeatSaving, onAdjustGuestCount, selectedDateKey],
+  );
 
   const notEnrolledInTermHint = (
     <div className="muted">Nicht in diesem Termin eingetragen</div>
@@ -144,6 +163,9 @@ export default function CourseCard({
         course={course}
         dates={dates}
         showOverbookingDetails={showOverbookingDetails}
+        canManageGuestSeats={canManageGuestSeats}
+        guestSeatSaving={guestSeatSaving}
+        onAdjustGuestCount={onAdjustGuestCount ? handleAdjustGuestCount : undefined}
         includePastTermsInSelect={includePastTermsInSelect}
         participantActionsLocked={participantActionsLocked}
         termState={termState}

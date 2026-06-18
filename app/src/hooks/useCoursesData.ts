@@ -8,7 +8,7 @@ import {
   UserTenantMembership,
   DEFAULT_TENANT_ID,
 } from "shared/types";
-import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
+import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
 import { getCourses } from "../api/courses";
 import { getOverrides } from "../api/overrides";
 import { getSwaps, getSwapsByStatus } from "../api/swaps";
@@ -216,5 +216,7 @@ export function useCoursesData({
     requestSwap: swapHandlers.requestSwap,
     cancelSwap: swapHandlers.cancelSwap,
     onToggleAbsence: swapHandlers.onToggleAbsence,
+    adjustGuestCount: swapHandlers.adjustGuestCount,
+    canManageGuestSeats: canManageParticipants(membershipForPermissions, tenant?.settings),
   };
 }

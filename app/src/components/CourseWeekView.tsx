@@ -38,6 +38,8 @@ type Props = {
     userName: string,
   ) => void;
   cancelSwap: (swap: Swap, clickedCourseId: number) => void;
+  canManageGuestSeats?: boolean;
+  onAdjustGuestCount?: (course: Course, dateIso: string, delta: 1 | -1) => Promise<void>;
 };
 
 export default function CourseWeekView({
@@ -57,6 +59,8 @@ export default function CourseWeekView({
   confirmSwap,
   requestSwap,
   cancelSwap,
+  canManageGuestSeats = false,
+  onAdjustGuestCount,
 }: Props) {
   const handleDateChange = useCallback(
     (date: Date) => {
@@ -113,6 +117,8 @@ export default function CourseWeekView({
                 allCourses={courses}
                 currentUser={currentUser}
                 showOverbookingDetails={canSeeCourseManagement}
+                canManageGuestSeats={canManageGuestSeats}
+                onAdjustGuestCount={onAdjustGuestCount}
                 dates={cardDates}
                 overrides={overrides}
                 swaps={swaps}

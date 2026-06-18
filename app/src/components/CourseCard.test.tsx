@@ -50,8 +50,11 @@ function openSwapModal() {
   fireEvent.click(swapButton);
 }
 
-function renderCourseCard(overrides: Partial<React.ComponentProps<typeof CourseCard>> = {}) {
-  const now = new Date("2099-06-10T10:00:00Z");
+function renderCourseCard(
+  overrides: Partial<React.ComponentProps<typeof CourseCard>> = {},
+  options?: { now?: Date },
+) {
+  const now = options?.now ?? new Date("2099-06-10T10:00:00Z");
   const dates = [new Date("2099-06-16T10:00:00Z")];
 
   const props: React.ComponentProps<typeof CourseCard> = {
@@ -168,6 +171,41 @@ describe("CourseCard", () => {
 
     expect(screen.getByText("4/4")).toBeInTheDocument();
     expect(screen.queryByLabelText("Freier Platz")).not.toBeInTheDocument();
+  });
+
+  it("zeigt Gast-Steuerung nur für Management und ruft Handler auf", async () => {
+    const onAdjustGuestCount = vi.fn().mockResolvedValue(undefined);
+    renderCourseCard({
+      canManageGuestSeats: true,
+      onAdjustGuestCount,
+    });
+
+    expect(screen.getByRole("group", { name: /Gastplätze verwalten/i })).toBeInTheDocument();
+    expect(screen.getByText("Gäste")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Gastplatz hinzufügen/i }));
+    expect(onAdjustGuestCount).toHaveBeenCalledWith(baseCourse, "2099-06-16", 1);
+  });
+
+  it("blendet Gast-Steuerung für Teilnehmer aus", () => {
+    renderCourseCard({ canManageGuestSeats: false });
+
+    expect(screen.queryByText("Gäste")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /Gastplätze verwalten/i })).not.toBeInTheDocument();
+  });
+
+  it("blendet Gast-Steuerung im Nachlauf aus", () => {
+    renderCourseCard(
+      {
+        canManageGuestSeats: true,
+        onAdjustGuestCount: vi.fn(),
+        includePastTermsInSelect: true,
+        initialSelectedDate: new Date("2099-06-16T10:00:00Z"),
+      },
+      { now: new Date("2099-06-17T10:00:00Z") },
+    );
+
+    expect(screen.queryByText("Gäste")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /Gastplätze verwalten/i })).not.toBeInTheDocument();
   });
 
   it("markiert eigene kurzfristige Absage mit chip-self und short-notice", () => {

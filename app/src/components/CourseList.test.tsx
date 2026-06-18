@@ -23,6 +23,7 @@ vi.mock("./useCourseSwaps", () => {
       requestSwap: vi.fn(),
       cancelSwap: vi.fn(),
       onToggleAbsence: vi.fn(),
+      adjustGuestCount: vi.fn(),
     }),
   };
 });

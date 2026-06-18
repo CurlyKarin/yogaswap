@@ -39,7 +39,7 @@ import {
   getCourses,
   updateCourse,
 } from "../api/courses";
-import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
+import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
 import {
   isWithinPostCourseEndGrace,
   looksLikeAutomaticallyInactive,
@@ -301,11 +301,14 @@ export default function CourseList({
     fetchData();
   }, [fetchData]);
 
+  const canManageGuestSeats = canManageParticipants(membershipForPermissions, tenant?.settings);
+
   const {
     confirmSwap,
     requestSwap,
     cancelSwap,
     onToggleAbsence,
+    adjustGuestCount,
     overrides: filteredOverrides,
   } = useCourseSwaps(
     courses,
@@ -889,6 +892,8 @@ export default function CourseList({
                 allCourses={courses}
                 currentUser={currentUser}
                 showOverbookingDetails={canSeeCourseManagement}
+                canManageGuestSeats={canManageGuestSeats}
+                onAdjustGuestCount={adjustGuestCount}
                 dates={dates}
                 overrides={filteredOverrides}
                 swaps={swaps}

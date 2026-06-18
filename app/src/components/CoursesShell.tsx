@@ -66,6 +66,8 @@ export default function CoursesShell({
     requestSwap,
     cancelSwap,
     onToggleAbsence,
+    adjustGuestCount,
+    canManageGuestSeats,
     earliestWeekAnchor,
   } = useCoursesData({
     currentUser,
@@ -240,6 +242,8 @@ export default function CoursesShell({
             confirmSwap={confirmSwap}
             requestSwap={requestSwap}
             cancelSwap={cancelSwap}
+            canManageGuestSeats={canManageGuestSeats}
+            onAdjustGuestCount={adjustGuestCount}
           />
         </section>
       )}
