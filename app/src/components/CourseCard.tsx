@@ -167,7 +167,6 @@ export default function CourseCard({
         guestSeatSaving={guestSeatSaving}
         onAdjustGuestCount={onAdjustGuestCount ? handleAdjustGuestCount : undefined}
         includePastTermsInSelect={includePastTermsInSelect}
-        participantActionsLocked={participantActionsLocked}
         termState={termState}
         selectedDate={selectedDate}
         onSelectedDateChange={handleSelectedDateChange}

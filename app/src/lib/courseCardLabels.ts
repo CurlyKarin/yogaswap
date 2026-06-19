@@ -12,14 +12,6 @@ export type AbsenceAnnouncementOutcome =
   | "undo"
   | "error";
 
-export function courseStatusBadgeLabel(autoInactive: boolean): string {
-  return autoInactive ? "Kursstatus: Automatisch inaktiv" : "Kursstatus: Inaktiv";
-}
-
-export function courseStatusBadgeText(autoInactive: boolean): string {
-  return autoInactive ? "Automatisch inaktiv" : "Inaktiv";
-}
-
 export const GUEST_CHIP_LABEL = "Gast";
 
 export function guestChipAriaLabel(index: number, total: number): string {

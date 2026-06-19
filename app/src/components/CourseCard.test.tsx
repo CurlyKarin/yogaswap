@@ -267,7 +267,7 @@ describe("CourseCard", () => {
     expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
   });
 
-  it("zeigt Badge und Hinweis bei gesperrter Teilnehmer-Ansicht für inaktiven Kurs", () => {
+  it("zeigt Hinweis bei gesperrter Teilnehmer-Ansicht für inaktiven Kurs", () => {
     const inactiveCourse: Course = {
       ...baseCourse,
       status: "inactive",
@@ -282,9 +282,8 @@ describe("CourseCard", () => {
       participantActionsLocked: true,
     });
 
-    expect(screen.getByText("Automatisch inaktiv")).toBeInTheDocument();
-    expect(screen.getByLabelText("Kursstatus: Automatisch inaktiv")).toBeInTheDocument();
     expect(screen.getByText(/automatisch beendet/i)).toBeInTheDocument();
+    expect(screen.queryByText("Automatisch inaktiv")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
   });
 

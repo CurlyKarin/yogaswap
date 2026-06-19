@@ -4,8 +4,6 @@ import type { Course } from "shared/types";
 import { resolveGuestCount, resolveMaxCapacity, resolveOverbookLimit, resolveEffectiveOccupancy, validateTermOccupancy } from "shared/courseCapacity";
 import { toDateKey } from "../lib/dates";
 import {
-  courseStatusBadgeLabel,
-  courseStatusBadgeText,
   excludedTermOptionSuffix,
   lastTermOptionSuffix,
   participantChipAriaLabel,
@@ -31,7 +29,6 @@ type CourseCardDetailsProps = {
   guestSeatSaving?: boolean;
   onAdjustGuestCount?: (delta: 1 | -1) => void;
   includePastTermsInSelect: boolean;
-  participantActionsLocked: boolean;
   termState: CourseCardTermState;
   selectedDate: string;
   onSelectedDateChange: (isoValue: string, date: Date) => void;
@@ -47,7 +44,6 @@ export default function CourseCardDetails({
   guestSeatSaving = false,
   onAdjustGuestCount,
   includePastTermsInSelect,
-  participantActionsLocked,
   termState,
   selectedDate,
   onSelectedDateChange,
@@ -69,7 +65,6 @@ export default function CourseCardDetails({
     hasNoUpcomingDates,
     showLastTermInSelect,
     lastOccurrenceDate,
-    showAutoInactiveStatusBadge,
     showPastGraceMarker,
     showCutoffMarker,
     showExcludedTermMarker,
@@ -118,8 +113,8 @@ export default function CourseCardDetails({
             </span>
           </div>
         </div>
-        <div className="course-head-meta">
-          {(showPastGraceMarker || showCutoffMarker || showExcludedTermMarker) && (
+        {(showPastGraceMarker || showCutoffMarker || showExcludedTermMarker) && (
+          <div className="course-head-meta">
             <div className="course-term-visual-markers" role="status">
               {showExcludedTermMarker && (
                 <span
@@ -152,20 +147,8 @@ export default function CourseCardDetails({
                 </span>
               )}
             </div>
-          )}
-          {participantActionsLocked && (
-            <span
-              className={`course-status-badge ${
-                showAutoInactiveStatusBadge
-                  ? "course-status-badge--auto"
-                  : "course-status-badge--inactive"
-              }`}
-              aria-label={courseStatusBadgeLabel(showAutoInactiveStatusBadge)}
-            >
-              {courseStatusBadgeText(showAutoInactiveStatusBadge)}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="course-row">
