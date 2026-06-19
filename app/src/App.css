@@ -401,7 +401,9 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
-  margin-bottom: 8px;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #e8e8e8;
 }
 
 .course-head-title {
@@ -415,9 +417,9 @@ body {
 
 .course-head-schedule {
   margin-top: 6px;
-  color: #374151;
-  font-size: 0.9375rem;
-  line-height: 1.35;
+  color: #1a1a1a;
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 .course-schedule-primary {
@@ -427,27 +429,18 @@ body {
   column-gap: 0.35rem;
 }
 
-.course-schedule-weekday {
-  font-weight: 500;
-}
-
 .course-schedule-separator {
   color: #9ca3af;
-  font-weight: 400;
 }
 
 .course-schedule-time {
-  font-size: 1.0625rem;
-  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: #111827;
 }
 
 .course-schedule-room {
   margin-top: 2px;
-  color: #6b7280;
-  font-size: 0.8125rem;
-  font-weight: 500;
+  color: #666;
+  font-size: 14px;
 }
 
 .course-head-meta {
@@ -537,6 +530,8 @@ body {
   color: #1a1a1a;
   -webkit-text-fill-color: currentColor;
   font: inherit;
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 .course-card-footer {
