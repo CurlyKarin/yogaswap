@@ -69,8 +69,6 @@ export default function CourseCardDetails({
     showCutoffMarker,
     showExcludedTermMarker,
     isPastOccurrence,
-    excludedTermNotice,
-    inactiveNotice,
     termSelectDisabled,
   } = termState;
 
@@ -152,8 +150,8 @@ export default function CourseCardDetails({
       </div>
 
       <div className="course-row">
-        <div className="muted">Kapazität</div>
-        <div>
+        <div className="muted course-row-label">Kapazität</div>
+        <div className="course-row-value">
           {showExcludedTermMarker ? (
             <span className="muted" aria-label="Kapazität entfällt">
               entfällt
@@ -218,7 +216,7 @@ export default function CourseCardDetails({
 
       {showGuestControls && (
         <div className="course-row guest-seats-row">
-          <div className="muted guest-seats-label">Gäste</div>
+          <div className="muted guest-seats-label course-row-label">Gäste</div>
           <GuestSeatControls
             guestCount={guestCount}
             canAddGuest={canAddGuest}
@@ -322,18 +320,6 @@ export default function CourseCardDetails({
           )}
         </ul>
       </div>
-
-      {inactiveNotice && (
-        <div className="course-row course-inactive-notice" role="status">
-          <span className="muted small">{inactiveNotice}</span>
-        </div>
-      )}
-
-      {excludedTermNotice && (
-        <div className="course-row course-excluded-term-notice" role="status">
-          <span className="muted small">{excludedTermNotice}</span>
-        </div>
-      )}
     </>
   );
 }

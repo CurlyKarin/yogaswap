@@ -468,37 +468,74 @@ body {
   background: #fafafa;
 }
 
-.course-inactive-notice {
-  margin-top: 4px;
-}
-
 .course-inactive-swap-actions {
   margin-top: 8px;
 }
 
 .course-row {
   display: flex;
-  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
   margin: 8px 0;
+}
+
+.course-row-label,
+.course-row.list-row .label,
+.guest-seats-label {
+  flex-shrink: 0;
+  min-width: 90px;
+  padding-top: 0.2em;
+}
+
+.course-row-value,
+.course-row.list-row .chips {
+  flex: 1;
+  min-width: 0;
+}
+
+.course-row > select {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.course-card select {
+  color: #1a1a1a;
+  -webkit-text-fill-color: currentColor;
+  font: inherit;
+}
+
+.course-card-footer {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e8e8e8;
+}
+
+.course-card-footer-notice {
+  margin-bottom: 0.5rem;
+}
+
+.course-card-footer-notice:last-child {
+  margin-bottom: 0;
+}
+
+.course-card-footer-notice + .course-card-footer-notice {
+  margin-top: 0.35rem;
 }
 
 .course-row.list-row {
   display: flex;
-  align-items: flex-start; /* Label bleibt oben */
-  gap: 0.75rem;            /* Abstand zwischen Label und Liste */
-}
-
-.course-row.list-row .label {
-  min-width: 90px;         /* sorgt für gleichmäßige Ausrichtung */
-  padding-top: 0.2em;      /* Label etwas nach unten rücken */
+  align-items: flex-start;
 }
 
 .guest-seats-row {
   align-items: center;
 }
 
-.guest-seats-label {
-  min-width: 90px;
+.guest-seats-row .course-row-label,
+.guest-seats-row .guest-seats-label {
+  padding-top: 0;
 }
 
 .guest-seat-controls {
@@ -1501,23 +1538,10 @@ a:focus-visible {
     margin-left: auto;
     align-items: flex-end;
   }
-  .course-row {
-    flex-direction: row;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-  .course-row:not(.list-row) > :last-child {
-    margin-left: auto;
-    text-align: right;
-  }
-  .course-row.list-row .label {
+  .course-row-label,
+  .course-row.list-row .label,
+  .guest-seats-label {
     min-width: 82px;
-    padding-top: 0;
-  }
-  .course-row.list-row .chips {
-    flex: 1;
-    min-width: 0;
   }
   .course-card select,
   .course-card button {
