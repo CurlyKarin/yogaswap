@@ -4,13 +4,12 @@ import type { Course } from "shared/types";
 import { resolveGuestCount, resolveMaxCapacity, resolveOverbookLimit, resolveEffectiveOccupancy, validateTermOccupancy } from "shared/courseCapacity";
 import { toDateKey } from "../lib/dates";
 import {
-  courseStatusBadgeLabel,
-  courseStatusBadgeText,
   excludedTermOptionSuffix,
   lastTermOptionSuffix,
   participantChipAriaLabel,
   guestChipAriaLabel,
   GUEST_CHIP_LABEL,
+  resolveCourseScheduleDisplay,
   TERM_MARKER_CUTOFF_LABEL,
   TERM_MARKER_EXCLUDED_LABEL,
   TERM_MARKER_PAST_LABEL,
@@ -19,7 +18,6 @@ import {
   waitlistChipAriaLabel,
 } from "../lib/courseCardLabels";
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
-import { weekdayLabelDe } from "../lib/weekdayLabels";
 import type { CourseCardTermState } from "./useCourseCardTermState";
 import GuestSeatControls from "./GuestSeatControls";
 
@@ -31,7 +29,6 @@ type CourseCardDetailsProps = {
   guestSeatSaving?: boolean;
   onAdjustGuestCount?: (delta: 1 | -1) => void;
   includePastTermsInSelect: boolean;
-  participantActionsLocked: boolean;
   termState: CourseCardTermState;
   selectedDate: string;
   onSelectedDateChange: (isoValue: string, date: Date) => void;
@@ -47,7 +44,6 @@ export default function CourseCardDetails({
   guestSeatSaving = false,
   onAdjustGuestCount,
   includePastTermsInSelect,
-  participantActionsLocked,
   termState,
   selectedDate,
   onSelectedDateChange,
@@ -69,13 +65,10 @@ export default function CourseCardDetails({
     hasNoUpcomingDates,
     showLastTermInSelect,
     lastOccurrenceDate,
-    showAutoInactiveStatusBadge,
     showPastGraceMarker,
     showCutoffMarker,
     showExcludedTermMarker,
     isPastOccurrence,
-    excludedTermNotice,
-    inactiveNotice,
     termSelectDisabled,
   } = termState;
 
@@ -98,6 +91,8 @@ export default function CourseCardDetails({
     !isPastOccurrence &&
     !!onAdjustGuestCount;
 
+  const schedule = resolveCourseScheduleDisplay(course.weekday, course.time);
+
   return (
     <>
       <div className="course-head">
@@ -109,17 +104,24 @@ export default function CourseCardDetails({
             </h3>
           </div>
           <div
-            className="course-head-schedule muted"
+            className="course-head-schedule"
             id={scheduleDescId}
-            aria-label={`${weekdayLabelDe(course.weekday)} · ${course.time}`}
+            aria-label={schedule.ariaLabel}
           >
-            <span aria-hidden="true">
-              {course.weekday} · {course.time}
-            </span>
+            <div className="course-schedule-primary" aria-hidden="true">
+              <span className="course-schedule-weekday">{schedule.weekdayLabel}</span>
+              <span className="course-schedule-separator">·</span>
+              <span className="course-schedule-time">{schedule.time}</span>
+            </div>
+            {schedule.roomLabel && (
+              <div className="course-schedule-room" aria-hidden="true">
+                {schedule.roomLabel}
+              </div>
+            )}
           </div>
         </div>
-        <div className="course-head-meta">
-          {(showPastGraceMarker || showCutoffMarker || showExcludedTermMarker) && (
+        {(showPastGraceMarker || showCutoffMarker || showExcludedTermMarker) && (
+          <div className="course-head-meta">
             <div className="course-term-visual-markers" role="status">
               {showExcludedTermMarker && (
                 <span
@@ -152,25 +154,13 @@ export default function CourseCardDetails({
                 </span>
               )}
             </div>
-          )}
-          {participantActionsLocked && (
-            <span
-              className={`course-status-badge ${
-                showAutoInactiveStatusBadge
-                  ? "course-status-badge--auto"
-                  : "course-status-badge--inactive"
-              }`}
-              aria-label={courseStatusBadgeLabel(showAutoInactiveStatusBadge)}
-            >
-              {courseStatusBadgeText(showAutoInactiveStatusBadge)}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="course-row">
-        <div className="muted">Kapazität</div>
-        <div>
+        <div className="muted course-row-label">Kapazität</div>
+        <div className="course-row-value">
           {showExcludedTermMarker ? (
             <span className="muted" aria-label="Kapazität entfällt">
               entfällt
@@ -235,7 +225,7 @@ export default function CourseCardDetails({
 
       {showGuestControls && (
         <div className="course-row guest-seats-row">
-          <div className="muted guest-seats-label">Gäste</div>
+          <div className="muted guest-seats-label course-row-label">Gäste</div>
           <GuestSeatControls
             guestCount={guestCount}
             canAddGuest={canAddGuest}
@@ -339,18 +329,6 @@ export default function CourseCardDetails({
           )}
         </ul>
       </div>
-
-      {inactiveNotice && (
-        <div className="course-row course-inactive-notice" role="status">
-          <span className="muted small">{inactiveNotice}</span>
-        </div>
-      )}
-
-      {excludedTermNotice && (
-        <div className="course-row course-excluded-term-notice" role="status">
-          <span className="muted small">{excludedTermNotice}</span>
-        </div>
-      )}
     </>
   );
 }

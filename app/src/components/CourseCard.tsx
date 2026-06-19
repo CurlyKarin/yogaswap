@@ -65,7 +65,7 @@ export default function CourseCard({
     initialSelectedDate,
     includePastTermsInSelect,
   });
-  const { selectedDate, setSelectedDate, selectedDateKey, userName, hasNoUpcomingDates } = termState;
+  const { selectedDate, setSelectedDate, selectedDateKey, userName, hasNoUpcomingDates, inactiveNotice, excludedTermNotice } = termState;
 
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [absenceSaving, setAbsenceSaving] = useState(false);
@@ -167,14 +167,24 @@ export default function CourseCard({
         guestSeatSaving={guestSeatSaving}
         onAdjustGuestCount={onAdjustGuestCount ? handleAdjustGuestCount : undefined}
         includePastTermsInSelect={includePastTermsInSelect}
-        participantActionsLocked={participantActionsLocked}
         termState={termState}
         selectedDate={selectedDate}
         onSelectedDateChange={handleSelectedDateChange}
         titleId={titleId}
         scheduleDescId={scheduleDescId}
       />
-      <CourseTermActions
+      <div className="course-card-footer">
+        {excludedTermNotice && (
+          <div className="course-card-footer-notice" role="status">
+            <span className="muted small">{excludedTermNotice}</span>
+          </div>
+        )}
+        {inactiveNotice && (
+          <div className="course-card-footer-notice" role="status">
+            <span className="muted small">{inactiveNotice}</span>
+          </div>
+        )}
+        <CourseTermActions
         course={course}
         allCourses={allCourses}
         overrides={overrides}
@@ -198,7 +208,8 @@ export default function CourseCard({
         onRequestSwap={(targetCourseId, targetDateIso) =>
           requestSwap(course, selectedDateKey, targetCourseId, targetDateIso, userName)
         }
-      />
+        />
+      </div>
     </article>
   );
 }

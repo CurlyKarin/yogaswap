@@ -92,9 +92,15 @@ describe("CourseCard", () => {
     expect(article).toHaveAttribute("aria-labelledby", heading.id);
     expect(article).toHaveAttribute("aria-describedby");
     const scheduleDescId = article.getAttribute("aria-describedby");
+    expect(scheduleDescId).toBeTruthy();
     const schedule = document.getElementById(scheduleDescId!);
-    expect(schedule).toHaveTextContent(/monday · 10:00/i);
+    expect(schedule).not.toBeNull();
+    if (!schedule) return;
+
+    expect(schedule).toHaveTextContent(/Montag\s*·\s*10:00/);
     expect(schedule).toHaveAttribute("aria-label", "Montag · 10:00");
+    expect(schedule.querySelector(".course-schedule-weekday")).toHaveTextContent("Montag");
+    expect(schedule.querySelector(".course-schedule-time")).toHaveTextContent("10:00");
   });
 
   it("verknüpft Terminauswahl mit kursbezogenem Label", () => {
@@ -267,7 +273,7 @@ describe("CourseCard", () => {
     expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
   });
 
-  it("zeigt Badge und Hinweis bei gesperrter Teilnehmer-Ansicht für inaktiven Kurs", () => {
+  it("zeigt Hinweis bei gesperrter Teilnehmer-Ansicht für inaktiven Kurs", () => {
     const inactiveCourse: Course = {
       ...baseCourse,
       status: "inactive",
@@ -282,9 +288,8 @@ describe("CourseCard", () => {
       participantActionsLocked: true,
     });
 
-    expect(screen.getByText("Automatisch inaktiv")).toBeInTheDocument();
-    expect(screen.getByLabelText("Kursstatus: Automatisch inaktiv")).toBeInTheDocument();
     expect(screen.getByText(/automatisch beendet/i)).toBeInTheDocument();
+    expect(screen.queryByText("Automatisch inaktiv")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
   });
 

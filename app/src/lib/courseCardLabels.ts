@@ -1,4 +1,5 @@
 import { formatCourseIsoDateDe } from "shared/courseStatus";
+import { weekdayLabelDe } from "./weekdayLabels";
 
 /** Zentraler Textkatalog für CourseCard — später i18n-fähig machen. */
 export const TERM_MARKER_EXCLUDED_LABEL = "Termin entfällt (vom Studio abgesagt)";
@@ -12,15 +13,31 @@ export type AbsenceAnnouncementOutcome =
   | "undo"
   | "error";
 
-export function courseStatusBadgeLabel(autoInactive: boolean): string {
-  return autoInactive ? "Kursstatus: Automatisch inaktiv" : "Kursstatus: Inaktiv";
-}
-
-export function courseStatusBadgeText(autoInactive: boolean): string {
-  return autoInactive ? "Automatisch inaktiv" : "Inaktiv";
-}
-
 export const GUEST_CHIP_LABEL = "Gast";
+
+export type CourseScheduleDisplay = {
+  weekdayLabel: string;
+  time: string;
+  roomLabel?: string;
+  ariaLabel: string;
+};
+
+/** Anzeige für Kursrhythmus (Wochentag, Uhrzeit, optional Raum) — später locale/i18n. */
+export function resolveCourseScheduleDisplay(
+  weekday: string,
+  time: string,
+  roomLabel?: string,
+): CourseScheduleDisplay {
+  const weekdayLabel = weekdayLabelDe(weekday);
+  const segments = [weekdayLabel, time];
+  if (roomLabel) segments.push(roomLabel);
+  return {
+    weekdayLabel,
+    time,
+    ...(roomLabel ? { roomLabel } : {}),
+    ariaLabel: segments.join(" · "),
+  };
+}
 
 export function guestChipAriaLabel(index: number, total: number): string {
   return total === 1 ? "Gastplatz belegt" : `Gastplatz ${index} von ${total}`;

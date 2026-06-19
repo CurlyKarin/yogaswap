@@ -367,8 +367,6 @@ export function useCourseCardTermState({
   }, [isShortNotice, isParticipant, canUndoRegularAbsence, originInCutoff]);
 
   const swapModalTitle = hasCancelled ? "Anderen Termin wählen" : "Tauschanfrage starten";
-  const showAutoInactiveStatusBadge =
-    showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace);
 
   return {
     swapWindow,
@@ -404,7 +402,6 @@ export function useCourseCardTermState({
     showLastTermInSelect,
     lastOccurrenceDate,
     showAutoInactiveBadge,
-    showAutoInactiveStatusBadge,
     graceLastIso,
     userSwapsOnCourse,
     cancellableUserSwapsOnCourse,
