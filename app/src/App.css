@@ -414,7 +414,40 @@ body {
 }
 
 .course-head-schedule {
+  margin-top: 6px;
+  color: #374151;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+
+.course-schedule-primary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.35rem;
+}
+
+.course-schedule-weekday {
+  font-weight: 500;
+}
+
+.course-schedule-separator {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.course-schedule-time {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #111827;
+}
+
+.course-schedule-room {
   margin-top: 2px;
+  color: #6b7280;
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 
 .course-head-meta {

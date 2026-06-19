@@ -3,6 +3,7 @@ import {
   formatAbsenceAnnouncement,
   guestChipAriaLabel,
   participantChipAriaLabel,
+  resolveCourseScheduleDisplay,
   waitlistChipAriaLabel,
 } from "./courseCardLabels";
 
@@ -30,5 +31,19 @@ describe("courseCardLabels", () => {
     expect(formatAbsenceAnnouncement("Yoga Basic", "2099-06-16", "cancelled")).toBe(
       "Termin abgesagt für Yoga Basic, 16.06.2099. Absage kann zurückgenommen werden.",
     );
+  });
+
+  it("formatiert Kursrhythmus für Anzeige und ARIA", () => {
+    expect(resolveCourseScheduleDisplay("Monday", "10:00")).toEqual({
+      weekdayLabel: "Montag",
+      time: "10:00",
+      ariaLabel: "Montag · 10:00",
+    });
+    expect(resolveCourseScheduleDisplay("Mon", "18:30", "Studio 1")).toEqual({
+      weekdayLabel: "Montag",
+      time: "18:30",
+      roomLabel: "Studio 1",
+      ariaLabel: "Montag · 18:30 · Studio 1",
+    });
   });
 });

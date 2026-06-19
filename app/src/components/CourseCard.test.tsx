@@ -92,9 +92,15 @@ describe("CourseCard", () => {
     expect(article).toHaveAttribute("aria-labelledby", heading.id);
     expect(article).toHaveAttribute("aria-describedby");
     const scheduleDescId = article.getAttribute("aria-describedby");
+    expect(scheduleDescId).toBeTruthy();
     const schedule = document.getElementById(scheduleDescId!);
-    expect(schedule).toHaveTextContent(/monday · 10:00/i);
+    expect(schedule).not.toBeNull();
+    if (!schedule) return;
+
+    expect(schedule).toHaveTextContent(/Montag\s*·\s*10:00/);
     expect(schedule).toHaveAttribute("aria-label", "Montag · 10:00");
+    expect(schedule.querySelector(".course-schedule-weekday")).toHaveTextContent("Montag");
+    expect(schedule.querySelector(".course-schedule-time")).toHaveTextContent("10:00");
   });
 
   it("verknüpft Terminauswahl mit kursbezogenem Label", () => {

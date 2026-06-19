@@ -9,6 +9,7 @@ import {
   participantChipAriaLabel,
   guestChipAriaLabel,
   GUEST_CHIP_LABEL,
+  resolveCourseScheduleDisplay,
   TERM_MARKER_CUTOFF_LABEL,
   TERM_MARKER_EXCLUDED_LABEL,
   TERM_MARKER_PAST_LABEL,
@@ -17,7 +18,6 @@ import {
   waitlistChipAriaLabel,
 } from "../lib/courseCardLabels";
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
-import { weekdayLabelDe } from "../lib/weekdayLabels";
 import type { CourseCardTermState } from "./useCourseCardTermState";
 import GuestSeatControls from "./GuestSeatControls";
 
@@ -91,6 +91,8 @@ export default function CourseCardDetails({
     !isPastOccurrence &&
     !!onAdjustGuestCount;
 
+  const schedule = resolveCourseScheduleDisplay(course.weekday, course.time);
+
   return (
     <>
       <div className="course-head">
@@ -102,13 +104,20 @@ export default function CourseCardDetails({
             </h3>
           </div>
           <div
-            className="course-head-schedule muted"
+            className="course-head-schedule"
             id={scheduleDescId}
-            aria-label={`${weekdayLabelDe(course.weekday)} · ${course.time}`}
+            aria-label={schedule.ariaLabel}
           >
-            <span aria-hidden="true">
-              {course.weekday} · {course.time}
-            </span>
+            <div className="course-schedule-primary" aria-hidden="true">
+              <span className="course-schedule-weekday">{schedule.weekdayLabel}</span>
+              <span className="course-schedule-separator">·</span>
+              <span className="course-schedule-time">{schedule.time}</span>
+            </div>
+            {schedule.roomLabel && (
+              <div className="course-schedule-room" aria-hidden="true">
+                {schedule.roomLabel}
+              </div>
+            )}
           </div>
         </div>
         {(showPastGraceMarker || showCutoffMarker || showExcludedTermMarker) && (
