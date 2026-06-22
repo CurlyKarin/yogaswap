@@ -54,6 +54,22 @@ export function isTermInParticipantSwapGrace(
 }
 
 /**
+ * Teilnehmer-Kurskachel im Wind-down: keine vollen Terminaktionen, RC-Nachlauf am
+ * Vergangenheitstermin bleibt möglich (#204 Option A).
+ */
+export function isParticipantCourseWindDown(
+  course: Course,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  const status = course.status ?? "active";
+  if (status === "inactive") {
+    return isWithinParticipantGraceCalendar(course, settings, now);
+  }
+  return isWithinPostCourseEndGrace(course, settings, now);
+}
+
+/**
  * Kurs gilt als „im Nachlauf“ für Wochenrückblick: innerhalb Grace-Tage nach Ende,
  * ohne weitere Zukunftstermine (außer `inactive` — dort reicht Kalender-Nachlauf).
  */

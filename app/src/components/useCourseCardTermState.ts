@@ -288,9 +288,20 @@ export function useCourseCardTermState({
     (isParticipant || originallyParticipant) &&
     !isPastOccurrence &&
     !isSelectedTermExcluded;
-  const canSwapFromPastCancelled =
-    swapForThisTerm == null &&
-    canRequestSwapFromPastCancelledOrigin({
+  const canRequestPastRcSwap = canRequestSwapFromPastCancelledOrigin({
+    isoDate: selectedDateKey,
+    courseTime: course.time,
+    tenantSettings,
+    override,
+    userName,
+    participants,
+    originallyParticipant,
+  });
+  const canSwapFromPastCancelled = swapForThisTerm == null && canRequestPastRcSwap;
+  const canRequestMorePastRcSwaps =
+    canRequestPastRcSwap &&
+    hasPendingRequestsFromOrigin &&
+    canCreateSwapFromOrigin({
       isoDate: selectedDateKey,
       courseTime: course.time,
       tenantSettings,
@@ -302,26 +313,16 @@ export function useCourseCardTermState({
   const swapForThisTermCancellable =
     swapForThisTerm != null && canCancelSwap(swapForThisTerm, allCourses);
   const showPastTermSwapActions =
-    !participantActionsLocked &&
     !isSelectedTermExcluded &&
     isPastOccurrence &&
     (isParticipant || originallyParticipant || hasCancelled) &&
-    (swapForThisTermCancellable || canSwapFromPastCancelled);
+    (swapForThisTermCancellable || canSwapFromPastCancelled || canRequestMorePastRcSwaps);
   const excludedTermNotice = showExcludedTermMarker
     ? "Dieser Termin entfällt — vom Studio abgesagt."
     : null;
 
   const isAutomaticallyInactive =
     isInactiveCourse && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
-  const canRequestPastRcSwap = canRequestSwapFromPastCancelledOrigin({
-    isoDate: selectedDateKey,
-    courseTime: course.time,
-    tenantSettings,
-    override,
-    userName,
-    participants,
-    originallyParticipant,
-  });
   const pastTermNotice =
     isPastOccurrence && !isSelectedTermExcluded
       ? resolvePastTermNotice({
@@ -355,10 +356,8 @@ export function useCourseCardTermState({
 
   const swapStatusLines = useMemo(
     () =>
-      hasNoUpcomingDates
-        ? []
-        : allSwapsForThisTerm.map((swap) => formatSwapStatusLine(swap, course.id, allCourses)),
-    [hasNoUpcomingDates, allSwapsForThisTerm, course.id, allCourses],
+      allSwapsForThisTerm.map((swap) => formatSwapStatusLine(swap, course.id, allCourses)),
+    [allSwapsForThisTerm, course.id, allCourses],
   );
 
   const showCutoffHint =
@@ -456,6 +455,7 @@ export function useCourseCardTermState({
     showExcludedTermMarker,
     canUseFullTermActions,
     canSwapFromPastCancelled,
+    canRequestMorePastRcSwaps,
     swapForThisTermCancellable,
     showPastTermSwapActions,
     excludedTermNotice,

@@ -5,6 +5,7 @@ import {
   canShowCourseInPastWeek,
   computeEarliestWeekAnchor,
   isCourseInParticipantGrace,
+  isParticipantCourseWindDown,
   isOccurrenceInPast,
 } from "./courseTermActions";
 import { startOfWeekMonday } from "./courseWeek";
@@ -57,6 +58,44 @@ describe("isCourseInParticipantGrace", () => {
     };
     expect(isCourseInParticipantGrace(inactive, { inactiveGraceDaysAfterCourseEnd: 7 }, now)).toBe(
       true,
+    );
+  });
+});
+
+describe("isParticipantCourseWindDown", () => {
+  it("is true for active course after last term while block still runs", () => {
+    const now = new Date(Date.UTC(2026, 5, 17, 12, 0, 0));
+    const activePostEnd: Course = {
+      ...endedCourse,
+      status: "active",
+      seriesEndDate: "2026-08-31",
+      dates: ["2026-06-10", "2026-06-17"],
+    };
+    expect(isParticipantCourseWindDown(activePostEnd, { inactiveGraceDaysAfterCourseEnd: 7 }, now)).toBe(
+      true,
+    );
+  });
+
+  it("is true for inactive course still in participant grace", () => {
+    const now = new Date(2026, 4, 22, 12, 0, 0);
+    expect(
+      isParticipantCourseWindDown(
+        { ...endedCourse, status: "inactive" },
+        { inactiveGraceDaysAfterCourseEnd: 7 },
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("is false for active course with upcoming dates", () => {
+    const now = new Date(2026, 4, 10, 12, 0, 0);
+    const rolling: Course = {
+      ...endedCourse,
+      dates: ["2026-05-18", "2026-06-15"],
+      status: "active",
+    };
+    expect(isParticipantCourseWindDown(rolling, { inactiveGraceDaysAfterCourseEnd: 7 }, now)).toBe(
+      false,
     );
   });
 });
