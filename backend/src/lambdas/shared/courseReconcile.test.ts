@@ -113,6 +113,34 @@ describe("courseReconcile", () => {
     ).toBe("active");
   });
 
+  test("auto-inactivates after last term grace when term exceeds block end", () => {
+    const blockThroughJune = {
+      planningMode: "bounded_series",
+      seriesEndDate: "2026-06-30",
+    };
+    const lastTermAfterBlock = ["2026-07-05"];
+    expect(
+      resolveEffectiveCourseStatus(
+        "active",
+        blockThroughJune,
+        lastTermAfterBlock,
+        "18:00",
+        undefined,
+        new Date(Date.UTC(2026, 6, 10, 12, 0, 0)),
+      ),
+    ).toBe("active");
+    expect(
+      resolveEffectiveCourseStatus(
+        "active",
+        blockThroughJune,
+        lastTermAfterBlock,
+        "18:00",
+        undefined,
+        new Date(Date.UTC(2026, 6, 15, 12, 0, 0)),
+      ),
+    ).toBe("inactive");
+  });
+
   test("does not change draft or inactive status", () => {
     expect(resolveEffectiveCourseStatus("draft", pastBlock, pastOnly, "18:00")).toBe("draft");
     expect(resolveEffectiveCourseStatus("inactive", futureBlock, future, "18:00")).toBe("inactive");

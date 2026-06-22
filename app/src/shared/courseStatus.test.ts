@@ -3,6 +3,7 @@ import {
   courseBlockEndIso,
   courseEndDateIso,
   effectiveAutoInactiveDeadlineIso,
+  participantCourseAccessDeadlineIso,
   lastScheduledOccurrenceIso,
   getInactiveGraceLastDayIso,
   hasUpcomingCourseOccurrences,
@@ -45,12 +46,27 @@ describe("courseStatus", () => {
       ...baseCourse,
       status: "inactive" as const,
       seriesEndDate: "2026-05-10",
+      dates: ["2026-05-10"],
     };
     const within = new Date(Date.UTC(2026, 4, 15, 12, 0, 0));
     const after = new Date(Date.UTC(2026, 4, 20, 12, 0, 0));
     expect(isCourseInInactiveGracePeriod(inactive, undefined, within)).toBe(true);
     expect(isCourseInInactiveGracePeriod(inactive, undefined, after)).toBe(false);
     expect(getInactiveGraceLastDayIso(inactive)).toBe("2026-05-17");
+  });
+
+  it("verlängert Teilnehmer-Zugriffsfrist bei letztem Termin nach Blockende", () => {
+    const course = {
+      ...baseCourse,
+      status: "inactive" as const,
+      seriesEndDate: "2026-06-30",
+      dates: ["2026-07-05"],
+    };
+    expect(participantCourseAccessDeadlineIso(course)).toBe("2026-07-12");
+    const within = new Date(Date.UTC(2026, 6, 10, 12, 0, 0));
+    const after = new Date(Date.UTC(2026, 6, 15, 12, 0, 0));
+    expect(isWithinPostCourseEndGrace(course, undefined, within)).toBe(true);
+    expect(isWithinPostCourseEndGrace(course, undefined, after)).toBe(false);
   });
 
   it("prüft upcoming occurrences mit Uhrzeit", () => {
@@ -103,6 +119,7 @@ describe("courseStatus", () => {
       seriesEndDate: "2026-06-30",
       dates: ["2026-07-05"],
     };
+    expect(participantCourseAccessDeadlineIso(lateLastTerm)).toBe("2026-07-12");
     expect(effectiveAutoInactiveDeadlineIso(lateLastTerm)).toBe("2026-07-12");
   });
 

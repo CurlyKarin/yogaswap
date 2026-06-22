@@ -113,6 +113,28 @@ export function shouldAutoDeactivateCourse(
   return toIsoDateUtc(now) > deadline;
 }
 
+type ParticipantAccessCourse = Pick<
+  Course,
+  "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "dates"
+>;
+
+/**
+ * Letzter inklusiver UTC-Tag für Teilnehmer-Sichtbarkeit und Wind-down (#204).
+ * Gleiche Frist wie Auto-Inaktiv (`effectiveAutoInactiveDeadlineIso`), sonst Fallback
+ * `courseEndDateIso` + Nachlauf (z. B. manuell inaktiver Rollkurs ohne Blockende).
+ */
+export function participantCourseAccessDeadlineIso(
+  course: ParticipantAccessCourse,
+  settings?: TenantSettings,
+): string | undefined {
+  const aligned = effectiveAutoInactiveDeadlineIso(course, settings);
+  if (aligned) return aligned;
+  const endIso = courseEndDateIso(course);
+  if (!endIso) return undefined;
+  const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+  return addCalendarDaysIsoUtc(endIso, graceDays);
+}
+
 /**
  * Letztes Kursende (YYYY-MM-DD) fuer Nachlauf bei inaktiven Kursen:
  * `plannedEndDate` (Rollkurs), sonst seriesEndDate, visibleUntil, max aus `dates`.
@@ -149,13 +171,10 @@ export function lastScheduledOccurrenceIso(
 }
 
 export function getInactiveGraceLastDayIso(
-  course: Pick<Course, "seriesEndDate" | "visibleUntil" | "dates" | "status">,
+  course: ParticipantAccessCourse,
   settings?: TenantSettings,
 ): string | undefined {
-  const endIso = courseEndDateIso(course);
-  if (!endIso) return undefined;
-  const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
-  return addCalendarDaysIsoUtc(endIso, graceDays);
+  return participantCourseAccessDeadlineIso(course, settings);
 }
 
 /** Teilnehmer-Nachlauf: heute (UTC) liegt noch im Fenster nach Kursende. */
@@ -169,20 +188,29 @@ export function isCourseInInactiveGracePeriod(
 }
 
 /**
- * Nach Kursende (letzter Termin vorbei), innerhalb des Nachlaufs — auch wenn Status noch `active`
- * (z. B. vor getCourses-Reconcile).
+ * Teilnehmer-Wind-down: letzter Termin vorbei (bei `active`) bzw. `inactive`, noch innerhalb
+ * der Zugriffsfrist — dieselbe Schwelle wie Auto-Inaktiv (#204).
  */
 export function isWithinPostCourseEndGrace(
-  course: Pick<Course, "dates" | "time" | "seriesEndDate" | "visibleUntil" | "status">,
+  course: Pick<
+    Course,
+    | "dates"
+    | "time"
+    | "seriesEndDate"
+    | "visibleUntil"
+    | "plannedEndDate"
+    | "planningMode"
+    | "status"
+  >,
   settings?: TenantSettings,
   now: Date = new Date(),
 ): boolean {
-  const endIso = courseEndDateIso(course);
-  if (!endIso) return false;
-  if (hasUpcomingCourseOccurrences(course.dates ?? [], course.time, now)) return false;
-  const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
-  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, graceDays);
-  return toIsoDateUtc(now) <= lastGraceInclusiveIso;
+  const deadline = participantCourseAccessDeadlineIso(course, settings);
+  if (!deadline) return false;
+  if (toIsoDateUtc(now) > deadline) return false;
+  const status = course.status ?? "active";
+  if (status === "inactive") return true;
+  return !hasUpcomingCourseOccurrences(course.dates ?? [], course.time, now);
 }
 
 /**

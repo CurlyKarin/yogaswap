@@ -61,7 +61,7 @@ Vertretung (`forceParticipantView` in `App`): Teilnehmer-Perspektive in der **Wo
 | Zustand | Erkennbar wie | Aktionen (Teilnehmer) |
 |--------|----------------|------------------------|
 | **Studio-Entfall** (`excludedDates`) | Marker `CalendarX` (rot), Dropdown `(entfällt)`, Hinweis „Termin entfällt“ | Keine Absage/Tausch; Swap ggf. nur abbrechen |
-| **Vergangen** (Nachlauf) | Marker `History` | Keine neuen Aktionen; RC-Absage → Tausch verwalten; bestehende Swaps abbrechen |
+| **Vergangen** (Nachlauf) | Marker `History` | Kurs-Wind-down: keine Absage am laufenden Termin; RC-Absage → „Anderen Termin wählen“ / offene Anfragen; Swaps abbrechen |
 | **Cutoff** (kurz vor Start) | Marker `Clock3` | Kein neuer Tausch; SN/RC-Regeln (#167) |
 | **Eigene RC/SN** | Chips (eigenes Chip grün; SN: du kräftig rot, andere blass) | Absage/Tausch wie in Kursübersicht |
 | **Aktiver Tausch vom Ursprung** | Oft nicht in Teilnehmer-Chips; Status-Text unten („Getauscht mit …“) | Follow-up [#185](https://github.com/CurlyKarin/yogaswap/issues/185) |
@@ -98,8 +98,8 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 |--------|-----------|
 | **Sichtbarkeit** | Vergangene KW: nur Kurse im Kalender-Nachlauf mit Termin in dieser KW. |
 | **Navigation ‹** | `computeEarliestWeekAnchor`; ‹ deaktiviert am unteren Limit. |
-| **Vergangener Termin** | Keine Absage, kein neuer Tausch. |
-| **RC abgesagt** | „Anderen Termin wählen“ / offene Tauschanfragen. |
+| **Vergangener Termin** | Keine Absage am laufenden Termin; kein Tausch ohne RC-Absage. |
+| **RC abgesagt** | „Anderen Termin wählen“, weitere Tauschanfragen, offene Anfragen abbrechen — auch im Kurs-Wind-down. |
 | **Bestehende Swaps** | Abbrechen/verwalten weiter möglich. |
 
 ---
@@ -108,7 +108,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 
 | Thema | Issue / Doku |
 |--------|----------------|
-| Kursstatus, `visibleDates`, Nachlauf | #149, `course-status-visibility.md` |
+| Kursstatus, `visibleDates`, Nachlauf, Wind-down | #149, #204, `course-status-visibility.md` |
 | Kalender-/Swap-Zeitachse, Sondertermine | #164 (dieses Dokument) |
 | Kontrollierte Überplanung | #153, `course-overbooking.md` |
 | Kurzfristige Absage (SN/RC, Cutoff) | #167, `short-notice-cancellation.md` |

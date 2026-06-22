@@ -8,6 +8,7 @@ import {
   DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
   isOccurrenceInPast,
   isWithinPostCourseEndGrace,
+  participantCourseAccessDeadlineIso,
   toIsoDateUtc,
 } from "shared/courseStatus";
 
@@ -21,18 +22,15 @@ function resolveGraceDays(settings?: TenantSettings): number {
   return typeof value === "number" && value > 0 ? value : DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
 }
 
-/** Kalendertage nach Kursende — gleiche Basis wie `canSeeCourse` für inaktive Kurse (#149). */
+/** Kalendertage nach Kursende — gleiche Zugriffsfrist wie Auto-Inaktiv (#204). */
 export function isWithinParticipantGraceCalendar(
-  course: Pick<Course, "dates" | "time" | "seriesEndDate" | "visibleUntil" | "status" | "plannedEndDate">,
+  course: Pick<Course, "dates" | "time" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "planningMode" | "status">,
   settings?: TenantSettings,
   now: Date = new Date(),
 ): boolean {
-  const endIso = courseEndDateIso(course);
-  if (!endIso) return false;
-  const todayIso = toIsoDateUtc(now);
-  if (todayIso < endIso) return false;
-  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, resolveGraceDays(settings));
-  return todayIso <= lastGraceInclusiveIso;
+  const deadline = participantCourseAccessDeadlineIso(course, settings);
+  if (!deadline) return false;
+  return toIsoDateUtc(now) <= deadline;
 }
 
 function isIsoWithinGraceWindow(isoDate: string, settings: TenantSettings | undefined, now: Date): boolean {
@@ -62,10 +60,6 @@ export function isParticipantCourseWindDown(
   settings?: TenantSettings,
   now: Date = new Date(),
 ): boolean {
-  const status = course.status ?? "active";
-  if (status === "inactive") {
-    return isWithinParticipantGraceCalendar(course, settings, now);
-  }
   return isWithinPostCourseEndGrace(course, settings, now);
 }
 

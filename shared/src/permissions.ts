@@ -1,8 +1,6 @@
 import {
-  addCalendarDaysIsoUtc,
-  courseEndDateIso,
-  DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
   isWithinPostCourseEndGrace,
+  participantCourseAccessDeadlineIso,
   toIsoDateUtc,
   wouldAutoDeactivateBoundedSeries,
 } from "./courseStatus";
@@ -146,8 +144,9 @@ function participantBaseVisible(
  *
  * Teilnehmer:innen:
  * - `draft`: nie sichtbar
- * - `inactive`: nur im Nachlauf (Kursende + TenantSettings.inactiveGraceDaysAfterCourseEnd,
- *   Default 7 Tage) und nur wenn die bestehende Buchungs-/Instructor-Logik zutrifft
+ * - `inactive`: nur im Nachlauf (Zugriffsfrist = `participantCourseAccessDeadlineIso`,
+ *   Default-Nachlauf 7 Tage nach letztem Termin bzw. Blockende) und nur wenn die
+ *   bestehende Buchungs-/Instructor-Logik zutrifft
  * - `active` / ohne Status: wie bisher
  *
  * Instructor:innen / Admins: Status filtert die Sichtbarkeit nicht (Planung / Verwaltung).
@@ -181,11 +180,8 @@ export function canSeeCourse(
   if (status === "draft") return false;
 
   if (status === "inactive") {
-    const endIso = courseEndDateIso(course);
-    if (!endIso) return false;
-    const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
-    const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, graceDays);
-    if (todayIso > lastGraceInclusiveIso) return false;
+    const deadline = participantCourseAccessDeadlineIso(course, settings);
+    if (!deadline || todayIso > deadline) return false;
   }
 
   return participantBaseVisible(settings, context);

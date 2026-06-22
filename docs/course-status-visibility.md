@@ -1,6 +1,6 @@
-# Kursstatus, Sichtbarkeit und Auto-Transition (#149)
+# Kursstatus, Sichtbarkeit und Auto-Transition (#149, #204)
 
-Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogaswap/issues/149): welche Kurse Teilnehmer:innen sehen, wann ein Kursblock automatisch `inactive` wird, und wie der Nachlauf mit dem Tauschfenster zusammenhängt.
+Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogaswap/issues/149) und [#204](https://github.com/CurlyKarin/yogaswap/issues/204): welche Kurse Teilnehmer:innen sehen, wann ein Kursblock automatisch `inactive` wird, und wie der Nachlauf mit dem Tauschfenster zusammenhängt.
 
 ## Kurzfassung
 
@@ -8,11 +8,11 @@ Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogasw
 |--------|-----------|
 | **`draft`** | Teilnehmer:innen sehen den Kurs nicht. |
 | **`active`** | Normale Sichtbarkeit; Termine über `getCourseDates` (Datum + Uhrzeit ≥ jetzt). |
-| **`active` → `inactive`** | Automatisch bei **Kursblock** (`bounded_series`), wenn kein Termin mehr in der Zukunft liegt (Datum **und** Uhrzeit). |
-| **Nachlauf** | Nach Kursende bleibt ein **`inactive`** Kurs für Teilnehmer:innen noch **X Kalendertage** sichtbar (Default **7**, UTC). |
-| **Lazy Reconcile** | Beim **`GET /courses`** (`get-courses` Lambda) werden Status und abgeleitete `dates` bei Bedarf in DynamoDB nachgezogen. |
+| **`active` → `inactive`** | Automatisch, wenn ein **Blockende** definiert ist und der UTC-Kalendertag **nach** der Zugriffsfrist liegt (siehe unten). Nicht mehr allein bei „kein Zukunftstermin“. |
+| **Nachlauf** | Teilnehmer:innen sehen den Kurs nach dem letzten Termin noch bis zum **gleichen Fristtag** wie die Auto-Inaktiv-Schwelle (Default-Nachlauf **7** Kalendertage nach letztem Termin, UTC). |
+| **Lazy Reconcile** | Beim **`GET /courses`** werden Status und abgeleitete `dates` bei Bedarf in DynamoDB nachgezogen. |
 
-Studio-Konfiguration für Nachlauf, Tauschfenster und Rollkurs-Fenster über **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)): `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays`, `maxOffsetDays`, `rollingPlanningHorizonWeeks` in `TenantSettings`. Rollkurse: siehe [rolling-courses-planning.md](./rolling-courses-planning.md). Nachlauf/Tauschfenster: [Nachlauf und Tauschfenster](#nachlauf-und-tauschfenster).
+Studio-Konfiguration: **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)) — `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays`, `maxOffsetDays`, `rollingPlanningHorizonWeeks`. Rollkurse: [rolling-courses-planning.md](./rolling-courses-planning.md).
 
 ---
 
@@ -24,8 +24,11 @@ flowchart LR
     P1{status?}
     P1 -->|draft| PH[nicht sichtbar]
     P1 -->|active| PA[sichtbar mit Zukunftsterminen]
-    P1 -->|inactive| PI{Nachlauf?}
-    PI -->|ja| PG[Kachel sichtbar, letzter Termin, eingeschränkte Aktionen]
+    P1 -->|active, letzter Termin vorbei| PW{noch in Zugriffsfrist?}
+    PW -->|ja| PG[Kachel sichtbar, Wind-down]
+    PW -->|nein| PH
+    P1 -->|inactive| PI{noch in Zugriffsfrist?}
+    PI -->|ja| PG
     PI -->|nein| PH
   end
 
@@ -35,31 +38,57 @@ flowchart LR
   end
 ```
 
-**Quelle im Code:** `shared/src/permissions.ts` — `canSeeCourse`, `canShowParticipantCourseCard`.
+**Quelle:** `shared/src/permissions.ts` — `canSeeCourse`, `canShowParticipantCourseCard`.
 
 Teilnehmer-Kachel auch **ohne Zukunftstermine**, wenn:
 
-- `inactive` im Nachlauf, oder
-- `active`, Termin vorbei, aber noch innerhalb des Nachlaufs (`isWithinPostCourseEndGrace` — Übergangsphase bis Reconcile).
+- `inactive` und noch innerhalb der Zugriffsfrist, oder
+- `active`, letzter Termin vorbei, aber noch in der Zugriffsfrist (`isWithinPostCourseEndGrace` — bis Reconcile oder bei laufendem Block).
+
+---
+
+## Zugriffsfrist und Auto-Inaktiv (#204)
+
+Gemeinsame Schwelle für **Auto-Inaktiv** und **Teilnehmer-Sichtbarkeit/Wind-down**:
+
+```
+ZugriffsfristEnde = max( blockEndIso, letzterTerminIso + inactiveGraceDaysAfterCourseEnd )
+```
+
+| Symbol | Bedeutung |
+|--------|-----------|
+| `blockEndIso` | `courseBlockEndIso()` — `seriesEndDate` / `visibleUntil` (Kursblock) oder `plannedEndDate` (Rollkurs mit Ende) |
+| `letzterTerminIso` | `lastScheduledOccurrenceIso()` — nur aus `dates`, kein seriesEndDate-Fallback |
+| `inactiveGraceDaysAfterCourseEnd` | Studio-Einstellung (Default **7**, UTC-Kalendertage) |
+
+**Im Code:** `effectiveAutoInactiveDeadlineIso` und `participantCourseAccessDeadlineIso` in `shared/src/courseStatus.ts` (identische Frist; Fallback ohne Blockende über `courseEndDateIso` + Nachlauf).
+
+### Nach Planungsmodus
+
+| Modus | Blockende | Auto-inaktiv |
+|-------|-----------|--------------|
+| `bounded_series` | `seriesEndDate` (ggf. `visibleUntil`) | Ja, nach obiger Formel |
+| `rolling_continuous` **mit** `plannedEndDate` | `plannedEndDate` | Gleiche Regel |
+| `rolling_continuous` **ohne** `plannedEndDate` | — | **Kein** Auto-inaktiv |
+
+**Bedeutung:**
+
+- Block läuft noch → Kurs bleibt `active`, auch ohne zukünftige Termine (Admin kann nachplanen).
+- Letzter Termin **nach** dem Blockende → Frist und Sichtbarkeit enden erst nach **Termin + Nachlauf**.
+- Liegt kein Termin in `dates`, gilt nur `blockEndIso` als Frist (ohne zusätzliche +7 Tage nur auf das Blockende).
 
 ---
 
 ## Automatischer Übergang `active` → `inactive`
 
-Gilt nur für **`bounded_series`** (Kursblock), nicht für durchlaufende Kurse (`rolling_continuous`, siehe [#165](https://github.com/CurlyKarin/yogaswap/issues/165)).
-
-**Bedingung:** Kein Eintrag in den abgeleiteten sichtbaren Terminen (`visibleDates`), dessen **Kursbeginn** (ISO-Datum + `time`) noch ≥ jetzt ist.
-
 ```mermaid
 flowchart TD
-  A[Gespeicherter status: active] --> B[visibleDates aus Planungsmodell ableiten]
-  B --> C{bounded_series?}
-  C -->|nein| Z[status unverändert]
-  C -->|ja| D{noch Termin mit Start >= jetzt?}
-  D -->|ja| Z
-  D -->|nein| E[effectiveStatus: inactive]
-  E --> F{Persistieren}
-  F --> G[Antwort + DynamoDB]
+  A[status: active] --> B{blockEndIso definiert?}
+  B -->|nein| Z[status unverändert]
+  B -->|ja| C{UTC-Heute > ZugriffsfristEnde?}
+  C -->|nein| Z
+  C -->|ja| E[effectiveStatus: inactive]
+  E --> F[Persistieren bei Reconcile/Speichern]
 ```
 
 **Auslöser (gleiche Regel):**
@@ -70,9 +99,9 @@ flowchart TD
 | Kurs speichern | `update-course` → `PUT /courses/{id}` |
 | Kurs anlegen | `create-course` → `POST /courses` |
 
-**Wichtig:** Die alte Prüfung nur auf Kalendertag (`datum >= heute`) würde am **Termintag** noch `active` lassen. Aktuell gilt überall **Datum + Uhrzeit** (`hasUpcomingCourseOccurrences` in `shared/src/courseStatus.ts` bzw. `backend/src/lambdas/shared/courseDates.ts`).
+Implementierung: `shouldAutoDeactivateCourse` in `shared/src/courseStatus.ts`, aufgerufen aus `backend/src/lambdas/shared/courseReconcile.ts`.
 
-Manuelles `active` → `inactive` bleibt an bestehende Guards gebunden (offene Termine, Swaps, Teilnehmer) — nur in `updateCourse`, nicht beim Lazy Reconcile.
+Manuelles `active` → `inactive` bleibt an bestehende Guards gebunden — nur in `updateCourse`, nicht beim Lazy Reconcile.
 
 ---
 
@@ -93,45 +122,35 @@ sequenceDiagram
     Lambda->>Lambda: computeCourseReconcile
     alt status oder dates geändert
       Lambda->>DDB: PutItem
-      Lambda->>Lambda: Log getCourses_reconcile
     end
   end
   Lambda-->>App: JSON mit effectiveStatus + dates
 ```
 
-**Lambda:** `get-courses` (ZIP: `getCourses.zip`, Code: `backend/src/lambdas/getCourses/index.ts`).
-
-**IAM:** `dynamodb:PutItem` auf der Courses-Tabelle (Terraform: `get_courses` in `projects/yogaswap/main.tf`).
-
-**Logs (CloudWatch):** u. a. `reason: empty_future_schedule`, `source: getCourses_reconcile`.
-
-Deploy ändert **keine** bestehenden Kurse von selbst — der Effekt entsteht beim **nächsten** erfolgreichen `GET /courses` nach Ausrollen der Lambda.
+Deploy ändert bestehende Kurse erst beim **nächsten** erfolgreichen `GET /courses` nach Ausrollen.
 
 ---
 
-## Nachlauf und Tauschfenster
+## Nachlauf, Wind-down und Tauschfenster
 
-Nach dem **letzten Kursende** (`courseEndDateIso`: `seriesEndDate` → `visibleUntil` → max aus `dates`) bleiben inaktive Kursblöcke für Teilnehmer:innen noch sichtbar:
+### Kurs-Wind-down (`isParticipantCourseWindDown`)
 
-```
-letzterTagNachlauf = Kursende + inactiveGraceDaysAfterCourseEnd   (Kalendertage, UTC)
-```
+Teilnehmer-Kachel im **Wind-down** (CSS `course-card--inactive-participant`, `participantActionsLocked`):
 
-| Einstellung | Ort (aktuell) | Default |
-|-------------|---------------|---------|
-| Nachlauf nach Kursende | `TenantSettings.inactiveGraceDaysAfterCourseEnd` | **7** |
-| Tauschfenster | `TenantSettings.minOffsetDays` / `maxOffsetDays` (`shared/tenantSettings.ts`) | **-7 / +7** |
-| Planungs- und Sichtfenster (Rollkurs) | `TenantSettings.rollingPlanningHorizonWeeks` | **5** |
+- Keine vollen Terminaktionen am **aktuellen/künftigen** Termin (keine Absage, kein neuer Tausch).
+- **RC-Nachlauf** am **vergangenen** Termin bleibt möglich: „Anderen Termin wählen“, offene Anfragen verwalten, weitere Tauschanfragen (#204 Option A).
 
-**Produktentscheidung (#149):** Nachlauf und Swap-Fenster nutzen **dieselbe Konfigurationsfamilie** in `TenantSettings` (Studio-UI [#44](https://github.com/CurlyKarin/yogaswap/issues/44)). Der Code-Default für den Nachlauf ist an `DEFAULT_SWAP_MAX_OFFSET_DAYS` angeglichen.
+### Termin-Nachlauf (pro Vergangenheitstermin)
 
-Im Nachlauf:
+Unabhängig vom Kurs-Wind-down: **7 Tage** (Studio-Einstellung) nach einem vergangenen Termin für RC-Tausch (`isTermInParticipantSwapGrace`). Details: [course-views.md](./course-views.md).
 
-- Kurskachel mit Badge „Automatisch inaktiv“ / „Inaktiv“
-- **Letzter Termin** im Dropdown (auch ohne Zukunftstermine in `getCourseDates`)
-- Keine neuen Absagen/Tauschanfragen; offene Swaps noch verwalten (Hinweistext mit Enddatum des Nachlaufs)
+| Einstellung | Default |
+|-------------|---------|
+| `inactiveGraceDaysAfterCourseEnd` | **7** |
+| `minOffsetDays` / `maxOffsetDays` (Tauschfenster) | **-7 / +7** |
+| `rollingPlanningHorizonWeeks` | **5** |
 
-**Quelle:** `shared/src/courseStatus.ts`, `app/src/components/CourseCard.tsx`, `app/src/components/CourseList.tsx`.
+**Quellen:** `shared/src/courseStatus.ts`, `app/src/lib/courseTermActions.ts`, `app/src/lib/courseCardLabels.ts`, `app/src/components/CourseCard.tsx`.
 
 ---
 
@@ -139,10 +158,8 @@ Im Nachlauf:
 
 | Anzeige | Bedeutung |
 |---------|-----------|
-| **wird beim Speichern inaktiv** | DB noch `active`, aber keine Zukunftstermine (heuristisch `wouldAutoDeactivateBoundedSeries`) |
+| **wird beim Speichern inaktiv** | DB noch `active`, aber UTC-Heute liegt nach `participantCourseAccessDeadlineIso` (`wouldAutoDeactivateBoundedSeries`) |
 | **automatisch inaktiv** | `inactive` und typisch per Auto-Transition gesetzt |
-
-Nach erfolgreichem Reconcile verschwindet „wird beim Speichern inaktiv“ zugunsten von **Inaktiv** / **automatisch inaktiv**.
 
 ---
 
@@ -151,20 +168,11 @@ Nach erfolgreichem Reconcile verschwindet „wird beim Speichern inaktiv“ zugu
 | Bereich | Datei |
 |---------|--------|
 | Permissions | `shared/src/permissions.ts` |
-| Kursende / Nachlauf / Occurrences | `shared/src/courseStatus.ts` |
-| Tenant-Typ | `shared/src/types.ts` (`inactiveGraceDaysAfterCourseEnd`) |
-| Reconcile-Logik | `backend/src/lambdas/shared/courseReconcile.ts` |
-| GET Kurse | `backend/src/lambdas/getCourses/index.ts` |
-| Terminliste UI | `app/src/lib/dates.ts` (`getCourseDates`) |
-| Kurskarte | `app/src/components/CourseCard.tsx` |
-
----
-
-## Mermaid in Cursor anzeigen
-
-Diese Datei in Cursor öffnen → **Markdown-Vorschau** (`Cmd+Shift+V` / `Ctrl+Shift+V`). Mermaid-Blöcke werden in der Vorschau gerendert.
-
-Extern: [mermaid.live](https://mermaid.live) oder GitHub nach Push.
+| Frist / Nachlauf / Occurrences | `shared/src/courseStatus.ts` |
+| Reconcile | `backend/src/lambdas/shared/courseReconcile.ts` |
+| Wind-down / RC-Nachlauf UI | `app/src/lib/courseTermActions.ts`, `app/src/components/useCourseCardTermState.ts` |
+| Hinweistexte | `app/src/lib/courseCardLabels.ts` |
+| Kurskarte | `app/src/components/CourseCard.tsx`, `CourseTermActions.tsx` |
 
 ---
 
@@ -174,3 +182,4 @@ Extern: [mermaid.live](https://mermaid.live) oder GitHub nach Push.
 - [#44](https://github.com/CurlyKarin/yogaswap/issues/44) — Studio-Settings (Nachlauf, Tauschfenster, Planungssperre)
 - [#129](https://github.com/CurlyKarin/yogaswap/issues/129) — Lifecycle-Guardrails (`updateCourse` / Prune)
 - [#165](https://github.com/CurlyKarin/yogaswap/issues/165) — Rollende Kurse mit optionalem Ende
+- [#204](https://github.com/CurlyKarin/yogaswap/issues/204) — Auto-Inaktiv vs. Teilnehmer-Nachlauf
