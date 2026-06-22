@@ -4,9 +4,9 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import {
   deriveVisibleDates,
-  hasUpcomingCourseOccurrences,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
+import { shouldAutoDeactivateCourse, type Course } from "@yogaswap/shared";
 import { generateCourseUid } from "../shared/courseUid";
 import {
   loadTenantSettings,
@@ -170,8 +170,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     let rollingPlanningHorizonWeeks = 5;
+    let tenantSettings;
     try {
-      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
       rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenantSettings);
     } catch (error) {
       console.error("Failed to load tenant settings for rolling planning horizon:", error);
@@ -221,9 +222,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       includedDates,
       fallbackDates: [],
     });
-    const hasUpcomingOccurrences = hasUpcomingCourseOccurrences(visibleDates, time, new Date());
     const effectiveStatus =
-      status === "active" && planningMode === "bounded_series" && !hasUpcomingOccurrences
+      status === "active" &&
+      shouldAutoDeactivateCourse(
+        {
+          status: "active",
+          planningMode: planningMode as Course["planningMode"],
+          seriesEndDate,
+          visibleUntil,
+          dates: visibleDates,
+        },
+        tenantSettings,
+      )
         ? "inactive"
         : status;
     if (effectiveStatus !== status) {

@@ -9,9 +9,9 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import {
   deriveVisibleDates,
-  hasUpcomingCourseOccurrences,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
+import { shouldAutoDeactivateCourse, type Course } from "@yogaswap/shared";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
@@ -354,8 +354,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     let rollingPlanningHorizonWeeks = 5;
+    let tenantSettings;
     try {
-      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
       rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenantSettings);
     } catch (error) {
       console.error("Failed to load tenant settings for rolling planning horizon:", error);
@@ -646,12 +647,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       includedDates: nextIncludedDates,
       fallbackDates: item.dates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [],
     });
-    const hasUpcomingOccurrences = hasUpcomingCourseOccurrences(nextDates, nextTime, new Date());
     let effectiveStatus = nextStatus;
     if (
-      effectiveStatus === "active" &&
-      nextPlanningMode === "bounded_series" &&
-      !hasUpcomingOccurrences
+      nextStatus === "active" &&
+      shouldAutoDeactivateCourse(
+        {
+          status: "active",
+          planningMode: nextPlanningMode as Course["planningMode"],
+          seriesEndDate: nextSeriesEndDate,
+          visibleUntil: nextVisibleUntil,
+          plannedEndDate: nextPlannedEndDate,
+          dates: nextDates,
+        },
+        tenantSettings,
+      )
     ) {
       effectiveStatus = "inactive";
       console.info(

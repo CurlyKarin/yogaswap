@@ -72,10 +72,12 @@ export const handler = async (
     console.log("getCourses tenant context", { tenantId, userId });
 
     let rollingPlanningHorizonWeeks = 5;
+    let inactiveGraceDaysAfterCourseEnd: number | undefined;
     if (tenantsTable) {
       try {
         const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
         rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenantSettings);
+        inactiveGraceDaysAfterCourseEnd = tenantSettings?.inactiveGraceDaysAfterCourseEnd;
       } catch (error) {
         console.error("Failed to load tenant settings for rolling horizon:", error);
       }
@@ -132,9 +134,13 @@ export const handler = async (
       const reconcile = computeCourseReconcile({
         storedStatus,
         planningMode,
+        seriesEndDate: item.seriesEndDate?.S,
+        visibleUntil: item.visibleUntil?.S,
+        plannedEndDate: item.plannedEndDate?.S,
         visibleDates,
         storedDates: fallbackDates,
         courseTime: item.time?.S ?? "",
+        inactiveGraceDaysAfterCourseEnd,
         now,
       });
 

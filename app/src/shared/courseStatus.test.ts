@@ -1,12 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
+  courseBlockEndIso,
   courseEndDateIso,
+  effectiveAutoInactiveDeadlineIso,
   lastScheduledOccurrenceIso,
   getInactiveGraceLastDayIso,
   hasUpcomingCourseOccurrences,
   isCourseInInactiveGracePeriod,
   isWithinPostCourseEndGrace,
   looksLikeAutomaticallyInactive,
+  shouldAutoDeactivateCourse,
+  supportsAutoInactiveTransition,
   wouldAutoDeactivateBoundedSeries,
 } from "shared/courseStatus";
 import type { Course } from "shared/types";
@@ -65,12 +69,82 @@ describe("courseStatus", () => {
     ).toBe(true);
   });
 
+  it("ermittelt Blockende fuer Auto-Inaktiv", () => {
+    expect(
+      courseBlockEndIso({ ...baseCourse, seriesEndDate: "2026-06-30" }),
+    ).toBe("2026-06-30");
+    expect(
+      courseBlockEndIso({
+        ...baseCourse,
+        planningMode: "rolling_continuous",
+        plannedEndDate: "2026-08-01",
+      }),
+    ).toBe("2026-08-01");
+    expect(
+      courseBlockEndIso({ ...baseCourse, planningMode: "rolling_continuous" }),
+    ).toBeUndefined();
+    expect(supportsAutoInactiveTransition({ ...baseCourse, seriesEndDate: "2026-06-30" })).toBe(
+      true,
+    );
+    expect(supportsAutoInactiveTransition({ ...baseCourse, planningMode: "rolling_continuous" })).toBe(
+      false,
+    );
+  });
+
+  it("berechnet effektive Auto-Inaktiv-Frist aus Blockende und letztem Termin", () => {
+    const course = {
+      ...baseCourse,
+      seriesEndDate: "2026-06-30",
+      dates: ["2026-03-15", "2026-05-10"],
+    };
+    expect(effectiveAutoInactiveDeadlineIso(course)).toBe("2026-06-30");
+    const lateLastTerm = {
+      ...baseCourse,
+      seriesEndDate: "2026-06-30",
+      dates: ["2026-07-05"],
+    };
+    expect(effectiveAutoInactiveDeadlineIso(lateLastTerm)).toBe("2026-07-12");
+  });
+
+  it("prüft shouldAutoDeactivateCourse nach Blockende + Nachlauf", () => {
+    const activeInBlock = {
+      ...baseCourse,
+      status: "active" as const,
+      seriesEndDate: "2026-06-30",
+      dates: ["2026-03-15"],
+    };
+    const beforeEnd = new Date(Date.UTC(2026, 3, 1, 12, 0, 0));
+    const afterEnd = new Date(Date.UTC(2026, 6, 15, 12, 0, 0));
+    expect(shouldAutoDeactivateCourse(activeInBlock, undefined, beforeEnd)).toBe(false);
+    expect(shouldAutoDeactivateCourse(activeInBlock, undefined, afterEnd)).toBe(true);
+    expect(wouldAutoDeactivateBoundedSeries(activeInBlock, true, undefined, beforeEnd)).toBe(
+      false,
+    );
+    expect(wouldAutoDeactivateBoundedSeries(activeInBlock, false, undefined, afterEnd)).toBe(true);
+  });
+
   it("erkennt auto-inaktiv-Heuristik und pending deactivation", () => {
     const inactive = { ...baseCourse, status: "inactive" as const };
-    const active = { ...baseCourse, status: "active" as const };
+    const activePastBlock = {
+      ...baseCourse,
+      status: "active" as const,
+      seriesEndDate: "2020-01-31",
+      dates: ["2020-01-06"],
+    };
+    const activeInBlock = {
+      ...baseCourse,
+      status: "active" as const,
+      seriesEndDate: "2099-12-31",
+      dates: ["2020-01-06"],
+    };
+    const afterBlock = new Date(Date.UTC(2026, 0, 1, 12, 0, 0));
     expect(looksLikeAutomaticallyInactive(inactive, false)).toBe(true);
-    expect(looksLikeAutomaticallyInactive(active, false)).toBe(false);
-    expect(wouldAutoDeactivateBoundedSeries(active, false)).toBe(true);
-    expect(wouldAutoDeactivateBoundedSeries(active, true)).toBe(false);
+    expect(looksLikeAutomaticallyInactive(activePastBlock, false)).toBe(false);
+    expect(wouldAutoDeactivateBoundedSeries(activePastBlock, true, undefined, afterBlock)).toBe(
+      true,
+    );
+    expect(wouldAutoDeactivateBoundedSeries(activeInBlock, false, undefined, afterBlock)).toBe(
+      false,
+    );
   });
 });
