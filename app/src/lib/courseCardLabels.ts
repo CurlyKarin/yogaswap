@@ -88,6 +88,28 @@ export function termSelectAriaLabel(courseName: string): string {
   return `Termin für ${courseName}`;
 }
 
+/** Hinweis in der Kurskachel, wenn Teilnehmer-Aktionen gesperrt sind und kein Termin-Kontext. */
+export function resolveInactiveParticipantNotice(input: {
+  isAutomaticallyInactive: boolean;
+}): string {
+  return input.isAutomaticallyInactive
+    ? "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten."
+    : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten.";
+}
+
+/** Footer-Hinweis für vergangene Termine ohne verfügbare Aktionen. */
+export function resolvePastTermNotice(input: {
+  showPastGraceMarker: boolean;
+  hasCancelled: boolean;
+}): string {
+  if (input.showPastGraceMarker) {
+    return input.hasCancelled
+      ? "Für diesen Termin ist der Nachlauf vorbei — kein Tausch mehr möglich."
+      : "Vergangener Termin im Nachlauf — Tausch nur nach rechtzeitiger Absage.";
+  }
+  return "Vergangener Termin — keine Änderungen mehr möglich.";
+}
+
 export function excludedTermOptionSuffix(): string {
   return " (entfällt)";
 }

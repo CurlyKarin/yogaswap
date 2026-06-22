@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { Course, CourseDateOverride, Swap, TenantSettings, User } from "shared/types";
 import {
   buildCourseOccurrenceLocal,
-  formatCourseIsoDateDe,
   getInactiveGraceLastDayIso,
   isCourseInInactiveGracePeriod,
   isWithinPostCourseEndGrace,
+  isOccurrenceInPast,
   lastScheduledOccurrenceIso,
   looksLikeAutomaticallyInactive,
 } from "shared/courseStatus";
@@ -19,10 +19,8 @@ import {
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
-import {
-  canRequestSwapFromPastCancelledOrigin,
-  isOccurrenceInPast,
-} from "../lib/courseTermActions";
+import { resolveInactiveParticipantNotice, resolvePastTermNotice } from "../lib/courseCardLabels";
+import { canRequestSwapFromPastCancelledOrigin, isTermInParticipantSwapGrace } from "../lib/courseTermActions";
 import { formatSwapStatusLine } from "../lib/courseTermActionLabels";
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import type { SwapSettings } from "../types";
@@ -232,6 +230,11 @@ export function useCourseCardTermState({
       : null;
   const showLastTermInSelect =
     hasNoUpcomingDates && lastOccurrenceDate != null && inPostEndGrace;
+  const showLastTermMarkerInSelect =
+    lastActualOccurrenceIso != null &&
+    (showLastTermInSelect ||
+      (includePastTermsInSelect &&
+        isTermInParticipantSwapGrace(lastActualOccurrenceIso, course.time, tenantSettings)));
   const showAutoInactiveBadge =
     participantActionsLocked && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
   const userSwapsOnCourse = useMemo(
@@ -249,8 +252,16 @@ export function useCourseCardTermState({
   );
   const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
   const isSelectedTermExcluded = isExcludedCourseDate(course, selectedDateKey);
+  const termInSwapGrace = isTermInParticipantSwapGrace(
+    selectedDateKey,
+    course.time,
+    tenantSettings,
+  );
   const showPastGraceMarker =
-    includePastTermsInSelect && isPastOccurrence && !isSelectedTermExcluded;
+    (includePastTermsInSelect || participantActionsLocked) &&
+    isPastOccurrence &&
+    !isSelectedTermExcluded &&
+    termInSwapGrace;
   const showCutoffMarker =
     includePastTermsInSelect &&
     !isPastOccurrence &&
@@ -286,15 +297,16 @@ export function useCourseCardTermState({
     ? "Dieser Termin entfällt — vom Studio abgesagt."
     : null;
 
-  const inactiveNotice = participantActionsLocked
-    ? showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
-      ? graceLastIso
-        ? `Dieser Kurs wurde automatisch beendet (keine weiteren Termine). Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
-        : "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten."
-      : graceLastIso
-        ? `Dieser Kurs ist inaktiv. Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
-        : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten."
-    : null;
+  const isAutomaticallyInactive =
+    isInactiveCourse && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
+  const pastTermNotice =
+    isPastOccurrence && !isSelectedTermExcluded && !showPastTermSwapActions
+      ? resolvePastTermNotice({ showPastGraceMarker: termInSwapGrace, hasCancelled })
+      : null;
+  const inactiveNotice =
+    participantActionsLocked && !pastTermNotice && !isPastOccurrence
+      ? resolveInactiveParticipantNotice({ isAutomaticallyInactive })
+      : null;
 
   useEffect(() => {
     if (includePastTermsInSelect) return;
@@ -400,6 +412,8 @@ export function useCourseCardTermState({
     hasNoUpcomingDates,
     hasUpcomingDates,
     showLastTermInSelect,
+    showLastTermMarkerInSelect,
+    lastActualOccurrenceIso,
     lastOccurrenceDate,
     showAutoInactiveBadge,
     graceLastIso,
@@ -416,6 +430,7 @@ export function useCourseCardTermState({
     showPastTermSwapActions,
     excludedTermNotice,
     inactiveNotice,
+    pastTermNotice,
     termSelectDisabled,
     swapStatusLines,
     showCutoffHint,

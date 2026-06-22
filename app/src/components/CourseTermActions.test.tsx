@@ -94,14 +94,14 @@ describe("CourseTermActions", () => {
     ).toBeInTheDocument();
   });
 
-  it("zeigt Hinweis für vergangene Termine ohne Aktionen", () => {
+  it("zeigt Nachlauf-Hinweis für vergangene Termine in der Wochenansicht", () => {
     vi.setSystemTime(new Date("2099-06-20T10:00:00Z"));
     renderCourseTermActions({
       termStateOverrides: { includePastTermsInSelect: true },
     });
 
     expect(
-      screen.getByText(/Vergangener Termin — keine Änderungen mehr möglich/i),
+      screen.getByText(/Vergangener Termin im Nachlauf — Tausch nur nach rechtzeitiger Absage/i),
     ).toBeInTheDocument();
   });
 });

@@ -42,6 +42,17 @@ function isIsoWithinGraceWindow(isoDate: string, settings: TenantSettings | unde
   return todayIso <= lastGraceInclusiveIso;
 }
 
+/** Termin liegt in der Vergangenheit und noch im Tausch-Nachlauf (gleiche Regel wie RC-Tausch). */
+export function isTermInParticipantSwapGrace(
+  isoDate: string,
+  courseTime: string,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  if (!isOccurrenceInPast(isoDate, courseTime, now)) return false;
+  return isIsoWithinGraceWindow(isoDate, settings, now);
+}
+
 /**
  * Kurs gilt als „im Nachlauf“ für Wochenrückblick: innerhalb Grace-Tage nach Ende,
  * ohne weitere Zukunftstermine (außer `inactive` — dort reicht Kalender-Nachlauf).
@@ -167,12 +178,9 @@ export function canRequestSwapFromPastCancelledOrigin(input: {
 }): boolean {
   const now = input.now ?? new Date();
   if (!isOccurrenceInPast(input.isoDate, input.courseTime, now)) return false;
-  const todayIso = toIsoDateUtc(now);
-  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(
-    input.isoDate,
-    resolveGraceDays(input.tenantSettings),
-  );
-  if (todayIso > lastGraceInclusiveIso) return false;
+  if (!isTermInParticipantSwapGrace(input.isoDate, input.courseTime, input.tenantSettings, now)) {
+    return false;
+  }
   if (
     !isRegularCancellation(
       input.originallyParticipant,

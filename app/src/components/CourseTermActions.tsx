@@ -98,12 +98,12 @@ export default function CourseTermActions({
     waitlistDates,
     swapWindow,
     swapForThisTerm,
-    isPastOccurrence,
     isSelectedTermExcluded,
     canUseFullTermActions,
     canSwapFromPastCancelled,
     swapForThisTermCancellable,
     showPastTermSwapActions,
+    pastTermNotice,
     swapStatusLines,
     showCutoffHint,
     termActionExtras,
@@ -251,9 +251,9 @@ export default function CourseTermActions({
             />
           </div>
         ) : null
-      ) : isPastOccurrence && !participantActionsLocked ? (
+      ) : pastTermNotice ? (
         <p className="muted small course-past-term-note" role="status">
-          Vergangener Termin — keine Änderungen mehr möglich.
+          {pastTermNotice}
         </p>
       ) : !participantActionsLocked && !hasNoUpcomingDates ? (
         <>

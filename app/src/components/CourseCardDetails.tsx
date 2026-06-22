@@ -64,6 +64,8 @@ export default function CourseCardDetails({
     userNameLower,
     hasNoUpcomingDates,
     showLastTermInSelect,
+    showLastTermMarkerInSelect,
+    lastActualOccurrenceIso,
     lastOccurrenceDate,
     showPastGraceMarker,
     showCutoffMarker,
@@ -211,10 +213,15 @@ export default function CourseCardDetails({
                 const excludedLabel = isExcludedCourseDate(course, dateIso)
                   ? excludedTermOptionSuffix()
                   : "";
+                const lastTermLabel =
+                  showLastTermMarkerInSelect && dateIso === lastActualOccurrenceIso
+                    ? lastTermOptionSuffix()
+                    : "";
                 return (
                   <option key={index} value={date.toISOString()}>
                     {date.toLocaleDateString()}
                     {excludedLabel}
+                    {lastTermLabel}
                   </option>
                 );
               },

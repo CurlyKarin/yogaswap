@@ -4,6 +4,8 @@ import {
   guestChipAriaLabel,
   participantChipAriaLabel,
   resolveCourseScheduleDisplay,
+  resolveInactiveParticipantNotice,
+  resolvePastTermNotice,
   waitlistChipAriaLabel,
 } from "./courseCardLabels";
 
@@ -45,5 +47,26 @@ describe("courseCardLabels", () => {
       roomLabel: "Studio 1",
       ariaLabel: "Montag · 18:30 · Studio 1",
     });
+  });
+
+  it("formuliert Kurs-Hinweis ohne Blockende-Datum", () => {
+    expect(resolveInactiveParticipantNotice({ isAutomaticallyInactive: true })).toBe(
+      "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten.",
+    );
+    expect(resolveInactiveParticipantNotice({ isAutomaticallyInactive: false })).toBe(
+      "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten.",
+    );
+  });
+
+  it("formuliert Footer-Hinweise für vergangene Termine", () => {
+    expect(resolvePastTermNotice({ showPastGraceMarker: false, hasCancelled: false })).toBe(
+      "Vergangener Termin — keine Änderungen mehr möglich.",
+    );
+    expect(resolvePastTermNotice({ showPastGraceMarker: true, hasCancelled: false })).toBe(
+      "Vergangener Termin im Nachlauf — Tausch nur nach rechtzeitiger Absage.",
+    );
+    expect(resolvePastTermNotice({ showPastGraceMarker: true, hasCancelled: true })).toBe(
+      "Für diesen Termin ist der Nachlauf vorbei — kein Tausch mehr möglich.",
+    );
   });
 });

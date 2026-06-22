@@ -83,7 +83,7 @@ describe("preferredWeekCardDate", () => {
 });
 
 describe("getWeekViewCardDates", () => {
-  it("includes past dates from the displayed week", () => {
+  it("includes in-week past dates only while they remain in term grace", () => {
     const course: Course = {
       id: 1,
       name: "Test",
@@ -97,7 +97,7 @@ describe("getWeekViewCardDates", () => {
     const now = new Date(2026, 5, 10, 12, 0, 0);
     const weekStart = new Date(2026, 4, 25);
     const keys = getWeekViewCardDates(course, weekStart, undefined, now).map((d) => toLocalDateIso(d));
-    expect(keys).toContain("2026-05-26");
+    expect(keys).not.toContain("2026-05-26");
     expect(keys).toContain("2026-06-15");
   });
 
@@ -122,6 +122,35 @@ describe("getWeekViewCardDates", () => {
     ).map((d) => toLocalDateIso(d));
     expect(keys).toContain("2026-05-18");
     expect(keys).toContain("2026-06-15");
+  });
+
+  it("lists only per-term grace dates symmetrically across weeks", () => {
+    const course: Course = {
+      id: 1,
+      name: "Test",
+      weekday: "Mon",
+      time: "10:00",
+      capacity: 8,
+      participants: [],
+      planningMode: "bounded_series",
+      seriesEndDate: "2026-08-31",
+      dates: ["2026-06-03", "2026-06-10", "2026-06-17"],
+      excludedDates: [],
+    };
+    const settings = { inactiveGraceDaysAfterCourseEnd: 7 };
+    const now = new Date(2026, 5, 17, 12, 0, 0);
+    const thisWeek = new Date(2026, 5, 16);
+    const lastWeek = new Date(2026, 5, 9);
+    const thisWeekKeys = getWeekViewCardDates(course, thisWeek, settings, now).map((d) =>
+      toLocalDateIso(d),
+    );
+    const lastWeekKeys = getWeekViewCardDates(course, lastWeek, settings, now).map((d) =>
+      toLocalDateIso(d),
+    );
+    expect(thisWeekKeys).toEqual(["2026-06-10", "2026-06-17"]);
+    expect(lastWeekKeys).toEqual(["2026-06-10", "2026-06-17"]);
+    expect(thisWeekKeys).not.toContain("2026-06-03");
+    expect(lastWeekKeys).not.toContain("2026-06-03");
   });
 });
 

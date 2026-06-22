@@ -65,7 +65,7 @@ export default function CourseCard({
     initialSelectedDate,
     includePastTermsInSelect,
   });
-  const { selectedDate, setSelectedDate, selectedDateKey, userName, hasNoUpcomingDates, inactiveNotice, excludedTermNotice } = termState;
+  const { selectedDate, setSelectedDate, selectedDateKey, userName, hasNoUpcomingDates, inactiveNotice, excludedTermNotice, pastTermNotice } = termState;
 
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [absenceSaving, setAbsenceSaving] = useState(false);
@@ -179,7 +179,7 @@ export default function CourseCard({
             <span className="muted small">{excludedTermNotice}</span>
           </div>
         )}
-        {inactiveNotice && (
+        {inactiveNotice && !pastTermNotice && (
           <div className="course-card-footer-notice" role="status">
             <span className="muted small">{inactiveNotice}</span>
           </div>
