@@ -200,40 +200,47 @@ export default function CourseTermActions({
           )}
         </div>
       ) : showPastTermSwapActions ? (
-        <div className="actions">
-          {swapForThisTerm && swapForThisTermCancellable ? (
-            <CourseTermActionButton
-              action={resolvePendingSwapCancelLabel(swapForThisTerm)}
-              courseName={course.name}
-              termIso={selectedDateKey}
-              labelExtras={termActionExtras}
-              className="secondary danger"
-              onClick={() => onCancelSwap(swapForThisTerm, course.id)}
-            />
-          ) : canSwapFromPastCancelled ? (
-            <>
+        <>
+          <div className="actions">
+            {swapForThisTerm && swapForThisTermCancellable ? (
               <CourseTermActionButton
-                action="Anderen Termin wählen"
+                action={resolvePendingSwapCancelLabel(swapForThisTerm)}
                 courseName={course.name}
                 termIso={selectedDateKey}
                 labelExtras={termActionExtras}
-                className="secondary"
-                onClick={onOpenSwapModal}
+                className="secondary danger"
+                onClick={() => onCancelSwap(swapForThisTerm, course.id)}
               />
-              {hasPendingRequestsFromOrigin && (
+            ) : canSwapFromPastCancelled ? (
+              <>
                 <CourseTermActionButton
-                  action="Weitere Tauschanfrage"
+                  action="Anderen Termin wählen"
                   courseName={course.name}
                   termIso={selectedDateKey}
                   labelExtras={termActionExtras}
                   className="secondary"
-                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
                   onClick={onOpenSwapModal}
                 />
-              )}
-            </>
+                {hasPendingRequestsFromOrigin && (
+                  <CourseTermActionButton
+                    action="Weitere Tauschanfrage"
+                    courseName={course.name}
+                    termIso={selectedDateKey}
+                    labelExtras={termActionExtras}
+                    className="secondary"
+                    title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
+                    onClick={onOpenSwapModal}
+                  />
+                )}
+              </>
+            ) : null}
+          </div>
+          {pastTermNotice ? (
+            <p className="muted small course-past-term-note" role="status">
+              {pastTermNotice}
+            </p>
           ) : null}
-        </div>
+        </>
       ) : isSelectedTermExcluded && includePastTermsInSelect ? (
         swapForThisTerm && swapForThisTermCancellable ? (
           <div className="actions">

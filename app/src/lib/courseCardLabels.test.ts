@@ -59,14 +59,69 @@ describe("courseCardLabels", () => {
   });
 
   it("formuliert Footer-Hinweise für vergangene Termine", () => {
-    expect(resolvePastTermNotice({ showPastGraceMarker: false, hasCancelled: false })).toBe(
-      "Vergangener Termin — keine Änderungen mehr möglich.",
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: false,
+        hasRegularCancellation: false,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBe("Vergangener Termin — keine Änderungen mehr möglich.");
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: true,
+        hasRegularCancellation: false,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBe("Vergangener Termin im Nachlauf — Tausch nur nach rechtzeitiger Absage.");
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: false,
+        hasRegularCancellation: true,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBe("Für diesen Termin ist der Nachlauf vorbei — kein Tausch mehr möglich.");
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: true,
+        hasRegularCancellation: true,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: true,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBe(
+      "Du hast rechtzeitig abgesagt. Deine Tauschanfrage ist offen — du wartest noch auf einen passenden Termin.",
     );
-    expect(resolvePastTermNotice({ showPastGraceMarker: true, hasCancelled: false })).toBe(
-      "Vergangener Termin im Nachlauf — Tausch nur nach rechtzeitiger Absage.",
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: true,
+        hasRegularCancellation: true,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: true,
+      }),
+    ).toBe(
+      "Du hast rechtzeitig abgesagt. Wähle „Anderen Termin wählen“, um einen Ersatztermin anzufragen.",
     );
-    expect(resolvePastTermNotice({ showPastGraceMarker: true, hasCancelled: true })).toBe(
-      "Für diesen Termin ist der Nachlauf vorbei — kein Tausch mehr möglich.",
-    );
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: true,
+        hasRegularCancellation: true,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: true,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBeNull();
   });
 });

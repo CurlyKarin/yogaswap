@@ -14,6 +14,7 @@ import {
   canCancelSwap,
   canCreateSwapFromOrigin,
   hasEffectiveCancellation,
+  isRegularCancellation,
   isShortNoticeCancelled,
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
@@ -121,6 +122,19 @@ export function useCourseCardTermState({
       s.fromCourseId === course.id &&
       s.fromDate === selectedDateKey &&
       new Date(s.toDate) < new Date(),
+  );
+  const hasActiveSwapFromOrigin = swaps.some(
+    (s) =>
+      s.user === userName &&
+      s.status === "active" &&
+      s.fromCourseId === course.id &&
+      s.fromDate === selectedDateKey,
+  );
+  const hasRegularCancellation = isRegularCancellation(
+    originallyParticipant,
+    override,
+    participants,
+    userName,
   );
   const canUndoRegularAbsence =
     hasCancelled && !isShortNotice && !isParticipant && !hasActiveOriginSwapInPast;
@@ -299,9 +313,25 @@ export function useCourseCardTermState({
 
   const isAutomaticallyInactive =
     isInactiveCourse && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
+  const canRequestPastRcSwap = canRequestSwapFromPastCancelledOrigin({
+    isoDate: selectedDateKey,
+    courseTime: course.time,
+    tenantSettings,
+    override,
+    userName,
+    participants,
+    originallyParticipant,
+  });
   const pastTermNotice =
-    isPastOccurrence && !isSelectedTermExcluded && !showPastTermSwapActions
-      ? resolvePastTermNotice({ showPastGraceMarker: termInSwapGrace, hasCancelled })
+    isPastOccurrence && !isSelectedTermExcluded
+      ? resolvePastTermNotice({
+          inSwapGrace: termInSwapGrace,
+          hasRegularCancellation,
+          hasShortNoticeCancellation: isShortNotice,
+          hasPendingSwapFromOrigin: hasPendingRequestsFromOrigin,
+          hasActiveSwapFromOrigin,
+          canRequestAlternativeTerm: canRequestPastRcSwap && !hasPendingRequestsFromOrigin,
+        })
       : null;
   const inactiveNotice =
     participantActionsLocked && !pastTermNotice && !isPastOccurrence
