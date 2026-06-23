@@ -81,12 +81,26 @@ export function useCourseCardTermState({
     [overrides, course.id, selectedDate],
   );
 
+  const lastActualOccurrenceIso = useMemo(
+    () => lastScheduledOccurrenceIso({ dates: course.dates }),
+    [course.dates],
+  );
+  const inPostEndGrace = isWithinPostCourseEndGrace(course, tenantSettings);
+
   const hasNoUpcomingDates = dates.length === 0;
-  const participants = hasNoUpcomingDates ? course.participants : (override ? override.participants : course.participants);
-  const swapped = hasNoUpcomingDates ? [] : (override?.swapped ?? []);
-  const shortNotice = hasNoUpcomingDates ? [] : (override?.shortNoticeCancellations ?? []);
-  const waitlist = hasNoUpcomingDates ? [] : (override?.waitlist ?? []);
-  const guestCount = hasNoUpcomingDates ? 0 : (override?.anonymousTrialCount ?? 0);
+  /** Im Nachlauf letzter Termin: Override; sonst Zukunftstermin-Override; nach Frist: Stamm. */
+  const useTermScopedParticipantState =
+    !hasNoUpcomingDates ||
+    (hasNoUpcomingDates && inPostEndGrace && lastActualOccurrenceIso != null);
+  const participants = useTermScopedParticipantState
+    ? (override?.participants ?? course.participants)
+    : course.participants;
+  const swapped = useTermScopedParticipantState ? (override?.swapped ?? []) : [];
+  const shortNotice = useTermScopedParticipantState
+    ? (override?.shortNoticeCancellations ?? [])
+    : [];
+  const waitlist = useTermScopedParticipantState ? (override?.waitlist ?? []) : [];
+  const guestCount = useTermScopedParticipantState ? (override?.anonymousTrialCount ?? 0) : 0;
 
   const userNameLower = userName.toLowerCase();
   const isParticipant = participants.some((p) => p.toLowerCase() === userNameLower);
@@ -227,17 +241,12 @@ export function useCourseCardTermState({
   const hasUpcomingDates = dates.length > 0;
   const courseStatus = course.status ?? "active";
   const isInactiveCourse = courseStatus === "inactive";
-  const inPostEndGrace = isWithinPostCourseEndGrace(course, tenantSettings);
   const inInactiveGrace =
     isInactiveCourse && isCourseInInactiveGracePeriod(course, tenantSettings);
   const graceLastIso =
     inPostEndGrace || inInactiveGrace
       ? getInactiveGraceLastDayIso(course, tenantSettings)
       : undefined;
-  const lastActualOccurrenceIso = useMemo(
-    () => lastScheduledOccurrenceIso({ dates: course.dates }),
-    [course.dates],
-  );
   const lastOccurrenceDate =
     lastActualOccurrenceIso != null
       ? buildCourseOccurrenceLocal(lastActualOccurrenceIso, course.time)
@@ -440,6 +449,8 @@ export function useCourseCardTermState({
     swapForWaitlist,
     hasNoUpcomingDates,
     hasUpcomingDates,
+    inPostEndGrace,
+    useTermScopedParticipantState,
     showLastTermInSelect,
     showLastTermMarkerInSelect,
     lastActualOccurrenceIso,
