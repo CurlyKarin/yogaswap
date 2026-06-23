@@ -4,6 +4,8 @@ import {
   guestChipAriaLabel,
   participantChipAriaLabel,
   resolveCourseScheduleDisplay,
+  resolveInactiveParticipantNotice,
+  resolvePastTermNotice,
   waitlistChipAriaLabel,
 } from "./courseCardLabels";
 
@@ -45,5 +47,81 @@ describe("courseCardLabels", () => {
       roomLabel: "Studio 1",
       ariaLabel: "Montag · 18:30 · Studio 1",
     });
+  });
+
+  it("formuliert Kurs-Hinweis ohne Blockende-Datum", () => {
+    expect(resolveInactiveParticipantNotice({ isAutomaticallyInactive: true })).toBe(
+      "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten.",
+    );
+    expect(resolveInactiveParticipantNotice({ isAutomaticallyInactive: false })).toBe(
+      "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten.",
+    );
+  });
+
+  it("formuliert Footer-Hinweise für vergangene Termine", () => {
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: false,
+        hasRegularCancellation: false,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBe("Vergangener Termin — keine Änderungen mehr möglich.");
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: true,
+        hasRegularCancellation: false,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBe("Vergangener Termin im Nachlauf — Tausch nur nach rechtzeitiger Absage.");
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: false,
+        hasRegularCancellation: true,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBe("Für diesen Termin ist der Nachlauf vorbei — kein Tausch mehr möglich.");
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: true,
+        hasRegularCancellation: true,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: true,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBe(
+      "Du hast rechtzeitig abgesagt. Deine Tauschanfrage ist offen — du wartest noch auf einen passenden Termin.",
+    );
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: true,
+        hasRegularCancellation: true,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: false,
+        canRequestAlternativeTerm: true,
+      }),
+    ).toBe(
+      "Du hast rechtzeitig abgesagt. Wähle „Anderen Termin wählen“, um einen Ersatztermin anzufragen.",
+    );
+    expect(
+      resolvePastTermNotice({
+        inSwapGrace: true,
+        hasRegularCancellation: true,
+        hasShortNoticeCancellation: false,
+        hasPendingSwapFromOrigin: false,
+        hasActiveSwapFromOrigin: true,
+        canRequestAlternativeTerm: false,
+      }),
+    ).toBeNull();
   });
 });

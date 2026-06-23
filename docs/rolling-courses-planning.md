@@ -27,6 +27,17 @@ Für `planningMode: rolling_continuous` gibt es **kein** separates Kursfeld für
 - „Unbefristet“ entfernt das Feld wieder.
 - Beim **Setzen, Ändern oder Aufheben** des Kursendes (`PUT /courses/{courseId}`) erhalten eingetragene Kursteilnehmer mit Login eine **E-Mail** (wie bei Terminabsage; nur eingeladene ohne Login werden übersprungen).
 
+### Auto-Inaktiv und Teilnehmer-Nachlauf (#204)
+
+Rollkurse **mit** `plannedEndDate` nutzen dieselbe Zugriffsfrist wie Kursblöcke:
+
+```
+ZugriffsfristEnde = max( plannedEndDate, letzterTerminIso + inactiveGraceDaysAfterCourseEnd )
+```
+
+- **Ohne** `plannedEndDate`: kein Auto-Inaktiv (unbefristeter Rollkurs).
+- **Mit** `plannedEndDate`: `shouldAutoDeactivateCourse` beim Reconcile; Teilnehmer-Sichtbarkeit über `participantCourseAccessDeadlineIso` (siehe [course-status-visibility.md](./course-status-visibility.md)).
+
 ## Swaps und Cleanup
 
 - In Produktion sind derzeit keine Rollkurse mit Swaps erwartet.

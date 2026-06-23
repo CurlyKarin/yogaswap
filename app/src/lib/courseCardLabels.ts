@@ -88,6 +88,48 @@ export function termSelectAriaLabel(courseName: string): string {
   return `Termin für ${courseName}`;
 }
 
+/** Hinweis in der Kurskachel, wenn Teilnehmer-Aktionen gesperrt sind und kein Termin-Kontext. */
+export function resolveInactiveParticipantNotice(input: {
+  isAutomaticallyInactive: boolean;
+}): string {
+  return input.isAutomaticallyInactive
+    ? "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten."
+    : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten.";
+}
+
+/** Footer-Hinweis für vergangene Termine (mit oder neben Aktionen im Nachlauf). */
+export function resolvePastTermNotice(input: {
+  inSwapGrace: boolean;
+  hasRegularCancellation: boolean;
+  hasShortNoticeCancellation: boolean;
+  hasPendingSwapFromOrigin: boolean;
+  hasActiveSwapFromOrigin: boolean;
+  canRequestAlternativeTerm: boolean;
+}): string | null {
+  if (!input.inSwapGrace) {
+    if (input.hasRegularCancellation) {
+      return "Für diesen Termin ist der Nachlauf vorbei — kein Tausch mehr möglich.";
+    }
+    return "Vergangener Termin — keine Änderungen mehr möglich.";
+  }
+  if (input.hasShortNoticeCancellation) {
+    return "Vergangener Termin im Nachlauf — kurzfristige Absage, kein Tausch möglich.";
+  }
+  if (!input.hasRegularCancellation) {
+    return "Vergangener Termin im Nachlauf — Tausch nur nach rechtzeitiger Absage.";
+  }
+  if (input.hasActiveSwapFromOrigin) {
+    return null;
+  }
+  if (input.hasPendingSwapFromOrigin) {
+    return "Du hast rechtzeitig abgesagt. Deine Tauschanfrage ist offen — du wartest noch auf einen passenden Termin.";
+  }
+  if (input.canRequestAlternativeTerm) {
+    return "Du hast rechtzeitig abgesagt. Wähle „Anderen Termin wählen“, um einen Ersatztermin anzufragen.";
+  }
+  return "Du hast rechtzeitig abgesagt. Derzeit ist kein passender Ersatztermin verfügbar.";
+}
+
 export function excludedTermOptionSuffix(): string {
   return " (entfällt)";
 }

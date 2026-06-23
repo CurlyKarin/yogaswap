@@ -49,6 +49,92 @@ export function addCalendarDaysIsoUtc(iso: string, days: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+function maxIsoDateUtc(a: string, b: string): string {
+  return a.localeCompare(b) >= 0 ? a : b;
+}
+
+/**
+ * Ende des Kursblocks fuer Auto-Inaktiv: `seriesEndDate` (bounded), sonst `plannedEndDate` (Rollkurs).
+ * Rollkurse ohne `plannedEndDate` liefern kein Blockende — kein Auto-Inaktiv.
+ */
+export function courseBlockEndIso(
+  course: Pick<Course, "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate">,
+): string | undefined {
+  const mode = course.planningMode ?? "bounded_series";
+  if (mode === "rolling_continuous") {
+    const planned = course.plannedEndDate?.trim();
+    return planned && ISO_DATE_ONLY.test(planned) ? planned : undefined;
+  }
+  const series = course.seriesEndDate?.trim();
+  if (series && ISO_DATE_ONLY.test(series)) return series;
+  const visible = course.visibleUntil?.trim();
+  if (visible && ISO_DATE_ONLY.test(visible)) return visible;
+  return undefined;
+}
+
+/** Kursmodus mit definiertem Blockende — Auto-Inaktiv nach Frist moeglich. */
+export function supportsAutoInactiveTransition(
+  course: Pick<Course, "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate">,
+): boolean {
+  return courseBlockEndIso(course) != null;
+}
+
+/**
+ * Letzter Kalendertag (UTC), an dem der Kurs noch aktiv bleiben darf:
+ * max(blockEnd, letzterTermin + Nachlauf).
+ */
+export function effectiveAutoInactiveDeadlineIso(
+  course: Pick<
+    Course,
+    "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "dates"
+  >,
+  settings?: TenantSettings,
+): string | undefined {
+  const blockEnd = courseBlockEndIso(course);
+  if (!blockEnd) return undefined;
+  const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+  const lastTerm = lastScheduledOccurrenceIso(course);
+  if (!lastTerm) return blockEnd;
+  return maxIsoDateUtc(blockEnd, addCalendarDaysIsoUtc(lastTerm, graceDays));
+}
+
+/** Auto-Inaktiv: aktiver Kurs, Blockende definiert, heutiger UTC-Tag liegt nach der Frist. */
+export function shouldAutoDeactivateCourse(
+  course: Pick<
+    Course,
+    "status" | "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "dates"
+  >,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  if ((course.status ?? "active") !== "active") return false;
+  const deadline = effectiveAutoInactiveDeadlineIso(course, settings);
+  if (!deadline) return false;
+  return toIsoDateUtc(now) > deadline;
+}
+
+type ParticipantAccessCourse = Pick<
+  Course,
+  "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "dates"
+>;
+
+/**
+ * Letzter inklusiver UTC-Tag für Teilnehmer-Sichtbarkeit und Wind-down (#204).
+ * Gleiche Frist wie Auto-Inaktiv (`effectiveAutoInactiveDeadlineIso`), sonst Fallback
+ * `courseEndDateIso` + Nachlauf (z. B. manuell inaktiver Rollkurs ohne Blockende).
+ */
+export function participantCourseAccessDeadlineIso(
+  course: ParticipantAccessCourse,
+  settings?: TenantSettings,
+): string | undefined {
+  const aligned = effectiveAutoInactiveDeadlineIso(course, settings);
+  if (aligned) return aligned;
+  const endIso = courseEndDateIso(course);
+  if (!endIso) return undefined;
+  const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+  return addCalendarDaysIsoUtc(endIso, graceDays);
+}
+
 /**
  * Letztes Kursende (YYYY-MM-DD) fuer Nachlauf bei inaktiven Kursen:
  * `plannedEndDate` (Rollkurs), sonst seriesEndDate, visibleUntil, max aus `dates`.
@@ -85,13 +171,10 @@ export function lastScheduledOccurrenceIso(
 }
 
 export function getInactiveGraceLastDayIso(
-  course: Pick<Course, "seriesEndDate" | "visibleUntil" | "dates" | "status">,
+  course: ParticipantAccessCourse,
   settings?: TenantSettings,
 ): string | undefined {
-  const endIso = courseEndDateIso(course);
-  if (!endIso) return undefined;
-  const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
-  return addCalendarDaysIsoUtc(endIso, graceDays);
+  return participantCourseAccessDeadlineIso(course, settings);
 }
 
 /** Teilnehmer-Nachlauf: heute (UTC) liegt noch im Fenster nach Kursende. */
@@ -105,45 +188,56 @@ export function isCourseInInactiveGracePeriod(
 }
 
 /**
- * Nach Kursende (letzter Termin vorbei), innerhalb des Nachlaufs — auch wenn Status noch `active`
- * (z. B. vor getCourses-Reconcile).
+ * Teilnehmer-Wind-down: letzter Termin vorbei (bei `active`) bzw. `inactive`, noch innerhalb
+ * der Zugriffsfrist — dieselbe Schwelle wie Auto-Inaktiv (#204).
  */
 export function isWithinPostCourseEndGrace(
-  course: Pick<Course, "dates" | "time" | "seriesEndDate" | "visibleUntil" | "status">,
+  course: Pick<
+    Course,
+    | "dates"
+    | "time"
+    | "seriesEndDate"
+    | "visibleUntil"
+    | "plannedEndDate"
+    | "planningMode"
+    | "status"
+  >,
   settings?: TenantSettings,
   now: Date = new Date(),
 ): boolean {
-  const endIso = courseEndDateIso(course);
-  if (!endIso) return false;
-  if (hasUpcomingCourseOccurrences(course.dates ?? [], course.time, now)) return false;
-  const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
-  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, graceDays);
-  return toIsoDateUtc(now) <= lastGraceInclusiveIso;
+  const deadline = participantCourseAccessDeadlineIso(course, settings);
+  if (!deadline) return false;
+  if (toIsoDateUtc(now) > deadline) return false;
+  const status = course.status ?? "active";
+  if (status === "inactive") return true;
+  return !hasUpcomingCourseOccurrences(course.dates ?? [], course.time, now);
 }
 
 /**
- * Entspricht der Backend-Regel in updateCourse (bounded_series ohne Zukunftstermine).
- * `hasUpcomingDates` kommt vom Aufrufer (z. B. getCourseDates.length > 0).
+ * Admin-Hinweis: Kurs wuerde beim naechsten Reconcile/Speichern inaktiv.
+ * `hasUpcomingDates` wird ignoriert (#204: Zugriffsfrist statt Zukunftstermine).
  */
-export function wouldAutoDeactivateBoundedSeries(
+export function wouldAutoDeactivateOnReconcile(
   course: Course,
   hasUpcomingDates: boolean,
+  settings?: TenantSettings,
+  now: Date = new Date(),
 ): boolean {
-  const status = course.status ?? "active";
-  const planningMode = course.planningMode ?? "bounded_series";
-  return status === "active" && planningMode === "bounded_series" && !hasUpcomingDates;
+  void hasUpcomingDates;
+  return shouldAutoDeactivateCourse(course, settings, now);
 }
 
 /**
- * Heuristik ohne DB-Feld: inaktiver Kursblock ohne Zukunftstermine (typisch auto-gesetzt).
+ * Admin-Hinweis: inaktiver Kurs mit definiertem Blockende, typisch auto-reconciled.
+ * `hasUpcomingDates` schliesst manuelle Inaktivierung bei noch sichtbaren Terminen aus.
  */
 export function looksLikeAutomaticallyInactive(
   course: Course,
   hasUpcomingDates: boolean,
 ): boolean {
   if ((course.status ?? "active") !== "inactive") return false;
-  const planningMode = course.planningMode ?? "bounded_series";
-  return planningMode === "bounded_series" && !hasUpcomingDates;
+  if (!supportsAutoInactiveTransition(course)) return false;
+  return !hasUpcomingDates;
 }
 
 export function formatCourseIsoDateDe(iso: string): string {

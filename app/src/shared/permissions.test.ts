@@ -239,6 +239,7 @@ describe("permissions", () => {
         ...dummyCourse,
         status: "inactive" as const,
         seriesEndDate: "2026-05-10",
+        dates: ["2026-05-10"],
       };
       const withinGrace = new Date(Date.UTC(2026, 4, 17, 12, 0, 0));
       expect(
@@ -264,6 +265,7 @@ describe("permissions", () => {
         ...dummyCourse,
         status: "inactive" as const,
         seriesEndDate: "2026-05-10",
+        dates: ["2026-05-10"],
       };
       const dayAfterShortGrace = new Date(Date.UTC(2026, 4, 14, 12, 0, 0));
       expect(
@@ -285,6 +287,7 @@ describe("permissions", () => {
         ...dummyCourse,
         status: "inactive" as const,
         seriesEndDate: "2026-05-10",
+        dates: ["2026-05-10"],
       };
       const withinGrace = new Date(Date.UTC(2026, 4, 12, 12, 0, 0));
       expect(
@@ -342,7 +345,7 @@ describe("permissions", () => {
         ...dummyCourse,
         status: "inactive" as const,
         seriesEndDate: "2026-05-10",
-        dates: [],
+        dates: ["2026-05-10"],
       };
       const withinGrace = new Date(Date.UTC(2026, 4, 12, 12, 0, 0));
       expect(

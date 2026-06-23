@@ -1,10 +1,10 @@
 import {
-  addCalendarDaysIsoUtc,
   buildCourseOccurrenceLocal,
-  DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
+  isOccurrenceInPast,
 } from "shared/courseStatus";
 import type { Course, TenantSettings } from "shared/types";
 import { getCourseDates } from "./dates";
+import { isTermInParticipantSwapGrace } from "./courseTermActions";
 
 export type WeekOccurrenceKind = "scheduled" | "excluded";
 
@@ -84,7 +84,18 @@ export function isWeekEntirelyInPast(weekStart: Date, now: Date = new Date()): b
   return end < toLocalDateIso(now);
 }
 
-/** Termine für Kachel-Dropdown: künftige plus alle Termine der angezeigten Kalenderwoche. */
+function isSelectableWeekViewDate(
+  course: Course,
+  dateIso: string,
+  settings: TenantSettings | undefined,
+  now: Date,
+): boolean {
+  if (isExcludedCourseDate(course, dateIso)) return true;
+  if (!isOccurrenceInPast(dateIso, course.time, now)) return true;
+  return isTermInParticipantSwapGrace(dateIso, course.time, settings, now);
+}
+
+/** Termine für Kachel-Dropdown: künftige plus Nachlauf-Termine (symmetrisch pro Termin). */
 export function getWeekViewCardDates(
   course: Course,
   weekStart: Date,
@@ -92,15 +103,11 @@ export function getWeekViewCardDates(
   now: Date = new Date(),
 ): Date[] {
   const future = getCourseDates(course, now);
-  const inWeek = weekOccurrenceDates(course, weekStart);
-  const todayIso = toLocalDateIso(now);
-  const graceDays =
-    typeof settings?.inactiveGraceDaysAfterCourseEnd === "number" &&
-    settings.inactiveGraceDaysAfterCourseEnd > 0
-      ? settings.inactiveGraceDaysAfterCourseEnd
-      : DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
+  const inWeek = weekOccurrenceDates(course, weekStart).filter((d) =>
+    isSelectableWeekViewDate(course, toLocalDateIso(d), settings, now),
+  );
   const pastGrace = (course.dates ?? [])
-    .filter((iso) => iso < todayIso && todayIso <= addCalendarDaysIsoUtc(iso, graceDays))
+    .filter((iso) => isTermInParticipantSwapGrace(iso, course.time, settings, now))
     .map((iso) => buildCourseOccurrenceLocal(iso, course.time))
     .filter((d): d is Date => d !== null);
   const merged = new Map<string, Date>();

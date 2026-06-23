@@ -8,6 +8,7 @@ import {
   DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
   isOccurrenceInPast,
   isWithinPostCourseEndGrace,
+  participantCourseAccessDeadlineIso,
   toIsoDateUtc,
 } from "shared/courseStatus";
 
@@ -21,18 +22,15 @@ function resolveGraceDays(settings?: TenantSettings): number {
   return typeof value === "number" && value > 0 ? value : DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
 }
 
-/** Kalendertage nach Kursende — gleiche Basis wie `canSeeCourse` für inaktive Kurse (#149). */
+/** Kalendertage nach Kursende — gleiche Zugriffsfrist wie Auto-Inaktiv (#204). */
 export function isWithinParticipantGraceCalendar(
-  course: Pick<Course, "dates" | "time" | "seriesEndDate" | "visibleUntil" | "status" | "plannedEndDate">,
+  course: Pick<Course, "dates" | "time" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "planningMode" | "status">,
   settings?: TenantSettings,
   now: Date = new Date(),
 ): boolean {
-  const endIso = courseEndDateIso(course);
-  if (!endIso) return false;
-  const todayIso = toIsoDateUtc(now);
-  if (todayIso < endIso) return false;
-  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(endIso, resolveGraceDays(settings));
-  return todayIso <= lastGraceInclusiveIso;
+  const deadline = participantCourseAccessDeadlineIso(course, settings);
+  if (!deadline) return false;
+  return toIsoDateUtc(now) <= deadline;
 }
 
 function isIsoWithinGraceWindow(isoDate: string, settings: TenantSettings | undefined, now: Date): boolean {
@@ -40,6 +38,29 @@ function isIsoWithinGraceWindow(isoDate: string, settings: TenantSettings | unde
   if (isoDate > todayIso) return false;
   const lastGraceInclusiveIso = addCalendarDaysIsoUtc(isoDate, resolveGraceDays(settings));
   return todayIso <= lastGraceInclusiveIso;
+}
+
+/** Termin liegt in der Vergangenheit und noch im Tausch-Nachlauf (gleiche Regel wie RC-Tausch). */
+export function isTermInParticipantSwapGrace(
+  isoDate: string,
+  courseTime: string,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  if (!isOccurrenceInPast(isoDate, courseTime, now)) return false;
+  return isIsoWithinGraceWindow(isoDate, settings, now);
+}
+
+/**
+ * Teilnehmer-Kurskachel im Wind-down: keine vollen Terminaktionen, RC-Nachlauf am
+ * Vergangenheitstermin bleibt möglich (#204 Option A).
+ */
+export function isParticipantCourseWindDown(
+  course: Course,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  return isWithinPostCourseEndGrace(course, settings, now);
 }
 
 /**
@@ -167,12 +188,9 @@ export function canRequestSwapFromPastCancelledOrigin(input: {
 }): boolean {
   const now = input.now ?? new Date();
   if (!isOccurrenceInPast(input.isoDate, input.courseTime, now)) return false;
-  const todayIso = toIsoDateUtc(now);
-  const lastGraceInclusiveIso = addCalendarDaysIsoUtc(
-    input.isoDate,
-    resolveGraceDays(input.tenantSettings),
-  );
-  if (todayIso > lastGraceInclusiveIso) return false;
+  if (!isTermInParticipantSwapGrace(input.isoDate, input.courseTime, input.tenantSettings, now)) {
+    return false;
+  }
   if (
     !isRegularCancellation(
       input.originallyParticipant,

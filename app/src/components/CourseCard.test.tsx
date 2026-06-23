@@ -80,6 +80,7 @@ function renderCourseCard(
 describe("CourseCard", () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it("rendert Kurskarte als article mit Kurs-Kontext im Namen", () => {
@@ -277,6 +278,7 @@ describe("CourseCard", () => {
     const inactiveCourse: Course = {
       ...baseCourse,
       status: "inactive",
+      planningMode: "bounded_series",
       seriesEndDate: "2099-01-01",
       dates: [],
     };
@@ -291,6 +293,104 @@ describe("CourseCard", () => {
     expect(screen.getByText(/automatisch beendet/i)).toBeInTheDocument();
     expect(screen.queryByText("Automatisch inaktiv")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
+  });
+
+  it("zeigt terminspezifischen Nachlauf-Hinweis bei gesperrter Ansicht", () => {
+    const now = new Date(Date.UTC(2026, 5, 17, 12, 0, 0));
+    const activePostEndCourse: Course = {
+      ...baseCourse,
+      status: "active",
+      planningMode: "bounded_series",
+      seriesEndDate: "2026-08-31",
+      dates: ["2026-06-10", "2026-06-17"],
+      time: "10:00",
+    };
+
+    renderCourseCard(
+      {
+        course: activePostEndCourse,
+        dates: [],
+        overrides: [],
+        participantActionsLocked: true,
+        tenantSettings: { inactiveGraceDaysAfterCourseEnd: 7 },
+        initialSelectedDate: new Date(Date.UTC(2026, 5, 17, 10, 0, 0)),
+      },
+      { now },
+    );
+
+    expect(
+      screen.getByText(/Vergangener Termin im Nachlauf — Tausch nur nach rechtzeitiger Absage/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Offene Tausche kannst du noch bis/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/automatisch beendet/i)).not.toBeInTheDocument();
+  });
+
+  it("zeigt im Nachlauf Termin-Override statt Stammteilnehmer in der Kursübersicht", () => {
+    const now = new Date(Date.UTC(2026, 5, 20, 12, 0, 0));
+    const course: Course = {
+      ...baseCourse,
+      participants: ["alice", "bob"],
+      dates: ["2026-06-17"],
+      seriesEndDate: "2026-08-31",
+      time: "10:00",
+    };
+    const termOverride: CourseDateOverride = {
+      courseId: 1,
+      date: "2026-06-17",
+      participants: ["carol"],
+      swapped: ["alice"],
+      waitlist: [],
+    };
+
+    renderCourseCard(
+      {
+        course,
+        dates: [],
+        overrides: [termOverride],
+        participantActionsLocked: true,
+        tenantSettings: { inactiveGraceDaysAfterCourseEnd: 7 },
+      },
+      { now },
+    );
+
+    expect(screen.getByText("carol")).toBeInTheDocument();
+    expect(screen.queryByText("bob")).not.toBeInTheDocument();
+  });
+
+  it("zeigt nach abgelaufenem Nachlauf Stammteilnehmer in der Kursübersicht", () => {
+    const now = new Date(Date.UTC(2026, 7, 1, 12, 0, 0));
+    const course: Course = {
+      ...baseCourse,
+      status: "inactive",
+      participants: ["alice", "bob"],
+      dates: ["2026-06-17"],
+      seriesEndDate: "2026-06-30",
+      time: "10:00",
+    };
+    const termOverride: CourseDateOverride = {
+      courseId: 1,
+      date: "2026-06-17",
+      participants: ["carol"],
+      swapped: ["alice"],
+      waitlist: [],
+    };
+
+    renderCourseCard(
+      {
+        course,
+        dates: [],
+        overrides: [termOverride],
+        tenantSettings: { inactiveGraceDaysAfterCourseEnd: 7 },
+      },
+      { now },
+    );
+
+    expect(screen.getByText("alice")).toBeInTheDocument();
+    expect(screen.getByText("bob")).toBeInTheDocument();
+    expect(screen.queryByText("carol")).not.toBeInTheDocument();
+    const select = screen.getByRole("combobox", { name: /termin für yoga basic/i });
+    expect(select).toBeDisabled();
+    expect(screen.getByRole("option", { name: /^—$/ })).toBeInTheDocument();
   });
 
   it("kennzeichnet vom Studio abgesagte Termine in der Wochenansicht", () => {

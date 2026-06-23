@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { Course, CourseDateOverride, Swap, TenantSettings, User } from "shared/types";
 import {
   buildCourseOccurrenceLocal,
-  formatCourseIsoDateDe,
   getInactiveGraceLastDayIso,
   isCourseInInactiveGracePeriod,
   isWithinPostCourseEndGrace,
+  isOccurrenceInPast,
   lastScheduledOccurrenceIso,
   looksLikeAutomaticallyInactive,
 } from "shared/courseStatus";
@@ -14,15 +14,14 @@ import {
   canCancelSwap,
   canCreateSwapFromOrigin,
   hasEffectiveCancellation,
+  isRegularCancellation,
   isShortNoticeCancelled,
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
-import {
-  canRequestSwapFromPastCancelledOrigin,
-  isOccurrenceInPast,
-} from "../lib/courseTermActions";
+import { resolveInactiveParticipantNotice, resolvePastTermNotice } from "../lib/courseCardLabels";
+import { canRequestSwapFromPastCancelledOrigin, isTermInParticipantSwapGrace } from "../lib/courseTermActions";
 import { formatSwapStatusLine } from "../lib/courseTermActionLabels";
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import type { SwapSettings } from "../types";
@@ -82,12 +81,26 @@ export function useCourseCardTermState({
     [overrides, course.id, selectedDate],
   );
 
+  const lastActualOccurrenceIso = useMemo(
+    () => lastScheduledOccurrenceIso({ dates: course.dates }),
+    [course.dates],
+  );
+  const inPostEndGrace = isWithinPostCourseEndGrace(course, tenantSettings);
+
   const hasNoUpcomingDates = dates.length === 0;
-  const participants = hasNoUpcomingDates ? course.participants : (override ? override.participants : course.participants);
-  const swapped = hasNoUpcomingDates ? [] : (override?.swapped ?? []);
-  const shortNotice = hasNoUpcomingDates ? [] : (override?.shortNoticeCancellations ?? []);
-  const waitlist = hasNoUpcomingDates ? [] : (override?.waitlist ?? []);
-  const guestCount = hasNoUpcomingDates ? 0 : (override?.anonymousTrialCount ?? 0);
+  /** Im Nachlauf letzter Termin: Override; sonst Zukunftstermin-Override; nach Frist: Stamm. */
+  const useTermScopedParticipantState =
+    !hasNoUpcomingDates ||
+    (hasNoUpcomingDates && inPostEndGrace && lastActualOccurrenceIso != null);
+  const participants = useTermScopedParticipantState
+    ? (override?.participants ?? course.participants)
+    : course.participants;
+  const swapped = useTermScopedParticipantState ? (override?.swapped ?? []) : [];
+  const shortNotice = useTermScopedParticipantState
+    ? (override?.shortNoticeCancellations ?? [])
+    : [];
+  const waitlist = useTermScopedParticipantState ? (override?.waitlist ?? []) : [];
+  const guestCount = useTermScopedParticipantState ? (override?.anonymousTrialCount ?? 0) : 0;
 
   const userNameLower = userName.toLowerCase();
   const isParticipant = participants.some((p) => p.toLowerCase() === userNameLower);
@@ -123,6 +136,19 @@ export function useCourseCardTermState({
       s.fromCourseId === course.id &&
       s.fromDate === selectedDateKey &&
       new Date(s.toDate) < new Date(),
+  );
+  const hasActiveSwapFromOrigin = swaps.some(
+    (s) =>
+      s.user === userName &&
+      s.status === "active" &&
+      s.fromCourseId === course.id &&
+      s.fromDate === selectedDateKey,
+  );
+  const hasRegularCancellation = isRegularCancellation(
+    originallyParticipant,
+    override,
+    participants,
+    userName,
   );
   const canUndoRegularAbsence =
     hasCancelled && !isShortNotice && !isParticipant && !hasActiveOriginSwapInPast;
@@ -215,23 +241,23 @@ export function useCourseCardTermState({
   const hasUpcomingDates = dates.length > 0;
   const courseStatus = course.status ?? "active";
   const isInactiveCourse = courseStatus === "inactive";
-  const inPostEndGrace = isWithinPostCourseEndGrace(course, tenantSettings);
   const inInactiveGrace =
     isInactiveCourse && isCourseInInactiveGracePeriod(course, tenantSettings);
   const graceLastIso =
     inPostEndGrace || inInactiveGrace
       ? getInactiveGraceLastDayIso(course, tenantSettings)
       : undefined;
-  const lastActualOccurrenceIso = useMemo(
-    () => lastScheduledOccurrenceIso({ dates: course.dates }),
-    [course.dates],
-  );
   const lastOccurrenceDate =
     lastActualOccurrenceIso != null
       ? buildCourseOccurrenceLocal(lastActualOccurrenceIso, course.time)
       : null;
   const showLastTermInSelect =
     hasNoUpcomingDates && lastOccurrenceDate != null && inPostEndGrace;
+  const showLastTermMarkerInSelect =
+    lastActualOccurrenceIso != null &&
+    (showLastTermInSelect ||
+      (includePastTermsInSelect &&
+        isTermInParticipantSwapGrace(lastActualOccurrenceIso, course.time, tenantSettings)));
   const showAutoInactiveBadge =
     participantActionsLocked && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
   const userSwapsOnCourse = useMemo(
@@ -249,8 +275,16 @@ export function useCourseCardTermState({
   );
   const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
   const isSelectedTermExcluded = isExcludedCourseDate(course, selectedDateKey);
+  const termInSwapGrace = isTermInParticipantSwapGrace(
+    selectedDateKey,
+    course.time,
+    tenantSettings,
+  );
   const showPastGraceMarker =
-    includePastTermsInSelect && isPastOccurrence && !isSelectedTermExcluded;
+    (includePastTermsInSelect || participantActionsLocked) &&
+    isPastOccurrence &&
+    !isSelectedTermExcluded &&
+    termInSwapGrace;
   const showCutoffMarker =
     includePastTermsInSelect &&
     !isPastOccurrence &&
@@ -263,9 +297,20 @@ export function useCourseCardTermState({
     (isParticipant || originallyParticipant) &&
     !isPastOccurrence &&
     !isSelectedTermExcluded;
-  const canSwapFromPastCancelled =
-    swapForThisTerm == null &&
-    canRequestSwapFromPastCancelledOrigin({
+  const canRequestPastRcSwap = canRequestSwapFromPastCancelledOrigin({
+    isoDate: selectedDateKey,
+    courseTime: course.time,
+    tenantSettings,
+    override,
+    userName,
+    participants,
+    originallyParticipant,
+  });
+  const canSwapFromPastCancelled = swapForThisTerm == null && canRequestPastRcSwap;
+  const canRequestMorePastRcSwaps =
+    canRequestPastRcSwap &&
+    hasPendingRequestsFromOrigin &&
+    canCreateSwapFromOrigin({
       isoDate: selectedDateKey,
       courseTime: course.time,
       tenantSettings,
@@ -277,24 +322,31 @@ export function useCourseCardTermState({
   const swapForThisTermCancellable =
     swapForThisTerm != null && canCancelSwap(swapForThisTerm, allCourses);
   const showPastTermSwapActions =
-    !participantActionsLocked &&
     !isSelectedTermExcluded &&
     isPastOccurrence &&
     (isParticipant || originallyParticipant || hasCancelled) &&
-    (swapForThisTermCancellable || canSwapFromPastCancelled);
+    (swapForThisTermCancellable || canSwapFromPastCancelled || canRequestMorePastRcSwaps);
   const excludedTermNotice = showExcludedTermMarker
     ? "Dieser Termin entfällt — vom Studio abgesagt."
     : null;
 
-  const inactiveNotice = participantActionsLocked
-    ? showAutoInactiveBadge || (!isInactiveCourse && inPostEndGrace)
-      ? graceLastIso
-        ? `Dieser Kurs wurde automatisch beendet (keine weiteren Termine). Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
-        : "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten."
-      : graceLastIso
-        ? `Dieser Kurs ist inaktiv. Offene Tausche kannst du noch bis ${formatCourseIsoDateDe(graceLastIso)} verwalten.`
-        : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten."
-    : null;
+  const isAutomaticallyInactive =
+    isInactiveCourse && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
+  const pastTermNotice =
+    isPastOccurrence && !isSelectedTermExcluded
+      ? resolvePastTermNotice({
+          inSwapGrace: termInSwapGrace,
+          hasRegularCancellation,
+          hasShortNoticeCancellation: isShortNotice,
+          hasPendingSwapFromOrigin: hasPendingRequestsFromOrigin,
+          hasActiveSwapFromOrigin,
+          canRequestAlternativeTerm: canRequestPastRcSwap && !hasPendingRequestsFromOrigin,
+        })
+      : null;
+  const inactiveNotice =
+    participantActionsLocked && !pastTermNotice && !isPastOccurrence
+      ? resolveInactiveParticipantNotice({ isAutomaticallyInactive })
+      : null;
 
   useEffect(() => {
     if (includePastTermsInSelect) return;
@@ -313,10 +365,8 @@ export function useCourseCardTermState({
 
   const swapStatusLines = useMemo(
     () =>
-      hasNoUpcomingDates
-        ? []
-        : allSwapsForThisTerm.map((swap) => formatSwapStatusLine(swap, course.id, allCourses)),
-    [hasNoUpcomingDates, allSwapsForThisTerm, course.id, allCourses],
+      allSwapsForThisTerm.map((swap) => formatSwapStatusLine(swap, course.id, allCourses)),
+    [allSwapsForThisTerm, course.id, allCourses],
   );
 
   const showCutoffHint =
@@ -399,7 +449,11 @@ export function useCourseCardTermState({
     swapForWaitlist,
     hasNoUpcomingDates,
     hasUpcomingDates,
+    inPostEndGrace,
+    useTermScopedParticipantState,
     showLastTermInSelect,
+    showLastTermMarkerInSelect,
+    lastActualOccurrenceIso,
     lastOccurrenceDate,
     showAutoInactiveBadge,
     graceLastIso,
@@ -412,10 +466,12 @@ export function useCourseCardTermState({
     showExcludedTermMarker,
     canUseFullTermActions,
     canSwapFromPastCancelled,
+    canRequestMorePastRcSwaps,
     swapForThisTermCancellable,
     showPastTermSwapActions,
     excludedTermNotice,
     inactiveNotice,
+    pastTermNotice,
     termSelectDisabled,
     swapStatusLines,
     showCutoffHint,

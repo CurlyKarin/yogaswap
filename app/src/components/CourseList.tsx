@@ -41,10 +41,10 @@ import {
 } from "../api/courses";
 import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
 import {
-  isWithinPostCourseEndGrace,
   looksLikeAutomaticallyInactive,
-  wouldAutoDeactivateBoundedSeries,
+  wouldAutoDeactivateOnReconcile,
 } from "shared/courseStatus";
+import { isParticipantCourseWindDown } from "../lib/courseTermActions";
 import { courseApiPathKey } from "../lib/courseUid";
 
 type Props = {
@@ -823,7 +823,7 @@ export default function CourseList({
             STATUS_OPTIONS.find((entry) => entry.value === (course.status ?? "active"))?.label ?? "Aktiv";
           const statusHint = looksLikeAutomaticallyInactive(course, hasUpcomingDates)
             ? " · automatisch inaktiv"
-            : wouldAutoDeactivateBoundedSeries(course, hasUpcomingDates)
+            : wouldAutoDeactivateOnReconcile(course, hasUpcomingDates)
               ? " · wird beim Speichern inaktiv"
               : "";
           return (
@@ -899,8 +899,7 @@ export default function CourseList({
                 swaps={swaps}
                 participantActionsLocked={
                   !canSeeCourseManagement &&
-                  ((course.status ?? "active") === "inactive" ||
-                    isWithinPostCourseEndGrace(course, tenant?.settings))
+                  isParticipantCourseWindDown(course, tenant?.settings)
                 }
                 tenantSettings={tenant?.settings}
                 onToggleAbsence={onToggleAbsence}

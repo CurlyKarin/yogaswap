@@ -98,12 +98,13 @@ export default function CourseTermActions({
     waitlistDates,
     swapWindow,
     swapForThisTerm,
-    isPastOccurrence,
     isSelectedTermExcluded,
     canUseFullTermActions,
     canSwapFromPastCancelled,
+    canRequestMorePastRcSwaps,
     swapForThisTermCancellable,
     showPastTermSwapActions,
+    pastTermNotice,
     swapStatusLines,
     showCutoffHint,
     termActionExtras,
@@ -200,18 +201,19 @@ export default function CourseTermActions({
           )}
         </div>
       ) : showPastTermSwapActions ? (
-        <div className="actions">
-          {swapForThisTerm && swapForThisTermCancellable ? (
-            <CourseTermActionButton
-              action={resolvePendingSwapCancelLabel(swapForThisTerm)}
-              courseName={course.name}
-              termIso={selectedDateKey}
-              labelExtras={termActionExtras}
-              className="secondary danger"
-              onClick={() => onCancelSwap(swapForThisTerm, course.id)}
-            />
-          ) : canSwapFromPastCancelled ? (
-            <>
+        <>
+          <div className="actions">
+            {swapForThisTermCancellable && swapForThisTerm ? (
+              <CourseTermActionButton
+                action={resolvePendingSwapCancelLabel(swapForThisTerm)}
+                courseName={course.name}
+                termIso={selectedDateKey}
+                labelExtras={termActionExtras}
+                className="secondary danger"
+                onClick={() => onCancelSwap(swapForThisTerm, course.id)}
+              />
+            ) : null}
+            {canSwapFromPastCancelled ? (
               <CourseTermActionButton
                 action="Anderen Termin wählen"
                 courseName={course.name}
@@ -220,20 +222,25 @@ export default function CourseTermActions({
                 className="secondary"
                 onClick={onOpenSwapModal}
               />
-              {hasPendingRequestsFromOrigin && (
-                <CourseTermActionButton
-                  action="Weitere Tauschanfrage"
-                  courseName={course.name}
-                  termIso={selectedDateKey}
-                  labelExtras={termActionExtras}
-                  className="secondary"
-                  title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
-                  onClick={onOpenSwapModal}
-                />
-              )}
-            </>
+            ) : null}
+            {canRequestMorePastRcSwaps ? (
+              <CourseTermActionButton
+                action="Weitere Tauschanfrage"
+                courseName={course.name}
+                termIso={selectedDateKey}
+                labelExtras={termActionExtras}
+                className="secondary"
+                title={`Du hast bereits ${pendingCount} offene Anfragen für diesen Termin — hier kannst du noch eine weitere anlegen.`}
+                onClick={onOpenSwapModal}
+              />
+            ) : null}
+          </div>
+          {pastTermNotice ? (
+            <p className="muted small course-past-term-note" role="status">
+              {pastTermNotice}
+            </p>
           ) : null}
-        </div>
+        </>
       ) : isSelectedTermExcluded && includePastTermsInSelect ? (
         swapForThisTerm && swapForThisTermCancellable ? (
           <div className="actions">
@@ -251,9 +258,9 @@ export default function CourseTermActions({
             />
           </div>
         ) : null
-      ) : isPastOccurrence && !participantActionsLocked ? (
+      ) : pastTermNotice ? (
         <p className="muted small course-past-term-note" role="status">
-          Vergangener Termin — keine Änderungen mehr möglich.
+          {pastTermNotice}
         </p>
       ) : !participantActionsLocked && !hasNoUpcomingDates ? (
         <>
@@ -274,10 +281,14 @@ export default function CourseTermActions({
         </>
       ) : null}
 
-      {participantActionsLocked && cancellableUserSwapsOnCourse.length > 0 && (
-        <div className="actions course-inactive-swap-actions">
-          {cancellableUserSwapsOnCourse.map((swap) => (
-            <div key={`${swap.fromCourseId}-${swap.fromDate}-${swap.toCourseId}-${swap.toDate}-${swap.status}`}>
+      {participantActionsLocked &&
+        cancellableUserSwapsOnCourse
+          .filter((swap) => swapTermIsoForCourse(swap, course.id) !== selectedDateKey)
+          .map((swap) => (
+            <div
+              key={`${swap.fromCourseId}-${swap.fromDate}-${swap.toCourseId}-${swap.toDate}-${swap.status}`}
+              className="actions course-inactive-swap-actions"
+            >
               <CourseTermActionButton
                 action={swap.status === "pending" ? "Tauschanfrage abbrechen" : "Tausch abbrechen"}
                 courseName={course.name}
@@ -288,8 +299,6 @@ export default function CourseTermActions({
               />
             </div>
           ))}
-        </div>
-      )}
 
       {swapStatusLines.length > 0 && (
         <div className="muted small status-text" role="status" aria-hidden="true">
@@ -299,7 +308,7 @@ export default function CourseTermActions({
         </div>
       )}
 
-      {(canUseFullTermActions || canSwapFromPastCancelled) && showSwapModal && (
+      {(canUseFullTermActions || canSwapFromPastCancelled || canRequestMorePastRcSwaps) && showSwapModal && (
         <CourseSwapModal
           title={swapModalTitle}
           courseName={course.name}

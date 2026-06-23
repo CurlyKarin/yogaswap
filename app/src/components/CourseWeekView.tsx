@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { Course, CourseDateOverride, Swap, TenantSettings, User } from "shared/types";
-import { isWithinPostCourseEndGrace } from "shared/courseStatus";
 import { weekAnchorForOccurrence } from "../lib/courseWeek";
+import { isParticipantCourseWindDown } from "../lib/courseTermActions";
 import {
   getWeekViewCardDates,
   preferredWeekCardDate,
@@ -124,8 +124,7 @@ export default function CourseWeekView({
                 swaps={swaps}
                 participantActionsLocked={
                   !canSeeCourseManagement &&
-                  ((course.status ?? "active") === "inactive" ||
-                    isWithinPostCourseEndGrace(course, tenantSettings))
+                  isParticipantCourseWindDown(course, tenantSettings)
                 }
                 tenantSettings={tenantSettings}
                 initialSelectedDate={initialSelectedDate}

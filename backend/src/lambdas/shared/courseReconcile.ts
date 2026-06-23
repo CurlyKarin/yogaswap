@@ -1,24 +1,43 @@
 /**
  * Lazy reconcile for course reads (#149): align persisted status/dates with derived schedule.
- * Auto-inactive when no upcoming occurrence (date + time), aligned with app getCourseDates.
+ * Auto-inactive when UTC calendar day is past block end + grace (#204).
  */
 
-import { hasUpcomingCourseOccurrences } from "./courseDates";
+import { shouldAutoDeactivateCourse, type TenantSettings } from "@yogaswap/shared";
+import type { Course } from "@yogaswap/shared";
+
+export type CourseReconcileScheduleContext = {
+  planningMode?: string;
+  seriesEndDate?: string;
+  visibleUntil?: string;
+  plannedEndDate?: string;
+};
 
 export function resolveEffectiveCourseStatus(
   storedStatus: string,
-  planningMode: string | undefined,
+  schedule: CourseReconcileScheduleContext,
   visibleDates: string[],
   courseTime: string,
+  settings?: Pick<TenantSettings, "inactiveGraceDaysAfterCourseEnd">,
   now: Date = new Date(),
 ): string {
   const status = storedStatus || "active";
-  const hasUpcoming = hasUpcomingCourseOccurrences(visibleDates, courseTime, now);
-  if (
-    status === "active" &&
-    (planningMode ?? "bounded_series") === "bounded_series" &&
-    !hasUpcoming
-  ) {
+  if (status !== "active") return status;
+
+  const course: Pick<
+    Course,
+    "status" | "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "dates" | "time"
+  > = {
+    status: "active",
+    planningMode: (schedule.planningMode ?? "bounded_series") as Course["planningMode"],
+    seriesEndDate: schedule.seriesEndDate,
+    visibleUntil: schedule.visibleUntil,
+    plannedEndDate: schedule.plannedEndDate,
+    dates: visibleDates,
+    time: courseTime,
+  };
+
+  if (shouldAutoDeactivateCourse(course, settings as TenantSettings | undefined, now)) {
     return "inactive";
   }
   return status;
@@ -46,17 +65,31 @@ export type CourseReconcileOutcome = {
 export function computeCourseReconcile(input: {
   storedStatus: string;
   planningMode?: string;
+  seriesEndDate?: string;
+  visibleUntil?: string;
+  plannedEndDate?: string;
   visibleDates: string[];
   storedDates: string[];
   courseTime: string;
+  inactiveGraceDaysAfterCourseEnd?: number;
   now?: Date;
 }): CourseReconcileOutcome {
   const now = input.now ?? new Date();
+  const settings =
+    input.inactiveGraceDaysAfterCourseEnd != null
+      ? { inactiveGraceDaysAfterCourseEnd: input.inactiveGraceDaysAfterCourseEnd }
+      : undefined;
   const effectiveStatus = resolveEffectiveCourseStatus(
     input.storedStatus,
-    input.planningMode,
+    {
+      planningMode: input.planningMode,
+      seriesEndDate: input.seriesEndDate,
+      visibleUntil: input.visibleUntil,
+      plannedEndDate: input.plannedEndDate,
+    },
     input.visibleDates,
     input.courseTime,
+    settings,
     now,
   );
   const statusChanged = effectiveStatus !== (input.storedStatus || "active");

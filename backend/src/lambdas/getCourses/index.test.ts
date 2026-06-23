@@ -23,6 +23,7 @@ describe("getCourses Lambda", () => {
     jest.resetModules();
     process.env = { ...OLD_ENV, COURSES_TABLE: "test-courses" };
     mockSend.mockReset();
+    PutItemCommand.mockClear();
   });
 
   afterAll(() => {
@@ -165,7 +166,7 @@ describe("getCourses Lambda", () => {
     jest.useRealTimers();
   });
 
-  test("reconciles to inactive when same-day term time has passed", async () => {
+  test("bleibt aktiv am Blockend-Tag nach Kurszeit bis Nachlauf abläuft", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date(Date.UTC(2026, 4, 18, 19, 0, 0)));
 
@@ -196,12 +197,8 @@ describe("getCourses Lambda", () => {
 
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
-    expect(JSON.parse(result.body)[0].status).toBe("inactive");
-    expect(PutItemCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        Item: expect.objectContaining({ status: { S: "inactive" } }),
-      }),
-    );
+    expect(JSON.parse(result.body)[0].status).toBe("active");
+    expect(PutItemCommand).not.toHaveBeenCalled();
 
     jest.useRealTimers();
   });
