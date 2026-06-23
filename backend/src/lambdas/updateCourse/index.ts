@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import {
+  DeleteItemCommand,
   GetItemCommand,
   PutItemCommand,
   QueryCommand,
@@ -29,6 +30,13 @@ import {
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { notifyParticipantsPlannedEndDate } from "../shared/plannedEndDateNotifications";
 import { validateOverbookLimit, validateParticipantListSize } from "@yogaswap/shared";
+import {
+  collectOverrideKeysForReactivationCleanup,
+  isScheduleExceptionPatchBody,
+  isScheduleWindowPatchBody,
+  resolveReactivatedExcludedDates,
+  resolveVisibleActiveDates,
+} from "../shared/overrideReactivation";
 
 const INSTRUCTOR_OVERBOOK_ONLY_KEYS = new Set(["overbookLimit"]);
 
@@ -731,6 +739,68 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         Item: updateItem,
       }),
     );
+
+    if (isScheduleExceptionPatchBody(body)) {
+      const reactivatedExcludedDates = resolveReactivatedExcludedDates(
+        currentExcludedDates,
+        nextExcludedDates,
+      );
+      const visibleActiveDates = resolveVisibleActiveDates(nextDates, nextExcludedDates);
+      const reactivatedKeySet = new Set(
+        reactivatedExcludedDates.map((date) => `${courseId}_${date}`),
+      );
+      const tombstoneScanDates = isScheduleWindowPatchBody(body)
+        ? visibleActiveDates.filter((date) => !reactivatedKeySet.has(`${courseId}_${date}`))
+        : [];
+      let overrideItems: Array<Record<string, { L?: Array<{ S?: string }>; S?: string }>> = [];
+      if (tombstoneScanDates.length > 0) {
+        const overridesResp = await client.send(
+          new QueryCommand({
+            TableName: overridesTable,
+            KeyConditionExpression:
+              "tenantId = :tenantId AND begins_with(courseId_date, :coursePrefix)",
+            ExpressionAttributeValues: {
+              ":tenantId": { S: tenantId },
+              ":coursePrefix": { S: `${courseId}_` },
+            },
+          }),
+        );
+        overrideItems = (overridesResp.Items ?? []) as Array<
+          Record<string, { L?: Array<{ S?: string }>; S?: string }>
+        >;
+      }
+      const overrideKeysToDelete = collectOverrideKeysForReactivationCleanup({
+        courseId,
+        reactivatedExcludedDates,
+        visibleActiveDatesForTombstoneScan: tombstoneScanDates,
+        overrideItems,
+      });
+      if (overrideKeysToDelete.length > 0) {
+        console.info(
+          JSON.stringify({
+            actor: actorUserId,
+            timestamp: new Date().toISOString(),
+            courseId,
+            reason: "term_reactivated_override_cleanup",
+            overrideKeys: overrideKeysToDelete,
+            reactivatedExcludedDates,
+          }),
+        );
+        await Promise.all(
+          overrideKeysToDelete.map((courseId_date) =>
+            client.send(
+              new DeleteItemCommand({
+                TableName: overridesTable,
+                Key: {
+                  tenantId: { S: tenantId },
+                  courseId_date: { S: courseId_date },
+                },
+              }),
+            ),
+          ),
+        );
+      }
+    }
 
     const previousPlannedEndDate = item.plannedEndDate?.S;
     const isRollingActiveWithParticipants =
