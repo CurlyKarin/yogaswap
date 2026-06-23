@@ -42,7 +42,7 @@ import {
 import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
 import {
   looksLikeAutomaticallyInactive,
-  wouldAutoDeactivateBoundedSeries,
+  wouldAutoDeactivateOnReconcile,
 } from "shared/courseStatus";
 import { isParticipantCourseWindDown } from "../lib/courseTermActions";
 import { courseApiPathKey } from "../lib/courseUid";
@@ -823,7 +823,7 @@ export default function CourseList({
             STATUS_OPTIONS.find((entry) => entry.value === (course.status ?? "active"))?.label ?? "Aktiv";
           const statusHint = looksLikeAutomaticallyInactive(course, hasUpcomingDates)
             ? " · automatisch inaktiv"
-            : wouldAutoDeactivateBoundedSeries(course, hasUpcomingDates)
+            : wouldAutoDeactivateOnReconcile(course, hasUpcomingDates)
               ? " · wird beim Speichern inaktiv"
               : "";
           return (

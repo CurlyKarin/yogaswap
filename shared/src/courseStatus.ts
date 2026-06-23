@@ -215,9 +215,9 @@ export function isWithinPostCourseEndGrace(
 
 /**
  * Admin-Hinweis: Kurs wuerde beim naechsten Reconcile/Speichern inaktiv.
- * `hasUpcomingDates` wird ignoriert (#204: Blockende + Nachlauf statt Zukunftstermine).
+ * `hasUpcomingDates` wird ignoriert (#204: Zugriffsfrist statt Zukunftstermine).
  */
-export function wouldAutoDeactivateBoundedSeries(
+export function wouldAutoDeactivateOnReconcile(
   course: Course,
   hasUpcomingDates: boolean,
   settings?: TenantSettings,
@@ -228,15 +228,16 @@ export function wouldAutoDeactivateBoundedSeries(
 }
 
 /**
- * Heuristik ohne DB-Feld: inaktiver Kursblock ohne Zukunftstermine (typisch auto-gesetzt).
+ * Admin-Hinweis: inaktiver Kurs mit definiertem Blockende, typisch auto-reconciled.
+ * `hasUpcomingDates` schliesst manuelle Inaktivierung bei noch sichtbaren Terminen aus.
  */
 export function looksLikeAutomaticallyInactive(
   course: Course,
   hasUpcomingDates: boolean,
 ): boolean {
   if ((course.status ?? "active") !== "inactive") return false;
-  const planningMode = course.planningMode ?? "bounded_series";
-  return planningMode === "bounded_series" && !hasUpcomingDates;
+  if (!supportsAutoInactiveTransition(course)) return false;
+  return !hasUpcomingDates;
 }
 
 export function formatCourseIsoDateDe(iso: string): string {

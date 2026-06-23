@@ -2,7 +2,7 @@ import {
   isWithinPostCourseEndGrace,
   participantCourseAccessDeadlineIso,
   toIsoDateUtc,
-  wouldAutoDeactivateBoundedSeries,
+  wouldAutoDeactivateOnReconcile,
 } from "./courseStatus";
 import type {
   Course,
@@ -211,7 +211,7 @@ export function canShowParticipantCourseCard(
   if (status === "inactive") return true;
   const now = context.now ?? new Date();
   if (
-    wouldAutoDeactivateBoundedSeries(course, context.hasVisibleCourseDates) &&
+    wouldAutoDeactivateOnReconcile(course, context.hasVisibleCourseDates) &&
     isWithinPostCourseEndGrace(course, settings, now)
   ) {
     return true;

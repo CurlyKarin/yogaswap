@@ -12,7 +12,7 @@ import {
   looksLikeAutomaticallyInactive,
   shouldAutoDeactivateCourse,
   supportsAutoInactiveTransition,
-  wouldAutoDeactivateBoundedSeries,
+  wouldAutoDeactivateOnReconcile,
 } from "shared/courseStatus";
 import type { Course } from "shared/types";
 
@@ -134,14 +134,26 @@ describe("courseStatus", () => {
     const afterEnd = new Date(Date.UTC(2026, 6, 15, 12, 0, 0));
     expect(shouldAutoDeactivateCourse(activeInBlock, undefined, beforeEnd)).toBe(false);
     expect(shouldAutoDeactivateCourse(activeInBlock, undefined, afterEnd)).toBe(true);
-    expect(wouldAutoDeactivateBoundedSeries(activeInBlock, true, undefined, beforeEnd)).toBe(
+    expect(wouldAutoDeactivateOnReconcile(activeInBlock, true, undefined, beforeEnd)).toBe(
       false,
     );
-    expect(wouldAutoDeactivateBoundedSeries(activeInBlock, false, undefined, afterEnd)).toBe(true);
+    expect(wouldAutoDeactivateOnReconcile(activeInBlock, false, undefined, afterEnd)).toBe(true);
   });
 
   it("erkennt auto-inaktiv-Heuristik und pending deactivation", () => {
-    const inactive = { ...baseCourse, status: "inactive" as const };
+    const inactive = {
+      ...baseCourse,
+      status: "inactive" as const,
+      seriesEndDate: "2020-01-31",
+      dates: ["2020-01-06"],
+    };
+    const inactiveRolling = {
+      ...baseCourse,
+      status: "inactive" as const,
+      planningMode: "rolling_continuous" as const,
+      plannedEndDate: "2020-01-31",
+      dates: ["2020-01-06"],
+    };
     const activePastBlock = {
       ...baseCourse,
       status: "active" as const,
@@ -154,13 +166,21 @@ describe("courseStatus", () => {
       seriesEndDate: "2099-12-31",
       dates: ["2020-01-06"],
     };
+    const manualInactiveRolling = {
+      ...baseCourse,
+      status: "inactive" as const,
+      planningMode: "rolling_continuous" as const,
+      dates: ["2099-06-16"],
+    };
     const afterBlock = new Date(Date.UTC(2026, 0, 1, 12, 0, 0));
     expect(looksLikeAutomaticallyInactive(inactive, false)).toBe(true);
+    expect(looksLikeAutomaticallyInactive(inactiveRolling, false)).toBe(true);
+    expect(looksLikeAutomaticallyInactive(manualInactiveRolling, true)).toBe(false);
     expect(looksLikeAutomaticallyInactive(activePastBlock, false)).toBe(false);
-    expect(wouldAutoDeactivateBoundedSeries(activePastBlock, true, undefined, afterBlock)).toBe(
+    expect(wouldAutoDeactivateOnReconcile(activePastBlock, true, undefined, afterBlock)).toBe(
       true,
     );
-    expect(wouldAutoDeactivateBoundedSeries(activeInBlock, false, undefined, afterBlock)).toBe(
+    expect(wouldAutoDeactivateOnReconcile(activeInBlock, false, undefined, afterBlock)).toBe(
       false,
     );
   });

@@ -158,8 +158,8 @@ Unabhängig vom Kurs-Wind-down: **7 Tage** (Studio-Einstellung) nach einem verga
 
 | Anzeige | Bedeutung |
 |---------|-----------|
-| **wird beim Speichern inaktiv** | DB noch `active`, aber UTC-Heute liegt nach `participantCourseAccessDeadlineIso` (`wouldAutoDeactivateBoundedSeries`) |
-| **automatisch inaktiv** | `inactive` und typisch per Auto-Transition gesetzt |
+| **wird beim Speichern inaktiv** | DB noch `active`, aber UTC-Heute liegt nach `participantCourseAccessDeadlineIso` (`wouldAutoDeactivateOnReconcile`) |
+| **automatisch inaktiv** | `inactive`, Blockende definiert, keine sichtbaren Zukunftstermine (`looksLikeAutomaticallyInactive`) |
 
 ---
 

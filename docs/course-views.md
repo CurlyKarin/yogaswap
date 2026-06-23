@@ -68,6 +68,18 @@ Vertretung (`forceParticipantView` in `App`): Teilnehmer-Perspektive in der **Wo
 
 Daten: `collectWeekOccurrences` / `isExcludedCourseDate` in `app/src/lib/courseWeekOccurrences.ts`; Filter Nachlauf in `useCoursesData` / `canShowCourseInPastWeek`.
 
+### Teilnehmer-Chips (Kurskachel)
+
+Die Chip-Zeile zeigt die **effektive Terminbelegung**, nicht die Stamm-Mitgliedschaft (die liegt im Mitglieder-Dialog).
+
+| Kontext | Anzeige |
+|---------|---------|
+| Gewählter Termin (Zukunft oder Wochenansicht) | Override: eingetragen, getauscht, SN, Warteliste, Gäste |
+| Kursübersicht im **Nachlauf** (letzter Termin) | Override dieses Termins — wie in der Wochenansicht |
+| **Nach abgelaufener Zugriffsfrist** | Stammteilnehmer (`course.participants`); Termin-Dropdown „—“ |
+
+Code: `useCourseCardTermState` (`useTermScopedParticipantState`).
+
 Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblendet werden: `hiddenPastCourseCount`.
 
 ### Tausch-UI
