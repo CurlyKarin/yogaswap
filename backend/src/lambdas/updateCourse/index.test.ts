@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
 import {
+  DeleteItemCommand,
   GetItemCommand,
   PutItemCommand,
   QueryCommand,
@@ -22,6 +23,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     GetItemCommand: jest.fn((input) => input),
     PutItemCommand: jest.fn((input) => input),
+    DeleteItemCommand: jest.fn((input) => input),
     QueryCommand: jest.fn((input) => input),
     ScanCommand: jest.fn((input) => input),
     mockSend,
@@ -78,8 +80,8 @@ function baseCourseItem(status = "draft") {
     seriesEndDate: { S: "2026-03-31" },
     visibleFrom: { S: "2026-01-01" },
     visibleUntil: { S: "2026-03-31" },
-    excludedDates: { L: [{ S: "2026-02-02" }] },
-    includedDates: { L: [{ S: "2026-02-04" }] },
+    excludedDates: { L: [] },
+    includedDates: { L: [] },
   };
 }
 
@@ -102,6 +104,7 @@ describe("updateCourse Lambda", () => {
     mockSesSend.mockReset();
     (GetItemCommand as unknown as jest.Mock).mockClear();
     (PutItemCommand as unknown as jest.Mock).mockClear();
+    (DeleteItemCommand as unknown as jest.Mock).mockClear();
     (QueryCommand as unknown as jest.Mock).mockClear();
     (ScanCommand as unknown as jest.Mock).mockClear();
   });
@@ -243,6 +246,7 @@ describe("updateCourse Lambda", () => {
         },
       })
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Items: [] })
       .mockResolvedValueOnce({
         Item: {
           email: { S: "luna@example.com" },
@@ -285,6 +289,7 @@ describe("updateCourse Lambda", () => {
         },
       })
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Items: [] })
       .mockResolvedValueOnce({
         Item: {
           email: { S: "luna@example.com" },
@@ -320,7 +325,8 @@ describe("updateCourse Lambda", () => {
           plannedEndDate: { S: "2099-06-20" },
         },
       })
-      .mockResolvedValueOnce({});
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Items: [] });
 
     const result = await handler(
       makeEvent({
@@ -774,5 +780,140 @@ describe("updateCourse Lambda", () => {
     expect(overrideWrites[0].Item.courseId_date.S).toBe(`1_${futureDateIso}`);
     expect(overrideWrites[0].Item.courseUid.S).toMatch(COURSE_UID_REGEX);
     expect(overrideWrites[0].Item.participants.L).toEqual([{ S: "luna" }, { S: "maya" }]);
+  });
+
+  test("deletes override when excluded date is reactivated", async () => {
+    const reactivatedIso = "2026-02-02";
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          excludedDates: { L: [{ S: reactivatedIso }] },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        excludedDates: [],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).toHaveBeenCalledWith({
+      TableName: "test-overrides",
+      Key: {
+        tenantId: { S: "default-tenant" },
+        courseId_date: { S: `1_${reactivatedIso}` },
+      },
+    });
+    expect(JSON.parse(result.body).excludedDates).toEqual([]);
+  });
+
+  test("deletes tombstone override when planning window expands after pruned exclusion", async () => {
+    const tombstoneDate = "2020-01-06";
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("draft"),
+          weekday: { S: "Mon" },
+          seriesStartDate: { S: "2026-01-01" },
+          seriesEndDate: { S: "2026-03-31" },
+          visibleFrom: { S: "2026-01-01" },
+          visibleUntil: { S: "2026-03-31" },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_date: { S: `1_${tombstoneDate}` },
+            courseId: { S: "1" },
+            date: { S: tombstoneDate },
+            participants: { L: [] },
+            swapped: { L: [] },
+            waitlist: { L: [] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        seriesStartDate: "2020-01-01",
+        seriesEndDate: "2026-03-31",
+        visibleFrom: "2020-01-01",
+        visibleUntil: "2026-03-31",
+        excludedDates: [],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).toHaveBeenCalledWith({
+      TableName: "test-overrides",
+      Key: {
+        tenantId: { S: "default-tenant" },
+        courseId_date: { S: `1_${tombstoneDate}` },
+      },
+    });
+  });
+
+  test("does not delete override when excluded dates stay unchanged", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: baseCourseItem("active"),
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        name: "Neuer Name",
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).not.toHaveBeenCalled();
+  });
+
+  test("deletes tombstone override when rolling course exclusion is removed", async () => {
+    const reactivatedIso = "2099-06-16";
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          seriesStartDate: undefined,
+          seriesEndDate: undefined,
+          visibleFrom: undefined,
+          visibleUntil: undefined,
+          excludedDates: { L: [{ S: reactivatedIso }] },
+          includedDates: { L: [] },
+          dates: { L: [{ S: "2099-01-06" }, { S: reactivatedIso }] },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        excludedDates: [],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).toHaveBeenCalledWith({
+      TableName: "test-overrides",
+      Key: {
+        tenantId: { S: "default-tenant" },
+        courseId_date: { S: `1_${reactivatedIso}` },
+      },
+    });
   });
 });
