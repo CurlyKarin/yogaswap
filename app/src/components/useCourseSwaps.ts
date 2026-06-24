@@ -304,7 +304,7 @@ export function useCourseSwaps(
           warningParts.push(`Offene Tauschanfragen (${pendingCount}) werden gelöscht.`);
         }
         if (activeFutureCount > 0) {
-          warningParts.push(`Aktive zukünftige Tausche (${activeFutureCount}) werden aufgehoben.`);
+          warningParts.push(`Aktive zukünftige Tauschvorgänge (${activeFutureCount}) werden aufgehoben.`);
         }
         const proceed = confirm(warningParts.join(" "));
         if (!proceed) return false;

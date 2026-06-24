@@ -163,7 +163,7 @@ export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTempl
       <p>Hallo ${input.nickname},</p>
       <p>du wurdest zum Kurs <strong>${input.courseName}</strong>${weekdayTime} hinzugefügt.</p>
       ${nextTermHint}
-      <p>Im YogaSwap-Portal kannst du Termine einsehen und Tausche verwalten.</p>
+      <p>Im YogaSwap-Portal kannst du Termine einsehen und Tauschvorgänge verwalten.</p>
       ${loginHint}
     `,
   };
@@ -182,7 +182,7 @@ export function buildCourseActivatedMail(input: CourseInfoMailInput): MailTempla
       <p>Hallo ${input.nickname},</p>
       <p>der Kurs <strong>${input.courseName}</strong>${weekdayTime} ist jetzt aktiv.</p>
       ${firstTermHint}
-      <p>Du kannst im YogaSwap-Portal Termine und Tausche verwalten.</p>
+      <p>Du kannst im YogaSwap-Portal Termine und Tauschvorgänge verwalten.</p>
       ${loginHint}
     `,
   };
