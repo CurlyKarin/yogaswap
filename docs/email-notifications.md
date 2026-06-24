@@ -57,43 +57,124 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 
 ---
 
-## Wichtigste Lücken (Vorschlag Priorität)
+## Produktentscheidungen (Stand Team)
 
-Bewertung für eine **erste nutzbare Version** (#45): hoher Nutzen, klarer Trigger, wenig Mehrdeutigkeit.
+### MVP-Priorität Teilnehmer:innen
 
-### Teilnehmer:innen (P1)
+| Prio | Ereignis | Inhalt | Trigger / Lambda |
+|------|----------|--------|------------------|
+| **1** | **Nachrücken von Warteliste** | Bestätigung mit **konkretem Termin** (Kurs, Datum, Uhrzeit) | `processPromotions` |
+| **2** | **Tausch erfolgreich** | Bestätigung mit Zieltermin; bei jedem erfolgreichen Tausch sinnvoll (inkl. klar freier Platz, Ringtausch) | `updateSwap` / `processRingSwaps` |
+| **3** | **Kursbeitritt** | Willkommen + Kursinfo; ggf. **Kalenderelement** für Serientermine | siehe unten |
 
-| Ereignis | Warum wichtig | Anmerkung |
-|----------|---------------|-----------|
-| **Tauschanfrage eingegangen** | Gegenpartei muss reagieren | Heute nur in-app sichtbar |
-| **Tausch bestätigt / ausgeführt** | Beide Seiten brauchen Bestätigung | inkl. Ringtausch-Beteiligte |
-| **Tausch abgelehnt / zurückgezogen** | Erwartungsmanagement | |
-| **Nachrücken von Warteliste** | `processPromotions` — Platz wurde frei | Zeitkritisch |
-| **Neuer Kurs / Kursbeitritt** | Aufnahme in `course.participants` ohne separate Einladung | Abgrenzung zu Studio-Einladung |
+**Nicht in MVP:** Tausch**anfragen** (eingehend/ausgehend) — potenziell zu viel Lärm; erst nach Erfahrung im Betrieb entscheiden.
 
-### Trainer / Kursleitung (P1)
+### Kursbeitritt — wann mailen?
 
-| Ereignis | Warum wichtig | Anmerkung |
-|----------|---------------|-----------|
-| **Terminabsage im eigenen Kurs** | Studio-Report existiert, aber nicht an zugeordnete Instructor:innen | Empfänger aus `course.instructors` |
-| **Offene Tauschanfrage am Kurs** | Übersicht für Leitung | Optional Digest statt Einzelmail |
-| **Kurzfristige Absage (SN)** | Siehe `docs/short-notice-cancellation.md` | Heute keine Mail |
+| Situation | Empfänger | Anmerkung |
+|-----------|-----------|-----------|
+| Person wird zu **`active`** Kurs in `course.participants` hinzugefügt | die hinzugefügte Person | Abgrenzung: Studio-**Einladung** (`createParticipants`) bleibt separat |
+| Kurs wechselt **`draft` → `active`** | alle aktuell in `course.participants` | einmalige „Kurs ist live“-Mail; nicht bei jedem späteren Edit |
+
+Keine Mail bei reinem Entfernen aus der Liste (dafür ggf. später separat).
+
+### Trainer / Kursleitung (MVP)
+
+Mail bei **relevanten Änderungen an der Teilnehmerliste** des Kurses (Hinzufügen, Entfernen — nicht jede Override-Änderung pro Termin im ersten Wurf).
+
+| Bewusst nicht MVP | Grund |
+|-------------------|--------|
+| **Gäste** | meist selbst durch Leitung eingetragen |
+| **Tauschanfragen** (jede Richtung) | zu granular; siehe Digest-Zukunft |
+| **Einzelmail pro Kleinigkeit** | siehe Zukunftsplanung |
+
+Zugeordnete Instructor:innen aus `course.instructors` (nicht ganzes Studio), sofern nicht anders konfiguriert.
+
+### Kalender-Anhang (ICS) — Zielbild
+
+Für Mails mit **festem Termin** (Nachrücken, erfolgreicher Tausch, ggf. Kursbeitritt):
+
+- **`.ics`-Anhang** (`text/calendar`, `METHOD:PUBLISH`) oder eingebetteter Link — „In Kalender übernehmen“
+- Felder: `DTSTART`/`DTEND` aus `date` + `course.time`, `SUMMARY` (Kursname), `LOCATION` optional, `DESCRIPTION` mit Studio/Kurs-Link
+- **Serienkurs:** bei Kursbeitritt / Aktivierung eher **mehrere VEVENTs** (sichtbare `dates`) oder Hinweis „Termine in der App“ — nicht ein einzelnes ICS für die ganze Serie ohne Abstimmung
+- SES: `SendEmailCommand` mit `RawMessage` oder Multipart-MIME (noch nicht im Code)
+
+Damit wird „Tausch bestätigt“ nicht nur Text, sondern direkt kalenderfähig — gilt für Ringtausch und Direkttausch gleichermaßen.
+
+### Zukunftsplanung (nicht MVP)
+
+- **Digest / Sammel-Updates** in festen Abständen, wenn es Änderungen gab (Tauschaktivität, Teilnehmerliste, …) — statt E-Mail bei jeder Kleinigkeit
+- UI-Schalter Studio / persönlich (Architektur unten vorgesehen)
+- Tausch**anfrage**-Mails, falls sich der Bedarf zeigt
+
+---
+
+## Lücken nach Priorität (technisch)
+
+### Teilnehmer:innen — MVP (#45)
+
+| Ereignis | Lambda | Kalender |
+|----------|--------|----------|
+| Nachrücken Warteliste | `processPromotions` | ja (ein Termin) |
+| Tausch erfolgreich | Swap-Ausführung | ja (Zieltermin) |
+| Kursbeitritt / Kurs aktiv | `updateCourse` | optional (Serie → siehe oben) |
+
+### Teilnehmer:innen — zurückgestellt
+
+| Ereignis | Anmerkung |
+|----------|-----------|
+| Tauschanfrage eingegangen | zu viel für MVP |
+| Tausch abgelehnt / zurückgezogen | optional später |
+| Termin-Erinnerung | P3 |
+
+### Trainer — MVP
+
+| Ereignis | Anmerkung |
+|----------|-----------|
+| Teilnehmerliste geändert (add/remove Stamm) | `updateCourse` `participants` |
+| Terminabsage im eigenen Kurs | ergänzt bestehenden Studio-Report |
+
+### Trainer — zurückgestellt
+
+| Ereignis | Anmerkung |
+|----------|-----------|
+| Gäste | nicht MVP |
+| Offene Tauschanfrage | Digest-Zukunft |
+| Kurzfristige Absage (SN) | später |
 
 ### Studio / Admin (P2)
 
 | Ereignis | Anmerkung |
 |----------|-----------|
-| **Tausch-Aktivität (Digest)** | Alternative zu vielen Einzelmails |
-| **Kurs ohne Leitung / Kapazitätsengpass** | Eher Reporting als Push |
+| Tausch-Aktivität (Digest) | Zukunftsplanung |
+| Kurs ohne Leitung / Kapazitätsengpass | Reporting |
 
 ### Später (P3)
 
-- Gastplätze hinzugefügt/entfernt
-- Kursplan-Fenster geändert (viele Empfänger → eher Digest)
-- Erinnerung vor Termin (Reminder)
+- Gastplätze
+- Kursplan-Fenster geändert (viele Empfänger → Digest)
+- Erinnerung vor Termin
 - Inaktiv-/Nachlauf-Hinweise
 
 ---
+
+## Wichtigste Lücken (ältere Prioritätsliste — ersetzt durch Abschnitt oben)
+
+<details>
+<summary>Archivierte erste Brainstorm-Tabelle</summary>
+
+### Teilnehmer:innen (P1)
+
+| Ereignis | Warum wichtig | Anmerkung |
+|----------|---------------|-----------|
+| **Tauschanfrage eingegangen** | Gegenpartei muss reagieren | → zurückgestellt |
+| **Tausch bestätigt / ausgeführt** | Beide Seiten brauchen Bestätigung | → MVP mit ICS |
+| **Tausch abgelehnt / zurückgezogen** | Erwartungsmanagement | → später |
+| **Nachrücken von Warteliste** | Zeitkritisch | → MVP #1 |
+| **Neuer Kurs / Kursbeitritt** | Aufnahme in `course.participants` | → MVP #3 |
+
+</details>
+
 
 ## Schalter: Studio vs. persönlich
 
@@ -125,10 +206,13 @@ export interface TenantEmailNotificationDefaults {
   /** Terminabsage: Studio-Report (heute STUDIO_NOTIFICATION_EMAILS) */
   courseDateCancelledStudioReport?: boolean;
 
-  swapRequestReceived?: boolean;
-  swapOutcome?: boolean; // bestätigt, abgelehnt, zurückgezogen
+  swapRequestReceived?: boolean;       // Default false / MVP aus
+  swapExecuted?: boolean;              // erfolgreicher Tausch inkl. ICS
+  swapOutcome?: boolean;               // abgelehnt, zurückgezogen — später
   waitlistPromotion?: boolean;
-  courseMembershipChanged?: boolean;
+  courseMembershipAdded?: boolean;
+  courseActivated?: boolean;           // draft → active an alle Stamm-TN
+  instructorParticipantListChanged?: boolean;
   plannedEndDateChanged?: boolean;
 
   /** Später: Digest statt Einzelmail */
@@ -145,9 +229,11 @@ Persönliche Overrides später am `ParticipantProfile` (analog zu `settings` am 
 export interface ParticipantNotificationPreferences {
   courseDateCancelled?: boolean;
   swapRequestReceived?: boolean;
+  swapExecuted?: boolean;
   swapOutcome?: boolean;
   waitlistPromotion?: boolean;
-  courseMembershipChanged?: boolean;
+  courseMembershipAdded?: boolean;
+  courseActivated?: boolean;
   plannedEndDate?: boolean;
   /** true = nur Digest (wenn Studio Digest anbietet) */
   preferDigest?: boolean;
@@ -169,7 +255,7 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 
 | Thema | Empfehlung |
 |-------|------------|
-| Neue Mail | Template in `authMailTemplates` oder `courseMailTemplates` (oder neues `swapMailTemplates.ts`) |
+| Neue Mail | `courseMailTemplates` / `swapMailTemplates.ts`; ICS-Helfer z. B. `buildIcsEventAttachment` |
 | Empfängerliste | Immer über `resolveParticipantEmail`; Instructor:innen aus `course.instructors` |
 | Fehler | Nicht-blockierend für Hauptaktion (wie heute bei `createParticipants` / `cancelCourseDate`) |
 | Logging | Einheitliches JSON-Summary pro Versand |
@@ -177,24 +263,27 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 
 ---
 
-## Offene Produktfragen (#45)
+## Offene Produktfragen
 
-1. **Trainer:in** — nur zugeordnete Instructor:innen des Kurses oder alle Instructor:innen des Studios?
-2. **Tausch** — Gegenpartei immer sofort mailen oder nur bei Inaktivität / Digest?
-3. **Kursbeitritt** — Mail bei jeder `participants`-Änderung oder nur Erstaufnahme?
-4. **Studio-Report** — `STUDIO_NOTIFICATION_EMAILS` (Deploy-Env) vs. konfigurierbar pro Tenant in den Studioeinstellungen?
-5. **Opt-out** — Teilnehmer dürfen kursbezogene Mails abschalten, Auth-Mails nie?
+| # | Frage | Stand |
+|---|--------|-------|
+| 1 | Trainer:in — nur `course.instructors`? | **Ja** (Vorgabe MVP) |
+| 2 | Tauschanfrage sofort mailen? | **Nein** für MVP; Digest später |
+| 3 | Kursbeitritt — wann? | **Entschieden:** add zu active + draft→active |
+| 4 | Studio-Report konfigurierbar? | offen (`STUDIO_NOTIFICATION_EMAILS` vs. Tenant) |
+| 5 | Opt-out kursbezogene Mails? | Architektur ja; UI später |
+| 6 | ICS bei Kursbeitritt Serienkurs | offen: ein Event vs. Liste vs. nur Link zur App |
 
 ---
 
 ## Nächste Schritte (Vorschlag)
 
-1. Produktentscheid zu P1-Ereignissen (Tabelle oben)
-2. `sendNotification`-Gerüst + `NotificationEvent` (ohne UI-Schalter)
-3. Erste Mails: Tauschanfrage + Tausch-Ergebnis + Warteliste
-4. Instructor-Mails bei Terminabsage
-5. `TenantSettings.emailNotifications` als Typ + Resolver (Defaults = heutiges Verhalten)
-6. UI-Schalter Studio / persönlich in separatem Issue
+1. ~~Produktentscheid P1~~ (siehe „Produktentscheidungen“)
+2. `sendNotification`-Gerüst + `NotificationEvent` + ICS-Helfer (ohne UI-Schalter)
+3. **Reihenfolge Implementierung:** Nachrücken → Tausch erfolgreich (+ ICS) → Kursbeitritt → Trainer Teilnehmerliste
+4. `TenantSettings.emailNotifications` als Typ + Resolver (Defaults = MVP-Entscheidungen)
+5. Instructor-Mails Teilnehmerliste + optional Terminabsage
+6. UI-Schalter / Digest in separaten Issues
 
 ## Verwandte Doku
 
