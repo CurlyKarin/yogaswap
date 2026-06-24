@@ -13,6 +13,7 @@ describe("swapMailTemplates", () => {
     expect(mail.subject).toMatch(/Tausch bestätigt/);
     expect(mail.html).toMatch(/Morgenyoga/);
     expect(mail.html).toMatch(/20\.06\.2026/);
+    expect(mail.html).toMatch(/Samstag/);
     expect(mail.html).toMatch(/18:00/);
     expect(mail.html).toMatch(/Kalender-Anhang/);
     expect(mail.html).toMatch(/app\.example\.com/);

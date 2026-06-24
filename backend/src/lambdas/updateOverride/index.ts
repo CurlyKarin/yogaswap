@@ -15,7 +15,7 @@ import { mapOverrideItem, mapStringList, stringListAttribute, anonymousTrialCoun
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
 import { validateAnonymousTrialCount } from '@yogaswap/shared';
 import { resolveSelfServiceAbsenceKind } from '../shared/notifications/resolveSelfServiceAbsenceKind';
-import { notifySelfServiceAbsence } from '../shared/notifications/termAbsenceNotifications';
+import { notifyParticipantTermReleased } from '../shared/notifications/termAbsenceNotifications';
 
 const client = dynamoClient;
 
@@ -234,13 +234,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       })
     );
 
-    if (selfServiceAbsenceKind && subjectNickname) {
+    if (selfServiceAbsenceKind === "term_released" && subjectNickname) {
       try {
         const baseUrl = process.env.BASE_URL || "";
-        const mailSummary = await notifySelfServiceAbsence(client, {
+        const mailSummary = await notifyParticipantTermReleased(client, {
           tenantId,
           userId: subjectNickname,
-          kind: selfServiceAbsenceKind,
           courseName,
           dateIso: date,
           time: courseTime,
@@ -248,16 +247,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           sesSourceEmail: process.env.SES_SOURCE_EMAIL,
           baseUrl,
         });
-        console.info("updateOverride self-service absence mail summary", {
+        console.info("updateOverride term released mail summary", {
           tenantId,
           courseId: legacyCourseId,
           date,
-          kind: selfServiceAbsenceKind,
           userId: subjectNickname,
           ...mailSummary,
         });
       } catch (notificationError) {
-        console.warn("updateOverride self-service absence notification failed", {
+        console.warn("updateOverride term released notification failed", {
           tenantId,
           courseId: legacyCourseId,
           date,

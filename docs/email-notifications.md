@@ -24,8 +24,7 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 | **Geplantes Kursende gesetzt** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateMail` | Rollkurs `active` mit TN; Skip: `invited`, kein Profil |
 | **Geplantes Kursende aufgehoben** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateClearedMail` | wie oben |
 | **Nachrücken Warteliste** | `processPromotions` | Nachgerückte Person | `buildWaitlistPromotionMail` + `.ics` | wie Tausch erfolgreich |
-| **Termin freigegeben (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantTermReleasedMail` | rechtzeitige Absage vor Cutoff |
-| **Kurzfristige Absage (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantShortNoticeCancellationMail` | im Cutoff-Fenster |
+| **Termin freigegeben (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantTermReleasedMail` | rechtzeitige Absage vor Cutoff; **keine** Mail bei kurzfristiger Absage (Platz bleibt belegt) |
 | **Terminabsage Studio** | `cancelCourseDate` | betroffene TN am Termin | `buildStudioTermCancelledMail` | mit Datum + Uhrzeit |
 | **Tausch erfolgreich** | `createSwap` (→ `active`), `updateSwap` (→ `active`), `processRingSwaps` | Tauschende Person | `buildSwapSuccessMail` + `.ics`-Anhang | `SendRawEmail`; ICS `METHOD:PUBLISH` |
 | **Kursbeitritt** | `updateCourse` | Neu hinzugefügte Stamm-TN | `buildCourseMembershipMail` | Nur bei `active`; nicht bei `draft`→`active` (dort Kurs-aktiv-Mail) |

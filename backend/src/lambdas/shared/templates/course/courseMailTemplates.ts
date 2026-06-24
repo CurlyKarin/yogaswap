@@ -30,6 +30,47 @@ export function formatIsoDateDe(isoDate: string): string {
   });
 }
 
+const COURSE_WEEKDAY_DE: Record<string, string> = {
+  Sun: "Sonntag",
+  Sunday: "Sonntag",
+  Mon: "Montag",
+  Monday: "Montag",
+  Tue: "Dienstag",
+  Tuesday: "Dienstag",
+  Wed: "Mittwoch",
+  Wednesday: "Mittwoch",
+  Thu: "Donnerstag",
+  Thursday: "Donnerstag",
+  Fri: "Freitag",
+  Friday: "Freitag",
+  Sat: "Samstag",
+  Saturday: "Samstag",
+};
+
+/** Kurs-Wochentag (gespeichert als Mon/Tue/…) → deutsches Label. */
+export function formatCourseWeekdayDe(weekday?: string): string | undefined {
+  if (!weekday?.trim()) return undefined;
+  const key = weekday.trim();
+  return COURSE_WEEKDAY_DE[key] ?? COURSE_WEEKDAY_DE[key.slice(0, 3)] ?? key;
+}
+
+/** Wochentag zu einem konkreten Termin (ISO-Datum), locale de-DE. */
+export function formatIsoWeekdayDe(isoDate: string): string {
+  const parsed = new Date(`${isoDate}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("de-DE", { weekday: "long", timeZone: "UTC" });
+}
+
+/** Terminzeile für Mails: „Montag, 20.06.2026 um 18:00 Uhr“. */
+export function formatTermDateTimeDe(isoDate: string, time: string): string {
+  const weekday = formatIsoWeekdayDe(isoDate);
+  const dateLabel = formatIsoDateDe(isoDate);
+  if (weekday) {
+    return `<strong>${weekday}, ${dateLabel}</strong> um <strong>${time}</strong> Uhr`;
+  }
+  return `<strong>${dateLabel}</strong> um <strong>${time}</strong> Uhr`;
+}
+
 export function buildPlannedEndDateMail(input: PlannedEndDateMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const plannedEndLabel = formatIsoDateDe(input.plannedEndDateIso);
@@ -74,8 +115,14 @@ type CourseInfoMailInput = {
 
 function formatTermHint(termDateIso: string | undefined, time: string | undefined, label: string): string {
   if (!termDateIso || !time) return "";
-  const dateLabel = formatIsoDateDe(termDateIso);
-  return `<p>${label} <strong>${dateLabel}</strong> um <strong>${time}</strong> Uhr.</p>`;
+  return `<p>${label} ${formatTermDateTimeDe(termDateIso, time)}.</p>`;
+}
+
+function formatCourseScheduleHint(weekday?: string, time?: string): string {
+  const weekdayDe = formatCourseWeekdayDe(weekday);
+  if (weekdayDe && time) return ` (${weekdayDe}, ${time} Uhr)`;
+  if (time) return ` (${time} Uhr)`;
+  return "";
 }
 
 export function buildPlannedEndDateClearedMail(input: PlannedEndDateClearedMailInput): MailTemplate {
@@ -104,8 +151,7 @@ export function buildPlannedEndDateClearedMail(input: PlannedEndDateClearedMailI
 }
 
 export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTemplate {
-  const weekdayTime =
-    input.weekday && input.time ? ` (${input.weekday}, ${input.time} Uhr)` : input.time ? ` (${input.time} Uhr)` : "";
+  const weekdayTime = formatCourseScheduleHint(input.weekday, input.time);
   const loginHint = input.loginUrl
     ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
     : "";
@@ -124,8 +170,7 @@ export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTempl
 }
 
 export function buildCourseActivatedMail(input: CourseInfoMailInput): MailTemplate {
-  const weekdayTime =
-    input.weekday && input.time ? ` (${input.weekday}, ${input.time} Uhr)` : input.time ? ` (${input.time} Uhr)` : "";
+  const weekdayTime = formatCourseScheduleHint(input.weekday, input.time);
   const loginHint = input.loginUrl
     ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
     : "";

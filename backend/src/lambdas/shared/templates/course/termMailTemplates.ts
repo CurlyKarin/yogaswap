@@ -1,4 +1,4 @@
-import { formatIsoDateDe } from "./courseMailTemplates";
+import { formatTermDateTimeDe } from "./courseMailTemplates";
 
 type MailTemplate = {
   subject: string;
@@ -14,8 +14,7 @@ export type TermMailInput = {
 };
 
 function termLine(dateIso: string, time: string): string {
-  const dateLabel = formatIsoDateDe(dateIso);
-  return `<strong>${dateLabel}</strong> um <strong>${time}</strong> Uhr`;
+  return formatTermDateTimeDe(dateIso, time);
 }
 
 function loginHint(loginUrl?: string): string {
@@ -43,21 +42,8 @@ export function buildParticipantTermReleasedMail(input: TermMailInput): MailTemp
     html: `
       <p>Hallo ${input.nickname},</p>
       <p>du hast deinen Platz am ${when} im Kurs <strong>${input.courseName}</strong> freigegeben.</p>
-      <p>Der Termin entfällt für dich; bei Warteliste kann jemand nachrücken.</p>
-      ${loginHint(input.loginUrl)}
-    `,
-  };
-}
-
-/** Kurzfristige Absage: Platz bleibt belegt (updateOverride). */
-export function buildParticipantShortNoticeCancellationMail(input: TermMailInput): MailTemplate {
-  const when = termLine(input.dateIso, input.time);
-  return {
-    subject: `Kurzfristige Absage: ${input.courseName}`,
-    html: `
-      <p>Hallo ${input.nickname},</p>
-      <p>deine kurzfristige Absage für den Termin am ${when} im Kurs <strong>${input.courseName}</strong> wurde gespeichert.</p>
-      <p>Dein Platz bleibt belegt; ein Tausch ist in diesem Zeitfenster nicht mehr möglich.</p>
+      <p>Der Termin entfällt für dich. Im YogaSwap-Portal kannst du nach einem Ersatztermin suchen — diese Möglichkeit besteht, solange das Tauschfenster offen ist.</p>
+      <p>Bei Warteliste auf diesem Termin kann jemand nachrücken.</p>
       ${loginHint(input.loginUrl)}
     `,
   };

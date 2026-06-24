@@ -1,4 +1,4 @@
-import { formatIsoDateDe } from "../course/courseMailTemplates";
+import { formatTermDateTimeDe } from "../course/courseMailTemplates";
 
 type MailTemplate = {
   subject: string;
@@ -18,8 +18,7 @@ function loginHint(loginUrl?: string): string {
 }
 
 function termDetails(courseName: string, dateIso: string, time: string): string {
-  const dateLabel = formatIsoDateDe(dateIso);
-  return `<strong>${courseName}</strong> am <strong>${dateLabel}</strong> um <strong>${time}</strong> Uhr`;
+  return `<strong>${courseName}</strong> am ${formatTermDateTimeDe(dateIso, time)}`;
 }
 
 export function buildSwapSuccessMail(input: TermMailInput): MailTemplate {

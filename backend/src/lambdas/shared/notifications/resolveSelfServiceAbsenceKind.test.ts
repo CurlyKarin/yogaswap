@@ -26,7 +26,7 @@ describe("resolveSelfServiceAbsenceKind", () => {
     ).toBe("term_released");
   });
 
-  test("detects kurzfristige Absage", () => {
+  test("sends no mail for kurzfristige Absage", () => {
     expect(
       resolveSelfServiceAbsenceKind({
         actorNickname: "luna",
@@ -46,6 +46,6 @@ describe("resolveSelfServiceAbsenceKind", () => {
         baseParticipants: ["luna"],
         now: new Date("1999-12-31T12:00:00"),
       }),
-    ).toBe("short_notice_cancelled");
+    ).toBeNull();
   });
 });
