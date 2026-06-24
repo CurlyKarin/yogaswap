@@ -154,15 +154,28 @@ locals {
         module.course_overrides_table.table_arn,
         module.courses_table.table_arn,
         module.tenants_table.table_arn,
+        module.participants_table.table_arn,
       ]
       dynamodb_actions = ["dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:GetItem"]
       tables = {
-        "OVERRIDES_TABLE" = module.course_overrides_table.table_name
-        "COURSES_TABLE"   = module.courses_table.table_name
-        "TENANTS_TABLE"   = module.tenants_table.table_name
+        "OVERRIDES_TABLE"    = module.course_overrides_table.table_name
+        "COURSES_TABLE"      = module.courses_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
+      additional_policies = [
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+          Resource = "*"
+        }
+      ]
+      environment = {
+        SES_SOURCE_EMAIL = var.ses_source_email
+        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+      }
     },
     "delete_override" = {
       name             = "delete-override"
@@ -301,8 +314,9 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL         = var.ses_source_email
+        SES_SOURCE_EMAIL           = var.ses_source_email
         STUDIO_NOTIFICATION_EMAILS = var.studio_notification_emails
+        BASE_URL                   = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
       }
     },
     "delete_course" = {

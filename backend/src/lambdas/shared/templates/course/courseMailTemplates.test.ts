@@ -42,18 +42,24 @@ describe("courseMailTemplates", () => {
       courseName: "Morgenyoga",
       weekday: "Mon",
       time: "18:00",
+      termDateIso: "2026-06-20",
     });
     expect(mail.subject).toMatch(/Kursbeitritt/);
     expect(mail.html).toMatch(/hinzugefügt/);
+    expect(mail.html).toMatch(/nächster Termin/);
+    expect(mail.html).toMatch(/20\.06\.2026/);
   });
 
   test("buildCourseActivatedMail announces active course", () => {
     const mail = buildCourseActivatedMail({
       nickname: "Luna",
       courseName: "Morgenyoga",
+      termDateIso: "2026-06-20",
+      time: "18:00",
     });
     expect(mail.subject).toMatch(/aktiv/);
-    expect(mail.html).toMatch(/jetzt aktiv/);
+    expect(mail.html).toMatch(/erste Termin/);
+    expect(mail.html).toMatch(/20\.06\.2026/);
   });
 
   test("buildInstructorParticipantListChangedMail lists adds and removes", () => {

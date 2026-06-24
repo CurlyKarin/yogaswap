@@ -19,6 +19,7 @@ export async function notifyCourseMembershipAdded(
     courseName: string;
     weekday?: string;
     time?: string;
+    termDateIso?: string;
     participantsTable?: string;
     sesSourceEmail?: string;
     baseUrl?: string;
@@ -36,6 +37,7 @@ export async function notifyCourseMembershipAdded(
         courseName: params.courseName,
         weekday: params.weekday,
         time: params.time,
+        termDateIso: params.termDateIso,
         loginUrl,
       }),
   });
@@ -49,6 +51,7 @@ export async function notifyCourseActivated(
     courseName: string;
     weekday?: string;
     time?: string;
+    termDateIso?: string;
     participantsTable?: string;
     sesSourceEmail?: string;
     baseUrl?: string;
@@ -66,6 +69,7 @@ export async function notifyCourseActivated(
         courseName: params.courseName,
         weekday: params.weekday,
         time: params.time,
+        termDateIso: params.termDateIso,
         loginUrl,
       }),
   });

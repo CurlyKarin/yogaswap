@@ -68,8 +68,15 @@ type CourseInfoMailInput = {
   courseName: string;
   weekday?: string;
   time?: string;
+  termDateIso?: string;
   loginUrl?: string;
 };
+
+function formatTermHint(termDateIso: string | undefined, time: string | undefined, label: string): string {
+  if (!termDateIso || !time) return "";
+  const dateLabel = formatIsoDateDe(termDateIso);
+  return `<p>${label} <strong>${dateLabel}</strong> um <strong>${time}</strong> Uhr.</p>`;
+}
 
 export function buildPlannedEndDateClearedMail(input: PlannedEndDateClearedMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
@@ -102,12 +109,14 @@ export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTempl
   const loginHint = input.loginUrl
     ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
     : "";
+  const nextTermHint = formatTermHint(input.termDateIso, input.time, "Dein nächster Termin ist am");
 
   return {
     subject: `Kursbeitritt: ${input.courseName}`,
     html: `
       <p>Hallo ${input.nickname},</p>
       <p>du wurdest zum Kurs <strong>${input.courseName}</strong>${weekdayTime} hinzugefügt.</p>
+      ${nextTermHint}
       <p>Im YogaSwap-Portal kannst du Termine einsehen und Tausche verwalten.</p>
       ${loginHint}
     `,
@@ -120,12 +129,14 @@ export function buildCourseActivatedMail(input: CourseInfoMailInput): MailTempla
   const loginHint = input.loginUrl
     ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
     : "";
+  const firstTermHint = formatTermHint(input.termDateIso, input.time, "Der erste Termin ist am");
 
   return {
     subject: `Kurs ist aktiv: ${input.courseName}`,
     html: `
       <p>Hallo ${input.nickname},</p>
       <p>der Kurs <strong>${input.courseName}</strong>${weekdayTime} ist jetzt aktiv.</p>
+      ${firstTermHint}
       <p>Du kannst im YogaSwap-Portal Termine und Tausche verwalten.</p>
       ${loginHint}
     `,

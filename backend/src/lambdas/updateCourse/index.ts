@@ -10,6 +10,7 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import {
   deriveVisibleDates,
+  findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
 import { shouldAutoDeactivateCourse, type Course } from "@yogaswap/shared";
@@ -917,6 +918,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const mailTime = nextTime;
     const instructorUserIds =
       item.instructors?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+    const upcomingTermIso = findNextUpcomingOccurrenceIso(nextDates, nextTime);
 
     if (status && currentStatus === "draft" && nextStatus === "active") {
       const activatedParticipantIds = nextParticipants
@@ -929,6 +931,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           courseName: mailCourseName,
           weekday: mailWeekday,
           time: mailTime,
+          termDateIso: upcomingTermIso,
           participantsTable,
           sesSourceEmail,
           baseUrl: baseUrlEnv,
@@ -969,6 +972,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             courseName: mailCourseName,
             weekday: mailWeekday,
             time: mailTime,
+            termDateIso: upcomingTermIso,
             participantsTable,
             sesSourceEmail,
             baseUrl: baseUrlEnv,

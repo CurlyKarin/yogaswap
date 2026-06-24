@@ -42,6 +42,7 @@ export function buildWaitlistPromotionMail(input: TermMailInput): MailTemplate {
     html: `
       <p>Hallo ${input.nickname},</p>
       <p>du bist von der Warteliste nachgerückt und bist jetzt für ${details} eingeplant.</p>
+      <p>Im Kalender-Anhang findest du den Termin zum Importieren (optional).</p>
       ${loginHint(input.loginUrl)}
     `,
   };

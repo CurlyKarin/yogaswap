@@ -145,7 +145,6 @@ describe("cancelCourseDate Lambda", () => {
           plannedRecipientsCount: 3,
           sentCount: 3,
           skippedNoProfileCount: 0,
-          skippedNoEmailCount: 0,
           skippedInvitedCount: 0,
           failedCount: 0,
         }),
@@ -490,7 +489,13 @@ describe("cancelCourseDate Lambda", () => {
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
     const payload = JSON.parse(result.body);
-    expect(payload.operationWarnings).toContain("participant_lookup_failed");
+    expect(payload.operationWarnings).toEqual([]);
+    expect(payload.outcome.notifications).toEqual(
+      expect.objectContaining({
+        sentCount: 0,
+        skippedNoProfileCount: 1,
+      }),
+    );
     expect(sesSend).toHaveBeenCalledTimes(1); // only studio report mail
   });
 

@@ -28,6 +28,7 @@ describe("swapMailTemplates", () => {
 
     expect(mail.subject).toMatch(/Nachrücken/);
     expect(mail.html).toMatch(/Warteliste/);
+    expect(mail.html).toMatch(/Kalender-Anhang/);
     expect(mail.html).toMatch(/Abendflow/);
   });
 });

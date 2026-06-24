@@ -23,7 +23,10 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 | **Terminabsage Studio-Report** | `cancelCourseDate` | `STUDIO_NOTIFICATION_EMAILS` (Infra-Env, CSV) | Inline-HTML Report | Optional; Fehler nur als Warning |
 | **Geplantes Kursende gesetzt** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateMail` | Rollkurs `active` mit TN; Skip: `invited`, kein Profil |
 | **Geplantes Kursende aufgehoben** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateClearedMail` | wie oben |
-| **Nachrücken Warteliste** | `processPromotions` | Nachgerückte Person | `buildWaitlistPromotionMail` | HTML; Skip: `invited`, kein Profil |
+| **Nachrücken Warteliste** | `processPromotions` | Nachgerückte Person | `buildWaitlistPromotionMail` + `.ics` | wie Tausch erfolgreich |
+| **Termin freigegeben (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantTermReleasedMail` | rechtzeitige Absage vor Cutoff |
+| **Kurzfristige Absage (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantShortNoticeCancellationMail` | im Cutoff-Fenster |
+| **Terminabsage Studio** | `cancelCourseDate` | betroffene TN am Termin | `buildStudioTermCancelledMail` | mit Datum + Uhrzeit |
 | **Tausch erfolgreich** | `createSwap` (→ `active`), `updateSwap` (→ `active`), `processRingSwaps` | Tauschende Person | `buildSwapSuccessMail` + `.ics`-Anhang | `SendRawEmail`; ICS `METHOD:PUBLISH` |
 | **Kursbeitritt** | `updateCourse` | Neu hinzugefügte Stamm-TN | `buildCourseMembershipMail` | Nur bei `active`; nicht bei `draft`→`active` (dort Kurs-aktiv-Mail) |
 | **Kurs aktiv (draft→active)** | `updateCourse` | Alle Stamm-TN | `buildCourseActivatedMail` | Einmalig bei Statuswechsel |
@@ -40,6 +43,8 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 | Tausch + ICS (Versand) | `backend/src/lambdas/shared/notifications/swapSuccessNotification.ts` |
 | Warteliste (Versand) | `backend/src/lambdas/shared/notifications/waitlistPromotionNotification.ts` |
 | Kursbeitritt / Trainer (Versand) | `backend/src/lambdas/shared/notifications/courseMembershipNotifications.ts` |
+| Termin-Absage / Freigabe (Versand) | `backend/src/lambdas/shared/notifications/termAbsenceNotifications.ts` |
+| Termin-Absage (Templates) | `backend/src/lambdas/shared/templates/course/termMailTemplates.ts` |
 | ICS | `backend/src/lambdas/shared/notifications/buildIcsPublishEvent.ts` |
 | SES HTML / MIME | `backend/src/lambdas/shared/notifications/sendParticipantEmail.ts` |
 
