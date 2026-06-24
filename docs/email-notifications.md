@@ -1,8 +1,18 @@
 # E-Mail-Benachrichtigungen (#45)
 
-Stand: Inventar und Zielbild für Erweiterungen. Issue [#45](https://github.com/CurlyKarin/yogaswap/issues/45) fragt u. a., **wann Trainer:innen** und **wann Teilnehmer:innen** per E-Mail informiert werden sollen.
+Stand: **MVP Teilnehmer-Benachrichtigungen implementiert** (Issue [#45](https://github.com/CurlyKarin/yogaswap/issues/45)). Dieses Dokument ist Inventar, Produktentscheidungen und Zielbild für Folgearbeit (Trainer:in, Schalter, Digest).
 
-Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-Versand ist überall unterdrückt (`MessageAction: SUPPRESS`); Auth-Mails laufen über eigene Token-Links.
+Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-Anhang). Absender `SES_SOURCE_EMAIL`. Cognito-Versand ist überall unterdrückt (`MessageAction: SUPPRESS`); Auth-Mails laufen über eigene Token-Links.
+
+### MVP #45 — Umsetzungsstand (Teilnehmer:innen)
+
+| Prio | Ereignis | Status |
+|------|----------|--------|
+| 1 | Nachrücken Warteliste | ✓ HTML + ICS |
+| 2 | Tausch erfolgreich | ✓ HTML + ICS (`createSwap`/`updateSwap`/`processRingSwaps`) |
+| 3 | Kursbeitritt / Kurs aktiv | ✓ HTML (ohne Serien-ICS) |
+| + | Studio-Terminabsage | ✓ `buildStudioTermCancelledMail` |
+| + | Selbst-Freigabe (rechtzeitig) | ✓ `buildParticipantTermReleasedMail` |
 
 ---
 
@@ -19,17 +29,16 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 | **E-Mail-Adresse geändert** | `updateParticipant` | Neue + ggf. alte Adresse | `buildEmailChangedNewAddressMail`, `buildEmailChangedOldAddressMail` | Nur bei aktivem Login-Status |
 | **Rolle geändert** | `updateParticipant` | Zielprofil | `buildRoleChangedMail` | Membership-Update mit Rollenwechsel |
 | **Studio-Zugang entfernt** | `deleteParticipant` | Zielprofil | `buildStudioAccessRemovedMail` | Nur wenn `inviteCompletedAt` gesetzt (Login-Historie) |
-| **Termin abgesagt** | `cancelCourseDate` | Gebuchte, getauschte, Wartelisten- und bereits abgemeldete TN am Termin | Inline-HTML (kein Template-Modul) | Skip: kein Profil, kein E-Mail, Status `invited` |
+| **Termin absgesagt (Studio)** | `cancelCourseDate` | Gebuchte, getauschte, Wartelisten- und abgemeldete TN am Termin | `buildStudioTermCancelledMail` (Datum + Uhrzeit, `de-DE`) | Skip: `invited`, kein Profil; kein ICS |
 | **Terminabsage Studio-Report** | `cancelCourseDate` | `STUDIO_NOTIFICATION_EMAILS` (Infra-Env, CSV) | Inline-HTML Report | Optional; Fehler nur als Warning |
 | **Geplantes Kursende gesetzt** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateMail` | Rollkurs `active` mit TN; Skip: `invited`, kein Profil |
 | **Geplantes Kursende aufgehoben** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateClearedMail` | wie oben |
 | **Nachrücken Warteliste** | `processPromotions` | Nachgerückte Person | `buildWaitlistPromotionMail` + `.ics` | wie Tausch erfolgreich |
-| **Termin freigegeben (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantTermReleasedMail` | rechtzeitige Absage vor Cutoff; **keine** Mail bei kurzfristiger Absage (Platz bleibt belegt) |
-| **Terminabsage Studio** | `cancelCourseDate` | betroffene TN am Termin | `buildStudioTermCancelledMail` | mit Datum + Uhrzeit |
+| **Termin freigegeben (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantTermReleasedMail` | rechtzeitige Absage vor Cutoff; Hinweis Ersatztermin; **keine** Mail bei kurzfristiger Absage |
 | **Tausch erfolgreich** | `createSwap` (→ `active`), `updateSwap` (→ `active`), `processRingSwaps` | Tauschende Person | `buildSwapSuccessMail` + `.ics`-Anhang | `SendRawEmail`; ICS `METHOD:PUBLISH` |
 | **Kursbeitritt** | `updateCourse` | Neu hinzugefügte Stamm-TN | `buildCourseMembershipMail` | Nur bei `active`; nicht bei `draft`→`active` (dort Kurs-aktiv-Mail) |
 | **Kurs aktiv (draft→active)** | `updateCourse` | Alle Stamm-TN | `buildCourseActivatedMail` | Einmalig bei Statuswechsel |
-| **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Nur bei add/remove Stamm; keine Mail wenn `instructors` leer |
+| **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Code vorhanden; **versendet erst**, wenn `instructors` am Kurs gesetzt — Bedarf/Leitung-Zuordnung noch klären |
 
 ### Template-Module
 
@@ -59,16 +68,16 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 |----------|--------|
 | `buildInvitePreparationMail` | Nur in Tests; kein Lambda-Versand |
 
-### Bewusst **ohne** E-Mail heute
+### Bewusst **ohne** E-Mail
 
-| Bereich | Lambdas / Flows |
-|---------|-----------------|
-| Tauschanfrage / -bestätigung / -ablehnung | `createSwap`, `updateSwap`, `deleteSwap` | **Tausch erfolgreich** in `createSwap`/`updateSwap`/`processRingSwaps` implementiert; Anfragen weiterhin ohne Mail |
-| Nachrücken Warteliste | `processPromotions` | **implementiert** |
-| Ringtausch-Ausführung | `processRingSwaps` | **Tausch-Mail + ICS implementiert** |
-| Kurs-Mitgliedschaft ändern | `updateCourse` (`participants`), `createOverride`, … | **Kursbeitritt + Trainer-Liste in `updateCourse` implementiert** |
-| Kurzfrist-Absage (SN) / RC-Rücknahme | App + `updateOverride` |
-| Tenant-/Studio-Einstellungen | `updateTenantSettings` |
+| Bereich | Flow | Anmerkung |
+|---------|------|-----------|
+| **Tauschanfrage** (`pending`) | `createSwap`, Gegenpartei wartet | zu viel Lärm für MVP; Digest später |
+| **Tausch abgelehnt / zurückgezogen** | `deleteSwap`, Ablehnung | optional später |
+| **Kurzfristige Absage (SN)** | `updateOverride` | Platz bleibt belegt — keine Bestätigungs-Mail |
+| **Absage zurücknehmen (RC)** | `updateOverride` | keine Mail |
+| **Entfernen aus Stammliste** | `updateCourse` `participants` | keine Mail |
+| **Tenant-/Studio-Einstellungen** | `updateTenantSettings` | — |
 
 ---
 
@@ -76,11 +85,11 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 
 ### MVP-Priorität Teilnehmer:innen
 
-| Prio | Ereignis | Inhalt | Trigger / Lambda |
-|------|----------|--------|------------------|
-| **1** | **Nachrücken von Warteliste** | Bestätigung mit **konkretem Termin** (Kurs, Datum, Uhrzeit) | `processPromotions` |
-| **2** | **Tausch erfolgreich** | Bestätigung mit Zieltermin (HTML) + **ICS-Anhang** | `createSwap` / `updateSwap` / `processRingSwaps` |
-| **3** | **Kursbeitritt** | Willkommen + Kursinfo (HTML); Serien-ICS später | siehe unten |
+| Prio | Ereignis | Inhalt | Trigger / Lambda | Status |
+|------|----------|--------|------------------|--------|
+| **1** | **Nachrücken von Warteliste** | Bestätigung mit Termin (HTML) + **ICS** | `processPromotions` | ✓ |
+| **2** | **Tausch erfolgreich** | Bestätigung mit Zieltermin (HTML) + **ICS** | `createSwap` / `updateSwap` / `processRingSwaps` | ✓ |
+| **3** | **Kursbeitritt** | Willkommen + Kursinfo + nächster/erster Termin (HTML) | `updateCourse` | ✓ |
 
 **Nicht in MVP:** Tausch**anfragen** (eingehend/ausgehend) — potenziell zu viel Lärm; erst nach Erfahrung im Betrieb entscheiden.
 
@@ -93,9 +102,14 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 
 Keine Mail bei reinem Entfernen aus der Liste (dafür ggf. später separat).
 
-### Trainer / Kursleitung (MVP)
+### Trainer / Kursleitung
 
-Mail bei **relevanten Änderungen an der Teilnehmerliste** des Kurses (Hinzufügen, Entfernen — nicht jede Override-Änderung pro Termin im ersten Wurf).
+**Stand:** Technisch vorbereitet (`buildInstructorParticipantListChangedMail` bei Stamm-Änderung), aber **praktisch inaktiv** — Kursen ist meist noch keine Leitung (`course.instructors`) zugeordnet. Bedarf und Kanal (Einzelmail vs. Digest) zuerst im Betrieb klären; kein Blocker für MVP Teilnehmer:innen.
+
+| Geplant / Code | Status |
+|----------------|--------|
+| Teilnehmerliste geändert (add/remove Stamm) | Code in `updateCourse`; Versand nur bei gesetzten `instructors` |
+| Terminabsage im eigenen Kurs | nicht umgesetzt; heute nur Studio-Report bei `cancelCourseDate` |
 
 | Bewusst nicht MVP | Grund |
 |-------------------|--------|
@@ -105,27 +119,28 @@ Mail bei **relevanten Änderungen an der Teilnehmerliste** des Kurses (Hinzufüg
 
 Zugeordnete Instructor:innen aus `course.instructors` (nicht ganzes Studio), sofern nicht anders konfiguriert.
 
-### Kalender-Anhang (ICS) — Stufenplan
+Zugeordnete Instructor:innen aus `course.instructors` (nicht ganzes Studio), sofern aktiviert.
 
-Kalender-Import ist **freiwillig** (Teilnehmer:in entscheidet). Absage-**Storno** per ICS (`METHOD:CANCEL`, stabile `UID`) ist **bewusst out of scope** — zu aufwendig, solange es keine vorherigen ICS-Versände gibt.
+### Kalender-Anhang (ICS)
 
-| Stufe | Inhalt | Ticket #45 |
-|-------|--------|------------|
-| **Stufe 1 (MVP)** | HTML-Mail mit Kursname, Datum, Uhrzeit, App-Link — **ohne** Anhang | **Ja** — Nachrücken, Tausch erfolgreich, Kursbeitritt |
-| **Stufe 2 (optional)** | Gemeinsamer Helfer `buildIcsPublishEvent` + `.ics`-Anhang (`METHOD:PUBLISH`, ein Termin) | **Ja — für Tausch erfolgreich** (nicht Nachrücken/Absage) |
-| **Out of scope** | Absage-ICS, Serien-ICS beim Kursbeitritt, Kalender-UPDATE | Nein / später |
+Kalender-Import ist **freiwillig** (Teilnehmer:in entscheidet). Absage-**Storno** per ICS (`METHOD:CANCEL`, stabile `UID`) ist **bewusst out of scope**.
 
-**Stufe 2 — technisch (falls gemacht):**
+| Anwendungsfall | ICS | Stand |
+|----------------|-----|--------|
+| Nachrücken Warteliste | `.ics` (`METHOD:PUBLISH`) | ✓ implementiert |
+| Tausch erfolgreich | `.ics` (`METHOD:PUBLISH`) | ✓ implementiert |
+| Kursbeitritt / Kurs aktiv | — | HTML only; Serien-ICS später |
+| Terminabsage / Freigabe | — | HTML only |
+| Storno / UPDATE in externem Kalender | — | out of scope |
 
-- Felder: `UID` stabil z. B. `{tenantId}/{courseId}/{date}`, `DTSTART`/`DTEND` aus `date` + `course.time`, `SUMMARY`, optional `LOCATION`
-- **`DTEND` / Kursdauer:** MVP nutzt fest **90 Minuten** (`DEFAULT_DURATION_MINUTES` in `buildIcsPublishEvent`). Pro-Kurs-Dauer in Kurseinstellungen → Follow-up [#239](https://github.com/CurlyKarin/yogaswap/issues/239)
-- SES: bisher nur `SendEmail` + HTML; Anhang braucht **`SendRawEmail`** + Multipart-MIME (einmaliger Helfer, dann für Nachrücken + Tausch wiederverwendbar)
-- IAM: `ses:SendRawEmail` ergänzen
-- **Mehraufwand** gegenüber Stufe 1: vor allem erster MIME-Weg (~½ Tag), nicht das ICS-Format selbst
+**Technik (implementiert):**
 
-**Bereits heute:** `cancelCourseDate` — nur HTML-Text, **kein** Kalender-Anhang und keine Aktualisierung externer Kalender.
+- `buildIcsPublishEvent` — `UID` z. B. `{tenantId}/{courseId}/{date}@yogaswap`, `DTSTART`/`DTEND` aus `date` + `course.time`
+- **`DTEND` / Kursdauer:** fest **90 Minuten** → Follow-up [#239](https://github.com/CurlyKarin/yogaswap/issues/239)
+- `sendParticipantEmail` — `SendEmail` oder `SendRawEmail` (Multipart-MIME)
+- IAM: `ses:SendRawEmail` für betroffene Lambdas in `main.tf`
 
-Tausch erfolgreich entsteht u. a. in `updateSwap` (→ `active`), `processRingSwaps`, ggf. `processPromotions` (Überschneidung mit Nachrücken-Mail).
+**Hinweis:** `processPromotions` setzt den Swap auf `active` und sendet die **Nachrücken-Mail** (nicht die Tausch-erfolgreich-Vorlage). Ringtausch: je aktivierter Swap eine Mail an die jeweilige Person.
 
 ### Zukunftsplanung (nicht MVP)
 
@@ -135,16 +150,11 @@ Tausch erfolgreich entsteht u. a. in `updateSwap` (→ `active`), `processRingSw
 
 ---
 
-## Lücken nach Priorität (technisch)
+## Lücken und Folgearbeit
 
-### Teilnehmer:innen — MVP (#45)
+### Teilnehmer:innen — MVP (#45) ✓
 
-| Ereignis | Lambda | Kalender (MVP) |
-|----------|--------|----------------|
-| Nachrücken Warteliste | `processPromotions` | Stufe 1 HTML; Stufe 2 optional ICS |
-| Tausch erfolgreich | `updateSwap`, `processRingSwaps` | Stufe 1 HTML; Stufe 2 optional ICS (Zieltermin) |
-| Kursbeitritt / Kurs aktiv | `updateCourse` | Stufe 1 HTML; Serien-ICS später |
-| Termin abgesagt (bestehend) | `cancelCourseDate` | nur HTML (unverändert); Storno-ICS out of scope |
+Alle MVP-Punkte oben sind umgesetzt. Manuelle Prüfung nach Deploy empfohlen (SES, `BASE_URL`, Profil mit E-Mail).
 
 ### Teilnehmer:innen — zurückgestellt
 
@@ -153,21 +163,15 @@ Tausch erfolgreich entsteht u. a. in `updateSwap` (→ `active`), `processRingSw
 | Tauschanfrage eingegangen | zu viel für MVP |
 | Tausch abgelehnt / zurückgezogen | optional später |
 | Termin-Erinnerung | P3 |
+| Serien-ICS beim Kursbeitritt | später |
 
-### Trainer — MVP
-
-| Ereignis | Anmerkung |
-|----------|-----------|
-| Teilnehmerliste geändert (add/remove Stamm) | `updateCourse` `participants` |
-| Terminabsage im eigenen Kurs | ergänzt bestehenden Studio-Report |
-
-### Trainer — zurückgestellt
+### Trainer / Kursleitung — Folgearbeit
 
 | Ereignis | Anmerkung |
 |----------|-----------|
-| Gäste | nicht MVP |
-| Offene Tauschanfrage | Digest-Zukunft |
-| Kurzfristige Absage (SN) | später |
+| Teilnehmerliste geändert | Code da; `instructors` pflegen + Bedarf klären |
+| Terminabsage im eigenen Kurs | nur Studio-Report heute |
+| Gäste, offene Tauschanfrage, SN an Leitung | Digest / später |
 
 ### Studio / Admin (P2)
 
@@ -267,14 +271,15 @@ export interface ParticipantNotificationPreferences {
 }
 ```
 
-### Zentrale Versand-Schicht (Ziel-Architektur)
+### Zentrale Versand-Schicht
 
-Neue Shared-Schicht, z. B. `backend/src/lambdas/shared/notifications/`:
+**Stand:** `backend/src/lambdas/shared/notifications/` mit `sendParticipantEmail`, `buildIcsPublishEvent` und ereignisspezifischen `notify*`-Helfern. Lambdas rufen diese direkt auf.
+
+**Noch offen (Folge-Issue):**
 
 1. **`NotificationEvent`** — enum/Union aller Ereignistypen
-2. **`resolveNotificationEnabled(tenant, profile, event)`** — heute: immer `true` außer hart codierten Skips (`invited`, fehlende E-Mail)
-3. **`sendNotification({ event, tenantId, recipients, payload })`** — SES + Template + Logging (`mailSentCount`, … wie `cancelCourseDate`)
-4. **Lambdas** rufen nur noch `sendNotification` auf — keine verstreuten `SendEmailCommand`
+2. **`resolveNotificationEnabled(tenant, profile, event)`** — heute: immer senden außer hart codierte Skips (`invited`, fehlende E-Mail)
+3. **`sendNotification({ event, … })`** — einheitlicher Einstieg statt verstreuter `SendEmailCommand` in älteren Lambdas
 
 Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIFICATION_EMAILS` kann später in `TenantSettings.studioNotificationEmails` wandern.
 
@@ -286,7 +291,7 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 | Empfängerliste | Immer über `resolveParticipantEmail`; Instructor:innen aus `course.instructors` |
 | Fehler | Nicht-blockierend für Hauptaktion (wie heute bei `createParticipants` / `cancelCourseDate`) |
 | Logging | Einheitliches JSON-Summary pro Versand |
-| Tests | Template-Unit-Tests + Lambda-Integration mit gemocktem SES |
+| Tests | Template-Unit-Tests ✓; Lambda-Integration mit gemocktem SES optional |
 
 ---
 
@@ -301,19 +306,28 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 | 5 | Opt-out kursbezogene Mails? | Architektur ja; UI später |
 | 6 | ICS bei Kursbeitritt Serienkurs | offen; Serien-ICS später |
 | 7 | ICS bei Terminabsage (Storno)? | **Nein** — out of scope |
-| 8 | ICS im MVP für neue Mails? | **Stufe 1 ohne**; Stufe 2 optional gemeinsamer Helfer |
+| 8 | ICS im MVP für neue Mails? | **Ja** — Nachrücken + Tausch erfolgreich mit `.ics`; Rest HTML |
 | 9 | Kursdauer für ICS `DTEND`? | MVP: **90 Min fest**; pro Kurs → [#239](https://github.com/CurlyKarin/yogaswap/issues/239) |
 
 ---
 
-## Nächste Schritte (Vorschlag)
+## Nächste Schritte
 
-1. ~~Produktentscheid P1~~ (siehe „Produktentscheidungen“)
-2. `sendNotification`-Gerüst + `NotificationEvent` (ohne UI-Schalter); ICS-Helfer **optional Stufe 2**
-3. **Reihenfolge Implementierung:** Nachrücken (HTML) → Tausch erfolgreich (HTML) → Kursbeitritt → Trainer Teilnehmerliste → optional ICS-Stufe 2
-4. `TenantSettings.emailNotifications` als Typ + Resolver (Defaults = MVP-Entscheidungen)
-5. Instructor-Mails Teilnehmerliste + optional Terminabsage
-6. UI-Schalter / Digest in separaten Issues
+### Erledigt (#45 MVP)
+
+1. ~~Produktentscheidungen Teilnehmer MVP~~
+2. ~~Nachrücken, Tausch erfolgreich, Kursbeitritt, Absage/Freigabe~~
+3. ~~ICS-Helfer + `SendRawEmail`~~
+4. ~~Deutsche Terminformatierung in Mails~~
+
+### Folge-Issues (nicht #45)
+
+1. **Deploy + manueller Testplan** (SES Sandbox, aktive Profile)
+2. `TenantSettings.emailNotifications` + Resolver (ohne UI)
+3. Kursleitung: Bedarf klären, `course.instructors` pflegen, ggf. Digest
+4. [#239](https://github.com/CurlyKarin/yogaswap/issues/239) — Kursdauer für ICS `DTEND`
+5. Zentrales `sendNotification` / Migration älterer Auth-Mails
+6. UI-Opt-out, Tauschanfrage-Mails, Erinnerungen
 
 ## Verwandte Doku
 
