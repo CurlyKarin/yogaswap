@@ -23,6 +23,11 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 | **Terminabsage Studio-Report** | `cancelCourseDate` | `STUDIO_NOTIFICATION_EMAILS` (Infra-Env, CSV) | Inline-HTML Report | Optional; Fehler nur als Warning |
 | **Geplantes Kursende gesetzt** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateMail` | Rollkurs `active` mit TN; Skip: `invited`, kein Profil |
 | **Geplantes Kursende aufgehoben** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateClearedMail` | wie oben |
+| **Nachrücken Warteliste** | `processPromotions` | Nachgerückte Person | `buildWaitlistPromotionMail` | HTML; Skip: `invited`, kein Profil |
+| **Tausch erfolgreich** | `createSwap` (→ `active`), `updateSwap` (→ `active`), `processRingSwaps` | Tauschende Person | `buildSwapSuccessMail` + `.ics`-Anhang | `SendRawEmail`; ICS `METHOD:PUBLISH` |
+| **Kursbeitritt** | `updateCourse` | Neu hinzugefügte Stamm-TN | `buildCourseMembershipMail` | Nur bei `active`; nicht bei `draft`→`active` (dort Kurs-aktiv-Mail) |
+| **Kurs aktiv (draft→active)** | `updateCourse` | Alle Stamm-TN | `buildCourseActivatedMail` | Einmalig bei Statuswechsel |
+| **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Nur bei add/remove Stamm; keine Mail wenn `instructors` leer |
 
 ### Template-Module
 
@@ -30,7 +35,13 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 |-------|------|
 | Auth | `backend/src/lambdas/shared/templates/auth/authMailTemplates.ts` |
 | Kurs | `backend/src/lambdas/shared/templates/course/courseMailTemplates.ts` |
+| Tausch / Warteliste | `backend/src/lambdas/shared/templates/swap/swapMailTemplates.ts` |
 | Geplantes Kursende (Versand) | `backend/src/lambdas/shared/plannedEndDateNotifications.ts` |
+| Tausch + ICS (Versand) | `backend/src/lambdas/shared/notifications/swapSuccessNotification.ts` |
+| Warteliste (Versand) | `backend/src/lambdas/shared/notifications/waitlistPromotionNotification.ts` |
+| Kursbeitritt / Trainer (Versand) | `backend/src/lambdas/shared/notifications/courseMembershipNotifications.ts` |
+| ICS | `backend/src/lambdas/shared/notifications/buildIcsPublishEvent.ts` |
+| SES HTML / MIME | `backend/src/lambdas/shared/notifications/sendParticipantEmail.ts` |
 
 ### Hilfslogik
 
@@ -48,10 +59,10 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 
 | Bereich | Lambdas / Flows |
 |---------|-----------------|
-| Tauschanfrage / -bestätigung / -ablehnung | `createSwap`, `updateSwap`, `deleteSwap` |
-| Nachrücken Warteliste | `processPromotions` |
-| Ringtausch-Ausführung | `processRingSwaps` |
-| Kurs-Mitgliedschaft ändern | `updateCourse` (`participants`), `createOverride`, … |
+| Tauschanfrage / -bestätigung / -ablehnung | `createSwap`, `updateSwap`, `deleteSwap` | **Tausch erfolgreich** in `createSwap`/`updateSwap`/`processRingSwaps` implementiert; Anfragen weiterhin ohne Mail |
+| Nachrücken Warteliste | `processPromotions` | **implementiert** |
+| Ringtausch-Ausführung | `processRingSwaps` | **Tausch-Mail + ICS implementiert** |
+| Kurs-Mitgliedschaft ändern | `updateCourse` (`participants`), `createOverride`, … | **Kursbeitritt + Trainer-Liste in `updateCourse` implementiert** |
 | Kurzfrist-Absage (SN) / RC-Rücknahme | App + `updateOverride` |
 | Tenant-/Studio-Einstellungen | `updateTenantSettings` |
 
@@ -64,7 +75,7 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 | Prio | Ereignis | Inhalt | Trigger / Lambda |
 |------|----------|--------|------------------|
 | **1** | **Nachrücken von Warteliste** | Bestätigung mit **konkretem Termin** (Kurs, Datum, Uhrzeit) | `processPromotions` |
-| **2** | **Tausch erfolgreich** | Bestätigung mit Zieltermin (HTML); ICS optional Stufe 2 | `updateSwap` / `processRingSwaps` |
+| **2** | **Tausch erfolgreich** | Bestätigung mit Zieltermin (HTML) + **ICS-Anhang** | `createSwap` / `updateSwap` / `processRingSwaps` |
 | **3** | **Kursbeitritt** | Willkommen + Kursinfo (HTML); Serien-ICS später | siehe unten |
 
 **Nicht in MVP:** Tausch**anfragen** (eingehend/ausgehend) — potenziell zu viel Lärm; erst nach Erfahrung im Betrieb entscheiden.
@@ -97,12 +108,13 @@ Kalender-Import ist **freiwillig** (Teilnehmer:in entscheidet). Absage-**Storno*
 | Stufe | Inhalt | Ticket #45 |
 |-------|--------|------------|
 | **Stufe 1 (MVP)** | HTML-Mail mit Kursname, Datum, Uhrzeit, App-Link — **ohne** Anhang | **Ja** — Nachrücken, Tausch erfolgreich, Kursbeitritt |
-| **Stufe 2 (optional)** | Gemeinsamer Helfer `buildIcsPublishEvent` + `.ics`-Anhang (`METHOD:PUBLISH`, ein Termin) | **Optional**, wenn MIME/SES-Helfer ohnehin gebaut wird |
+| **Stufe 2 (optional)** | Gemeinsamer Helfer `buildIcsPublishEvent` + `.ics`-Anhang (`METHOD:PUBLISH`, ein Termin) | **Ja — für Tausch erfolgreich** (nicht Nachrücken/Absage) |
 | **Out of scope** | Absage-ICS, Serien-ICS beim Kursbeitritt, Kalender-UPDATE | Nein / später |
 
 **Stufe 2 — technisch (falls gemacht):**
 
 - Felder: `UID` stabil z. B. `{tenantId}/{courseId}/{date}`, `DTSTART`/`DTEND` aus `date` + `course.time`, `SUMMARY`, optional `LOCATION`
+- **`DTEND` / Kursdauer:** MVP nutzt fest **90 Minuten** (`DEFAULT_DURATION_MINUTES` in `buildIcsPublishEvent`). Pro-Kurs-Dauer in Kurseinstellungen → Follow-up [#239](https://github.com/CurlyKarin/yogaswap/issues/239)
 - SES: bisher nur `SendEmail` + HTML; Anhang braucht **`SendRawEmail`** + Multipart-MIME (einmaliger Helfer, dann für Nachrücken + Tausch wiederverwendbar)
 - IAM: `ses:SendRawEmail` ergänzen
 - **Mehraufwand** gegenüber Stufe 1: vor allem erster MIME-Weg (~½ Tag), nicht das ICS-Format selbst
@@ -286,6 +298,7 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 | 6 | ICS bei Kursbeitritt Serienkurs | offen; Serien-ICS später |
 | 7 | ICS bei Terminabsage (Storno)? | **Nein** — out of scope |
 | 8 | ICS im MVP für neue Mails? | **Stufe 1 ohne**; Stufe 2 optional gemeinsamer Helfer |
+| 9 | Kursdauer für ICS `DTEND`? | MVP: **90 Min fest**; pro Kurs → [#239](https://github.com/CurlyKarin/yogaswap/issues/239) |
 
 ---
 

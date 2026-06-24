@@ -13,6 +13,7 @@ import { getDelegationErrorResponse } from '../shared/delegation';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
 import { loadTenantSettings } from '../shared/tenantSettingsLoader';
 import { mapOverrideItem, mapStringList } from '../shared/overrideDynamo';
+import { notifySwapSuccess } from '../shared/notifications/swapSuccessNotification';
 
 const client = dynamoClient;
 
@@ -191,6 +192,32 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
 
     await client.send(new PutItemCommand({ TableName: tableName, Item: dynamoItem }));
+
+    if (swap.status === "active") {
+      try {
+        const baseUrl = process.env.BASE_URL || "";
+        const loginUrl = baseUrl.startsWith("http") ? baseUrl : baseUrl ? `https://${baseUrl}` : undefined;
+        const mailSummary = await notifySwapSuccess({
+          client,
+          tenantId,
+          swap: {
+            user: swap.user,
+            toCourseId: Number(swap.toCourseId),
+            toDate: swap.toDate,
+          },
+          coursesTable,
+          participantsTable: process.env.PARTICIPANTS_TABLE,
+          sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+          loginUrl,
+          mailLocale: process.env.MAIL_LOCALE || "de",
+          attachIcs: true,
+        });
+        console.info("createSwap swap success mail summary", { tenantId, swapId, ...mailSummary });
+      } catch (notificationError) {
+        console.warn("createSwap swap success notification failed", { tenantId, swapId, error: notificationError });
+      }
+    }
+
     return { statusCode: 200, body: JSON.stringify({ message: 'Swap created' }) };
   } catch (error) {
     console.error('Error creating swap:', error);

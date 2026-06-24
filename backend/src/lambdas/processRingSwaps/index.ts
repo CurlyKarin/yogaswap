@@ -21,6 +21,7 @@ import {
   type ExecutedRingLog,
   type RejectedRingLog,
 } from "../shared/ringSwapLogging";
+import { notifySwapSuccess } from "../shared/notifications/swapSuccessNotification";
 
 const client = dynamoClient;
 
@@ -166,6 +167,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         );
 
         executedRings.push(buildExecutedRingLog(cycle, planned.plan, courses));
+
+        try {
+          const baseUrl = process.env.BASE_URL || "";
+          const loginUrl = baseUrl.startsWith("http") ? baseUrl : baseUrl ? `https://${baseUrl}` : undefined;
+          for (const activatedSwap of planned.plan.swapActivations) {
+            const mailSummary = await notifySwapSuccess({
+              client,
+              tenantId,
+              swap: activatedSwap,
+              coursesTable,
+              participantsTable: process.env.PARTICIPANTS_TABLE,
+              sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+              loginUrl,
+              mailLocale: process.env.MAIL_LOCALE || "de",
+              attachIcs: true,
+            });
+            console.info("processRingSwaps swap success mail summary", {
+              tenantId,
+              user: activatedSwap.user,
+              ...mailSummary,
+            });
+          }
+        } catch (notificationError) {
+          console.warn("processRingSwaps swap success notification failed", {
+            tenantId,
+            error: notificationError,
+          });
+        }
       } catch (error) {
         if (isTransactionConflict(error)) {
           const users = cycle.edges.map((edge) => edge.swap.user);
