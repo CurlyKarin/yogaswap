@@ -64,8 +64,8 @@ Technik: **AWS SES** (`SendEmailCommand`), Absender `SES_SOURCE_EMAIL`. Cognito-
 | Prio | Ereignis | Inhalt | Trigger / Lambda |
 |------|----------|--------|------------------|
 | **1** | **Nachrücken von Warteliste** | Bestätigung mit **konkretem Termin** (Kurs, Datum, Uhrzeit) | `processPromotions` |
-| **2** | **Tausch erfolgreich** | Bestätigung mit Zieltermin; bei jedem erfolgreichen Tausch sinnvoll (inkl. klar freier Platz, Ringtausch) | `updateSwap` / `processRingSwaps` |
-| **3** | **Kursbeitritt** | Willkommen + Kursinfo; ggf. **Kalenderelement** für Serientermine | siehe unten |
+| **2** | **Tausch erfolgreich** | Bestätigung mit Zieltermin (HTML); ICS optional Stufe 2 | `updateSwap` / `processRingSwaps` |
+| **3** | **Kursbeitritt** | Willkommen + Kursinfo (HTML); Serien-ICS später | siehe unten |
 
 **Nicht in MVP:** Tausch**anfragen** (eingehend/ausgehend) — potenziell zu viel Lärm; erst nach Erfahrung im Betrieb entscheiden.
 
@@ -90,16 +90,26 @@ Mail bei **relevanten Änderungen an der Teilnehmerliste** des Kurses (Hinzufüg
 
 Zugeordnete Instructor:innen aus `course.instructors` (nicht ganzes Studio), sofern nicht anders konfiguriert.
 
-### Kalender-Anhang (ICS) — Zielbild
+### Kalender-Anhang (ICS) — Stufenplan
 
-Für Mails mit **festem Termin** (Nachrücken, erfolgreicher Tausch, ggf. Kursbeitritt):
+Kalender-Import ist **freiwillig** (Teilnehmer:in entscheidet). Absage-**Storno** per ICS (`METHOD:CANCEL`, stabile `UID`) ist **bewusst out of scope** — zu aufwendig, solange es keine vorherigen ICS-Versände gibt.
 
-- **`.ics`-Anhang** (`text/calendar`, `METHOD:PUBLISH`) oder eingebetteter Link — „In Kalender übernehmen“
-- Felder: `DTSTART`/`DTEND` aus `date` + `course.time`, `SUMMARY` (Kursname), `LOCATION` optional, `DESCRIPTION` mit Studio/Kurs-Link
-- **Serienkurs:** bei Kursbeitritt / Aktivierung eher **mehrere VEVENTs** (sichtbare `dates`) oder Hinweis „Termine in der App“ — nicht ein einzelnes ICS für die ganze Serie ohne Abstimmung
-- SES: `SendEmailCommand` mit `RawMessage` oder Multipart-MIME (noch nicht im Code)
+| Stufe | Inhalt | Ticket #45 |
+|-------|--------|------------|
+| **Stufe 1 (MVP)** | HTML-Mail mit Kursname, Datum, Uhrzeit, App-Link — **ohne** Anhang | **Ja** — Nachrücken, Tausch erfolgreich, Kursbeitritt |
+| **Stufe 2 (optional)** | Gemeinsamer Helfer `buildIcsPublishEvent` + `.ics`-Anhang (`METHOD:PUBLISH`, ein Termin) | **Optional**, wenn MIME/SES-Helfer ohnehin gebaut wird |
+| **Out of scope** | Absage-ICS, Serien-ICS beim Kursbeitritt, Kalender-UPDATE | Nein / später |
 
-Damit wird „Tausch bestätigt“ nicht nur Text, sondern direkt kalenderfähig — gilt für Ringtausch und Direkttausch gleichermaßen.
+**Stufe 2 — technisch (falls gemacht):**
+
+- Felder: `UID` stabil z. B. `{tenantId}/{courseId}/{date}`, `DTSTART`/`DTEND` aus `date` + `course.time`, `SUMMARY`, optional `LOCATION`
+- SES: bisher nur `SendEmail` + HTML; Anhang braucht **`SendRawEmail`** + Multipart-MIME (einmaliger Helfer, dann für Nachrücken + Tausch wiederverwendbar)
+- IAM: `ses:SendRawEmail` ergänzen
+- **Mehraufwand** gegenüber Stufe 1: vor allem erster MIME-Weg (~½ Tag), nicht das ICS-Format selbst
+
+**Bereits heute:** `cancelCourseDate` — nur HTML-Text, **kein** Kalender-Anhang und keine Aktualisierung externer Kalender.
+
+Tausch erfolgreich entsteht u. a. in `updateSwap` (→ `active`), `processRingSwaps`, ggf. `processPromotions` (Überschneidung mit Nachrücken-Mail).
 
 ### Zukunftsplanung (nicht MVP)
 
@@ -113,11 +123,12 @@ Damit wird „Tausch bestätigt“ nicht nur Text, sondern direkt kalenderfähig
 
 ### Teilnehmer:innen — MVP (#45)
 
-| Ereignis | Lambda | Kalender |
-|----------|--------|----------|
-| Nachrücken Warteliste | `processPromotions` | ja (ein Termin) |
-| Tausch erfolgreich | Swap-Ausführung | ja (Zieltermin) |
-| Kursbeitritt / Kurs aktiv | `updateCourse` | optional (Serie → siehe oben) |
+| Ereignis | Lambda | Kalender (MVP) |
+|----------|--------|----------------|
+| Nachrücken Warteliste | `processPromotions` | Stufe 1 HTML; Stufe 2 optional ICS |
+| Tausch erfolgreich | `updateSwap`, `processRingSwaps` | Stufe 1 HTML; Stufe 2 optional ICS (Zieltermin) |
+| Kursbeitritt / Kurs aktiv | `updateCourse` | Stufe 1 HTML; Serien-ICS später |
+| Termin abgesagt (bestehend) | `cancelCourseDate` | nur HTML (unverändert); Storno-ICS out of scope |
 
 ### Teilnehmer:innen — zurückgestellt
 
@@ -168,7 +179,7 @@ Damit wird „Tausch bestätigt“ nicht nur Text, sondern direkt kalenderfähig
 | Ereignis | Warum wichtig | Anmerkung |
 |----------|---------------|-----------|
 | **Tauschanfrage eingegangen** | Gegenpartei muss reagieren | → zurückgestellt |
-| **Tausch bestätigt / ausgeführt** | Beide Seiten brauchen Bestätigung | → MVP mit ICS |
+| **Tausch bestätigt / ausgeführt** | Beide Seiten brauchen Bestätigung | → MVP Stufe 1 HTML; ICS optional Stufe 2 |
 | **Tausch abgelehnt / zurückgezogen** | Erwartungsmanagement | → später |
 | **Nachrücken von Warteliste** | Zeitkritisch | → MVP #1 |
 | **Neuer Kurs / Kursbeitritt** | Aufnahme in `course.participants` | → MVP #3 |
@@ -255,7 +266,7 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 
 | Thema | Empfehlung |
 |-------|------------|
-| Neue Mail | `courseMailTemplates` / `swapMailTemplates.ts`; ICS-Helfer z. B. `buildIcsEventAttachment` |
+| Neue Mail | `swapMailTemplates.ts` / `courseMailTemplates.ts`; Stufe 2: `buildIcsPublishEvent` + `sendRawEmailWithAttachment` |
 | Empfängerliste | Immer über `resolveParticipantEmail`; Instructor:innen aus `course.instructors` |
 | Fehler | Nicht-blockierend für Hauptaktion (wie heute bei `createParticipants` / `cancelCourseDate`) |
 | Logging | Einheitliches JSON-Summary pro Versand |
@@ -272,15 +283,17 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 | 3 | Kursbeitritt — wann? | **Entschieden:** add zu active + draft→active |
 | 4 | Studio-Report konfigurierbar? | offen (`STUDIO_NOTIFICATION_EMAILS` vs. Tenant) |
 | 5 | Opt-out kursbezogene Mails? | Architektur ja; UI später |
-| 6 | ICS bei Kursbeitritt Serienkurs | offen: ein Event vs. Liste vs. nur Link zur App |
+| 6 | ICS bei Kursbeitritt Serienkurs | offen; Serien-ICS später |
+| 7 | ICS bei Terminabsage (Storno)? | **Nein** — out of scope |
+| 8 | ICS im MVP für neue Mails? | **Stufe 1 ohne**; Stufe 2 optional gemeinsamer Helfer |
 
 ---
 
 ## Nächste Schritte (Vorschlag)
 
 1. ~~Produktentscheid P1~~ (siehe „Produktentscheidungen“)
-2. `sendNotification`-Gerüst + `NotificationEvent` + ICS-Helfer (ohne UI-Schalter)
-3. **Reihenfolge Implementierung:** Nachrücken → Tausch erfolgreich (+ ICS) → Kursbeitritt → Trainer Teilnehmerliste
+2. `sendNotification`-Gerüst + `NotificationEvent` (ohne UI-Schalter); ICS-Helfer **optional Stufe 2**
+3. **Reihenfolge Implementierung:** Nachrücken (HTML) → Tausch erfolgreich (HTML) → Kursbeitritt → Trainer Teilnehmerliste → optional ICS-Stufe 2
 4. `TenantSettings.emailNotifications` als Typ + Resolver (Defaults = MVP-Entscheidungen)
 5. Instructor-Mails Teilnehmerliste + optional Terminabsage
 6. UI-Schalter / Digest in separaten Issues
