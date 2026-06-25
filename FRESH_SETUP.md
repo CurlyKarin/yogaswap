@@ -384,6 +384,46 @@ spa_bucket_regional_name = "yogaswap-xxx.s3.eu-central-1.amazonaws.com"
 
 ---
 
+## 🔧 Schritt 12.5: Frontend mit Cognito-Werten bauen und erneut deployen
+
+**⚠️ Wichtig – häufige Fehlerquelle:** Das Frontend bäckt die Cognito-Werte (`VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`) **zur Build-Zeit** fest ein. Der Cognito User Pool existiert aber erst **nach** dem Deployment (Schritt 11.2). Das in Schritt 7 gebaute Frontend kennt diese Werte also noch nicht – du musst es nach dem Deploy mit den echten Werten **neu bauen und erneut hochladen**.
+
+**Welche `.env`-Datei gilt?** `npm run build` läuft im Vite-Modus `production` und lädt `app/.env.production` (höhere Priorität als `.env.local`!). `.env.local` ist nur für die lokale Entwicklung (`npm run dev`) gedacht und wird im Build überstimmt.
+
+**1. Cognito-Werte holen:**
+```bash
+cd projects/yogaswap
+tofu output -raw cognito_user_pool_id
+tofu output -raw cognito_user_pool_client_id
+```
+
+**2. `app/.env.production` mit diesen Werten setzen:**
+```bash
+cd ../../app
+cat > .env.production <<EOF
+VITE_COGNITO_USER_POOL_ID=<cognito_user_pool_id>
+VITE_COGNITO_CLIENT_ID=<cognito_user_pool_client_id>
+EOF
+```
+
+**3. Frontend neu bauen und vor dem Deploy prüfen:**
+```bash
+npm run build
+grep -rl "<cognito_user_pool_id>" build/assets   # muss die index-*.js liefern
+```
+
+**4. Erneut deployen (lädt das neue Frontend hoch):**
+```bash
+cd ../projects/yogaswap
+tofu apply
+```
+
+Danach im Browser (am besten Inkognito) prüfen: In der Konsole muss `Amplify Config` deine korrekte `userPoolId` zeigen.
+
+> Für eine **zweite Umgebung** (z. B. staging) nutzt du eine eigene Datei `app/.env.staging` und baust mit `npm run build -- --mode staging` – Details siehe Abschnitt „Mehrere Umgebungen" am Ende.
+
+---
+
 ## 📊 Schritt 13: Seed-Daten laden (optional)
 
 Falls du Beispieldaten in DynamoDB laden möchtest:
@@ -481,10 +521,30 @@ node scripts/createAdminUser.js $USER_POOL_ID admin@example.com admin MeinPasswo
 - Die **E-Mail** kann mehrfach verwendet werden (z.B. mehrere User mit gleicher E-Mail)
 - Beim Login wird der **Nickname** verwendet, nicht die E-Mail
 
-**3. Login testen:**
+**3. Default-Tenant und Admin-Mitgliedschaft anlegen (sonst „actor cannot manage participants"):**
+
+`createAdminUser.js` legt nur den **Cognito-User** an. Damit der Admin im Portal Teilnehmer verwalten/einladen darf, braucht er zusätzlich (a) einen Tenant-Datensatz und (b) eine Mitgliedschaft mit `role: admin`. Bei normal eingeladenen Usern passiert das automatisch – nur der **erste Admin** muss von Hand gebootstrappt werden.
+
+```bash
+# (a) Default-Tenant anlegen (liest den Projektnamen aus terraform.tfvars)
+cd ../../backend
+npm run seed:tenants
+
+# (b) Admin-Mitgliedschaft anlegen
+#  <NICKNAME> = der Nickname/Username aus Schritt 2 (z.B. "admin")
+#  <PROJECT>  = Projektname aus terraform.tfvars (z.B. yogaswap-demo)
+aws dynamodb put-item \
+  --table-name <PROJECT>-memberships-table \
+  --item '{"tenantId":{"S":"default-tenant"},"userId":{"S":"<NICKNAME>"},"role":{"S":"admin"}}' \
+  --region eu-central-1
+```
+
+> Hinweis: Dieser manuelle Bootstrap soll künftig ein eigenes `create-tenant`-Script übernehmen (Issue #53).
+
+**4. Login testen:**
 1. Öffne die CloudFront-URL im Browser (aus `tofu output cloudfront_domain`)
 2. Logge dich mit dem Nickname und Passwort ein
-3. Du solltest als Admin eingeloggt sein
+3. Du solltest als Admin eingeloggt sein und Teilnehmer verwalten können
 
 **Nach dem Login:**
 - Über das AdminPanel kannst du weitere User einladen
@@ -587,6 +647,65 @@ Das Script:
 
 ---
 
+## 🌍 Mehrere Umgebungen (staging/prod) mit OpenTofu-Workspaces
+
+Du kannst dieselbe Terraform-Konfiguration für mehrere getrennte Umgebungen nutzen. Das Prinzip:
+
+- **Umgebung = eigener OpenTofu-Workspace** (eigener State) + eigener `project`-Wert (→ eigene AWS-Ressourcen, keine Datenvermischung).
+- **Tenant (Studio) = logisch innerhalb einer Umgebung** über `tenantId`/Subdomain.
+
+`default`-Workspace = prod (`project = "yogaswap-demo"`, bedient `app.yogaswap.de`). Eine zweite Umgebung (z. B. staging) wird rein additiv daneben aufgebaut, ohne prod anzufassen.
+
+### staging anlegen
+
+```bash
+cd projects/yogaswap
+
+# 1. Eigene Variablen-Datei (Projektname yogaswap-staging etc.)
+cp staging.tfvars.example staging.tfvars   # ses_source_email anpassen
+
+# 2. Eigenen State über einen Workspace (einmalig)
+tofu workspace new staging
+tofu workspace show                          # MUSS "staging" zeigen
+
+# 3. Deployen – IMMER mit -var-file (Workspace lädt staging.tfvars NICHT automatisch!)
+tofu apply -var-file=staging.tfvars
+```
+
+> **Falle:** Ein Workspace-Wechsel lädt **nicht** automatisch `staging.tfvars`. Ohne `-var-file` nimmt tofu `terraform.tfvars` (= prod-Werte) und würde im staging-State prod-Ressourcen anlegen wollen → Namenskollision. Vor jedem Apply `tofu workspace show` prüfen.
+
+Beim allerersten Apply einer frischen Umgebung kann die S3/CloudFront-Abhängigkeit den 3-Schritt-Apply aus Schritt 11 erfordern – dann die `-target`-Befehle jeweils zusätzlich mit `-var-file=staging.tfvars` ausführen.
+
+### Frontend für staging bauen
+
+```bash
+# eigene Datei mit den staging-Cognito-Werten (aus: tofu output im staging-Workspace)
+cat > app/.env.staging <<EOF
+VITE_COGNITO_USER_POOL_ID=<staging_pool_id>
+VITE_COGNITO_CLIENT_ID=<staging_client_id>
+EOF
+
+cd app && npm run build -- --mode staging   # lädt .env.staging statt .env.production
+cd ../projects/yogaswap && tofu apply -var-file=staging.tfvars
+```
+
+`.env.production` (prod) und `.env.staging` (staging) bleiben so getrennt – kein Datei-Hin-und-Her. Beide sind in `.gitignore` und bleiben lokal.
+
+### Admin-Bootstrap je Umgebung
+
+Den Tenant + die Admin-Mitgliedschaft (Schritt 15.3) musst du pro Umgebung anlegen – mit den **Tabellennamen der jeweiligen Umgebung**, z. B. für staging:
+
+```bash
+cd backend
+TENANTS_TABLE=yogaswap-staging-tenants-table npm run seed:tenants
+aws dynamodb put-item \
+  --table-name yogaswap-staging-memberships-table \
+  --item '{"tenantId":{"S":"default-tenant"},"userId":{"S":"<NICKNAME>"},"role":{"S":"admin"}}' \
+  --region eu-central-1
+```
+
+---
+
 ## 🐛 Häufige Probleme
 
 ### Problem: "Access Denied" beim tofu apply
@@ -636,9 +755,12 @@ source ~/.zshrc
 - [ ] Schritt 2: Cognito, Lambdas und API Gateway erstellt
 - [ ] Schritt 3: CloudFront und S3-Bucket-Policy erstellt
 - [ ] URLs abgerufen (`tofu output`)
+- [ ] Frontend mit Cognito-Werten (`.env.production`) neu gebaut und erneut deployed (Schritt 12.5)
 - [ ] Cognito-Environment-Variablen für lokale Entwicklung konfiguriert (`.env.local`)
 - [ ] Cognito User Groups geprüft/erstellt (`node scripts/createGroups.js ...`)
 - [ ] Ersten Admin-User erstellt (`node scripts/createAdminUser.js ...`)
+- [ ] Default-Tenant geseedet (`npm run seed:tenants`)
+- [ ] Admin-Mitgliedschaft angelegt (`aws dynamodb put-item ... memberships-table`)
 - [ ] (Optional) Seed-Daten geladen (`npm run seed`)
 - [ ] (Optional) SES E-Mail-Adresse verifiziert und in `terraform.tfvars` gesetzt
 - [ ] (Optional) Lambda nach SES-Konfiguration neu deployed (`tofu apply`)
