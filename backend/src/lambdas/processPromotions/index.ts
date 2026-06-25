@@ -11,6 +11,7 @@ import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
 import { mapOverrideItem } from "../shared/overrideDynamo";
 import { loadTenantSettings } from "../shared/tenantSettingsLoader";
+import { notifyWaitlistPromotion } from "../shared/notifications/waitlistPromotionNotification";
 
 const client = dynamoClient;
 
@@ -422,6 +423,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         console.log(
           `[processPromotions] ${promotedSwapUser} nachgerückt von ${correspondingSwap.fromCourseId}/${correspondingSwap.fromDate} → ${override.courseId}/${override.date}`
         );
+
+        try {
+          const baseUrl = process.env.BASE_URL || "";
+          const loginUrl = baseUrl.startsWith("http") ? baseUrl : baseUrl ? `https://${baseUrl}` : undefined;
+          const mailSummary = await notifyWaitlistPromotion(client, {
+            tenantId,
+            swap: {
+              user: promotedSwapUser,
+              toCourseId: correspondingSwap.toCourseId,
+              toDate: correspondingSwap.toDate,
+            },
+            coursesTable: process.env.COURSES_TABLE,
+            participantsTable: process.env.PARTICIPANTS_TABLE,
+            sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+            loginUrl,
+          });
+          console.info("processPromotions waitlist mail summary", {
+            tenantId,
+            user: promotedSwapUser,
+            ...mailSummary,
+          });
+        } catch (notificationError) {
+          console.warn("processPromotions waitlist notification failed", {
+            tenantId,
+            user: promotedSwapUser,
+            error: notificationError,
+          });
+        }
       }
 
       if (iterations >= maxIterations) {

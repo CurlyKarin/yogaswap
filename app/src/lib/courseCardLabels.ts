@@ -93,8 +93,8 @@ export function resolveInactiveParticipantNotice(input: {
   isAutomaticallyInactive: boolean;
 }): string {
   return input.isAutomaticallyInactive
-    ? "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten."
-    : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten.";
+    ? "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tauschvorgänge verwalten."
+    : "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tauschvorgänge verwalten.";
 }
 
 /** Footer-Hinweis für vergangene Termine (mit oder neben Aktionen im Nachlauf). */

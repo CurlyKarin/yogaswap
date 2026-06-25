@@ -12,7 +12,7 @@ export const PLANNED_END_INVALID_MESSAGE =
   "Das Kursende muss nach der Planungssperre liegen (ISO-Datum YYYY-MM-DD).";
 
 export const PLANNED_END_CONSEQUENCE_HINT =
-  "Ab diesem Datum gibt es keine neuen Kurstermine mehr. Beim Speichern werden betroffene Tausche bereinigt; Teilnehmer erhalten eine E-Mail (folgt).";
+  "Ab diesem Datum gibt es keine neuen Kurstermine mehr. Beim Speichern werden betroffene Tauschvorgänge bereinigt; Stamm-Teilnehmer erhalten eine E-Mail-Benachrichtigung.";
 
 export function courseHasParticipants(participants?: string[]): boolean {
   return (participants?.length ?? 0) > 0;

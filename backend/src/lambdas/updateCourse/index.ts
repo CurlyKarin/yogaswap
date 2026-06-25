@@ -10,6 +10,7 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import {
   deriveVisibleDates,
+  findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
 import { shouldAutoDeactivateCourse, type Course } from "@yogaswap/shared";
@@ -29,6 +30,11 @@ import {
 } from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { notifyParticipantsPlannedEndDate } from "../shared/plannedEndDateNotifications";
+import {
+  notifyCourseActivated,
+  notifyCourseMembershipAdded,
+  notifyInstructorParticipantListChanged,
+} from "../shared/notifications/courseMembershipNotifications";
 import { validateOverbookLimit, validateParticipantListSize } from "@yogaswap/shared";
 import {
   collectOverrideKeysForReactivationCleanup,
@@ -900,6 +906,118 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               },
             }),
           );
+        }
+      }
+    }
+
+    const participantsTable = process.env.PARTICIPANTS_TABLE;
+    const sesSourceEmail = process.env.SES_SOURCE_EMAIL;
+    const baseUrlEnv = process.env.BASE_URL || "";
+    const mailCourseName = nextName;
+    const mailWeekday = nextWeekday;
+    const mailTime = nextTime;
+    const instructorUserIds =
+      item.instructors?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+    const upcomingTermIso = findNextUpcomingOccurrenceIso(nextDates, nextTime);
+
+    if (status && currentStatus === "draft" && nextStatus === "active") {
+      const activatedParticipantIds = nextParticipants
+        .map((entry) => entry.S ?? "")
+        .filter((entry) => entry.length > 0);
+      try {
+        const mailSummary = await notifyCourseActivated(client, {
+          tenantId,
+          participantUserIds: activatedParticipantIds,
+          courseName: mailCourseName,
+          weekday: mailWeekday,
+          time: mailTime,
+          termDateIso: upcomingTermIso,
+          participantsTable,
+          sesSourceEmail,
+          baseUrl: baseUrlEnv,
+        });
+        console.info("updateCourse course activated mail summary", {
+          tenantId,
+          courseId,
+          ...mailSummary,
+        });
+      } catch (notificationError) {
+        console.warn("updateCourse course activated notification failed", {
+          tenantId,
+          courseId,
+          error: notificationError,
+        });
+      }
+    }
+
+    if (participants && effectiveStatus === "active") {
+      const previousParticipantsForMail =
+        item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+      const previousParticipantsMailSet = new Set(
+        previousParticipantsForMail.map((entry) => entry.toLowerCase()),
+      );
+      const addedParticipantsForMail = participants.filter(
+        (entry) => !previousParticipantsMailSet.has(entry.toLowerCase()),
+      );
+      const nextParticipantsMailSet = new Set(participants.map((entry) => entry.toLowerCase()));
+      const removedParticipantsForMail = previousParticipantsForMail.filter(
+        (entry) => !nextParticipantsMailSet.has(entry.toLowerCase()),
+      );
+
+      if (addedParticipantsForMail.length > 0 && !(currentStatus === "draft" && nextStatus === "active")) {
+        try {
+          const mailSummary = await notifyCourseMembershipAdded(client, {
+            tenantId,
+            participantUserIds: addedParticipantsForMail,
+            courseName: mailCourseName,
+            weekday: mailWeekday,
+            time: mailTime,
+            termDateIso: upcomingTermIso,
+            participantsTable,
+            sesSourceEmail,
+            baseUrl: baseUrlEnv,
+          });
+          console.info("updateCourse course membership mail summary", {
+            tenantId,
+            courseId,
+            addedParticipants: addedParticipantsForMail,
+            ...mailSummary,
+          });
+        } catch (notificationError) {
+          console.warn("updateCourse course membership notification failed", {
+            tenantId,
+            courseId,
+            error: notificationError,
+          });
+        }
+      }
+
+      if (
+        instructorUserIds.length > 0 &&
+        (addedParticipantsForMail.length > 0 || removedParticipantsForMail.length > 0)
+      ) {
+        try {
+          const mailSummary = await notifyInstructorParticipantListChanged(client, {
+            tenantId,
+            instructorUserIds,
+            courseName: mailCourseName,
+            addedParticipants: addedParticipantsForMail,
+            removedParticipants: removedParticipantsForMail,
+            participantsTable,
+            sesSourceEmail,
+            baseUrl: baseUrlEnv,
+          });
+          console.info("updateCourse instructor participant list mail summary", {
+            tenantId,
+            courseId,
+            ...mailSummary,
+          });
+        } catch (notificationError) {
+          console.warn("updateCourse instructor participant list notification failed", {
+            tenantId,
+            courseId,
+            error: notificationError,
+          });
         }
       }
     }

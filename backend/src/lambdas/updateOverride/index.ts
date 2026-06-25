@@ -14,6 +14,8 @@ import {
 import { mapOverrideItem, mapStringList, stringListAttribute, anonymousTrialCountAttribute } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
 import { validateAnonymousTrialCount } from '@yogaswap/shared';
+import { resolveSelfServiceAbsenceKind } from '../shared/notifications/resolveSelfServiceAbsenceKind';
+import { notifyParticipantTermReleased } from '../shared/notifications/termAbsenceNotifications';
 
 const client = dynamoClient;
 
@@ -107,6 +109,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 404, body: JSON.stringify({ error: 'Course not found' }) };
     }
     const courseTime = courseResp.Item.time?.S ?? '';
+    const courseName = courseResp.Item.name?.S ?? `Kurs ${legacyCourseId}`;
     const baseParticipants = mapStringList(courseResp.Item.participants);
     const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
 
@@ -128,6 +131,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       updates.participants !== undefined || updates.shortNoticeCancellations !== undefined;
 
     const subjectNickname = actingForUserId ?? userId;
+    let selfServiceAbsenceKind: ReturnType<typeof resolveSelfServiceAbsenceKind> = null;
     if (touchesCutoffFields && subjectNickname && tenantsTable) {
       const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
       const merged = mergeOverrideUpdate(before, baseParticipants, updates);
@@ -151,6 +155,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       if (transitionError) {
         return { statusCode: 400, body: JSON.stringify({ error: transitionError }) };
       }
+
+      selfServiceAbsenceKind = resolveSelfServiceAbsenceKind({
+        actorNickname: subjectNickname,
+        courseTime,
+        dateIso: date,
+        tenantSettings,
+        before,
+        after: merged,
+        baseParticipants,
+      });
     }
 
     if (updates.participants !== undefined || updates.anonymousTrialCount !== undefined) {
@@ -219,6 +233,36 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ExpressionAttributeValues: expressionAttributeValues,
       })
     );
+
+    if (selfServiceAbsenceKind === "term_released" && subjectNickname) {
+      try {
+        const baseUrl = process.env.BASE_URL || "";
+        const mailSummary = await notifyParticipantTermReleased(client, {
+          tenantId,
+          userId: subjectNickname,
+          courseName,
+          dateIso: date,
+          time: courseTime,
+          participantsTable: process.env.PARTICIPANTS_TABLE,
+          sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+          baseUrl,
+        });
+        console.info("updateOverride term released mail summary", {
+          tenantId,
+          courseId: legacyCourseId,
+          date,
+          userId: subjectNickname,
+          ...mailSummary,
+        });
+      } catch (notificationError) {
+        console.warn("updateOverride term released notification failed", {
+          tenantId,
+          courseId: legacyCourseId,
+          date,
+          error: notificationError,
+        });
+      }
+    }
 
     return { statusCode: 200, body: JSON.stringify({ message: 'Override updated' }) };
   } catch (error) {

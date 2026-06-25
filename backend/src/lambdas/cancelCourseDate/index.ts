@@ -7,7 +7,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { dynamoClient } from "../shared/dynamoClient";
-import { resolveParticipantEmail } from "../shared/participantEmailLookup";
+import { notifyStudioTermCancelled } from "../shared/notifications/termAbsenceNotifications";
 import { resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { getTenantContext } from "../shared/tenantContext";
 
@@ -142,6 +142,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 404, body: JSON.stringify({ error: "Course not found" }) };
     }
     const courseName = courseResp.Item.name?.S ?? `Kurs ${courseId}`;
+    const courseTime = courseResp.Item.time?.S ?? "";
     const staticParticipants = asStringList(courseResp.Item.participants);
 
     const overrideKey = `${courseId}_${date}`;
@@ -369,109 +370,36 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     let mailSentCount = 0;
     let mailSkippedNoProfileCount = 0;
-    let mailSkippedNoEmailCount = 0;
     let mailSkippedInvitedCount = 0;
     let mailFailedCount = 0;
-    let normalizedLookupUsedCount = 0;
-    if (participantsTable && sesSourceEmail && notifyUsers.size > 0) {
-      for (const userId of notifyUsers) {
-        let email: string | undefined;
-        let resolvedUserId: string | undefined;
-        let status: "no_login" | "invited" | "active" | undefined;
-        let lookupSource: "exact" | "normalized" | undefined;
-        try {
-          const lookupResult = await resolveParticipantEmail(
-            client,
-            participantsTable,
-            tenantId,
-            userId,
-          );
-          email = lookupResult.email;
-          resolvedUserId = lookupResult.resolvedUserId;
-          status = lookupResult.status;
-          lookupSource = lookupResult.lookupSource;
-        } catch (lookupError) {
-          warningCodes.add("participant_lookup_failed");
-          mailSkippedNoProfileCount += 1;
-          console.warn("cancelCourseDate participant lookup warning", {
-            tenantId,
-            courseId,
-            date,
-            requestedUserId: userId,
-            error: lookupError,
-          });
-          continue;
+    if (participantsTable && sesSourceEmail && notifyUserList.length > 0) {
+      try {
+        const baseUrl = process.env.BASE_URL || "";
+        const mailSummary = await notifyStudioTermCancelled(client, {
+          tenantId,
+          participantUserIds: notifyUserList,
+          courseName,
+          dateIso: date,
+          time: courseTime,
+          participantsTable,
+          sesSourceEmail,
+          baseUrl,
+        });
+        mailSentCount = mailSummary.mailSentCount;
+        mailSkippedNoProfileCount = mailSummary.mailSkippedNoProfileCount;
+        mailSkippedInvitedCount = mailSummary.mailSkippedInvitedCount;
+        mailFailedCount = mailSummary.mailFailedCount;
+        if (mailFailedCount > 0) {
+          warningCodes.add("participant_mail_failed");
         }
-        const recipientName = (resolvedUserId || userId || "Teilnehmer").trim();
-        console.info("cancelCourseDate participant notification candidate", {
+      } catch (notificationError) {
+        warningCodes.add("participant_mail_failed");
+        console.warn("cancelCourseDate participant notification failed", {
           tenantId,
           courseId,
           date,
-          requestedUserId: userId,
-          resolvedUserId: resolvedUserId ?? null,
-          participantStatus: status ?? null,
-          lookupSource: lookupSource ?? null,
-          hasEmail: Boolean(email),
+          error: notificationError,
         });
-        if (!email) {
-          mailSkippedNoProfileCount += 1;
-          console.warn("cancelCourseDate skip mail: participant profile missing", {
-            tenantId,
-            courseId,
-            date,
-            userId,
-          });
-          continue;
-        }
-        if (status === "invited") {
-          mailSkippedInvitedCount += 1;
-          console.info("cancelCourseDate skip mail: participant invited only", {
-            tenantId,
-            courseId,
-            date,
-            requestedUserId: userId,
-            resolvedUserId: resolvedUserId ?? userId,
-          });
-          continue;
-        }
-        if (resolvedUserId && resolvedUserId !== userId) {
-          normalizedLookupUsedCount += 1;
-          console.info("cancelCourseDate participant email resolved via normalized lookup", {
-            tenantId,
-            courseId,
-            date,
-            requestedUserId: userId,
-            resolvedUserId,
-          });
-        }
-        try {
-          await ses.send(
-            new SendEmailCommand({
-              Source: sesSourceEmail,
-              Destination: { ToAddresses: [email] },
-              Message: {
-                Subject: { Data: `Terminabsage: ${courseName} (${date})` },
-                Body: {
-                  Html: {
-                    Data: `<p>Hallo ${recipientName},</p><p>der Termin <strong>${date}</strong> im Kurs <strong>${courseName}</strong> wurde abgesagt.</p>`,
-                  },
-                },
-              },
-            }),
-          );
-          mailSentCount += 1;
-          console.info("cancelCourseDate mail sent", {
-            tenantId,
-            courseId,
-            date,
-            userId,
-            email,
-          });
-        } catch (mailError) {
-          warningCodes.add("participant_mail_failed");
-          mailFailedCount += 1;
-          console.warn("cancelCourseDate mail warning", { tenantId, userId, date, error: mailError });
-        }
       }
       console.info("cancelCourseDate mail summary", {
         tenantId,
@@ -479,11 +407,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         date,
         mailSentCount,
         mailSkippedNoProfileCount,
-        mailSkippedNoEmailCount,
         mailSkippedInvitedCount,
         mailFailedCount,
         requestedRecipients: notifyUserList.length,
-        normalizedLookupUsedCount,
       });
     } else {
       console.info("cancelCourseDate mail skipped entirely", {
@@ -547,7 +473,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         <p>Pending Swaps mit anderem Ursprung (Ziel abgesagter Termin): ${pendingSwapsToCancelledDateWithOtherOrigin.map((s) => `${s.userId} <- ${s.fromCourseId}/${s.fromDate} (originCancelled=${s.fromOriginCancelled})`).join("; ") || "-"}</p>
         <p>Pending Swaps mit Ursprung abgesagter Termin: ${pendingSwapsWithOriginOnCancelledDate.map((s) => `${s.userId} -> ${s.toCourseId}/${s.toDate}`).join("; ") || "-"}</p>
         <hr />
-        <p>Mail Summary: sent=${mailSentCount}, skippedNoProfile=${mailSkippedNoProfileCount}, skippedNoEmail=${mailSkippedNoEmailCount}, skippedInvited=${mailSkippedInvitedCount}, failed=${mailFailedCount}</p>
+        <p>Mail Summary: sent=${mailSentCount}, skippedNoProfile=${mailSkippedNoProfileCount}, skippedInvited=${mailSkippedInvitedCount}, failed=${mailFailedCount}</p>
       `;
       try {
         await ses.send(
@@ -605,10 +531,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             plannedRecipientsCount: notifyUserList.length,
             sentCount: mailSentCount,
             skippedNoProfileCount: mailSkippedNoProfileCount,
-            skippedNoEmailCount: mailSkippedNoEmailCount,
             skippedInvitedCount: mailSkippedInvitedCount,
             failedCount: mailFailedCount,
-            normalizedLookupUsedCount,
           },
         },
         affected: {

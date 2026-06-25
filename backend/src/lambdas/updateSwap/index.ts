@@ -3,6 +3,7 @@ import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getDelegationErrorResponse } from "../shared/delegation";
+import { notifySwapSuccess } from "../shared/notifications/swapSuccessNotification";
 
 const client = dynamoClient;
 
@@ -86,6 +87,32 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     console.log("UpdateItemCommand:", command.input);
     await client.send(command);
     console.log("Swap updated:", { swapId, user, status });
+
+    if (status === "active") {
+      try {
+        const baseUrl = process.env.BASE_URL || "";
+        const loginUrl = baseUrl.startsWith("http") ? baseUrl : baseUrl ? `https://${baseUrl}` : undefined;
+        const mailSummary = await notifySwapSuccess({
+          client,
+          tenantId,
+          swap: {
+            user,
+            toCourseId: Number(toCourseId),
+            toDate,
+          },
+          coursesTable: process.env.COURSES_TABLE,
+          participantsTable: process.env.PARTICIPANTS_TABLE,
+          sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+          loginUrl,
+          mailLocale: process.env.MAIL_LOCALE || "de",
+          attachIcs: true,
+        });
+        console.info("updateSwap swap success mail summary", { tenantId, swapId, ...mailSummary });
+      } catch (notificationError) {
+        console.warn("updateSwap swap success notification failed", { tenantId, swapId, error: notificationError });
+      }
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({ message: "Swap updated" }),

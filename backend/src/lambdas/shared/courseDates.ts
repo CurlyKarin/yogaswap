@@ -219,6 +219,19 @@ export function buildCourseOccurrenceLocal(isoDate: string, time: string): Date 
   return new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
 }
 
+export function findNextUpcomingOccurrenceIso(
+  dateIsos: string[],
+  time: string,
+  now: Date = new Date(),
+): string | undefined {
+  const sorted = [...dateIsos].sort((a, b) => a.localeCompare(b));
+  for (const iso of sorted) {
+    const occurrence = buildCourseOccurrenceLocal(iso, time);
+    if (occurrence && occurrence >= now) return iso;
+  }
+  return undefined;
+}
+
 export function hasUpcomingCourseOccurrences(
   dateIsos: string[],
   time: string,

@@ -51,10 +51,10 @@ describe("courseCardLabels", () => {
 
   it("formuliert Kurs-Hinweis ohne Blockende-Datum", () => {
     expect(resolveInactiveParticipantNotice({ isAutomaticallyInactive: true })).toBe(
-      "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tausche verwalten.",
+      "Dieser Kurs wurde automatisch beendet. Du kannst nur noch bestehende Tauschvorgänge verwalten.",
     );
     expect(resolveInactiveParticipantNotice({ isAutomaticallyInactive: false })).toBe(
-      "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tausche verwalten.",
+      "Dieser Kurs ist inaktiv. Du kannst nur noch bestehende Tauschvorgänge verwalten.",
     );
   });
 
