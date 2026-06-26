@@ -5,7 +5,7 @@
 #
 # Uncomment um zu aktivieren:
 # resource "aws_ses_email_identity" "source_email" {
-#   email = var.ses_source_email
+#   email = local.ses_source_email
 # }
 #
 # output "ses_verification_token" {

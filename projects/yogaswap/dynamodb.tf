@@ -2,7 +2,7 @@
 # GSI_From/GSI_To: PK = tenantId_user, SK = fromDate_... / toDate_...
 module "swaps_table" {
   source    = "../modules/dynamodb"
-  name      = "${var.project}-swaps-table"
+  name      = "${local.project}-swaps-table"
   hash_key  = "tenantId"
   range_key = "user_swapId"
 
@@ -33,7 +33,7 @@ module "swaps_table" {
 # Tenant-scoped: PK = tenantId, SK = courseId_date (courseId_date)
 module "course_overrides_table" {
   source    = "../modules/dynamodb"
-  name      = "${var.project}-courseOverrides-table"
+  name      = "${local.project}-courseOverrides-table"
   hash_key  = "tenantId"
   range_key = "courseId_date"
   attributes = [
@@ -46,7 +46,7 @@ module "course_overrides_table" {
 # GSI_CourseUid: Lookup tenantId + courseUid → Projektion ALL (UUID in API-Pfaden)
 module "courses_table" {
   source    = "../modules/dynamodb"
-  name      = "${var.project}-courses-table"
+  name      = "${local.project}-courses-table"
   hash_key  = "tenantId"
   range_key = "courseId"
   attributes = [
@@ -72,7 +72,7 @@ module "courses_table" {
 # Speichert z. B. Settings, Name, Impressum des Studios
 module "tenants_table" {
   source   = "../modules/dynamodb"
-  name     = "${var.project}-tenants-table"
+  name     = "${local.project}-tenants-table"
   hash_key = "tenantId"
   attributes = [
     { name = "tenantId", type = "S" }
@@ -83,7 +83,7 @@ module "tenants_table" {
 # Speichert die Rolle (admin, instructor, participant) des Users in diesem Tenant
 module "memberships_table" {
   source    = "../modules/dynamodb"
-  name      = "${var.project}-memberships-table"
+  name      = "${local.project}-memberships-table"
   hash_key  = "tenantId"
   range_key = "userId"
   attributes = [
@@ -96,7 +96,7 @@ module "memberships_table" {
 # Speichert Teilnehmerprofil-Daten (optional E-Mail, Einladungsstatus, Settings)
 module "participants_table" {
   source    = "../modules/dynamodb"
-  name      = "${var.project}-participants-table"
+  name      = "${local.project}-participants-table"
   hash_key  = "tenantId"
   range_key = "userId"
   attributes = [
@@ -118,7 +118,7 @@ module "participants_table" {
 # Speichert One-Time-Token inkl. Ablauf und usedAt (ohne TTL: wird serverseitig validiert).
 module "auth_tokens_table" {
   source    = "../modules/dynamodb"
-  name      = "${var.project}-auth-tokens-table"
+  name      = "${local.project}-auth-tokens-table"
   hash_key  = "tenantId"
   range_key = "token"
   attributes = [

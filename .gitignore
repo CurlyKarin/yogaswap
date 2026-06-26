@@ -55,6 +55,9 @@ lerna-debug.log*
 # Terraform/OpenTofu
 *.tfvars
 !*.tfvars.example
+# Env-Secrets pro OpenTofu-Workspace (#241): nur .example wird getrackt
+projects/yogaswap/env.*.json
+!projects/yogaswap/env.*.json.example
 *.tfstate
 *.tfstate.*
 *.tfstate.backup

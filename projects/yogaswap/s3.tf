@@ -1,7 +1,7 @@
 
 module "spa_site" {
   source                      = "../modules/s3_static_site"
-  bucket_name                 = "${var.project}-site"
+  bucket_name                 = "${local.project}-site"
   cloudfront_distribution_arn = module.cloudfront_spa.distribution_arn
   index_file                  = "index.html"
   error_file                  = "index.html"
