@@ -774,12 +774,10 @@ export default function CourseList({
     return <div role="alert">{error}</div>;
   }
 
-  if (visibleCourses.length === 0 || (!canSeeCourseManagement && participantCoursesToRender.length === 0)) {
+  if (!canSeeCourseManagement && participantCoursesToRender.length === 0) {
     return (
       <div className="muted" style={{ textAlign: "center", padding: "2rem" }} role="status" aria-live="polite">
-        {canSeeCourseManagement
-          ? "Aktuell sind noch keine Kurse angelegt."
-          : "Aktuell keine Kurse in dieser Ansicht — z. B. keine anstehenden Termine, Kurse in Planung, Sichtbarkeit nach Buchung/Lehrkraft oder abgelaufener Nachlauf bei inaktiven Kursen."}
+        Aktuell keine Kurse in dieser Ansicht — z. B. keine anstehenden Termine, Kurse in Planung, Sichtbarkeit nach Buchung/Lehrkraft oder abgelaufener Nachlauf bei inaktiven Kursen.
       </div>
     );
   }
@@ -816,6 +814,11 @@ export default function CourseList({
       )}
 
       <div className="grid" role="region" aria-label="Kursübersicht">
+        {coursesToRender.length === 0 && (
+          <div className="muted" style={{ textAlign: "center", padding: "2rem" }} role="status" aria-live="polite">
+            Aktuell sind noch keine Kurse angelegt. Lege oben den ersten Kurs an.
+          </div>
+        )}
         {coursesToRender.map((course) => {
           const dates = getCourseDates(course);
           const hasUpcomingDates = dates.length > 0;
