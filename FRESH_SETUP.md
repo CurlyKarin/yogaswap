@@ -420,7 +420,7 @@ tofu apply
 
 Danach im Browser (am besten Inkognito) prüfen: In der Konsole muss `Amplify Config` deine korrekte `userPoolId` zeigen.
 
-> Für eine **zweite Umgebung** (z. B. staging) nutzt du eine eigene Datei `app/.env.staging` und baust mit `npm run build -- --mode staging` – Details siehe Abschnitt „Mehrere Umgebungen" am Ende.
+> Für eine **zweite Umgebung** (z. B. staging) nutzt du eine eigene Datei `app/.env.staging` und baust mit `npm run build:staging` – Details siehe Abschnitt „Mehrere Umgebungen" am Ende.
 
 ---
 
@@ -651,30 +651,43 @@ Das Script:
 
 Du kannst dieselbe Terraform-Konfiguration für mehrere getrennte Umgebungen nutzen. Das Prinzip:
 
-- **Umgebung = eigener OpenTofu-Workspace** (eigener State) + eigener `project`-Wert (→ eigene AWS-Ressourcen, keine Datenvermischung).
+- **Umgebung = eigener OpenTofu-Workspace** (eigener State). Die env-spezifischen Werte (`project`, Emails, CloudFront-Aliases, cert-ARN) werden in `env.tf` **automatisch aus dem aktiven Workspace abgeleitet** – kein `-var-file` mehr nötig (#241).
 - **Tenant (Studio) = logisch innerhalb einer Umgebung** über `tenantId`/Subdomain.
 
 `default`-Workspace = prod (`project = "yogaswap-demo"`, bedient `app.yogaswap.de`). Eine zweite Umgebung (z. B. staging) wird rein additiv daneben aufgebaut, ohne prod anzufassen.
+
+**Wo liegen die Werte?**
+
+- Nicht-sensible Werte (`project`, `cloudfront_aliases`) stehen pro Workspace committed in `projects/yogaswap/env.tf` (`locals.env_public`).
+- Sensible Werte (Emails = PII, cert-ARN mit AWS-Account-ID) liegen pro Workspace in der **gitignored** Datei `projects/yogaswap/env.<workspace>.json` (Vorlage: `env.<workspace>.json.example`). Das Repo ist öffentlich – diese Werte gehören nicht eingecheckt.
+
+> **Schutz vor Env-Vermischung:** tofu liest die Werte nur noch aus dem Workspace. Ein vergessenes `-var-file` kann daher **nicht** mehr prod-Werte in den staging-State ziehen. Unbekannter Workspace → `env.tf` wirft einen klaren Fehler statt eines prod-Fallbacks.
 
 ### staging anlegen
 
 ```bash
 cd projects/yogaswap
 
-# 1. Eigene Variablen-Datei (Projektname yogaswap-staging etc.)
-cp staging.tfvars.example staging.tfvars   # ses_source_email anpassen
-
-# 2. Eigenen State über einen Workspace (einmalig)
+# 1. Eigenen State über einen Workspace (einmalig)
 tofu workspace new staging
 tofu workspace show                          # MUSS "staging" zeigen
 
-# 3. Deployen – IMMER mit -var-file (Workspace lädt staging.tfvars NICHT automatisch!)
-tofu apply -var-file=staging.tfvars
+# 2. Sensible Werte für staging hinterlegen (gitignored)
+cp env.staging.json.example env.staging.json # ses_source_email etc. anpassen
+
+# 3. Deployen – ohne -var-file (Werte kommen aus dem Workspace)
+tofu apply                                   # oder: make apply ENV=staging
 ```
 
-> **Falle:** Ein Workspace-Wechsel lädt **nicht** automatisch `staging.tfvars`. Ohne `-var-file` nimmt tofu `terraform.tfvars` (= prod-Werte) und würde im staging-State prod-Ressourcen anlegen wollen → Namenskollision. Vor jedem Apply `tofu workspace show` prüfen.
+Beim allerersten Apply einer frischen Umgebung kann die S3/CloudFront-Abhängigkeit den 3-Schritt-Apply aus Schritt 11 erfordern.
 
-Beim allerersten Apply einer frischen Umgebung kann die S3/CloudFront-Abhängigkeit den 3-Schritt-Apply aus Schritt 11 erfordern – dann die `-target`-Befehle jeweils zusätzlich mit `-var-file=staging.tfvars` ausführen.
+**Komfort:** Das `Makefile` in `projects/yogaswap/` kapselt Workspace-Wahl + Befehl:
+
+```bash
+make plan  ENV=staging
+make apply ENV=staging
+make plan  ENV=default    # default = prod
+```
 
 ### Frontend für staging bauen
 
@@ -685,8 +698,8 @@ VITE_COGNITO_USER_POOL_ID=<staging_pool_id>
 VITE_COGNITO_CLIENT_ID=<staging_client_id>
 EOF
 
-cd app && npm run build -- --mode staging   # lädt .env.staging statt .env.production
-cd ../projects/yogaswap && tofu apply -var-file=staging.tfvars
+cd app && npm run build:staging             # lädt .env.staging statt .env.production
+cd ../projects/yogaswap && tofu apply       # Workspace staging
 ```
 
 `.env.production` (prod) und `.env.staging` (staging) bleiben so getrennt – kein Datei-Hin-und-Her. Beide sind in `.gitignore` und bleiben lokal.
