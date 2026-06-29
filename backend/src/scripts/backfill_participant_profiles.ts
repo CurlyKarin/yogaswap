@@ -8,10 +8,26 @@ import { dynamoClient } from "../lambdas/shared/dynamoClient";
 
 const client = dynamoClient;
 
-const MEMBERSHIPS_TABLE =
-  process.env.MEMBERSHIPS_TABLE || "yogaswap-demo-memberships-table";
-const PARTICIPANTS_TABLE =
-  process.env.PARTICIPANTS_TABLE || "yogaswap-demo-participants-table";
+// Fail-fast statt stillem Demo-Fallback (siehe #74): die Zielumgebung muss
+// explizit gesetzt werden, damit dieses Backfill nie versehentlich die falsche
+// Umgebung anfasst.
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    console.error(
+      `❌ Fehlende Umgebungsvariable: ${name}.\n` +
+        `   Setze MEMBERSHIPS_TABLE und PARTICIPANTS_TABLE der Zielumgebung, z. B.:\n` +
+        `     MEMBERSHIPS_TABLE="<project>-memberships-table" \\\n` +
+        `     PARTICIPANTS_TABLE="<project>-participants-table" \\\n` +
+        `     npm run backfill:participants`,
+    );
+    process.exit(1);
+  }
+  return value;
+}
+
+const MEMBERSHIPS_TABLE = requireEnv("MEMBERSHIPS_TABLE");
+const PARTICIPANTS_TABLE = requireEnv("PARTICIPANTS_TABLE");
 
 async function run(): Promise<void> {
   console.log(

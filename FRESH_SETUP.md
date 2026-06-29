@@ -251,15 +251,14 @@ cp terraform.tfvars.example terraform.tfvars
 
 **Bearbeite `terraform.tfvars`** und setze deinen Projektnamen:
 ```hcl
-project = "yogaswap-backend-demo-karin"  # Ändere zu deinem Namen!
+project = "<PROJECT_NAME>"  # Ändere zu deinem Namen!
 region  = "eu-central-1"
 ```
 
 **Beispiele für eindeutige Namen:**
-- `yogaswap-backend-demo-2025`
-- `yogaswap-backend-demo-karin`
-- `yogaswap-backend-demo-prod`
-- `yogaswap-backend-demo-<dein-name>`
+- `yogaswap-<studio>`
+- `yogaswap-<studio>-prod`
+- `yogaswap-<studio>-2025`
 
 ---
 
@@ -440,10 +439,10 @@ Falls du den Projektnamen explizit setzen möchtest:
 
 ```bash
 cd ../../backend
-PROJECT_NAME="yogaswap-backend-demo-karin" npm run seed
+PROJECT_NAME="<PROJECT_NAME>" npm run seed
 ```
 
-**Ersetze `yogaswap-backend-demo-karin`** mit dem Projektnamen aus deiner `terraform.tfvars`.
+**Setze `<PROJECT_NAME>`** auf den Projektnamen aus deiner `terraform.tfvars`.
 
 Das Script zeigt dir, welche Tabellen verwendet werden und lädt Beispieldaten:
 - Beispiel-Swaps
@@ -452,9 +451,9 @@ Das Script zeigt dir, welche Tabellen verwendet werden und lädt Beispieldaten:
 
 **Alternative:** Du kannst die Tabellennamen auch direkt setzen:
 ```bash
-SWAPS_TABLE="yogaswap-backend-demo-karin-swaps-table" \
-OVERRIDES_TABLE="yogaswap-backend-demo-karin-courseOverrides-table" \
-COURSES_TABLE="yogaswap-backend-demo-karin-courses-table" \
+SWAPS_TABLE="<PROJECT_NAME>-swaps-table" \
+OVERRIDES_TABLE="<PROJECT_NAME>-courseOverrides-table" \
+COURSES_TABLE="<PROJECT_NAME>-courses-table" \
 npm run seed
 ```
 
@@ -632,7 +631,7 @@ Falls du das temporäre Passwort kennst, kannst du auch die `/invite` Seite verw
 
 ```bash
 cd /Users/karin/repos/yogaswap
-./scripts/deploy.sh yogaswap-backend-demo-karin
+./scripts/deploy.sh <PROJECT_NAME>
 ```
 
 Das Script:

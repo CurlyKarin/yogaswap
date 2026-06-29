@@ -299,13 +299,13 @@ Führt alle Build-Schritte aus und deployt auf AWS:
 **Beispiele:**
 ```bash
 # Standard-Deployment
-./scripts/deploy.sh yogaswap-backend-demo-karin
+./scripts/deploy.sh <PROJECT_NAME>
 
 # Ohne vorherige Builds (nutzt vorhandene)
-./scripts/deploy.sh yogaswap-backend-demo-karin --skip-build
+./scripts/deploy.sh <PROJECT_NAME> --skip-build
 
 # Direktes Apply ohne Plan
-./scripts/deploy.sh yogaswap-backend-demo-karin --skip-plan
+./scripts/deploy.sh <PROJECT_NAME> --skip-plan
 ```
 
 ---
@@ -394,7 +394,7 @@ S3-Bucket-Namen müssen **global eindeutig** sein. Wenn du die Anwendung auf meh
 Das Deployment-Script erstellt automatisch eine `terraform.tfvars` Datei:
 
 ```bash
-./scripts/deploy.sh yogaswap-backend-demo-karin
+./scripts/deploy.sh <PROJECT_NAME>
 ```
 
 **Option 2: Manuell konfigurieren**
@@ -407,11 +407,11 @@ cp terraform.tfvars.example terraform.tfvars
 
 2. Bearbeite `terraform.tfvars` und setze einen eindeutigen Projektnamen:
 ```hcl
-project = "yogaswap-backend-demo-karin"  # Ändere diesen Namen!
+project = "<PROJECT_NAME>"  # Ändere diesen Namen!
 region = "eu-central-1"
 ```
 
-Der Bucket-Name wird automatisch zu `${project}-site`, z.B. `yogaswap-backend-demo-karin-site`.
+Der Bucket-Name wird automatisch zu `${project}-site`, z.B. `<PROJECT_NAME>-site`.
 
 ### Deployment durchführen
 
@@ -420,7 +420,7 @@ Der Bucket-Name wird automatisch zu `${project}-site`, z.B. `yogaswap-backend-de
 Das Script führt alle Build-Schritte aus und deployt automatisch:
 
 ```bash
-./scripts/deploy.sh yogaswap-backend-demo-karin
+./scripts/deploy.sh <PROJECT_NAME>
 ```
 
 **Optionen:**
@@ -504,16 +504,16 @@ cd ..
 **Option 2: Mit PROJECT_NAME**
 ```bash
 cd backend
-PROJECT_NAME="yogaswap-demo" npm run seed
+PROJECT_NAME="<PROJECT_NAME>" npm run seed
 cd ..
 ```
 
 **Option 3: Tabellennamen direkt setzen**
 ```bash
 cd backend
-SWAPS_TABLE="yogaswap-demo-swaps-table" \
-OVERRIDES_TABLE="yogaswap-demo-courseOverrides-table" \
-COURSES_TABLE="yogaswap-demo-courses-table" \
+SWAPS_TABLE="<PROJECT_NAME>-swaps-table" \
+OVERRIDES_TABLE="<PROJECT_NAME>-courseOverrides-table" \
+COURSES_TABLE="<PROJECT_NAME>-courses-table" \
 npm run seed
 cd ..
 ```

@@ -1,5 +1,14 @@
 # terraform.tfvars - Erklärung
 
+> **⚠️ Veraltet seit #241.** tofu leitet die env-spezifischen Werte (project,
+> Emails, CloudFront-Aliases, cert-ARN) inzwischen aus dem aktiven
+> OpenTofu-Workspace ab (siehe `env.tf` / `env.<workspace>.json`).
+> `var.project` wird von den Ressourcen **nicht mehr** genutzt und hat keinen
+> Demo-Default mehr (`default = ""`). `terraform.tfvars` wird derzeit nur noch
+> von einigen Scripts gelesen, um den Projektnamen zu beziehen
+> (Bereinigung folgt in #245). Die folgende Erklärung beschreibt den
+> historischen Mechanismus.
+
 ## Was ist terraform.tfvars?
 
 `terraform.tfvars` ist eine Konfigurationsdatei für Terraform/OpenTofu, die dir erlaubt, **Werte für Variablen** festzulegen, ohne den Code selbst ändern zu müssen.

@@ -1,8 +1,12 @@
 
 variable "project" {
-  description = "Projektname für Ressourcen-Namen"
+  # Hinweis: Seit #241 leitet tofu den Projektnamen aus dem Workspace ab
+  # (siehe env.tf / local.project). Diese Variable wird von den Ressourcen
+  # nicht mehr genutzt; sie bleibt nur, damit terraform.tfvars (von Scripts
+  # gelesen) keine "undeclared variable"-Warnung erzeugt. Kein Demo-Default.
+  description = "Veraltet: Projektname kommt aus dem OpenTofu-Workspace (env.tf). Nur noch für Scripts/terraform.tfvars-Kompatibilität."
   type        = string
-  default     = "yogaswap-backend-demo"
+  default     = ""
 }
 
 variable "region" {
