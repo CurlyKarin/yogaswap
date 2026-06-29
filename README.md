@@ -288,25 +288,25 @@ Installiert alle Abhängigkeiten und baut das komplette Projekt:
 ./scripts/setup.sh
 ```
 
-### `deploy.sh` - Automatisches Deployment
+### `deploy.sh` / `make deploy` - Automatisches Deployment (workspace-aware)
 
-Führt alle Build-Schritte aus und deployt auf AWS:
+Wählt den OpenTofu-Workspace (= Umgebung), baut alle Komponenten (Frontend-Build-Modus an die Umgebung gekoppelt) und deployt:
 
 ```bash
-./scripts/deploy.sh <projektname> [--skip-build] [--skip-plan]
+make -C projects/yogaswap deploy ENV=staging   # oder ENV=default (= prod)
+# gleichwertig:
+./scripts/deploy.sh <env> [--skip-build] [--skip-plan] [--auto-approve]
 ```
 
 **Beispiele:**
 ```bash
-# Standard-Deployment
-./scripts/deploy.sh <PROJECT_NAME>
-
-# Ohne vorherige Builds (nutzt vorhandene)
-./scripts/deploy.sh <PROJECT_NAME> --skip-build
-
-# Direktes Apply ohne Plan
-./scripts/deploy.sh <PROJECT_NAME> --skip-plan
+./scripts/deploy.sh staging                 # staging bauen + deployen
+./scripts/deploy.sh default                 # prod/demo
+./scripts/deploy.sh staging --skip-build    # vorhandenen (passenden) Build nutzen
+./scripts/deploy.sh staging --auto-approve  # ohne Rückfrage (z. B. CI)
 ```
+
+`<env>` ist der OpenTofu-Workspace; Projektname und Cognito-Werte werden daraus abgeleitet (`env.tf`), nicht mehr aus `terraform.tfvars`.
 
 ---
 
@@ -385,47 +385,28 @@ Die gebauten Dateien werden im Verzeichnis `app/build/` erstellt.
 
 ## 🚀 AWS Deployment
 
-### ⚠️ WICHTIG: Bucket-Namen konfigurieren
+### Umgebung = OpenTofu-Workspace
 
-S3-Bucket-Namen müssen **global eindeutig** sein. Wenn du die Anwendung auf mehreren AWS-Accounts betreibst, musst du einen eindeutigen Projektnamen verwenden.
+Seit #241/#245 ist eine **Umgebung = ein OpenTofu-Workspace**. Projektname, S3-Bucket (`${project}-site`), Cognito usw. werden aus dem Workspace abgeleitet (`env.tf`) – du musst **kein** `terraform.tfvars` mehr pflegen.
 
-**Option 1: Automatisch mit Deployment-Script (empfohlen)**
+- `default` = prod (`yogaswap-demo`, `app.yogaswap.de`)
+- `staging` = Testumgebung (`yogaswap-staging`, `staging.yogaswap.de`)
 
-Das Deployment-Script erstellt automatisch eine `terraform.tfvars` Datei:
-
-```bash
-./scripts/deploy.sh <PROJECT_NAME>
-```
-
-**Option 2: Manuell konfigurieren**
-
-1. Kopiere die Beispiel-Datei:
-```bash
-cd projects/yogaswap
-cp terraform.tfvars.example terraform.tfvars
-```
-
-2. Bearbeite `terraform.tfvars` und setze einen eindeutigen Projektnamen:
-```hcl
-project = "<PROJECT_NAME>"  # Ändere diesen Namen!
-region = "eu-central-1"
-```
-
-Der Bucket-Name wird automatisch zu `${project}-site`, z.B. `<PROJECT_NAME>-site`.
+Eine **neue** Umgebung anzulegen (eigener State, `env.<ws>.json`, Cognito-Frontend-Werte) ist in `FRESH_SETUP.md` beschrieben.
 
 ### Deployment durchführen
 
-**Option A: Mit Deployment-Script (empfohlen)**
+**Option A: Mit `make` / Deployment-Script (empfohlen)**
 
-Das Script führt alle Build-Schritte aus und deployt automatisch:
+Baut alle Komponenten (Frontend-Build-Modus an die Umgebung gekoppelt) und deployt:
 
 ```bash
-./scripts/deploy.sh <PROJECT_NAME>
+make -C projects/yogaswap deploy ENV=staging   # oder ENV=default (= prod)
+# gleichwertig:
+./scripts/deploy.sh staging
 ```
 
-**Optionen:**
-- `--skip-build`: Überspringe Build-Schritte (nutze vorhandene Builds)
-- `--skip-plan`: Überspringe Plan, führe direkt Apply aus
+**Optionen:** `--skip-build`, `--skip-plan`, `--auto-approve`
 
 **Option B: Manuell**
 
@@ -434,33 +415,26 @@ Das Script führt alle Build-Schritte aus und deployt automatisch:
 ./scripts/check-setup.sh
 ```
 
-**2. Terraform/OpenTofu initialisieren:**
+**2. Workspace wählen + initialisieren:**
 ```bash
 cd projects/yogaswap
-terraform init
-# oder
-tofu init
+tofu workspace select staging   # Umgebung wählen (NICHT vergessen!)
+tofu init                       # falls noch nicht geschehen
 ```
-
-Dies lädt die benötigten Terraform-Provider (AWS) herunter.
 
 **3. Deployment planen (optional, aber empfohlen):**
 ```bash
-terraform plan
-# oder
 tofu plan
 ```
 
-Dies zeigt dir, welche Ressourcen erstellt werden.
-
 **4. Deployment ausführen:**
 ```bash
-terraform apply
-# oder
 tofu apply
 ```
 
 Du wirst nach einer Bestätigung gefragt. Gib `yes` ein.
+
+> ⚠️ Beim manuellen Weg musst du das Frontend **selbst** im passenden Modus bauen (`cd app && npm run build:staging` für staging bzw. `npm run build` für prod), sonst landen falsche Cognito-Werte im Bundle. `make deploy` / `deploy.sh` nehmen dir das ab.
 
 **Wichtig**: Das Deployment kann einige Minuten dauern, da folgende Ressourcen erstellt werden:
 - DynamoDB-Tabellen (Swaps, Course Overrides, Courses)

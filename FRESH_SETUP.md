@@ -623,24 +623,24 @@ Falls du das temporäre Passwort kennst, kannst du auch die `/invite` Seite verw
 
 ---
 
-## 🔄 Alternative: Alles auf einmal mit Deployment-Script (erst nach 1. Deployment!)
+## 🔄 Alternative: Deployment-Script / Makefile (erst nach 1. Deployment!)
 
-**⚠️ Hinweis:** Das Deployment-Script ist für **spätere Updates** gedacht. Beim ersten Mal solltest du die 3 Schritte manuell durchführen (siehe Schritt 11).
-
-**Für spätere Deployments** kannst du das Script verwenden:
+**⚠️ Hinweis:** Für den allerersten Aufbau einer Umgebung folge der manuellen 3-Schritt-Anleitung (Schritt 11). Für **spätere Deployments** ist das der normale Weg:
 
 ```bash
 cd /Users/karin/repos/yogaswap
-./scripts/deploy.sh <PROJECT_NAME>
+make -C projects/yogaswap deploy ENV=staging   # oder ENV=default (= prod)
+# gleichwertig:
+./scripts/deploy.sh staging
 ```
 
-Das Script:
-- Baut alle Komponenten
-- Erstellt/aktualisiert `terraform.tfvars`
-- Führt `tofu init` aus (falls nötig)
-- Zeigt den Plan
-- Fragt nach Bestätigung
-- Führt `tofu apply` aus
+Das Script (workspace-aware, #245):
+- wählt + verifiziert den OpenTofu-Workspace (= Umgebung)
+- leitet den Projektnamen aus `env.tf` ab (Single Source) – kein `terraform.tfvars`-Schreiben mehr
+- baut alle Komponenten und **koppelt den Frontend-Build-Modus an die Umgebung**
+  (`default` → production-Build, sonst → `vite --mode <env>`), damit nie die
+  falschen Cognito-Werte eingebacken werden
+- führt `tofu init` aus (falls nötig), zeigt den Plan, fragt nach Bestätigung, `tofu apply`
 
 **Nach dem ersten Deployment** funktioniert `tofu apply` ohne `-target` Flags, da alle Ressourcen bereits existieren.
 
@@ -674,46 +674,50 @@ tofu workspace show                          # MUSS "staging" zeigen
 # 2. Sensible Werte für staging hinterlegen (gitignored)
 cp env.staging.json.example env.staging.json # ses_source_email etc. anpassen
 
-# 3. Deployen – ohne -var-file (Werte kommen aus dem Workspace)
+# 3. Infrastruktur anlegen (nur Infra, ohne Frontend) – liefert die Cognito-IDs
 tofu apply                                   # oder: make apply ENV=staging
 ```
 
 Beim allerersten Apply einer frischen Umgebung kann die S3/CloudFront-Abhängigkeit den 3-Schritt-Apply aus Schritt 11 erfordern.
 
-**Komfort:** Das `Makefile` in `projects/yogaswap/` kapselt Workspace-Wahl + Befehl:
+### Frontend-Cognito-Werte für staging hinterlegen (einmalig)
 
 ```bash
-make plan  ENV=staging
-make apply ENV=staging
-make plan  ENV=default    # default = prod
-```
-
-### Frontend für staging bauen
-
-```bash
-# eigene Datei mit den staging-Cognito-Werten (aus: tofu output im staging-Workspace)
+# Werte aus den tofu outputs des staging-Workspace
 cat > app/.env.staging <<EOF
 VITE_COGNITO_USER_POOL_ID=<staging_pool_id>
 VITE_COGNITO_CLIENT_ID=<staging_client_id>
 EOF
-
-cd app && npm run build:staging             # lädt .env.staging statt .env.production
-cd ../projects/yogaswap && tofu apply       # Workspace staging
 ```
 
-`.env.production` (prod) und `.env.staging` (staging) bleiben so getrennt – kein Datei-Hin-und-Her. Beide sind in `.gitignore` und bleiben lokal.
+`.env.production` (prod) und `.env.staging` (staging) bleiben getrennt – `make deploy` wählt automatisch den richtigen Modus. Beide Dateien sind gitignored.
 
 ### Admin-Bootstrap je Umgebung
 
-Den Tenant + die Admin-Mitgliedschaft (Schritt 15.3) musst du pro Umgebung anlegen – mit den **Tabellennamen der jeweiligen Umgebung**, z. B. für staging:
+Den ersten Admin (Tenant + Cognito-Gruppen + Admin-User + Membership) legst du pro Umgebung mit **einem** Befehl an – Projektname, Cognito-Pool und Region werden aus dem Workspace abgeleitet:
 
 ```bash
-cd backend
-TENANTS_TABLE=yogaswap-staging-tenants-table npm run seed:tenants
-aws dynamodb put-item \
-  --table-name yogaswap-staging-memberships-table \
-  --item '{"tenantId":{"S":"default-tenant"},"userId":{"S":"<NICKNAME>"},"role":{"S":"admin"}}' \
-  --region eu-central-1
+make -C projects/yogaswap bootstrap-admin ENV=staging \
+  EMAIL=admin@example.com NICKNAME=admin
+# optional: PASSWORD=… (sonst wird ein temporäres Passwort erzeugt)
+```
+
+Nur den Tenant (ohne Admin) anlegen: `make seed-tenants ENV=staging`.
+
+### Danach: bauen + deployen
+
+```bash
+make deploy ENV=staging     # baut staging-Frontend + lädt hoch
+```
+
+**Alle Make-Targets:**
+
+```bash
+make deploy ENV=staging     # bauen + deployen (normaler Weg)
+make deploy ENV=default     # prod (yogaswap-demo)
+make plan   ENV=staging     # nur Infra-Plan (kein Frontend-Build)
+make apply  ENV=staging     # nur Infra-Apply (kein Frontend-Build)
+make test                   # lokale Checks (Backend-Tests + FE-Typecheck)
 ```
 
 ---
@@ -788,8 +792,8 @@ source ~/.zshrc
 # Alles installieren und bauen
 ./scripts/setup.sh
 
-# Deployment (automatisch)
-./scripts/deploy.sh <projektname>
+# Deployment (automatisch, workspace-aware)
+make -C projects/yogaswap deploy ENV=staging   # oder ENV=default (= prod)
 
 # Erste Deployment (in 3 Schritten)
 cd projects/yogaswap
