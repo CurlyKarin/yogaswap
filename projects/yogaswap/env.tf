@@ -22,7 +22,7 @@ locals {
     }
     staging = {
       project            = "yogaswap-staging"
-      cloudfront_aliases = []
+      cloudfront_aliases = ["staging.yogaswap.de"]
     }
   }
 
