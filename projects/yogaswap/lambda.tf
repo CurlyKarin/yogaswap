@@ -2,7 +2,7 @@
 resource "aws_iam_role" "lambda_role" {
   for_each = local.lambda_configs
 
-  name = "${var.project}-${each.value.name}"
+  name = "${local.project}-${each.value.name}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -27,8 +27,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
     Statement = concat(
       # DynamoDB-Berechtigungen, falls dynamodb_actions nicht leer
       length(each.value.dynamodb_actions) > 0 ? [{
-        Effect   = "Allow",
-        Action   = each.value.dynamodb_actions,
+        Effect = "Allow",
+        Action = each.value.dynamodb_actions,
         Resource = concat(
           each.value.table_arns,
           [for arn in each.value.table_arns : "${arn}/index/*"],
@@ -59,7 +59,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
 resource "aws_lambda_function" "lambda" {
   for_each = local.lambda_configs
 
-  function_name = "${var.project}-${each.value.name}"
+  function_name = "${local.project}-${each.value.name}"
   handler       = "index.handler"
   runtime       = "nodejs18.x"
   timeout       = try(each.value.timeout, 3)

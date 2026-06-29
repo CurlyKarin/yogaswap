@@ -1,6 +1,6 @@
 # Cognito User Pool
 resource "aws_cognito_user_pool" "yogaswap" {
-  name = "${var.project}-users"
+  name = "${local.project}-users"
 
   # Self-Sign-Up erlauben
   auto_verified_attributes = ["email"]
@@ -61,7 +61,7 @@ resource "aws_cognito_user_pool" "yogaswap" {
 
 # Checkmark App Client
 resource "aws_cognito_user_pool_client" "yogaswap_app" {
-  name         = "${var.project}-app-client"
+  name         = "${local.project}-app-client"
   user_pool_id = aws_cognito_user_pool.yogaswap.id
 
   explicit_auth_flows = [

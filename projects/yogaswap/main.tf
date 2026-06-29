@@ -15,8 +15,8 @@ provider "aws" {
 locals {
   lambda_configs = {
     "get_swaps" = {
-      name             = var.lambdas["get_swaps"].name
-      file_name        = var.lambdas["get_swaps"].file_name
+      name      = var.lambdas["get_swaps"].name
+      file_name = var.lambdas["get_swaps"].file_name
       table_arns = [
         module.swaps_table.table_arn,
         module.courses_table.table_arn,
@@ -34,8 +34,8 @@ locals {
       s3_resources = []
     },
     "get_swaps_by_status" = {
-      name             = "get-swaps-by-status"
-      file_name        = "getSwapsByStatus.zip"
+      name      = "get-swaps-by-status"
+      file_name = "getSwapsByStatus.zip"
       table_arns = [
         module.swaps_table.table_arn,
         module.courses_table.table_arn,
@@ -53,8 +53,8 @@ locals {
       s3_resources = []
     },
     "create_swap" = {
-      name             = "create-swap"
-      file_name        = "createSwap.zip"
+      name      = "create-swap"
+      file_name = "createSwap.zip"
       table_arns = [
         module.swaps_table.table_arn,
         module.courses_table.table_arn,
@@ -80,13 +80,13 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = var.ses_source_email
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = local.ses_source_email
+        BASE_URL         = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
       }
     },
     "update_swap" = {
-      name             = "update-swap"
-      file_name        = "updateSwap.zip"
+      name      = "update-swap"
+      file_name = "updateSwap.zip"
       table_arns = [
         module.swaps_table.table_arn,
         module.courses_table.table_arn,
@@ -108,8 +108,8 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = var.ses_source_email
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = local.ses_source_email
+        BASE_URL         = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
       }
     },
     "delete_swap" = {
@@ -148,8 +148,8 @@ locals {
       s3_resources = []
     },
     "update_override" = {
-      name             = "update-override"
-      file_name        = "updateOverride.zip"
+      name      = "update-override"
+      file_name = "updateOverride.zip"
       table_arns = [
         module.course_overrides_table.table_arn,
         module.courses_table.table_arn,
@@ -173,8 +173,8 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = var.ses_source_email
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = local.ses_source_email
+        BASE_URL         = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
       }
     },
     "delete_override" = {
@@ -210,8 +210,8 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = var.ses_source_email
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = local.ses_source_email
+        BASE_URL         = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
       }
     },
     "process_ring_swaps" = {
@@ -236,8 +236,8 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = var.ses_source_email
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = local.ses_source_email
+        BASE_URL         = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
       }
     },
     "get_courses" = {
@@ -288,8 +288,8 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = var.ses_source_email
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = local.ses_source_email
+        BASE_URL         = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
       }
     },
     "cancel_course_date" = {
@@ -314,9 +314,9 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL           = var.ses_source_email
-        STUDIO_NOTIFICATION_EMAILS = var.studio_notification_emails
-        BASE_URL                   = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL           = local.ses_source_email
+        STUDIO_NOTIFICATION_EMAILS = local.studio_notification_emails
+        BASE_URL                   = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
       }
     },
     "delete_course" = {
@@ -376,8 +376,8 @@ locals {
       ]
       environment = {
         USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
-        SES_SOURCE_EMAIL = var.ses_source_email
+        BASE_URL         = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL = local.ses_source_email
       }
     },
     "delete_participant" = {
@@ -401,7 +401,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = var.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_source_email
       }
     },
     "create_participants" = {
@@ -413,7 +413,7 @@ locals {
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
-        "AUTH_TOKENS_TABLE"   = module.auth_tokens_table.table_name
+        "AUTH_TOKENS_TABLE"  = module.auth_tokens_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -436,9 +436,9 @@ locals {
         }
       ]
       environment = {
-        USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
-        SES_SOURCE_EMAIL = var.ses_source_email # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
+        USER_POOL_ID      = aws_cognito_user_pool.yogaswap.id
+        BASE_URL          = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL  = local.ses_source_email # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },
@@ -450,7 +450,7 @@ locals {
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
-        "AUTH_TOKENS_TABLE"   = module.auth_tokens_table.table_name
+        "AUTH_TOKENS_TABLE"  = module.auth_tokens_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -469,9 +469,9 @@ locals {
         }
       ]
       environment = {
-        USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
-        BASE_URL         = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
-        SES_SOURCE_EMAIL = var.ses_source_email
+        USER_POOL_ID      = aws_cognito_user_pool.yogaswap.id
+        BASE_URL          = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL  = local.ses_source_email
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },
@@ -495,8 +495,8 @@ locals {
         }
       ]
       environment = {
-        BASE_URL          = length(var.cloudfront_aliases) > 0 ? "https://${var.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
-        SES_SOURCE_EMAIL  = var.ses_source_email
+        BASE_URL          = length(local.cloudfront_aliases) > 0 ? "https://${local.cloudfront_aliases[0]}" : module.cloudfront_spa.distribution_url
+        SES_SOURCE_EMAIL  = local.ses_source_email
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },
@@ -544,21 +544,21 @@ locals {
       table_arns       = [module.auth_tokens_table.table_arn, module.participants_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:UpdateItem"]
       tables = {
-        "AUTH_TOKENS_TABLE" = module.auth_tokens_table.table_name
+        "AUTH_TOKENS_TABLE"  = module.auth_tokens_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
       additional_policies = [
         {
-          Effect = "Allow"
-          Action = ["cognito-idp:AdminResetUserPassword"]
+          Effect   = "Allow"
+          Action   = ["cognito-idp:AdminResetUserPassword"]
           Resource = aws_cognito_user_pool.yogaswap.arn
         }
       ]
       environment = {
-        USER_POOL_ID      = aws_cognito_user_pool.yogaswap.id
-        AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
+        USER_POOL_ID       = aws_cognito_user_pool.yogaswap.id
+        AUTH_TOKENS_TABLE  = module.auth_tokens_table.table_name
         PARTICIPANTS_TABLE = module.participants_table.table_name
       }
     }
@@ -568,31 +568,31 @@ locals {
 
   # API Gateway Routen
   api_routes = {
-    "GET /swaps"                                 = "get_swaps"
-    "GET /swaps/status"                          = "get_swaps_by_status"
-    "GET /course-overrides"                      = "get_coursedateoverrides"
-    "POST /swaps"                                = "create_swap"
-    "PUT /swaps/{swapId}"                        = "update_swap"
-    "DELETE /swaps/{swapId}"                     = "delete_swap"
-    "POST /course-overrides"                     = "create_override"
-    "PUT /course-overrides/{courseId}/{date}"    = "update_override"
-    "DELETE /course-overrides/{courseId}/{date}" = "delete_override"
-    "POST /process-promotions"                   = "process_promotions"
-    "POST /process-ring-swaps"                   = "process_ring_swaps"
-    "GET /courses"                               = "get_courses"
-    "POST /courses"                              = "create_course"
-    "PUT /courses/{courseId}"                    = "update_course"
+    "GET /swaps"                                   = "get_swaps"
+    "GET /swaps/status"                            = "get_swaps_by_status"
+    "GET /course-overrides"                        = "get_coursedateoverrides"
+    "POST /swaps"                                  = "create_swap"
+    "PUT /swaps/{swapId}"                          = "update_swap"
+    "DELETE /swaps/{swapId}"                       = "delete_swap"
+    "POST /course-overrides"                       = "create_override"
+    "PUT /course-overrides/{courseId}/{date}"      = "update_override"
+    "DELETE /course-overrides/{courseId}/{date}"   = "delete_override"
+    "POST /process-promotions"                     = "process_promotions"
+    "POST /process-ring-swaps"                     = "process_ring_swaps"
+    "GET /courses"                                 = "get_courses"
+    "POST /courses"                                = "create_course"
+    "PUT /courses/{courseId}"                      = "update_course"
     "POST /courses/{courseId}/dates/{date}/cancel" = "cancel_course_date"
-    "DELETE /courses/{courseId}"                 = "delete_course"
-    "GET /participants"                          = "get_participants"
-    "POST /participants"                         = "create_participants"
-    "POST /participants/{userId}/password-reset" = "reset_participant_password"
-    "POST /auth/password-reset/request"          = "request_self_password_reset"
-    "POST /auth/password-reset/from-token"       = "start_password_reset_from_token"
-    "PUT /participants/{userId}"                 = "update_participant"
-    "DELETE /participants/{userId}"              = "delete_participant"
-    "GET /tenant-context"                        = "get_tenant_context"
-    "PUT /tenant-settings"                       = "update_tenant_settings"
+    "DELETE /courses/{courseId}"                   = "delete_course"
+    "GET /participants"                            = "get_participants"
+    "POST /participants"                           = "create_participants"
+    "POST /participants/{userId}/password-reset"   = "reset_participant_password"
+    "POST /auth/password-reset/request"            = "request_self_password_reset"
+    "POST /auth/password-reset/from-token"         = "start_password_reset_from_token"
+    "PUT /participants/{userId}"                   = "update_participant"
+    "DELETE /participants/{userId}"                = "delete_participant"
+    "GET /tenant-context"                          = "get_tenant_context"
+    "PUT /tenant-settings"                         = "update_tenant_settings"
   }
 
   build_files = fileset("../../app/build", "**")
@@ -602,7 +602,7 @@ locals {
 #--------------apigateway--------------------
 module "yogaswap_api" {
   source      = "../modules/apigatewayv2"
-  name        = "${var.project}-api"
+  name        = "${local.project}-api"
   lambda_arns = local.lambda_arns
   routes      = local.api_routes
   jwt_issuer  = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.yogaswap.id}"
@@ -630,8 +630,8 @@ module "cloudfront_spa" {
   bucket_name             = module.spa_site.bucket_name
   bucket_domain_name      = module.spa_site.bucket_regional_domain
   api_gateway_domain_name = replace(module.yogaswap_api.api_endpoint, "https://", "")
-  aliases                 = var.cloudfront_aliases
-  acm_certificate_arn     = var.cloudfront_acm_certificate_arn
+  aliases                 = local.cloudfront_aliases
+  acm_certificate_arn     = local.cloudfront_acm_certificate_arn
 }
 
 resource "null_resource" "cloudfront_invalidation" {
