@@ -1,12 +1,33 @@
 import { CognitoIdentityProviderClient, ListUsersCommand, AdminListGroupsForUserCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
 
-const cognito = new CognitoIdentityProviderClient({ region: "eu-central-1" });
-const dynamodb = new DynamoDBClient({ region: "eu-central-1" });
+const AWS_REGION =
+  process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "eu-central-1";
 
-const USER_POOL_ID = "eu-central-1_s6pVZ7mnn"; // From tofu outputs
-const MEMBERSHIPS_TABLE = "yogaswap-demo-memberships-table";
-const TENANT_ID = "default-tenant";
+const cognito = new CognitoIdentityProviderClient({ region: AWS_REGION });
+const dynamodb = new DynamoDBClient({ region: AWS_REGION });
+
+// Fail-fast statt hartkodierter Demo-/prod-Werte (siehe #74): Zielumgebung muss
+// explizit gesetzt werden, sonst koennte dieses einmalige Migrationsskript die
+// falsche Cognito-Pool/Tabelle anfassen.
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    console.error(
+      `❌ Fehlende Umgebungsvariable: ${name}.\n` +
+        `   Setze USER_POOL_ID und MEMBERSHIPS_TABLE der Zielumgebung, z. B.:\n` +
+        `     USER_POOL_ID="<pool-id>" \\\n` +
+        `     MEMBERSHIPS_TABLE="<project>-memberships-table" \\\n` +
+        `     npx ts-node src/scripts/migrate_users.ts`,
+    );
+    process.exit(1);
+  }
+  return value;
+}
+
+const USER_POOL_ID = requireEnv("USER_POOL_ID");
+const MEMBERSHIPS_TABLE = requireEnv("MEMBERSHIPS_TABLE");
+const TENANT_ID = process.env.TENANT_ID || "default-tenant";
 
 async function run() {
   console.log("Fetching users from Cognito...");

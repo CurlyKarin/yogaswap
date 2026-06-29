@@ -67,7 +67,7 @@ else
     echo ""
     echo "Beispiele:"
     echo "  $0                                    # Projekt aus tfvars, mit Bestätigungen"
-    echo "  $0 yogaswap-backend-demo-karin        # Neues Projekt oder tfvars anlegen"
+    echo "  $0 <PROJECT_NAME>                     # Neues Projekt oder tfvars anlegen"
     echo "  $0 --auto-approve                     # Deploy ohne Rückfragen (z.B. CI)"
     echo ""
     exit 1

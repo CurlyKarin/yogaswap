@@ -1,19 +1,19 @@
 // cd backend
 // npm run seed
 //
-// Tabellennamen können über Environment-Variablen gesetzt werden:
+// Die Zielumgebung MUSS explizit gesetzt werden (kein Demo-Fallback, siehe #74):
 //
 // Option 1: Mit PROJECT_NAME (empfohlen - Tabellennamen werden automatisch gebildet)
-// PROJECT_NAME="yogaswap-backend-demo-karin" npm run seed
+// PROJECT_NAME="<PROJECT_NAME>" npm run seed
 //
 // Option 2: Tabellennamen direkt setzen
-// SWAPS_TABLE="yogaswap-backend-demo-karin-swaps-table" \
-// OVERRIDES_TABLE="yogaswap-backend-demo-karin-courseOverrides-table" \
-// COURSES_TABLE="yogaswap-backend-demo-karin-courses-table" \
+// SWAPS_TABLE="<PROJECT_NAME>-swaps-table" \
+// OVERRIDES_TABLE="<PROJECT_NAME>-courseOverrides-table" \
+// COURSES_TABLE="<PROJECT_NAME>-courses-table" \
 // npm run seed
 //
-// Option 3: Standard (verwendet "yogaswap-backend-demo")
-// npm run seed
+// Alternativ wird der Projektname aus projects/yogaswap/terraform.tfvars gelesen,
+// falls vorhanden.
 
 import { DynamoDBClient, PutItemCommand, DescribeTableCommand, ResourceNotFoundException, ListTablesCommand } from "@aws-sdk/client-dynamodb";
 import { swaps } from "./swaps";
@@ -24,7 +24,7 @@ import { generateCourseUid } from "../lambdas/shared/courseUid";
 import path from "node:path";
 import fs from "node:fs";
 
-function resolveProjectName(): string {
+function resolveProjectName(): string | undefined {
   if (process.env.PROJECT_NAME) {
     return process.env.PROJECT_NAME;
   }
@@ -57,15 +57,34 @@ function resolveProjectName(): string {
     console.warn("⚠️  Konnte terraform.tfvars nicht lesen:", err);
   }
 
-  return "yogaswap-backend-demo";
+  // Bewusst kein Demo-Fallback: lieber Fail-fast als versehentlich die
+  // falsche Umgebung anfassen (siehe #74).
+  return undefined;
 }
 
 // Tabellennamen aus Environment-Variablen oder terraform.tfvars
 // Format: {project}-{table-type}-table
 const PROJECT_NAME = resolveProjectName();
-const SWAPS_TABLE = process.env.SWAPS_TABLE || `${PROJECT_NAME}-swaps-table`;
-const OVERRIDES_TABLE = process.env.OVERRIDES_TABLE || `${PROJECT_NAME}-courseOverrides-table`;
-const COURSES_TABLE = process.env.COURSES_TABLE || `${PROJECT_NAME}-courses-table`;
+
+function resolveTable(directEnv: string | undefined, suffix: string): string {
+  if (directEnv) return directEnv;
+  if (PROJECT_NAME) return `${PROJECT_NAME}-${suffix}`;
+  console.error(
+    [
+      "❌ Zielumgebung nicht bestimmbar: weder Tabellen-Variablen noch PROJECT_NAME gesetzt",
+      "   (und kein project in projects/yogaswap/terraform.tfvars gefunden).",
+      "",
+      "   Setze die Umgebung explizit, z. B.:",
+      '     PROJECT_NAME="<project>" npm run seed',
+      '     SWAPS_TABLE="<project>-swaps-table" OVERRIDES_TABLE="..." COURSES_TABLE="..." npm run seed',
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+
+const SWAPS_TABLE = resolveTable(process.env.SWAPS_TABLE, "swaps-table");
+const OVERRIDES_TABLE = resolveTable(process.env.OVERRIDES_TABLE, "courseOverrides-table");
+const COURSES_TABLE = resolveTable(process.env.COURSES_TABLE, "courses-table");
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "eu-central-1";
 
 const DEFAULT_TENANT_ID = "default-tenant";
@@ -155,7 +174,7 @@ async function checkTablesExist(): Promise<void> {
     console.log("🔍 Suche nach ähnlichen Tabellen...");
     
     // Versuche ähnliche Tabellen zu finden
-    const projectPrefix = PROJECT_NAME.split('-').slice(0, 2).join('-'); // z.B. "yogaswap-demo"
+    const projectPrefix = (PROJECT_NAME ?? "").split('-').slice(0, 2).join('-');
     const similarTables = await listSimilarTables(projectPrefix);
     
     if (similarTables.length > 0) {
@@ -209,7 +228,7 @@ async function checkTablesExist(): Promise<void> {
       
       console.log("");
       console.log("   2. Oder PROJECT_NAME anpassen:");
-      console.log("      PROJECT_NAME=\"yogaswap-demo\" npm run seed");
+      console.log("      PROJECT_NAME=\"<PROJECT_NAME>\" npm run seed");
       console.log("");
       console.log("   3. Oder terraform.tfvars aktualisieren mit dem korrekten Projektnamen")
     } else {
@@ -304,7 +323,7 @@ async function seedOverrides(tableName: string, items: any[]) {
   try {
     console.log("🌱 Starting seed process...");
     console.log(`   AWS Region: ${AWS_REGION}`);
-    console.log(`   Project Name: ${PROJECT_NAME}`);
+    console.log(`   Project Name: ${PROJECT_NAME ?? "(via Tabellen-Variablen)"}`);
     console.log(`   Swaps Table: ${SWAPS_TABLE}`);
     console.log(`   Overrides Table: ${OVERRIDES_TABLE}`);
     console.log(`   Courses Table: ${COURSES_TABLE}`);

@@ -1,35 +1,16 @@
 # Projekt-Konfiguration
-# Kopiere diese Datei zu terraform.tfvars und passe die Werte an
-
-# Der Bucket-Name wird automatisch zu "${project}-site"
-# z.B. mit project = "yogaswap-demo" wird der Bucket zu "yogaswap-demo-site"
+# Kopiere diese Datei zu terraform.tfvars und passe die Werte an.
 #
-# WICHTIG: S3-Bucket-Namen müssen global eindeutig sein!
-# Wenn du auf mehreren AWS-Accounts arbeitest, verwende einen eindeutigen Suffix:
-# project = "yogaswap-demo-prod"  oder
-# project = "yogaswap-demo-2025"  oder
-# project = "yogaswap-demo-karin"
+# HINWEIS (#241): Seit der Umstellung auf OpenTofu-Workspaces leitet tofu die
+# env-spezifischen Werte (project, Emails, CloudFront-Aliases, cert-ARN) aus dem
+# aktiven Workspace ab (siehe env.tf und env.<workspace>.json).
+# terraform.tfvars wird von tofu dafür NICHT mehr ausgewertet.
+#
+# Diese Datei wird derzeit nur noch von einigen Scripts gelesen, die den
+# Projektnamen daraus beziehen (Bereinigung folgt in #245). Trage daher den
+# Projektnamen deiner Zielumgebung ein – KEINEN generischen Demo-Namen, damit
+# nichts mit prod kollidiert.
 
-project = "yogaswap-demo"
+project = "<PROJECT_NAME>"
 
 region = "eu-central-1"
-
-# E-Mail-Adresse für SES (muss in AWS SES verifiziert sein)
-# In SES Sandbox-Modus: Nur verifizierte E-Mail-Adressen können E-Mails senden/empfangen
-# Für Produktion: Verlasse den Sandbox-Modus oder verifiziere deine Domain in SES
-#
-# Beispiel:
-# ses_source_email = "yogaswap@example.com"
-#
-# Wichtig: Diese E-Mail-Adresse muss in AWS SES Console verifiziert werden!
-ses_source_email = "yogaswap@example.com"
-
-# Optional: Custom Domain für CloudFront (SPA)
-# Wenn du `app.yogaswap.de` über CloudFront nutzen willst, setze:
-# - cloudfront_aliases
-# - cloudfront_acm_certificate_arn (ACM Zertifikat in us-east-1!)
-#
-# Beispiel:
-# cloudfront_aliases = ["app.yogaswap.de"]
-# cloudfront_acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-
