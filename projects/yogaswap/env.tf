@@ -14,14 +14,19 @@
 
 locals {
   # Nicht-sensible, env-spezifische Werte je Workspace.
-  # "default" = prod (yogaswap-demo, app.yogaswap.de) – Namen NICHT aendern.
+  # Hinweis zur Benennung: Das Ressourcen-Praefix (project) ist ein Implementierungs-
+  # detail; die fachliche Umgebung steckt in "environment" (Tagging, Kostenzuordnung).
+  # "default" haelt aktuell nur Demo-Daten -> Environment=demo. Der echte prod-Stack
+  # bekommt einen eigenen Workspace (yogaswap-prod, siehe #248).
   env_public = {
     default = {
       project            = "yogaswap-demo"
+      environment        = "demo"
       cloudfront_aliases = ["app.yogaswap.de"]
     }
     staging = {
       project            = "yogaswap-staging"
+      environment        = "staging"
       cloudfront_aliases = ["staging.yogaswap.de"]
     }
   }
@@ -33,8 +38,21 @@ locals {
   env_secrets = jsondecode(file("${path.module}/env.${terraform.workspace}.json"))
 
   project                        = local.env_current.project
+  environment                    = local.env_current.environment
   cloudfront_aliases             = local.env_current.cloudfront_aliases
   ses_source_email               = local.env_secrets.ses_source_email
   studio_notification_emails     = local.env_secrets.studio_notification_emails
   cloudfront_acm_certificate_arn = local.env_secrets.cloudfront_acm_certificate_arn
+
+  # Standardisierte AWS-Tags (#16). Pflicht: Project/Environment/ManagedBy.
+  # Optional (nur wenn in env.<workspace>.json gesetzt): Owner, CostCenter.
+  optional_tags = merge(
+    try(local.env_secrets.owner, "") != "" ? { Owner = local.env_secrets.owner } : {},
+    try(local.env_secrets.cost_center, "") != "" ? { CostCenter = local.env_secrets.cost_center } : {},
+  )
+  common_tags = merge({
+    Project     = "yogaswap"
+    Environment = local.environment
+    ManagedBy   = "terraform"
+  }, local.optional_tags)
 }
