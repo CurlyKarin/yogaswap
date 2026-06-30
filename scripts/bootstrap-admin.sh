@@ -3,11 +3,10 @@
 # YogaSwap Erst-Admin-Bootstrap fuer eine Umgebung (#245)
 #
 # Legt fuer eine frische Umgebung alles an, was der erste Admin braucht:
-#   1. default-tenant (seed:tenants)
-#   2. Cognito-Gruppen (admin/instructor/participant)
-#   3. Admin-User in Cognito
-#   4. UserTenantMembership (role=admin) -> ohne das kann der Admin keine
-#      Teilnehmer verwalten
+#   1. Cognito-Gruppen (admin/instructor/participant)
+#   2. Admin-User in Cognito
+#   3. default-tenant + UserTenantMembership (role=admin) via create-tenant (#53)
+#      -> ohne die Membership kann der Admin keine Teilnehmer verwalten
 #
 # Alle umgebungsabhaengigen Werte (Projektname, Cognito-Pool, Region) werden aus
 # dem OpenTofu-Workspace abgeleitet (Single Source: env.tf + tofu outputs).
@@ -55,7 +54,6 @@ if [ -z "$PROJECT_NAME" ] || [ -z "$POOL_ID" ]; then
     exit 1
 fi
 
-MEMBERSHIPS_TABLE="${PROJECT_NAME}-memberships-table"
 TENANT_ID="default-tenant"
 
 echo "🔧 Admin-Bootstrap"
@@ -65,15 +63,11 @@ echo "   Cognito:     $POOL_ID ($REGION)"
 echo "   Admin:       $NICKNAME <$EMAIL>"
 echo ""
 
-echo "1️⃣  default-tenant..."
-( cd "$PROJECT_ROOT/backend" && PROJECT_NAME="$PROJECT_NAME" npm run seed:tenants )
-echo ""
-
-echo "2️⃣  Cognito-Gruppen..."
+echo "1️⃣  Cognito-Gruppen..."
 ( cd "$PROJECT_ROOT/backend" && node scripts/createGroups.js "$POOL_ID" )
 echo ""
 
-echo "3️⃣  Admin-User..."
+echo "2️⃣  Admin-User..."
 if [ -n "$PASSWORD" ]; then
     ( cd "$PROJECT_ROOT/backend" && node scripts/createAdminUser.js "$POOL_ID" "$EMAIL" "$NICKNAME" "$PASSWORD" )
 else
@@ -81,12 +75,9 @@ else
 fi
 echo ""
 
-echo "4️⃣  Admin-Membership (role=admin)..."
-aws dynamodb put-item \
-    --table-name "$MEMBERSHIPS_TABLE" \
-    --item "{\"tenantId\":{\"S\":\"$TENANT_ID\"},\"userId\":{\"S\":\"$NICKNAME\"},\"role\":{\"S\":\"admin\"}}" \
-    --region "$REGION"
-echo "✅ Membership in $MEMBERSHIPS_TABLE gesetzt."
+echo "3️⃣  Tenant + Admin-Membership (role=admin)..."
+( cd "$PROJECT_ROOT/backend" && PROJECT_NAME="$PROJECT_NAME" AWS_REGION="$REGION" \
+    npm run create-tenant -- --tenant "$TENANT_ID" --name "YogaSwap" --admin-nickname "$NICKNAME" )
 echo ""
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
