@@ -524,21 +524,19 @@ node scripts/createAdminUser.js $USER_POOL_ID admin@example.com admin MeinPasswo
 
 `createAdminUser.js` legt nur den **Cognito-User** an. Damit der Admin im Portal Teilnehmer verwalten/einladen darf, braucht er zusätzlich (a) einen Tenant-Datensatz und (b) eine Mitgliedschaft mit `role: admin`. Bei normal eingeladenen Usern passiert das automatisch – nur der **erste Admin** muss von Hand gebootstrappt werden.
 
-```bash
-# (a) Default-Tenant anlegen (liest den Projektnamen aus terraform.tfvars)
-cd ../../backend
-npm run seed:tenants
+Beides erledigt das `create-tenant`-Script idempotent (legt den Tenant nur an, falls er fehlt, und setzt die Membership):
 
-# (b) Admin-Mitgliedschaft anlegen
+```bash
 #  <NICKNAME> = der Nickname/Username aus Schritt 2 (z.B. "admin")
-#  <PROJECT>  = Projektname aus terraform.tfvars (z.B. yogaswap-demo)
-aws dynamodb put-item \
-  --table-name <PROJECT>-memberships-table \
-  --item '{"tenantId":{"S":"default-tenant"},"userId":{"S":"<NICKNAME>"},"role":{"S":"admin"}}' \
-  --region eu-central-1
+#  <PROJECT>  = Projektname der Umgebung (z.B. yogaswap-demo, yogaswap-staging)
+cd ../../backend
+PROJECT_NAME="<PROJECT>" npm run create-tenant -- \
+  --tenant default-tenant --admin-nickname <NICKNAME>
 ```
 
-> Hinweis: Dieser manuelle Bootstrap soll künftig ein eigenes `create-tenant`-Script übernehmen (Issue #53).
+> Tipp: Für eine frische Umgebung erledigt **Schritte 14 + 15 in einem Rutsch** der Wrapper
+> `make bootstrap-admin ENV=<env> EMAIL=<mail> NICKNAME=<nick>` (Gruppen + Admin-User + Tenant + Membership).
+> Einen **weiteren** Tenant für denselben Admin legst du mit `make create-tenant ENV=<env> TENANT=<id> ADMIN=<nick>` an.
 
 **4. Login testen:**
 1. Öffne die CloudFront-URL im Browser (aus `tofu output cloudfront_domain`)

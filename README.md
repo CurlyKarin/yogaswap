@@ -308,6 +308,23 @@ make -C projects/yogaswap deploy ENV=staging   # oder ENV=default (= prod)
 
 `<env>` ist der OpenTofu-Workspace; Projektname und Cognito-Werte werden daraus abgeleitet (`env.tf`), nicht mehr aus `terraform.tfvars`.
 
+### Erst-Admin & Tenants
+
+Nach dem ersten Deploy einer Umgebung braucht der erste Admin Cognito-User **plus** Tenant + Mitgliedschaft. Das erledigt ein Wrapper in einem Schritt:
+
+```bash
+make -C projects/yogaswap bootstrap-admin ENV=staging EMAIL=admin@example.com NICKNAME=admin
+```
+
+Einen **weiteren** Tenant anlegen und einen **bereits existierenden** Admin damit verknüpfen (idempotent):
+
+```bash
+make -C projects/yogaswap create-tenant ENV=staging TENANT=studio-x ADMIN=admin
+# optional: ARGS="--name \"Studio X\" --with-participant-profile"
+```
+
+Beides leitet Projektname/Tabellen/Region aus dem Workspace ab (kein prod-Hardcode).
+
 ---
 
 ## 📦 Projekt-Setup

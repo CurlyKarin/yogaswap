@@ -11,7 +11,8 @@
 #
 # Erst-Setup einer Umgebung:
 #   make bootstrap-admin ENV=staging EMAIL=admin@example.com NICKNAME=admin
-#   make seed-tenants ENV=staging  # nur default-tenant (in bootstrap enthalten)
+#   make seed-tenants ENV=staging   # nur default-tenant (in bootstrap enthalten)
+#   make create-tenant ENV=staging TENANT=studio-x ADMIN=karin  # weiterer Tenant
 #
 # Nur-Infra (fortgeschritten, baut KEIN Frontend):
 #   make plan ENV=staging
@@ -23,7 +24,7 @@
 ENV ?= staging
 REPO_ROOT := $(abspath $(CURDIR)/../..)
 
-.PHONY: workspace plan apply show fmt validate deploy test seed-tenants bootstrap-admin
+.PHONY: workspace plan apply show fmt validate deploy test seed-tenants create-tenant bootstrap-admin
 
 workspace:
 	tofu workspace select $(ENV)
@@ -42,6 +43,14 @@ seed-tenants: workspace
 	cd $(REPO_ROOT)/backend && \
 	  PROJECT_NAME=$$(cd $(CURDIR) && echo 'local.project' | tofu console 2>/dev/null | tr -d '"') \
 	  npm run seed:tenants
+
+# Tenant anlegen + bestehenden Admin verknüpfen (#53).
+#   make create-tenant ENV=staging TENANT=studio-x ADMIN=karin \
+#     [ARGS="--name \"Studio X\" --with-participant-profile"]
+create-tenant: workspace
+	cd $(REPO_ROOT)/backend && \
+	  PROJECT_NAME=$$(cd $(CURDIR) && echo 'local.project' | tofu console 2>/dev/null | tr -d '"') \
+	  npm run create-tenant -- --tenant "$(TENANT)" --admin-nickname "$(ADMIN)" $(ARGS)
 
 # Ersten Admin der ENV anlegen (Gruppen + Admin-User + Tenant + Membership).
 #   make bootstrap-admin ENV=staging EMAIL=admin@example.com NICKNAME=admin [PASSWORD=...]
