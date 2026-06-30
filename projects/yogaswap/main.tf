@@ -10,6 +10,11 @@ terraform {
 
 provider "aws" {
   region = var.region
+
+  # Standardisierte Tags auf allen taggable Ressourcen (#16, siehe env.tf -> local.common_tags).
+  default_tags {
+    tags = local.common_tags
+  }
 }
 
 locals {

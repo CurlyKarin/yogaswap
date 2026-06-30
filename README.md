@@ -406,10 +406,13 @@ Die gebauten Dateien werden im Verzeichnis `app/build/` erstellt.
 
 Seit #241/#245 ist eine **Umgebung = ein OpenTofu-Workspace**. Projektname, S3-Bucket (`${project}-site`), Cognito usw. werden aus dem Workspace abgeleitet (`env.tf`) – du musst **kein** `terraform.tfvars` mehr pflegen.
 
-- `default` = prod (`yogaswap-demo`, `app.yogaswap.de`)
-- `staging` = Testumgebung (`yogaswap-staging`, `staging.yogaswap.de`)
+- `default` → `Environment=demo` (`yogaswap-demo`, `app.yogaswap.de`) – hält aktuell nur Demo-Daten
+- `staging` → `Environment=staging` (`yogaswap-staging`, `staging.yogaswap.de`)
+- `prod` → `Environment=prod` (`yogaswap-prod`) – eigener Stack, kommt mit #248
 
 Eine **neue** Umgebung anzulegen (eigener State, `env.<ws>.json`, Cognito-Frontend-Werte) ist in `FRESH_SETUP.md` beschrieben.
+
+AWS-Ressourcen werden über `default_tags` automatisch standardisiert getaggt (`Project`/`Environment`/`ManagedBy`, optional `Owner`/`CostCenter`) – Details in `projects/yogaswap/TAGGING.md`.
 
 ### Deployment durchführen
 
