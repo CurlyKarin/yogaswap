@@ -10,7 +10,7 @@
 # Das Script leitet ALLES aus dem Workspace ab (Single Source: env.tf):
 #   - Projektname (local.project) -> nur Anzeige/Seeds
 #   - Frontend-Build-Modus wird an den Workspace gekoppelt
-#     (default -> production-Build fuer demo, prod/staging -> vite --mode <env>)
+#     (default-Workspace -> vite --mode demo + app/.env.demo; prod/staging -> --mode <env>)
 # So kann kein prod-Frontend versehentlich nach staging gelangen (und umgekehrt).
 
 set -e
@@ -134,16 +134,22 @@ if [ "$SKIP_BUILD" = false ]; then
     echo "3️⃣  frontend (Modus an '$ENV' gekoppelt)..."
     cd "$PROJECT_ROOT/app"
     [ -d node_modules ] || npm install
-    if [ "$ENV" = "default" ]; then
-        npm run build
-    else
-        if [ ! -f ".env.$ENV" ]; then
-            echo "❌ app/.env.$ENV fehlt – der Frontend-Build für '$ENV' braucht diese Datei"
-            echo "   (sonst würden falsche Cognito-Werte eingebacken)."
-            exit 1
+
+    # OpenTofu-Workspace != Vite-Modus: default (demo) nutzt --mode demo (#253).
+    case "$ENV" in
+        default) VITE_MODE="demo" ;;
+        *)       VITE_MODE="$ENV" ;;
+    esac
+
+    if [ ! -f ".env.$VITE_MODE" ]; then
+        echo "❌ app/.env.$VITE_MODE fehlt – der Frontend-Build für '$ENV' braucht diese Datei"
+        if [ "$VITE_MODE" = "demo" ] && [ -f ".env.production" ]; then
+            echo "   Tipp: Alte Demo-Datei umbenennen: mv .env.production .env.demo"
         fi
-        npm run build -- --mode "$ENV"
+        echo "   (sonst würden falsche Cognito-Werte eingebacken)."
+        exit 1
     fi
+    npm run build -- --mode "$VITE_MODE"
     echo ""
 
     cd "$TF_DIR"

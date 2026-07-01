@@ -10,7 +10,9 @@
 
 YogaSwap ermöglicht Yogastudios in einer Multi-Tenant-Architektur die Verwaltung und den Tausch von Kursplätzen zwischen Teilnehmenden – inkl. automatischem Wartelisten-Management und rollenbasierter Zugriffskontrolle.
 
-**▶ [Live-Demo ansehen](https://app.yogaswap.de)** *(Anmeldung erforderlich)*
+**▶ [Live-Demo ansehen](https://demo.yogaswap.de)** *(Anmeldung erforderlich)*
+
+Die produktive Instanz läuft unter [app.yogaswap.de](https://app.yogaswap.de).
 
 ---
 
@@ -409,9 +411,11 @@ Die gebauten Dateien werden im Verzeichnis `app/build/` erstellt.
 
 Seit #241/#245 ist eine **Umgebung = ein OpenTofu-Workspace**. Projektname, S3-Bucket (`${project}-site`), Cognito usw. werden aus dem Workspace abgeleitet (`env.tf`) – du musst **kein** `terraform.tfvars` mehr pflegen.
 
-- `default` → `Environment=demo` (`yogaswap-demo`, `app.yogaswap.de`) – hält aktuell nur Demo-Daten
+- `default` → `Environment=demo` (`yogaswap-demo`, `demo.yogaswap.de`) – öffentliche Demo
 - `staging` → `Environment=staging` (`yogaswap-staging`, `staging.yogaswap.de`)
-- `prod` → `Environment=prod` (`yogaswap-prod`) – eigener Stack, kommt mit #248
+- `prod` → `Environment=prod` (`yogaswap-prod`, `app.yogaswap.de`)
+
+**Demo-Domain aktivieren:** `demo.yogaswap.de` braucht ein **eigenes** ACM-Zertifikat in `us-east-1` (nicht das von `app.yogaswap.de`). DNS-Validierung + CNAME auf die Demo-CloudFront-Domain – Schritt-für-Schritt in `FRESH_SETUP.md` (Abschnitt „DNS für Demo").
 
 Eine **neue** Umgebung anzulegen (eigener State, `env.<ws>.json`, Cognito-Frontend-Werte) ist in `FRESH_SETUP.md` beschrieben.
 
@@ -459,7 +463,7 @@ tofu apply
 
 Du wirst nach einer Bestätigung gefragt. Gib `yes` ein.
 
-> ⚠️ Beim manuellen Weg musst du das Frontend **selbst** im passenden Modus bauen (`cd app && npm run build:staging` für staging bzw. `npm run build` für prod), sonst landen falsche Cognito-Werte im Bundle. `make deploy` / `deploy.sh` nehmen dir das ab.
+> ⚠️ Beim manuellen Weg musst du das Frontend **selbst** im passenden Modus bauen (`npm run build:demo` / `build:staging` / `build:prod`), sonst landen falsche Cognito-Werte im Bundle. `make deploy` / `deploy.sh` nehmen dir das ab.
 
 **Wichtig**: Das Deployment kann einige Minuten dauern, da folgende Ressourcen erstellt werden:
 - DynamoDB-Tabellen (Swaps, Course Overrides, Courses)
@@ -526,10 +530,12 @@ cd ..
 ### Frontend-Änderungen
 
 1. Änderungen im `app/src/` Verzeichnis vornehmen
-2. Frontend neu bauen:
+2. Frontend neu bauen (passender Modus für die Zielumgebung):
    ```bash
    cd app
-   npm run build
+   npm run build:demo      # Demo (ENV=default)
+   npm run build:staging   # Staging
+   npm run build:prod      # prod
    cd ..
    ```
 3. Terraform anwenden (CloudFront erkennt Änderungen automatisch):
@@ -545,18 +551,18 @@ cd ..
 cd app
 VITE_COGNITO_USER_POOL_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_id) \
 VITE_COGNITO_CLIENT_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_client_id) \
-npm run build
+npm run build:demo
 cd ..
 ```
 
-Alternativ kannst du eine `.env.production` Datei erstellen (wird automatisch von Vite beim Build verwendet):
+Alternativ kannst du eine `app/.env.demo` Datei erstellen (wird von Vite beim Demo-Build verwendet):
 ```bash
 cd app
-cat > .env.production << EOF
+cat > .env.demo << EOF
 VITE_COGNITO_USER_POOL_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_id)
 VITE_COGNITO_CLIENT_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_client_id)
 EOF
-npm run build
+npm run build:demo
 cd ..
 ```
 

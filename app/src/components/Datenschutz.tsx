@@ -36,8 +36,8 @@ export default function Datenschutz() {
         <h2>4. Hosting, Anmeldung und Speicherort</h2>
         <p>
           Die Anwendung wird über Amazon CloudFront und AWS bereitgestellt und ist unter{" "}
-          <a href="https://d1cvi2br361w6h.cloudfront.net" target="_blank" rel="noopener noreferrer">
-            https://d1cvi2br361w6h.cloudfront.net
+          <a href="https://demo.yogaswap.de" target="_blank" rel="noopener noreferrer">
+            https://demo.yogaswap.de
           </a>{" "}
           erreichbar. Dabei können technisch bedingt Verbindungsdaten (IP, Zeitpunkt) an den Betreiber übermittelt werden.
         </p>

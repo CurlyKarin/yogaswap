@@ -72,14 +72,15 @@ resource "aws_cognito_user_pool_client" "yogaswap_app" {
 
   generate_secret = false
 
-  callback_urls = [
-    "https://${module.cloudfront_spa.distribution_url}",
-  "http://localhost:5173"]
+  callback_urls = concat(
+    ["https://${module.cloudfront_spa.distribution_url}", "http://localhost:5173"],
+    [for alias in local.cloudfront_aliases : "https://${alias}"],
+  )
 
-  logout_urls = [
-    "https://${module.cloudfront_spa.distribution_url}",
-    "http://localhost:5173"
-  ]
+  logout_urls = concat(
+    ["https://${module.cloudfront_spa.distribution_url}", "http://localhost:5173"],
+    [for alias in local.cloudfront_aliases : "https://${alias}"],
+  )
 }
 
 resource "aws_cognito_user_group" "admin" {
