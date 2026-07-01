@@ -5,12 +5,12 @@
 # Aufruf:
 #   ./scripts/deploy.sh <env> [--skip-build] [--skip-plan] [--auto-approve]
 #
-#   <env> = OpenTofu-Workspace, z. B. "staging" oder "default" (= prod/demo).
+#   <env> = OpenTofu-Workspace, z. B. "staging", "prod" oder "default" (= demo).
 #
 # Das Script leitet ALLES aus dem Workspace ab (Single Source: env.tf):
 #   - Projektname (local.project) -> nur Anzeige/Seeds
 #   - Frontend-Build-Modus wird an den Workspace gekoppelt
-#     (default -> production-Build, sonst -> vite --mode <env>)
+#     (default -> production-Build fuer demo, prod/staging -> vite --mode <env>)
 # So kann kein prod-Frontend versehentlich nach staging gelangen (und umgekehrt).
 
 set -e
@@ -41,7 +41,7 @@ done
 usage() {
     echo "Verwendung: $0 <env> [Optionen]"
     echo ""
-    echo "  <env>  OpenTofu-Workspace (z. B. 'staging' oder 'default' = prod/demo)"
+    echo "  <env>  OpenTofu-Workspace (z. B. 'staging', 'prod' oder 'default' = demo)"
     echo ""
     echo "Optionen:"
     echo "  --skip-build    Build überspringen (⚠️ nur sinnvoll, wenn der letzte"
@@ -51,7 +51,8 @@ usage() {
     echo ""
     echo "Beispiele:"
     echo "  $0 staging                 # staging bauen + deployen"
-    echo "  $0 default                 # prod/demo bauen + deployen"
+    echo "  $0 prod                    # prod bauen + deployen"
+    echo "  $0 default                 # demo bauen + deployen"
     echo "  $0 staging --auto-approve  # ohne Rückfrage"
 }
 

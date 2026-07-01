@@ -293,7 +293,9 @@ Installiert alle Abhängigkeiten und baut das komplette Projekt:
 Wählt den OpenTofu-Workspace (= Umgebung), baut alle Komponenten (Frontend-Build-Modus an die Umgebung gekoppelt) und deployt:
 
 ```bash
-make -C projects/yogaswap deploy ENV=staging   # oder ENV=default (= prod)
+make -C projects/yogaswap deploy ENV=staging   # Testumgebung
+make -C projects/yogaswap deploy ENV=prod      # prod (yogaswap-prod)
+make -C projects/yogaswap deploy ENV=default   # Demo (yogaswap-demo)
 # gleichwertig:
 ./scripts/deploy.sh <env> [--skip-build] [--skip-plan] [--auto-approve]
 ```
@@ -301,7 +303,8 @@ make -C projects/yogaswap deploy ENV=staging   # oder ENV=default (= prod)
 **Beispiele:**
 ```bash
 ./scripts/deploy.sh staging                 # staging bauen + deployen
-./scripts/deploy.sh default                 # prod/demo
+./scripts/deploy.sh prod                    # prod bauen + deployen
+./scripts/deploy.sh default                 # demo
 ./scripts/deploy.sh staging --skip-build    # vorhandenen (passenden) Build nutzen
 ./scripts/deploy.sh staging --auto-approve  # ohne Rückfrage (z. B. CI)
 ```
@@ -421,7 +424,9 @@ AWS-Ressourcen werden über `default_tags` automatisch standardisiert getaggt (`
 Baut alle Komponenten (Frontend-Build-Modus an die Umgebung gekoppelt) und deployt:
 
 ```bash
-make -C projects/yogaswap deploy ENV=staging   # oder ENV=default (= prod)
+make -C projects/yogaswap deploy ENV=staging   # Testumgebung
+make -C projects/yogaswap deploy ENV=prod      # prod (yogaswap-prod)
+make -C projects/yogaswap deploy ENV=default   # Demo (yogaswap-demo)
 # gleichwertig:
 ./scripts/deploy.sh staging
 ```

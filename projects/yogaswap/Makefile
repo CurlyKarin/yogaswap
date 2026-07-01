@@ -7,7 +7,8 @@
 # Normaler Alltag:
 #   make test                      # lokale Checks (Backend-Tests + FE-Typecheck)
 #   make deploy ENV=staging        # bauen + deployen nach staging
-#   make deploy ENV=default        # bauen + deployen nach prod (yogaswap-demo)
+#   make deploy ENV=prod        # bauen + deployen nach prod (yogaswap-prod)
+#   make deploy ENV=default     # bauen + deployen nach demo (yogaswap-demo)
 #
 # Erst-Setup einer Umgebung:
 #   make bootstrap-admin ENV=staging EMAIL=admin@example.com NICKNAME=admin
