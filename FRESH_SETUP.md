@@ -651,7 +651,7 @@ Du kannst dieselbe Terraform-Konfiguration für mehrere getrennte Umgebungen nut
 - **Umgebung = eigener OpenTofu-Workspace** (eigener State). Die env-spezifischen Werte (`project`, Emails, CloudFront-Aliases, cert-ARN) werden in `env.tf` **automatisch aus dem aktiven Workspace abgeleitet** – kein `-var-file` mehr nötig (#241).
 - **Tenant (Studio) = logisch innerhalb einer Umgebung** über `tenantId`/Subdomain.
 
-`default`-Workspace = prod (`project = "yogaswap-demo"`, bedient `app.yogaswap.de`). Eine zweite Umgebung (z. B. staging) wird rein additiv daneben aufgebaut, ohne prod anzufassen.
+`default`-Workspace = **Demo** (`project = "yogaswap-demo"`, bedient aktuell `app.yogaswap.de`). Der echte prod-Stack ist der Workspace **`prod`** (`yogaswap-prod`, #248). Staging und prod werden rein additiv daneben aufgebaut.
 
 **Wo liegen die Werte?**
 
@@ -688,7 +688,7 @@ VITE_COGNITO_CLIENT_ID=<staging_client_id>
 EOF
 ```
 
-`.env.production` (prod) und `.env.staging` (staging) bleiben getrennt – `make deploy` wählt automatisch den richtigen Modus. Beide Dateien sind gitignored.
+`.env.production` (demo/default), `.env.staging` und `.env.prod` bleiben getrennt – `make deploy` wählt automatisch den richtigen Modus. Alle drei Dateien sind gitignored.
 
 ### Admin-Bootstrap je Umgebung
 
@@ -712,11 +712,72 @@ make deploy ENV=staging     # baut staging-Frontend + lädt hoch
 
 ```bash
 make deploy ENV=staging     # bauen + deployen (normaler Weg)
-make deploy ENV=default     # prod (yogaswap-demo)
+make deploy ENV=prod        # prod (yogaswap-prod)
+make deploy ENV=default     # demo (yogaswap-demo)
 make plan   ENV=staging     # nur Infra-Plan (kein Frontend-Build)
 make apply  ENV=staging     # nur Infra-Apply (kein Frontend-Build)
 make test                   # lokale Checks (Backend-Tests + FE-Typecheck)
 ```
+
+### prod anlegen (#248)
+
+Frischer prod-Stack mit Präfix `yogaswap-prod` und Domain `app.yogaswap.de`. **Keine Datenmigration** vom Demo-Stack – der `default`-Workspace (Demo) bleibt parallel bestehen.
+
+**Wichtig – Domain-Konflikt:** `app.yogaswap.de` kann nur an **eine** CloudFront-Distribution hängen. Demo (`default`) nutzt sie aktuell. Vor **Schritt 11.3** (CloudFront) musst du den Alias auf demo freigeben (siehe DNS-Cutover unten) – Schritte 11.1 + 11.2 sind davon unabhängig.
+
+```bash
+cd projects/yogaswap
+
+# 1. Eigenen State (einmalig)
+tofu workspace new prod
+tofu workspace show                          # MUSS "prod" zeigen
+
+# 2. Sensible Werte (gitignored)
+cp env.prod.json.example env.prod.json       # ses_source_email, cert-ARN anpassen
+
+# 3. Infrastruktur – gestaffelt wie Schritt 11 (frische Umgebung)
+tofu workspace select prod
+tofu apply -target=module.swaps_table -target=module.course_overrides_table -target=module.courses_table -target=module.tenants_table -target=module.memberships_table -target=module.participants_table -target=module.auth_tokens_table -target=module.spa_site
+
+tofu apply -target=aws_cognito_user_pool.yogaswap -target=aws_cognito_user_pool_client.yogaswap_app -target=aws_cognito_user_group.admin -target=aws_cognito_user_group.instructor -target=aws_cognito_user_group.participant -target=aws_lambda_function.lambda -target=aws_iam_role.lambda_role -target=aws_iam_role_policy.lambda_policy -target=module.yogaswap_api
+```
+
+**4. Frontend-Cognito-Werte für prod:**
+
+```bash
+tofu workspace select prod
+cat > ../../app/.env.prod <<EOF
+VITE_COGNITO_USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
+VITE_COGNITO_CLIENT_ID=$(tofu output -raw cognito_user_pool_client_id)
+EOF
+```
+
+**5. Admin-Bootstrap + Test-Tenant (#53):**
+
+```bash
+make -C projects/yogaswap bootstrap-admin ENV=prod EMAIL=admin@example.com NICKNAME=admin
+# optional: weiteren Tenant testen
+make -C projects/yogaswap create-tenant ENV=prod TENANT=yogastudio-test ADMIN=admin
+```
+
+**6. DNS-Cutover (vor CloudFront-Schritt 11.3):**
+
+Demo muss `app.yogaswap.de` als CloudFront-Alias abgeben. Zwei Wege:
+
+- **Variante A (empfohlen):** Demo auf `demo.app.yogaswap.de` umhängen (eigenes ACM-Zertifikat + CNAME in IONOS), dann `default`-Workspace anpassen und `tofu apply` auf demo.
+- **Variante B (kurzfristig):** Demo-Alias in `env.tf` für `default` vorübergehend auf `[]` setzen und applyen – Demo läuft dann nur noch über `*.cloudfront.net`.
+
+Danach prod CloudFront:
+
+```bash
+tofu workspace select prod
+tofu apply    # Schritt 11.3: CloudFront + S3-Policy + Frontend-Upload
+# oder vollständig inkl. Build: make deploy ENV=prod
+```
+
+**7. IONOS:** CNAME `app.yogaswap.de` → prod-CloudFront-Domain (`tofu output cloudfront_domain`).
+
+**8. SES:** Für echte Teilnehmer-Mails Production-Access in der AWS-Konsole beantragen (Sandbox reicht zum Testen).
 
 ---
 

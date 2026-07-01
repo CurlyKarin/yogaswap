@@ -1,13 +1,13 @@
-# OpenTofu `project`-Rename – Plan & Risikoabschätzung (#74)
+# OpenTofu `project`-Rename – Plan & Risikoabschätzung (#74, aktualisiert #248)
 
-Der `default`-Workspace betreibt prod unter dem Ressourcen-Präfix
-`yogaswap-demo` (siehe `env.tf`, `local.project`). Vor dem ersten echten
-Studio-Rollout stellt sich die Frage, ob dieser Demo-Name umbenannt werden soll.
+Der `default`-Workspace betreibt die **Demo** unter dem Ressourcen-Präfix
+`yogaswap-demo` (siehe `env.tf`). Der echte **prod**-Stack ist ein separater
+Workspace `prod` mit Präfix `yogaswap-prod` (#248) – kein In-place-Rename.
 
-**Kurzfazit:** Ein In-place-Rename des `project`-Werts ist **kein** einfacher
-Edit – er ersetzt praktisch die gesamte Infrastruktur (inkl. Datenverlust) und
-sollte **vermieden** werden. Empfehlung: den internen Präfix `yogaswap-demo`
-beibehalten und nur über Domain/Anzeige nach außen auftreten.
+**Kurzfazit:** Ein In-place-Rename des `project`-Werts im bestehenden Stack ist
+**kein** einfacher Edit – er ersetzt praktisch die gesamte Infrastruktur (inkl.
+Datenverlust) und sollte **vermieden** werden. Stattdessen: Demo-Stack
+(`yogaswap-demo`) behalten, prod frisch als `yogaswap-prod` daneben aufbauen.
 
 ## Warum ein Rename teuer ist
 
@@ -28,15 +28,18 @@ Der `project`-Wert ist Namensbestandteil fast aller Ressourcen
 
 Kurz: Ein Rename ≈ Neuaufbau der Umgebung mit Datenmigration.
 
-## Empfohlener Weg: NICHT umbenennen
+## Empfohlener Weg (seit #248)
 
-Der Ressourcen-Präfix ist ein **Implementierungsdetail** und für Endnutzer
-unsichtbar – sie sehen nur die Domain (`app.yogaswap.de`, Studio-Subdomains).
+| Workspace | Präfix | `Environment`-Tag | Rolle |
+|---|---|---|---|
+| `default` | `yogaswap-demo` | `demo` | Demo / LinkedIn-Link |
+| `staging` | `yogaswap-staging` | `staging` | Entwicklung & Tests |
+| `prod` | `yogaswap-prod` | `prod` | Echte Studios |
 
-- `default`/prod behält `yogaswap-demo` als Präfix (kein Replace, kein Risiko).
-- Der „echte" Auftritt erfolgt über Domain + Studio-/Tenant-Namen (siehe #61).
-- Neue Umgebungen (staging etc.) bekommen ohnehin eigene Präfixe über den
-  Workspace (`env.tf`).
+Der Ressourcen-Präfix ist ein **Implementierungsdetail** – Endnutzer sehen die
+Domain (`app.yogaswap.de` für prod, ggf. `demo.app.yogaswap.de` für Demo).
+
+Setup-Anleitung: `FRESH_SETUP.md` Abschnitt „prod anlegen".
 
 ## Falls ein Rename doch zwingend ist (Migrations-Variante)
 
@@ -66,6 +69,7 @@ Status der vorhandenen Skripte (`backend/src/scripts/`):
 - `backfill_course_uids.ts`: einmaliger Backfill (Course-UIDs). Wie oben.
 - `migrate_users.ts`: einmaliges Cognito→Memberships-Migrationsskript. Für
   Go-Live eines neuen Studios nicht nötig; seit #74 env-gesteuert (fail-fast).
+- `create_tenant.ts`: Tenant + Admin-Membership idempotent anlegen (#53).
 
-→ Für den Go-Live eines **neuen** Studios werden **keine** dieser Skripte
-benötigt. Sie bleiben als einmalige Migrationswerkzeuge erhalten.
+→ Für den Go-Live eines **neuen** Studios werden **keine** Backfill-Skripte
+benötigt. `create-tenant` / `bootstrap-admin` decken den Erst-Setup ab.

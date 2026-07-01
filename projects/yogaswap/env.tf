@@ -29,6 +29,11 @@ locals {
       environment        = "staging"
       cloudfront_aliases = ["staging.yogaswap.de"]
     }
+    prod = {
+      project            = "yogaswap-prod"
+      environment        = "prod"
+      cloudfront_aliases = ["app.yogaswap.de"]
+    }
   }
 
   # Harte Absicherung: unbekannter Workspace -> klarer Fehler statt prod-Fallback.
