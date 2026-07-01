@@ -22,7 +22,8 @@ locals {
     default = {
       project            = "yogaswap-demo"
       environment        = "demo"
-      cloudfront_aliases = ["app.yogaswap.de"]
+      # Nach Cutover (#248): nur noch *.cloudfront.net. Spaeter optional demo.app.yogaswap.de (#249).
+      cloudfront_aliases = []
     }
     staging = {
       project            = "yogaswap-staging"
@@ -32,9 +33,7 @@ locals {
     prod = {
       project            = "yogaswap-prod"
       environment        = "prod"
-      # Bootstrap ohne Custom Domain (kein Konflikt mit demo auf app.yogaswap.de).
-      # Nach DNS-Cutover auf ["app.yogaswap.de"] setzen + cert-ARN in env.prod.json.
-      cloudfront_aliases = []
+      cloudfront_aliases = ["app.yogaswap.de"]
     }
   }
 
