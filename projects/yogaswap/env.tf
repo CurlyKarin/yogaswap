@@ -22,8 +22,7 @@ locals {
     default = {
       project            = "yogaswap-demo"
       environment        = "demo"
-      # Nach Cutover (#248): nur noch *.cloudfront.net. Spaeter optional demo.app.yogaswap.de (#249).
-      cloudfront_aliases = []
+      cloudfront_aliases = ["demo.yogaswap.de"]
     }
     staging = {
       project            = "yogaswap-staging"

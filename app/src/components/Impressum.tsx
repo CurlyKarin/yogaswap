@@ -24,8 +24,8 @@ export default function Impressum() {
         <h2>Angebot</h2>
         <p>
           YogaSwap ist erreichbar unter:{" "}
-          <a href="https://d1cvi2br361w6h.cloudfront.net" target="_blank" rel="noopener noreferrer">
-            https://d1cvi2br361w6h.cloudfront.net
+          <a href="https://demo.yogaswap.de" target="_blank" rel="noopener noreferrer">
+            https://demo.yogaswap.de
           </a>
         </p>
       </section>
