@@ -723,7 +723,7 @@ make test                   # lokale Checks (Backend-Tests + FE-Typecheck)
 
 Frischer prod-Stack mit Präfix `yogaswap-prod` und Domain `app.yogaswap.de`. **Keine Datenmigration** vom Demo-Stack – der `default`-Workspace (Demo) bleibt parallel bestehen.
 
-**Wichtig – Domain-Konflikt:** `app.yogaswap.de` kann nur an **eine** CloudFront-Distribution hängen. Demo (`default`) nutzt sie aktuell. Vor **Schritt 11.3** (CloudFront) musst du den Alias auf demo freigeben (siehe DNS-Cutover unten) – Schritte 11.1 + 11.2 sind davon unabhängig.
+**Wichtig – Domain-Konflikt:** `app.yogaswap.de` hängt aktuell an der Demo-Distribution. prod startet deshalb **ohne Custom Domain** (`cloudfront_aliases = []` in `env.tf`, leerer cert-ARN in `env.prod.json`) und ist über `*.cloudfront.net` erreichbar. DNS-Cutover auf `app.yogaswap.de` kommt erst am Ende (Schritt 7).
 
 ```bash
 cd projects/yogaswap
@@ -733,7 +733,7 @@ tofu workspace new prod
 tofu workspace show                          # MUSS "prod" zeigen
 
 # 2. Sensible Werte (gitignored)
-cp env.prod.json.example env.prod.json       # ses_source_email, cert-ARN anpassen
+cp env.prod.json.example env.prod.json       # ses_source_email etc.; cert-ARN LEER lassen (Bootstrap)
 
 # 3. Infrastruktur – gestaffelt wie Schritt 11 (frische Umgebung)
 tofu workspace select prod
@@ -760,22 +760,13 @@ make -C projects/yogaswap bootstrap-admin ENV=prod EMAIL=admin@example.com NICKN
 make -C projects/yogaswap create-tenant ENV=prod TENANT=yogastudio-test ADMIN=admin
 ```
 
-**6. DNS-Cutover (vor CloudFront-Schritt 11.3):**
+**6. DNS-Cutover (wenn prod auf app.yogaswap.de soll):**
 
-Demo muss `app.yogaswap.de` als CloudFront-Alias abgeben. Zwei Wege:
-
-- **Variante A (empfohlen):** Demo auf `demo.app.yogaswap.de` umhängen (eigenes ACM-Zertifikat + CNAME in IONOS), dann `default`-Workspace anpassen und `tofu apply` auf demo.
-- **Variante B (kurzfristig):** Demo-Alias in `env.tf` für `default` vorübergehend auf `[]` setzen und applyen – Demo läuft dann nur noch über `*.cloudfront.net`.
-
-Danach prod CloudFront:
-
-```bash
-tofu workspace select prod
-tofu apply    # Schritt 11.3: CloudFront + S3-Policy + Frontend-Upload
-# oder vollständig inkl. Build: make deploy ENV=prod
-```
-
-**7. IONOS:** CNAME `app.yogaswap.de` → prod-CloudFront-Domain (`tofu output cloudfront_domain`).
+1. Demo den Alias `app.yogaswap.de` abnehmen (Variante A: auf `demo.app.yogaswap.de` umhängen; Variante B: Alias in `env.tf` für `default` auf `[]` setzen + `tofu apply` auf demo).
+2. In `env.tf` für `prod`: `cloudfront_aliases = ["app.yogaswap.de"]` setzen.
+3. In `env.prod.json`: `cloudfront_acm_certificate_arn` eintragen (gleiches Zertifikat wie bisher für app.yogaswap.de).
+4. `tofu workspace select prod && tofu apply`
+5. **IONOS:** CNAME `app.yogaswap.de` → prod-CloudFront-Domain (`tofu output cloudfront_domain`).
 
 **8. SES:** Für echte Teilnehmer-Mails Production-Access in der AWS-Konsole beantragen (Sandbox reicht zum Testen).
 

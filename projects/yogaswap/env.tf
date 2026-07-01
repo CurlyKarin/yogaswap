@@ -32,7 +32,9 @@ locals {
     prod = {
       project            = "yogaswap-prod"
       environment        = "prod"
-      cloudfront_aliases = ["app.yogaswap.de"]
+      # Bootstrap ohne Custom Domain (kein Konflikt mit demo auf app.yogaswap.de).
+      # Nach DNS-Cutover auf ["app.yogaswap.de"] setzen + cert-ARN in env.prod.json.
+      cloudfront_aliases = []
     }
   }
 
