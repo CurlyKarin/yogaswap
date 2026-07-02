@@ -561,12 +561,14 @@ cd app
 cat > .env.demo << EOF
 VITE_COGNITO_USER_POOL_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_id)
 VITE_COGNITO_CLIENT_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_client_id)
+VITE_DEFAULT_TENANT_ID=default-tenant
 EOF
 npm run build:demo
 cd ..
 ```
 
 **Hinweis:** Die Region ist bereits in der User Pool ID enthalten (z.B. `eu-central-1_XXXXXXXXX`) und muss nicht separat gesetzt werden.
+`VITE_DEFAULT_TENANT_ID` steuert den initialen Tenant-Header im Frontend (`x-tenant-id`), z. B. `beharmony`.
 
 ### Backend-Änderungen (Lambda-Funktionen)
 
@@ -817,6 +819,7 @@ cd app
 cat > .env.local << EOF
 VITE_COGNITO_USER_POOL_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_id)
 VITE_COGNITO_CLIENT_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_client_id)
+VITE_DEFAULT_TENANT_ID=default-tenant
 EOF
 ```
 
@@ -825,9 +828,11 @@ Erstelle `app/.env.local` und trage die Werte ein:
 ```bash
 VITE_COGNITO_USER_POOL_ID=eu-central-1_XXXXXXXXX
 VITE_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
+VITE_DEFAULT_TENANT_ID=default-tenant
 ```
 
 **Hinweis:** Die Region ist bereits in der User Pool ID enthalten (z.B. `eu-central-1_XXXXXXXXX`) und muss nicht separat gesetzt werden.
+`VITE_DEFAULT_TENANT_ID` steuert den initialen Tenant-Header im Frontend (`x-tenant-id`), z. B. `beharmony`.
 
 **3. Frontend lokal starten:**
 ```bash

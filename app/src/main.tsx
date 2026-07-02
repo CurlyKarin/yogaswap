@@ -7,9 +7,14 @@ import App from './App';
 import { Amplify } from 'aws-amplify';
 import axios from 'axios';
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { DEFAULT_TENANT_ID } from 'shared/types';
 
 // Konfiguriere Axios für Tenant-Header
-axios.defaults.headers.common['x-tenant-id'] = 'default-tenant';
+const configuredDefaultTenantId = import.meta.env.VITE_DEFAULT_TENANT_ID?.trim();
+axios.defaults.headers.common['x-tenant-id'] =
+  configuredDefaultTenantId && configuredDefaultTenantId.length > 0
+    ? configuredDefaultTenantId
+    : DEFAULT_TENANT_ID;
 
 // Fuegt fuer alle API-Requests den aktuellen Cognito-Token hinzu.
 axios.interceptors.request.use(async (config) => {
