@@ -402,8 +402,11 @@ cd ../../app
 cat > .env.demo <<EOF
 VITE_COGNITO_USER_POOL_ID=<cognito_user_pool_id>
 VITE_COGNITO_CLIENT_ID=<cognito_user_pool_client_id>
+VITE_DEFAULT_TENANT_ID=default-tenant
 EOF
 ```
+
+`VITE_DEFAULT_TENANT_ID` legt fest, welcher Tenant im Frontend standardmäßig als `x-tenant-id` gesetzt wird (z. B. `beharmony`).
 
 **3. Frontend neu bauen und vor dem Deploy prüfen:**
 ```bash
@@ -685,6 +688,7 @@ Beim allerersten Apply einer frischen Umgebung kann die S3/CloudFront-Abhängigk
 cat > app/.env.staging <<EOF
 VITE_COGNITO_USER_POOL_ID=<staging_pool_id>
 VITE_COGNITO_CLIENT_ID=<staging_client_id>
+VITE_DEFAULT_TENANT_ID=default-tenant
 EOF
 ```
 
@@ -749,6 +753,7 @@ tofu workspace select prod
 cat > ../../app/.env.prod <<EOF
 VITE_COGNITO_USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
 VITE_COGNITO_CLIENT_ID=$(tofu output -raw cognito_user_pool_client_id)
+VITE_DEFAULT_TENANT_ID=default-tenant
 EOF
 ```
 
