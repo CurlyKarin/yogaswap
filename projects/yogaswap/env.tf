@@ -30,9 +30,11 @@ locals {
       cloudfront_aliases = ["staging.yogaswap.de"]
     }
     prod = {
-      project            = "yogaswap-prod"
-      environment        = "prod"
-      cloudfront_aliases = ["app.yogaswap.de"]
+      project     = "yogaswap-prod"
+      environment = "prod"
+      # Apex + Wildcard (#249). ACM-Zertifikat muss BEIDES abdecken:
+      # Subject = app.yogaswap.de, SAN = *.app.yogaswap.de (oder umgekehrt).
+      cloudfront_aliases = ["app.yogaswap.de", "*.app.yogaswap.de"]
     }
   }
 
@@ -42,9 +44,19 @@ locals {
   # Sensible Werte pro Workspace aus gitignored JSON (nicht im Repo).
   env_secrets = jsondecode(file("${path.module}/env.${terraform.workspace}.json"))
 
-  project                        = local.env_current.project
-  environment                    = local.env_current.environment
-  cloudfront_aliases             = local.env_current.cloudfront_aliases
+  project            = local.env_current.project
+  environment        = local.env_current.environment
+  cloudfront_aliases = local.env_current.cloudfront_aliases
+  # Apex (ohne Wildcard) fuer BASE_URL / Cognito-Callbacks.
+  cloudfront_apex_aliases = [
+    for alias in local.cloudfront_aliases : alias if !startswith(alias, "*.")
+  ]
+  cloudfront_apex_alias = try(local.cloudfront_apex_aliases[0], "")
+  # Parent-Host aus Wildcard-Alias (*.app.yogaswap.de → app.yogaswap.de); leer in demo/staging.
+  tenant_base_host = try(
+    [for alias in local.cloudfront_aliases : trimprefix(alias, "*.") if startswith(alias, "*.")][0],
+    "",
+  )
   ses_source_email               = local.env_secrets.ses_source_email
   studio_notification_emails     = local.env_secrets.studio_notification_emails
   cloudfront_acm_certificate_arn = local.env_secrets.cloudfront_acm_certificate_arn

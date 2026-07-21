@@ -785,6 +785,45 @@ make -C projects/yogaswap create-tenant ENV=prod TENANT=yogastudio-test ADMIN=ad
 
 **DNS-Cutover prod (`app.yogaswap.de`):** Bereits erledigt (#248). Jede Subdomain darf nur an **eine** CloudFront-Distribution hängen.
 
+### Multi-Tenant Subdomains (#249)
+
+**Regel:** Apex `app.yogaswap.de` → `default-tenant` (Fallback). Studios nur unter `{tenantId}.app.yogaswap.de`.
+
+**1. ACM-Zertifikat (us-east-1)** – muss Apex **und** Wildcard abdecken:
+
+```bash
+aws acm request-certificate \
+  --domain-name app.yogaswap.de \
+  --subject-alternative-names "*.app.yogaswap.de" \
+  --validation-method DNS \
+  --region us-east-1
+```
+
+IONOS: beide Validierungs-CNAMEs eintragen, warten bis **Issued**. ARN in `env.prod.json` → `cloudfront_acm_certificate_arn` setzen (ersetzt das alte Zertifikat, das nur `app.yogaswap.de` hatte).
+
+**2. DNS (IONOS):** Wildcard-CNAME
+
+| Name | Typ | Ziel |
+|------|-----|------|
+| `*` (bzw. `*.app` je nach UI) | CNAME | prod-CloudFront (`tofu workspace select prod && tofu output cloudfront_domain`) |
+
+Bestehendes `app` → CloudFront bleibt.
+
+**3. Frontend `app/.env.prod`:**
+
+```bash
+VITE_DEFAULT_TENANT_ID=default-tenant
+VITE_MULTI_TENANT_PARENT_HOST=app.yogaswap.de
+```
+
+**4. Deploy:** `make -C projects/yogaswap deploy ENV=prod`
+
+`env.tf` setzt CloudFront-Aliases `app.yogaswap.de` + `*.app.yogaswap.de` und Lambda-Env `TENANT_BASE_HOST` für tenant-spezifische Mail-Links.
+
+**Hinweis Cognito:** Callback-URLs unterstützen keine Wildcards. Login per SRP (Amplify) funktioniert trotzdem; Hosted-UI-Redirects pro Subdomain wären ein Folgethema.
+
+**Cleanup:** Test-Tenant `yogastudio-test` nach dem Smoke-Test wieder entfernen.
+
 **8. SES:** Für echte Teilnehmer-Mails Production-Access in der AWS-Konsole beantragen (Sandbox reicht zum Testen).
 
 ---

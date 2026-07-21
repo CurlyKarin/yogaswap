@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
+import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import {
   deriveVisibleDates,
   findNextUpcomingOccurrenceIso,
@@ -829,8 +830,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (plannedEndNotifyChange && plannedEndNotifyDateIso) {
       const participantsTable = process.env.PARTICIPANTS_TABLE;
       const sesSourceEmail = process.env.SES_SOURCE_EMAIL;
-      const baseUrlEnv = process.env.BASE_URL || "";
-      const loginUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : baseUrlEnv ? `https://${baseUrlEnv}` : undefined;
+      const baseUrlEnv = resolveAppBaseUrlForTenant(tenantId);
+      const loginUrl = baseUrlEnv || undefined;
       const participantUserIds = nextParticipants
         .map((entry) => entry.S ?? "")
         .filter((entry) => entry.length > 0);
@@ -912,7 +913,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const participantsTable = process.env.PARTICIPANTS_TABLE;
     const sesSourceEmail = process.env.SES_SOURCE_EMAIL;
-    const baseUrlEnv = process.env.BASE_URL || "";
+    const baseUrlEnv = resolveAppBaseUrlForTenant(tenantId);
     const mailCourseName = nextName;
     const mailWeekday = nextWeekday;
     const mailTime = nextTime;

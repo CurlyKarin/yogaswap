@@ -3,6 +3,7 @@ import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
+import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import crypto from "crypto";
 import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
 
@@ -18,8 +19,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const authTokensTable = process.env.AUTH_TOKENS_TABLE;
   const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
   const mailLocale = process.env.MAIL_LOCALE || "de";
-  const baseUrlEnv = process.env.BASE_URL || "";
-  const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
 
   if (!participantsTable || !membershipsTable || !authTokensTable) {
     return {
@@ -110,6 +109,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     );
 
+    const baseUrl = resolveAppBaseUrlForTenant(tenantId);
     const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(
       cognitoUsername,
     )}&email=${encodeURIComponent(email)}`;

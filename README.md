@@ -413,7 +413,9 @@ Seit #241/#245 ist eine **Umgebung = ein OpenTofu-Workspace**. Projektname, S3-B
 
 - `default` → `Environment=demo` (`yogaswap-demo`, `demo.yogaswap.de`) – öffentliche Demo
 - `staging` → `Environment=staging` (`yogaswap-staging`, `staging.yogaswap.de`)
-- `prod` → `Environment=prod` (`yogaswap-prod`, `app.yogaswap.de`)
+- `prod` → `Environment=prod` (`yogaswap-prod`, `app.yogaswap.de` + `*.app.yogaswap.de`)
+
+**Multi-Tenant (#249):** Studios unter `{tenant}.app.yogaswap.de`. Apex `app.yogaswap.de` → `default-tenant` (Fallback, kein Studio). Frontend: `VITE_MULTI_TENANT_PARENT_HOST=app.yogaswap.de` in `app/.env.prod`. ACM-Zertifikat muss Apex **und** Wildcard abdecken – Details in `FRESH_SETUP.md`.
 
 **Demo-Domain aktivieren:** `demo.yogaswap.de` braucht ein **eigenes** ACM-Zertifikat in `us-east-1` (nicht das von `app.yogaswap.de`). DNS-Validierung + CNAME auf die Demo-CloudFront-Domain – Schritt-für-Schritt in `FRESH_SETUP.md` (Abschnitt „DNS für Demo").
 

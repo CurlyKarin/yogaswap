@@ -11,6 +11,7 @@ import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } fro
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
+import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { buildInviteMail, buildReactivationMail } from "../shared/templates/auth/authMailTemplates";
 
 const cognito = new CognitoIdentityProviderClient({});
@@ -310,8 +311,7 @@ export const handler = async (event: any) => {
       // If an already registered user is reactivated without passing email in request,
       // use the existing profile email to notify about reactivation.
       if (reactivated && existingEmail?.trim()) {
-        const baseUrlEnv = process.env.BASE_URL || "";
-        const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+        const baseUrl = resolveAppBaseUrlForTenant(tenantId);
         const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
         const reactivationMail = buildReactivationMail({
           locale: mailLocale,
@@ -545,8 +545,7 @@ export const handler = async (event: any) => {
   }
 
   // Build link (only nickname in the URL)
-  const baseUrlEnv = process.env.BASE_URL || "";
-  const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+  const baseUrl = resolveAppBaseUrlForTenant(tenantId);
   const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
   const nowSeconds = Math.floor(Date.now() / 1000);
 

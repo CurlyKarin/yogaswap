@@ -10,6 +10,7 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { notifyStudioTermCancelled } from "../shared/notifications/termAbsenceNotifications";
 import { resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { getTenantContext } from "../shared/tenantContext";
+import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 
 const client = dynamoClient;
 const ses = new SESClient({});
@@ -374,7 +375,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     let mailFailedCount = 0;
     if (participantsTable && sesSourceEmail && notifyUserList.length > 0) {
       try {
-        const baseUrl = process.env.BASE_URL || "";
+        const baseUrl = resolveAppBaseUrlForTenant(tenantId);
         const mailSummary = await notifyStudioTermCancelled(client, {
           tenantId,
           participantUserIds: notifyUserList,
