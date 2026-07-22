@@ -4,7 +4,6 @@ import React from "react";
 import { afterEach } from "vitest";
 import CourseCard from "./CourseCard";
 import type { Course, CourseDateOverride, Swap, User } from "shared/types";
-import { swapOptionKey } from "../lib/dates";
 
 const baseCourse: Course = {
   tenantId: "default-tenant",
@@ -112,6 +111,7 @@ describe("CourseCard", () => {
     expect(visibleLabel.tagName).toBe("LABEL");
     expect(visibleLabel).toHaveAttribute("for", select.id);
     expect(visibleLabel).toHaveAttribute("aria-label", "Termin für Yoga Basic");
+    expect(select).toHaveClass("term-date-select");
   });
 
   it("verknüpft Teilnehmer-Chips mit beschrifteter Liste", () => {
@@ -390,7 +390,7 @@ describe("CourseCard", () => {
     expect(screen.queryByText("carol")).not.toBeInTheDocument();
     const select = screen.getByRole("combobox", { name: /termin für yoga basic/i });
     expect(select).toBeDisabled();
-    expect(screen.getByRole("option", { name: /^—$/ })).toBeInTheDocument();
+    expect(select).toHaveTextContent("—");
   });
 
   it("kennzeichnet vom Studio abgesagte Termine in der Wochenansicht", () => {
@@ -411,6 +411,7 @@ describe("CourseCard", () => {
     expect(screen.getByText(/vom Studio abgesagt/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Kapazität entfällt")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Termin absagen/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("combobox", { name: /termin für yoga basic/i }));
     expect(screen.getByRole("option", { name: /6\/16\/2099 \(entfällt\)/i })).toBeInTheDocument();
   });
 
@@ -777,8 +778,10 @@ describe("CourseCard", () => {
 
     expect(screen.getByRole("dialog", { name: /Tauschanfrage starten, Yoga Basic, 16\.06\.2099/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Tauschanfrage starten/i })).toBeInTheDocument();
-    expect(document.querySelector(`option[value="${swapOptionKey(3, new Date(2099, 5, 21, 10, 0, 0))}"]`)).toBeInTheDocument();
-    expect(document.querySelector(`option[value="${swapOptionKey(2, new Date(2099, 5, 20, 10, 0, 0))}"]`)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("combobox", { name: /Freien Termin auswählen/i }));
+    // Kurs 2 ist bereits angefragt → nur Kurs 3 bleibt als freie Option
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(screen.queryByRole("option", { name: /Yoga Abend/i })).not.toBeInTheDocument();
   });
 });
 

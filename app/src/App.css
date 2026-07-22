@@ -5,6 +5,8 @@ body {
   display: block;
   min-height: 100vh;
   background-color: #f5f5f5;
+  color: #213547;
+  color-scheme: only light;
   font-family: Arial, sans-serif;
   overflow-x: hidden;
 }
@@ -519,19 +521,125 @@ body {
   min-width: 0;
 }
 
-.course-row > select {
+.course-row > select,
+.course-row > .term-date-select-wrap {
   flex: 0 1 auto;
   width: auto;
   max-width: 100%;
   min-width: 0;
 }
 
-.course-card select {
+/*
+ * Custom term picker (not native <select>): OS dark mode cannot restyle
+ * native option popups on macOS; keep trigger + list fully light-themed.
+ */
+.term-date-select-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.term-date-select-wrap.dialog-field {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.term-date-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   color: #1a1a1a;
+  background-color: #ffffff;
   -webkit-text-fill-color: currentColor;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 0.35em 0.5em;
   font: inherit;
   font-size: 1rem;
+  font-weight: 400;
   line-height: 1.4;
+  text-align: left;
+  max-width: 100%;
+  cursor: pointer;
+  color-scheme: only light;
+}
+
+.term-date-select-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.term-date-select-chevron {
+  flex-shrink: 0;
+  color: #6b7280;
+  transition: transform 0.15s ease;
+}
+
+.term-date-select-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.term-date-select-wrap.dialog-field > .term-date-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem;
+  font-size: 16px;
+}
+
+.term-date-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.term-date-select-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-width: min(100vw - 32px, 360px);
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background-color: #ffffff;
+  color: #1a1a1a;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  color-scheme: only light;
+}
+
+.term-date-select-option {
+  padding: 0.4em 0.65em;
+  cursor: pointer;
+  white-space: nowrap;
+  color: #1a1a1a;
+  background-color: #ffffff;
+}
+
+.term-date-select-option.is-active,
+.term-date-select-option:hover:not(.is-disabled) {
+  background-color: #f3f4f6;
+}
+
+.term-date-select-option[aria-selected="true"] {
+  background-color: #eef3ff;
+}
+
+.term-date-select-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .course-card-footer {
@@ -1394,6 +1502,116 @@ a:focus-visible {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.75rem 1rem;
+}
+
+/* Match TermDateSelect / dialog control size — bare inputs inside labeled
+ * dialog-field wrappers otherwise stay browser-default (too small on mobile). */
+.studio-settings-grid > .dialog-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.studio-settings-grid > .dialog-field > .dialog-field-label,
+.studio-settings-grid > .dialog-field > .studio-field-label-block {
+  width: 100%;
+}
+
+.studio-settings-grid > .dialog-field > input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  color: #1a1a1a;
+  background-color: #ffffff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  color-scheme: only light;
+}
+
+.studio-settings-grid > .dialog-field > input:disabled {
+  opacity: 0.6;
+}
+
+.studio-number-step {
+  display: inline-flex;
+  align-items: stretch;
+  width: auto;
+  max-width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color-scheme: only light;
+  overflow: hidden;
+}
+
+.studio-number-step-input {
+  width: 5.5rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 0;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  color: #1a1a1a;
+  background-color: #ffffff;
+  -moz-appearance: textfield;
+}
+
+.studio-number-step-input::-webkit-outer-spin-button,
+.studio-number-step-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.studio-number-step-input:disabled {
+  opacity: 0.6;
+}
+
+.studio-number-step-buttons {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #ddd;
+  flex-shrink: 0;
+}
+
+.studio-number-step-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  flex: 1;
+  min-height: 1.15rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: #f9fafb;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.studio-number-step-btn + .studio-number-step-btn {
+  border-top: 1px solid #ddd;
+}
+
+.studio-number-step-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: transparent;
+}
+
+.studio-number-step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .studio-field-label-block {

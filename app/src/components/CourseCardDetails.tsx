@@ -20,6 +20,7 @@ import {
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import type { CourseCardTermState } from "./useCourseCardTermState";
 import GuestSeatControls from "./GuestSeatControls";
+import TermDateSelect from "./TermDateSelect";
 
 type CourseCardDetailsProps = {
   course: Course;
@@ -189,45 +190,42 @@ export default function CourseCardDetails({
         >
           Termine
         </label>
-        <select
+        <TermDateSelect
           id={termSelectId}
           value={termSelectDisabled ? "" : selectedDate}
-          onChange={(e) => {
-            const next = new Date(e.target.value);
-            onSelectedDateChange(e.target.value, next);
-          }}
           disabled={termSelectDisabled}
           aria-describedby={termSelectDisabled ? termSelectDisabledHintId : undefined}
-        >
-          {showLastTermInSelect && lastOccurrenceDate ? (
-            <option value={lastOccurrenceDate.toISOString()}>
-              {lastOccurrenceDate.toLocaleDateString()}
-              {lastTermOptionSuffix()}
-            </option>
-          ) : hasNoUpcomingDates ? (
-            <option value="">—</option>
-          ) : (
-            (includePastTermsInSelect ? dates : dates.filter((d) => d >= new Date())).map(
-              (date, index) => {
-                const dateIso = toDateKey(date);
-                const excludedLabel = isExcludedCourseDate(course, dateIso)
-                  ? excludedTermOptionSuffix()
-                  : "";
-                const lastTermLabel =
-                  showLastTermMarkerInSelect && dateIso === lastActualOccurrenceIso
-                    ? lastTermOptionSuffix()
-                    : "";
-                return (
-                  <option key={index} value={date.toISOString()}>
-                    {date.toLocaleDateString()}
-                    {excludedLabel}
-                    {lastTermLabel}
-                  </option>
-                );
-              },
-            )
-          )}
-        </select>
+          options={
+            showLastTermInSelect && lastOccurrenceDate
+              ? [
+                  {
+                    value: lastOccurrenceDate.toISOString(),
+                    label: `${lastOccurrenceDate.toLocaleDateString()}${lastTermOptionSuffix()}`,
+                  },
+                ]
+              : hasNoUpcomingDates
+                ? [{ value: "", label: "—", disabled: true }]
+                : (includePastTermsInSelect ? dates : dates.filter((d) => d >= new Date())).map(
+                    (date) => {
+                      const dateIso = toDateKey(date);
+                      const excludedLabel = isExcludedCourseDate(course, dateIso)
+                        ? excludedTermOptionSuffix()
+                        : "";
+                      const lastTermLabel =
+                        showLastTermMarkerInSelect && dateIso === lastActualOccurrenceIso
+                          ? lastTermOptionSuffix()
+                          : "";
+                      return {
+                        value: date.toISOString(),
+                        label: `${date.toLocaleDateString()}${excludedLabel}${lastTermLabel}`,
+                      };
+                    },
+                  )
+          }
+          onChange={(nextValue) => {
+            onSelectedDateChange(nextValue, new Date(nextValue));
+          }}
+        />
       </div>
 
       {showGuestControls && (

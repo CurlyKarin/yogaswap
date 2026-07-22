@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import CourseSwapModal from "./CourseSwapModal";
 import type { Course } from "shared/types";
-import { swapOptionKey } from "../lib/dates";
 import { DIRECT_SWAP_WARNINGS, SWAP_REQUEST_WARNINGS } from "../lib/swapRequestWarnings";
 
 const baseCourse: Course = {
@@ -113,6 +112,12 @@ describe("CourseSwapModal", () => {
     expect(screen.getByRole("button", { name: /Hilfe: Freie Tauschtermine/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Hilfe: Warteliste im Tauschdialog/i })).toBeInTheDocument();
 
+    const termSelects = screen.getAllByRole("combobox");
+    expect(termSelects.length).toBeGreaterThanOrEqual(1);
+    for (const select of termSelects) {
+      expect(select).toHaveClass("term-date-select");
+    }
+
     const freeSlotsHint = screen.getByRole("button", { name: /Hilfe: Freie Tauschtermine/i });
     fireEvent.click(freeSlotsHint);
     expect(screen.getByRole("region", { name: /Freie Tauschtermine/i })).toHaveTextContent(
@@ -154,9 +159,8 @@ describe("CourseSwapModal", () => {
 
     expect(screen.queryByRole("note", { name: /Hinweise vor dem Tausch/i })).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: swapOptionKey(2, freeTargetDate) },
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: /Freien Termin auswählen/i }));
+    fireEvent.click(screen.getAllByRole("option")[0]);
 
     const notice = screen.getByRole("note", { name: /Hinweise vor dem Tausch/i });
     for (const warning of DIRECT_SWAP_WARNINGS) {
@@ -171,9 +175,8 @@ describe("CourseSwapModal", () => {
       waitlistDates: [{ course: alternativeCourse, date: waitlistDate }],
     });
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: swapOptionKey(2, waitlistDate) },
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: /Belegten Termin für Warteliste wählen/i }));
+    fireEvent.click(screen.getAllByRole("option")[0]);
 
     const notice = screen.getByRole("note", { name: /Hinweise vor dem Tausch/i });
     for (const warning of SWAP_REQUEST_WARNINGS) {
@@ -186,9 +189,8 @@ describe("CourseSwapModal", () => {
   it("ruft onConfirmFree nach Terminauswahl auf", () => {
     const { onConfirmFree, onClose } = renderSwapModal();
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: swapOptionKey(2, freeTargetDate) },
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: /Freien Termin auswählen/i }));
+    fireEvent.click(screen.getAllByRole("option")[0]);
     fireEvent.click(screen.getByRole("button", { name: /Bestätigen/i }));
 
     expect(onConfirmFree).toHaveBeenCalledWith(2, "2099-06-20");
@@ -211,10 +213,8 @@ describe("CourseSwapModal", () => {
       ],
     });
 
-    const waitlistSelect = screen.getAllByRole("combobox")[0];
-    fireEvent.change(waitlistSelect, {
-      target: { value: swapOptionKey(3, sharedDate) },
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: /Belegten Termin für Warteliste wählen/i }));
+    fireEvent.click(screen.getByRole("option", { name: /Yoga Mittag/i }));
     fireEvent.click(screen.getByRole("button", { name: /Bestätigen/i }));
 
     expect(onConfirmWaitlist).toHaveBeenCalledWith(3, "2099-06-20");
