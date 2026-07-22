@@ -8,6 +8,7 @@ import {
   validateStudioSettingsPatch,
 } from "shared/tenantSettings";
 import { updateTenantSettings } from "../api/tenantSettings";
+import NumberStepInput from "./NumberStepInput";
 
 function FieldLabelWithTooltip({ children, tooltip }: { children: ReactNode; tooltip: string }) {
   const hintId = useId();
@@ -132,12 +133,11 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           <FieldLabelWithTooltip tooltip="Tage nach Kursende, in denen Teilnehmer noch tauschen dürfen. Sollte zur spätesten Tausch-Offset-Zahl passen (oft gleiche Anzahl Tage).">
             Nachlauf nach Kursende (Tage)
           </FieldLabelWithTooltip>
-          <input
-            type="number"
+          <NumberStepInput
             min={0}
             max={90}
             value={inactiveGraceDays}
-            onChange={(e) => setInactiveGraceDays(e.target.value)}
+            onChange={setInactiveGraceDays}
             disabled={saving}
           />
         </label>
@@ -146,12 +146,11 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           <FieldLabelWithTooltip tooltip="Tage relativ zum gewählten Kurstermin: frühestens so viele Tage vor dem Termin ist ein Tausch möglich.">
             Tauschfenster: frühestens (Tage)
           </FieldLabelWithTooltip>
-          <input
-            type="number"
+          <NumberStepInput
             min={-90}
             max={90}
             value={minOffsetDays}
-            onChange={(e) => setMinOffsetDays(e.target.value)}
+            onChange={setMinOffsetDays}
             disabled={saving}
           />
         </label>
@@ -160,12 +159,11 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           <FieldLabelWithTooltip tooltip="Tage relativ zum gewählten Kurstermin: spätestens so viele Tage vor dem Termin (negativ = nach dem Termin).">
             Tauschfenster: spätestens (Tage)
           </FieldLabelWithTooltip>
-          <input
-            type="number"
+          <NumberStepInput
             min={-90}
             max={90}
             value={maxOffsetDays}
-            onChange={(e) => setMaxOffsetDays(e.target.value)}
+            onChange={setMaxOffsetDays}
             disabled={saving}
           />
         </label>
@@ -174,13 +172,12 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           <FieldLabelWithTooltip tooltip="Ab diesem Zeitpunkt vor Kursbeginn können Teilnehmer:innen nur noch kurzfristig absagen (Platz bleibt belegt), aber keinen neuen Tausch mehr vom Termin starten.">
             Kurzfrist-Absage: Minuten vor Terminbeginn
           </FieldLabelWithTooltip>
-          <input
-            type="number"
+          <NumberStepInput
             min={0}
             max={1440}
             step={15}
             value={cancellationSwapCutoffMinutes}
-            onChange={(e) => setCancellationSwapCutoffMinutes(e.target.value)}
+            onChange={setCancellationSwapCutoffMinutes}
             disabled={saving}
           />
         </label>
@@ -189,12 +186,11 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           <FieldLabelWithTooltip tooltip="Für durchlaufende Kurse: legt studio-weit fest, welche Termine ab heute Teilnehmer sehen und tauschen dürfen und innerhalb welcher Frist bei aktivem Kurs nur Absage statt Ausschließen möglich ist. Vergrößerung ist jederzeit möglich. Beim Verkleinern werden weniger Termine sichtbar; Speichern ist nur möglich, wenn im betroffenen Zeitraum keine offenen Tauschanfragen und keine gebuchten Rollkurs-Termine mehr liegen — diese vorher abschließen oder abbrechen.">
             Planungs- und Sichtfenster für Durchlaufende Kurse (Wochen)
           </FieldLabelWithTooltip>
-          <input
-            type="number"
+          <NumberStepInput
             min={1}
             max={52}
             value={rollingPlanningHorizonWeeks}
-            onChange={(e) => setRollingPlanningHorizonWeeks(e.target.value)}
+            onChange={setRollingPlanningHorizonWeeks}
             disabled={saving}
             aria-label="Planungs- und Sichtfenster für Durchlaufende Kurse in Wochen"
           />

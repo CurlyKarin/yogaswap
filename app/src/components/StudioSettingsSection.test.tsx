@@ -75,6 +75,13 @@ describe("StudioSettingsSection", () => {
     expect(screen.getByRole("textbox", { name: /studioname/i })).toBeInTheDocument();
   });
 
+  it("erhöht Kurzfrist-Absage in 15-Minuten-Schritten", () => {
+    render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expect(getCutoffInput()).toHaveValue(60);
+    fireEvent.click(screen.getByRole("button", { name: /Erhöhen um 15/i }));
+    expect(getCutoffInput()).toHaveValue(75);
+  });
+
   it("zeigt Validierungsfehler bei ungültigem Cutoff-Wert", async () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
     fireEvent.change(getCutoffInput(), { target: { value: "1500" } });

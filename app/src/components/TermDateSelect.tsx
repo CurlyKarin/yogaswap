@@ -6,6 +6,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { ChevronDown } from "lucide-react";
 
 export type TermDateSelectOption = {
   value: string;
@@ -140,7 +141,12 @@ const TermDateSelect = forwardRef<HTMLButtonElement, TermDateSelectProps>(functi
         onClick={toggleOpen}
         onKeyDown={onTriggerKeyDown}
       >
-        {displayLabel}
+        <span className="term-date-select-label">{displayLabel}</span>
+        <ChevronDown
+          className={["term-date-select-chevron", open ? "is-open" : ""].filter(Boolean).join(" ")}
+          size={16}
+          aria-hidden="true"
+        />
       </button>
       {open && !disabled && (
         <ul

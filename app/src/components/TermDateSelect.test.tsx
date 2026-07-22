@@ -24,9 +24,11 @@ describe("TermDateSelect", () => {
 
     const trigger = screen.getByRole("combobox", { name: /Termin wählen/i });
     expect(trigger).toHaveTextContent("Bitte wählen…");
+    expect(trigger.querySelector(".term-date-select-chevron")).toBeTruthy();
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 
     fireEvent.click(trigger);
+    expect(trigger.querySelector(".term-date-select-chevron")).toHaveClass("is-open");
     const listbox = screen.getByRole("listbox");
     expect(listbox).toHaveClass("term-date-select-list");
     expect(screen.getByRole("option", { name: "Termin A" })).toBeInTheDocument();
