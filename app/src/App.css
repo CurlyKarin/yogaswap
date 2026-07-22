@@ -5,6 +5,8 @@ body {
   display: block;
   min-height: 100vh;
   background-color: #f5f5f5;
+  color: #213547;
+  color-scheme: only light;
   font-family: Arial, sans-serif;
   overflow-x: hidden;
 }
@@ -519,19 +521,104 @@ body {
   min-width: 0;
 }
 
-.course-row > select {
+.course-row > select,
+.course-row > .term-date-select-wrap {
   flex: 0 1 auto;
   width: auto;
   max-width: 100%;
   min-width: 0;
 }
 
-.course-card select {
+/*
+ * Custom term picker (not native <select>): OS dark mode cannot restyle
+ * native option popups on macOS; keep trigger + list fully light-themed.
+ */
+.term-date-select-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.term-date-select-wrap.dialog-field {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.term-date-select {
   color: #1a1a1a;
+  background-color: #ffffff;
   -webkit-text-fill-color: currentColor;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 0.35em 0.5em;
   font: inherit;
   font-size: 1rem;
+  font-weight: 400;
   line-height: 1.4;
+  text-align: left;
+  max-width: 100%;
+  cursor: pointer;
+  color-scheme: only light;
+}
+
+.term-date-select-wrap.dialog-field > .term-date-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem;
+  font-size: 16px;
+}
+
+.term-date-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.term-date-select-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-width: min(100vw - 32px, 360px);
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background-color: #ffffff;
+  color: #1a1a1a;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  color-scheme: only light;
+}
+
+.term-date-select-option {
+  padding: 0.4em 0.65em;
+  cursor: pointer;
+  white-space: nowrap;
+  color: #1a1a1a;
+  background-color: #ffffff;
+}
+
+.term-date-select-option.is-active,
+.term-date-select-option:hover:not(.is-disabled) {
+  background-color: #f3f4f6;
+}
+
+.term-date-select-option[aria-selected="true"] {
+  background-color: #eef3ff;
+}
+
+.term-date-select-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .course-card-footer {

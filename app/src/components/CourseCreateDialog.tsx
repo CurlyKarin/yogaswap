@@ -2,6 +2,7 @@ import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
 import CourseModalFrame from "./CourseModalFrame";
 import CourseCapacityFields from "./CourseCapacityFields";
+import TermDateSelect from "./TermDateSelect";
 
 type CourseCreateState = {
   name: string;
@@ -67,19 +68,17 @@ export default function CourseCreateDialog({
             disabled={saving}
             className="dialog-field"
           />
-          <select
+          <TermDateSelect
             aria-label="Wochentag"
             value={state.weekday}
-            onChange={(event) => onChange({ ...state, weekday: event.target.value })}
             disabled={saving}
             className="dialog-field"
-          >
-            {weekdayOptions.map((weekday) => (
-              <option key={weekday.value} value={weekday.value}>
-                {weekday.label}
-              </option>
-            ))}
-          </select>
+            options={weekdayOptions.map((weekday) => ({
+              value: weekday.value,
+              label: weekday.label,
+            }))}
+            onChange={(weekday) => onChange({ ...state, weekday })}
+          />
           <input
             type="time"
             aria-label="Uhrzeit"
@@ -95,37 +94,33 @@ export default function CourseCreateDialog({
             onCapacityChange={(capacity) => onChange({ ...state, capacity })}
             onOverbookLimitChange={(overbookLimit) => onChange({ ...state, overbookLimit })}
           />
-          <select
+          <TermDateSelect
             aria-label="Status"
             value={state.status}
-            onChange={(event) => onChange({ ...state, status: event.target.value as CourseStatus })}
             disabled={saving}
             className="dialog-field"
-          >
-            {statusOptions.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-          <select
+            options={statusOptions.map((status) => ({
+              value: status.value,
+              label: status.label,
+            }))}
+            onChange={(status) => onChange({ ...state, status: status as CourseStatus })}
+          />
+          <TermDateSelect
             aria-label="Planungsmodus"
             value={state.planningMode}
-            onChange={(event) =>
-              onChange({
-                ...state,
-                planningMode: event.target.value as CoursePlanningMode,
-              })
-            }
             disabled={saving}
             className="dialog-field"
-          >
-            {planningModeOptions.map((mode) => (
-              <option key={mode.value} value={mode.value}>
-                {mode.label}
-              </option>
-            ))}
-          </select>
+            options={planningModeOptions.map((mode) => ({
+              value: mode.value,
+              label: mode.label,
+            }))}
+            onChange={(planningMode) =>
+              onChange({
+                ...state,
+                planningMode: planningMode as CoursePlanningMode,
+              })
+            }
+          />
           <p className="course-editor-inline-hint">{planningModeHint(state.planningMode)}</p>
           {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
         </div>

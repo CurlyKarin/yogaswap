@@ -1087,9 +1087,8 @@ describe("AdminPanel", () => {
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
     expect(within(dialog).getByLabelText("Rolle bearbeiten")).toBeInTheDocument();
 
-    fireEvent.change(within(dialog).getByLabelText("Rolle bearbeiten"), {
-      target: { value: "instructor" },
-    });
+    fireEvent.click(within(dialog).getByLabelText("Rolle bearbeiten"));
+    fireEvent.click(within(dialog).getByRole("option", { name: "Kursleitung" }));
     fireEvent.click(within(dialog).getByRole("button", { name: /Speichern/i }));
 
     await waitFor(() => {

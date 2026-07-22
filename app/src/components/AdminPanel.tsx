@@ -11,6 +11,7 @@ import {
 import type { Tenant, UserRole } from "shared/types";
 import { getStatusPresentation } from "../lib/participants";
 import StudioSettingsSection from "./StudioSettingsSection";
+import TermDateSelect from "./TermDateSelect";
 
 const ROLE_LABELS_DE: Record<UserRole, string> = {
   admin: "Admin",
@@ -89,7 +90,7 @@ export default function AdminPanel({
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
   const createNicknameInputRef = useRef<HTMLInputElement | null>(null);
   const createEmailInputRef = useRef<HTMLInputElement | null>(null);
-  const createRoleSelectRef = useRef<HTMLSelectElement | null>(null);
+  const createRoleSelectRef = useRef<HTMLButtonElement | null>(null);
   const createCancelButtonRef = useRef<HTMLButtonElement | null>(null);
   const createReactivationCheckboxRef = useRef<HTMLInputElement | null>(null);
 
@@ -1238,19 +1239,17 @@ export default function AdminPanel({
                 className="dialog-field"
               />
               {canEditRoles && (
-                <select
+                <TermDateSelect
                   aria-label="Rolle bearbeiten"
                   value={editingRole}
-                  onChange={(e) => setEditingRole(e.target.value as UserRole)}
                   disabled={editingSaving}
                   className="dialog-field"
-                >
-                  {ROLE_OPTIONS.map((role) => (
-                    <option key={role} value={role}>
-                      {ROLE_LABELS_DE[role]}
-                    </option>
-                  ))}
-                </select>
+                  options={ROLE_OPTIONS.map((role) => ({
+                    value: role,
+                    label: ROLE_LABELS_DE[role],
+                  }))}
+                  onChange={(role) => setEditingRole(role as UserRole)}
+                />
               )}
               {canEditRoles && editingOriginal?.status === "active" && (
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1474,22 +1473,20 @@ export default function AdminPanel({
               )}
 
               {canEditRoles && (
-                <select
+                <TermDateSelect
                   aria-label="Rolle"
                   ref={createRoleSelectRef}
                   value={createRole}
-                  onChange={(e) =>
-                    setCreateRole(e.target.value as "participant" | "instructor" | "admin")
-                  }
                   disabled={createSaving}
                   className="dialog-field"
-                >
-                  {ROLE_OPTIONS.map((role) => (
-                    <option key={role} value={role}>
-                      {ROLE_LABELS_DE[role]}
-                    </option>
-                  ))}
-                </select>
+                  options={ROLE_OPTIONS.map((role) => ({
+                    value: role,
+                    label: ROLE_LABELS_DE[role],
+                  }))}
+                  onChange={(role) =>
+                    setCreateRole(role as "participant" | "instructor" | "admin")
+                  }
+                />
               )}
 
               {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}

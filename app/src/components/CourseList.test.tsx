@@ -592,8 +592,9 @@ describe("CourseList", () => {
     expect(screen.getByLabelText("Planungsmodus bearbeiten")).toBeDisabled();
     expect(screen.getByText(/Planungsmodus kann bei einem aktiven Kurs/)).toBeInTheDocument();
     expect(screen.getByLabelText("Status bearbeiten")).toBeEnabled();
+    await user.click(screen.getByLabelText("Status bearbeiten"));
     const inactiveOption = screen.getByRole("option", { name: /inaktiv/i });
-    expect(inactiveOption).toBeDisabled();
+    expect(inactiveOption).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText(/ein Kursende/)).toBeInTheDocument();
   });
 

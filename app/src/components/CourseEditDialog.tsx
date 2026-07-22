@@ -3,6 +3,7 @@ import type { CoursePlanningMode, CourseStatus } from "shared/types";
 import CourseModalFrame from "./CourseModalFrame";
 import CoursePlannedEndField from "./CoursePlannedEndField";
 import CourseCapacityFields from "./CourseCapacityFields";
+import TermDateSelect from "./TermDateSelect";
 
 type CourseEditorState = {
   id: number;
@@ -91,19 +92,17 @@ export default function CourseEditDialog({
           />
           )}
           {!overbookingOnlyMode && (
-          <select
+          <TermDateSelect
             aria-label="Wochentag bearbeiten"
             value={state.weekday}
-            onChange={(event) => onChange({ ...state, weekday: event.target.value })}
             disabled={saving}
             className="dialog-field"
-          >
-            {weekdayOptions.map((weekday) => (
-              <option key={weekday.value} value={weekday.value}>
-                {weekday.label}
-              </option>
-            ))}
-          </select>
+            options={weekdayOptions.map((weekday) => ({
+              value: weekday.value,
+              label: weekday.label,
+            }))}
+            onChange={(weekday) => onChange({ ...state, weekday })}
+          />
           )}
           {!overbookingOnlyMode && (
           <input
@@ -126,23 +125,18 @@ export default function CourseEditDialog({
           />
           {!overbookingOnlyMode && (
             <>
-              <select
+              <TermDateSelect
                 aria-label="Status bearbeiten"
                 value={state.status}
-                onChange={(event) => onChange({ ...state, status: event.target.value as CourseStatus })}
                 disabled={saving}
                 className="dialog-field"
-              >
-                {statusOptions.map((status) => (
-                  <option
-                    key={status.value}
-                    value={status.value}
-                    disabled={rollingInactiveBlocked && status.value === "inactive"}
-                  >
-                    {status.label}
-                  </option>
-                ))}
-              </select>
+                options={statusOptions.map((status) => ({
+                  value: status.value,
+                  label: status.label,
+                  disabled: rollingInactiveBlocked && status.value === "inactive",
+                }))}
+                onChange={(status) => onChange({ ...state, status: status as CourseStatus })}
+              />
               {rollingInactiveBlocked && rollingInactiveHint && (
                 <p className="course-editor-inline-hint">{rollingInactiveHint}</p>
               )}
@@ -150,24 +144,22 @@ export default function CourseEditDialog({
           )}
           {!overbookingOnlyMode && (
             <>
-              <select
+              <TermDateSelect
                 aria-label="Planungsmodus bearbeiten"
                 value={state.planningMode}
-                onChange={(event) =>
-                  onChange({
-                    ...state,
-                    planningMode: event.target.value as CoursePlanningMode,
-                  })
-                }
                 disabled={saving || planningModeLocked}
                 className="dialog-field"
-              >
-                {planningModeOptions.map((mode) => (
-                  <option key={mode.value} value={mode.value}>
-                    {mode.label}
-                  </option>
-                ))}
-              </select>
+                options={planningModeOptions.map((mode) => ({
+                  value: mode.value,
+                  label: mode.label,
+                }))}
+                onChange={(planningMode) =>
+                  onChange({
+                    ...state,
+                    planningMode: planningMode as CoursePlanningMode,
+                  })
+                }
+              />
               {planningModeLocked && planningModeLockedHint && (
                 <p className="course-editor-inline-hint">{planningModeLockedHint}</p>
               )}

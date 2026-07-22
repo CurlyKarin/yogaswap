@@ -6,6 +6,7 @@ import { DIRECT_SWAP_WARNINGS, SWAP_REQUEST_WARNINGS } from "../lib/swapRequestW
 import { focusWithVisibleRing } from "../lib/focusWithVisibleRing";
 import type { SwapSettings } from "../types";
 import CourseModalFrame from "./CourseModalFrame";
+import TermDateSelect from "./TermDateSelect";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -222,32 +223,29 @@ export default function CourseSwapModal({
               <p className="muted">
                 Es stehen {availableSwapDates.length} freie Termin(e) zur Auswahl.
               </p>
-              <select
+              <TermDateSelect
+                aria-label="Freien Termin auswählen"
                 value={swapDateIso ?? ""}
-                onChange={(e) => {
-                  setSwapDateIso(e.target.value || null);
+                options={[
+                  { value: "", label: "Bitte freien Termin auswählen…", disabled: true },
+                  ...availableSwapDates.map((swapDate) => ({
+                    value: swapOptionKey(swapDate.course.id, swapDate.date),
+                    label: `${swapOptionLabel(swapDate.date)}${
+                      availableSwapDates.some(
+                        (other) =>
+                          other !== swapDate &&
+                          other.date.getTime() === swapDate.date.getTime(),
+                      )
+                        ? ` · ${swapDate.course.name}`
+                        : ""
+                    }`,
+                  })),
+                ]}
+                onChange={(nextValue) => {
+                  setSwapDateIso(nextValue || null);
                   setSwapDateIsoWaitlist(null);
                 }}
-              >
-                <option value="" disabled>
-                  Bitte freien Termin auswählen…
-                </option>
-                {availableSwapDates.map((swapDate) => (
-                  <option
-                    key={swapOptionKey(swapDate.course.id, swapDate.date)}
-                    value={swapOptionKey(swapDate.course.id, swapDate.date)}
-                  >
-                    {swapOptionLabel(swapDate.date)}
-                    {availableSwapDates.some(
-                      (other) =>
-                        other !== swapDate &&
-                        other.date.getTime() === swapDate.date.getTime(),
-                    )
-                      ? ` · ${swapDate.course.name}`
-                      : ""}
-                  </option>
-                ))}
-              </select>
+              />
             </>
           ) : (
             <p className="muted">Derzeit keine freien Termine im Tauschfenster.</p>
@@ -273,32 +271,29 @@ export default function CourseSwapModal({
               <p className="muted">
                 {waitlistDates.length} belegte Termin(e) mit Wartelisten-Option:
               </p>
-              <select
+              <TermDateSelect
+                aria-label="Belegten Termin für Warteliste wählen"
                 value={swapDateIsoWaitlist ?? ""}
-                onChange={(e) => {
-                  setSwapDateIsoWaitlist(e.target.value || null);
+                options={[
+                  { value: "", label: "Bitte belegten Termin wählen…", disabled: true },
+                  ...waitlistDates.map((waitlistDate) => ({
+                    value: swapOptionKey(waitlistDate.course.id, waitlistDate.date),
+                    label: `${swapOptionLabel(waitlistDate.date)}${
+                      waitlistDates.some(
+                        (other) =>
+                          other !== waitlistDate &&
+                          other.date.getTime() === waitlistDate.date.getTime(),
+                      )
+                        ? ` · ${waitlistDate.course.name}`
+                        : ""
+                    }`,
+                  })),
+                ]}
+                onChange={(nextValue) => {
+                  setSwapDateIsoWaitlist(nextValue || null);
                   setSwapDateIso(null);
                 }}
-              >
-                <option value="" disabled>
-                  Bitte belegten Termin wählen…
-                </option>
-                {waitlistDates.map((waitlistDate) => (
-                  <option
-                    key={swapOptionKey(waitlistDate.course.id, waitlistDate.date)}
-                    value={swapOptionKey(waitlistDate.course.id, waitlistDate.date)}
-                  >
-                    {swapOptionLabel(waitlistDate.date)}
-                    {waitlistDates.some(
-                      (other) =>
-                        other !== waitlistDate &&
-                        other.date.getTime() === waitlistDate.date.getTime(),
-                    )
-                      ? ` · ${waitlistDate.course.name}`
-                      : ""}
-                  </option>
-                ))}
-              </select>
+              />
             </>
           ) : (
             <p className="muted">Derzeit keine belegten Termine mit Wartelisten-Option.</p>
