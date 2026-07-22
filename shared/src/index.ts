@@ -3,6 +3,7 @@ export * from './types';
 export * from './courseStatus';
 export * from './courseEditPolicy';
 export * from './tenantSettings';
+export * from './tenantHost';
 export * from './rollingHorizonShrink';
 export * from './cancellationSwapCutoff';
 export * from './courseCapacity';

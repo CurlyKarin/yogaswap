@@ -21,6 +21,7 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
+import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import {
   buildEmailChangedNewAddressMail,
   buildEmailChangedOldAddressMail,
@@ -295,8 +296,7 @@ export const handler = async (
             }
 
             if (emailChanged && existingStatus === "active") {
-              const baseUrlEnv = process.env.BASE_URL || "";
-              const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+              const baseUrl = resolveAppBaseUrlForTenant(tenantId);
               const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
               const mailLocale = process.env.MAIL_LOCALE || "de";
               const oldEmail = (existing.email ?? "").trim();
@@ -380,8 +380,7 @@ export const handler = async (
               );
               passwordResetTriggered = true;
 
-              const baseUrlEnv = process.env.BASE_URL || "";
-              const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+              const baseUrl = resolveAppBaseUrlForTenant(tenantId);
               const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
               const mailLocale = process.env.MAIL_LOCALE || "de";
               const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
@@ -490,8 +489,7 @@ export const handler = async (
     }
 
     if (roleChanged && existingStatus === "active" && updated.email) {
-      const baseUrlEnv = process.env.BASE_URL || "";
-      const baseUrl = baseUrlEnv.startsWith("http") ? baseUrlEnv : `https://${baseUrlEnv}`;
+      const baseUrl = resolveAppBaseUrlForTenant(tenantId);
       const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
       const mailLocale = process.env.MAIL_LOCALE || "de";
       try {

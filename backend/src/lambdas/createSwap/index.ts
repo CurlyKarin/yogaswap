@@ -8,6 +8,7 @@ import {
   validateTermOccupancy,
 } from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
+import { resolveAppBaseUrlForTenant } from '../shared/appBaseUrl';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
@@ -195,8 +196,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (swap.status === "active") {
       try {
-        const baseUrl = process.env.BASE_URL || "";
-        const loginUrl = baseUrl.startsWith("http") ? baseUrl : baseUrl ? `https://${baseUrl}` : undefined;
+        const loginUrl = resolveAppBaseUrlForTenant(tenantId) || undefined;
         const mailSummary = await notifySwapSuccess({
           client,
           tenantId,

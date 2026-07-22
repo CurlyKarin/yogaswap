@@ -7,10 +7,9 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["shared/src/*"],
-      "@app/*": ["app/src/*"]
+      "@shared/*": ["./shared/src/*"],
+      "@app/*": ["./app/src/*"]
     },
     "moduleResolution": "bundler",
     "resolveJsonModule": true

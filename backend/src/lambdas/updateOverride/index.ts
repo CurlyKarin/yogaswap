@@ -1,6 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { getTenantContext } from '../shared/tenantContext';
+import { resolveAppBaseUrlForTenant } from '../shared/appBaseUrl';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
 import { resolveLegacyCourseIdFromPathSegment } from '../shared/courseUid';
@@ -236,7 +237,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (selfServiceAbsenceKind === "term_released" && subjectNickname) {
       try {
-        const baseUrl = process.env.BASE_URL || "";
+        const baseUrl = resolveAppBaseUrlForTenant(tenantId);
         const mailSummary = await notifyParticipantTermReleased(client, {
           tenantId,
           userId: subjectNickname,

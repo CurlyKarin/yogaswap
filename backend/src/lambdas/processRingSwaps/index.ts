@@ -2,6 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { QueryCommand } from "@aws-sdk/client-dynamodb";
 import type { Course, CourseDateOverride, Swap } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
+import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { dynamoClient } from "../shared/dynamoClient";
 import { mapOverrideItem } from "../shared/overrideDynamo";
 import { loadTenantSettings } from "../shared/tenantSettingsLoader";
@@ -169,8 +170,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         executedRings.push(buildExecutedRingLog(cycle, planned.plan, courses));
 
         try {
-          const baseUrl = process.env.BASE_URL || "";
-          const loginUrl = baseUrl.startsWith("http") ? baseUrl : baseUrl ? `https://${baseUrl}` : undefined;
+          const loginUrl = resolveAppBaseUrlForTenant(tenantId) || undefined;
           for (const activatedSwap of planned.plan.swapActivations) {
             const mailSummary = await notifySwapSuccess({
               client,

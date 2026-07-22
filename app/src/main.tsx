@@ -8,13 +8,25 @@ import { Amplify } from 'aws-amplify';
 import axios from 'axios';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { DEFAULT_TENANT_ID } from 'shared/types';
+import { resolveTenantIdFromHostname } from 'shared/tenantHost';
 
-// Konfiguriere Axios für Tenant-Header
+// Tenant aus Hostname (#249), Apex/localhost → VITE_DEFAULT_TENANT_ID / default-tenant.
 const configuredDefaultTenantId = import.meta.env.VITE_DEFAULT_TENANT_ID?.trim();
-axios.defaults.headers.common['x-tenant-id'] =
+const fallbackTenantId =
   configuredDefaultTenantId && configuredDefaultTenantId.length > 0
     ? configuredDefaultTenantId
     : DEFAULT_TENANT_ID;
+const multiTenantParentHost = import.meta.env.VITE_MULTI_TENANT_PARENT_HOST?.trim();
+axios.defaults.headers.common['x-tenant-id'] = resolveTenantIdFromHostname(
+  window.location.hostname,
+  {
+    fallbackTenantId,
+    multiTenantParentHost:
+      multiTenantParentHost && multiTenantParentHost.length > 0
+        ? multiTenantParentHost
+        : undefined,
+  },
+);
 
 // Fuegt fuer alle API-Requests den aktuellen Cognito-Token hinzu.
 axios.interceptors.request.use(async (config) => {

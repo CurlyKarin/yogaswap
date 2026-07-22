@@ -6,7 +6,6 @@
     "declarationMap": true,    // Mapping für Debugging
     "outDir": "./dist",
     "rootDir": "src",
-    "moduleResolution": "node",
     "module": "ESNext",
     "target": "ES2020",
     "esModuleInterop": true,
