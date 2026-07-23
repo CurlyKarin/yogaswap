@@ -564,6 +564,7 @@ cat > .env.demo << EOF
 VITE_COGNITO_USER_POOL_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_id)
 VITE_COGNITO_CLIENT_ID=$(cd ../projects/yogaswap && tofu output -raw cognito_user_pool_client_id)
 VITE_DEFAULT_TENANT_ID=default-tenant
+VITE_SHOW_DEMO_LOGIN=true
 EOF
 npm run build:demo
 cd ..
@@ -571,6 +572,7 @@ cd ..
 
 **Hinweis:** Die Region ist bereits in der User Pool ID enthalten (z.B. `eu-central-1_XXXXXXXXX`) und muss nicht separat gesetzt werden.
 `VITE_DEFAULT_TENANT_ID` steuert den initialen Tenant-Header im Frontend (`x-tenant-id`), z. B. `beharmony`.
+`VITE_SHOW_DEMO_LOGIN=true` aktiviert Luna-Vorbefüllung (Demo + Staging; in Prod `false` / weglassen, #100).
 
 ### Backend-Änderungen (Lambda-Funktionen)
 

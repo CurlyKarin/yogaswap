@@ -1565,6 +1565,7 @@ a:focus-visible {
   color: #1a1a1a;
   background-color: #ffffff;
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .studio-number-step-input::-webkit-outer-spin-button,

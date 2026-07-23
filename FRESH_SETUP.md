@@ -403,10 +403,12 @@ cat > .env.demo <<EOF
 VITE_COGNITO_USER_POOL_ID=<cognito_user_pool_id>
 VITE_COGNITO_CLIENT_ID=<cognito_user_pool_client_id>
 VITE_DEFAULT_TENANT_ID=default-tenant
+VITE_SHOW_DEMO_LOGIN=true
 EOF
 ```
 
 `VITE_DEFAULT_TENANT_ID` legt fest, welcher Tenant im Frontend standardmäßig als `x-tenant-id` gesetzt wird (z. B. `beharmony`).
+`VITE_SHOW_DEMO_LOGIN=true` zeigt Luna-Vorbefüllung und Demo-Hinweis (#100; auch in staging).
 
 **3. Frontend neu bauen und vor dem Deploy prüfen:**
 ```bash
@@ -689,6 +691,7 @@ cat > app/.env.staging <<EOF
 VITE_COGNITO_USER_POOL_ID=<staging_pool_id>
 VITE_COGNITO_CLIENT_ID=<staging_client_id>
 VITE_DEFAULT_TENANT_ID=default-tenant
+VITE_SHOW_DEMO_LOGIN=true
 EOF
 ```
 
@@ -754,6 +757,7 @@ cat > ../../app/.env.prod <<EOF
 VITE_COGNITO_USER_POOL_ID=$(tofu output -raw cognito_user_pool_id)
 VITE_COGNITO_CLIENT_ID=$(tofu output -raw cognito_user_pool_client_id)
 VITE_DEFAULT_TENANT_ID=default-tenant
+VITE_SHOW_DEMO_LOGIN=false
 EOF
 ```
 
@@ -814,6 +818,7 @@ Bestehendes `app` → CloudFront bleibt.
 ```bash
 VITE_DEFAULT_TENANT_ID=default-tenant
 VITE_MULTI_TENANT_PARENT_HOST=app.yogaswap.de
+VITE_SHOW_DEMO_LOGIN=false
 ```
 
 **4. Deploy:** `make -C projects/yogaswap deploy ENV=prod`
