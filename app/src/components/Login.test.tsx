@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Login from "./Login";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
 import { loadCurrentUser } from "shared/lib/storage";
+import { isDemoLoginEnabled } from "../lib/demoLoginFlag";
 
 vi.mock("../auth/useCognitoAuth", () => ({
   useCognitoAuth: vi.fn(),
@@ -14,12 +15,22 @@ vi.mock("shared/lib/storage", () => ({
   loadCurrentUser: vi.fn(),
 }));
 
+vi.mock("../lib/demoLoginFlag", () => ({
+  isDemoLoginEnabled: vi.fn(() => true),
+}));
+
 const useCognitoAuthMock = useCognitoAuth as unknown as ReturnType<typeof vi.fn>;
 const mockedLoadCurrentUser = loadCurrentUser as unknown as ReturnType<typeof vi.fn>;
+const mockedIsDemoLoginEnabled = isDemoLoginEnabled as unknown as ReturnType<typeof vi.fn>;
 
 describe("Login", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedIsDemoLoginEnabled.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("rendert Formular mit Demo-Credentials und ruft bei Erfolg onLogin mit gespeichertem User auf", async () => {
@@ -43,9 +54,9 @@ describe("Login", () => {
       </MemoryRouter>,
     );
 
-    // Demo-Werte sind vorausgefüllt
     expect(screen.getByPlaceholderText("Spitzname")).toHaveValue("Luna");
     expect(screen.getByPlaceholderText("Passwort")).toHaveValue("Hallo123!");
+    expect(screen.getByText(/Demo:/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Login/i }));
 
@@ -60,6 +71,27 @@ describe("Login", () => {
       "href",
       "/forgot-password",
     );
+  });
+
+  it("lässt Login-Felder leer ohne Demo-Flag", () => {
+    mockedIsDemoLoginEnabled.mockReturnValue(false);
+    const onLogin = vi.fn();
+
+    useCognitoAuthMock.mockReturnValue({
+      login: vi.fn().mockResolvedValue(false),
+      isLoading: false,
+      error: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <Login onLogin={onLogin} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByPlaceholderText("Spitzname")).toHaveValue("");
+    expect(screen.getByPlaceholderText("Passwort")).toHaveValue("");
+    expect(screen.queryByText(/Demo:/i)).not.toBeInTheDocument();
   });
 
   it("zeigt eine Fehlermeldung aus useCognitoAuth an", () => {
@@ -114,4 +146,3 @@ describe("Login", () => {
     expect(within(page).queryByText(/Demo:/i)).not.toBeInTheDocument();
   });
 });
-

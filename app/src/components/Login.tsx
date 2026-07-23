@@ -4,6 +4,7 @@ import { loadCurrentUser } from "shared/lib/storage";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
+import { isDemoLoginEnabled } from "../lib/demoLoginFlag";
 
 type Props = {
   onLogin: (user: User) => void;
@@ -14,12 +15,11 @@ type LoginRouteState = {
   prefillPassword?: unknown;
 };
 
-// Demo: voreingestellter Nutzer (später nur in Demo-Variante oder ganz entfernen)
 const DEMO_USERNAME = "Luna";
 const DEMO_PASSWORD = "Hallo123!";
 
 export default function Login({ onLogin }: Props) {
-  const { state, pathname } = useLocation();
+  const { state } = useLocation();
   const navigate = useNavigate();
   const prefillUsername =
     typeof (state as LoginRouteState | null)?.prefillUsername === "string"
@@ -30,7 +30,7 @@ export default function Login({ onLogin }: Props) {
       ? ((state as LoginRouteState).prefillPassword as string)
       : "";
   const fromPasswordResetFlow = prefillUsername.length > 0;
-  const useDemoPrefill = !fromPasswordResetFlow && pathname !== "/login";
+  const useDemoPrefill = isDemoLoginEnabled() && !fromPasswordResetFlow;
   const [username, setUsername] = useState(useDemoPrefill ? DEMO_USERNAME : prefillUsername);
   const [password, setPassword] = useState(useDemoPrefill ? DEMO_PASSWORD : prefillPassword);
   const { login, isLoading, error } = useCognitoAuth();
