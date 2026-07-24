@@ -829,7 +829,7 @@ VITE_SHOW_DEMO_LOGIN=false
 
 **Cleanup:** Test-Tenant `yogastudio-test` nach dem Smoke-Test wieder entfernen.
 
-**8. SES:** Für echte Teilnehmer-Mails Production-Access in der AWS-Konsole beantragen (Sandbox reicht zum Testen).
+**8. SES:** Domain `yogaswap.de` + Absender `noreply@yogaswap.de`, dann Production Access beantragen. Details: `docs/ses-production.md` (#80). Sandbox reicht nur für Tests an verifizierte Empfänger.
 
 ---
 
