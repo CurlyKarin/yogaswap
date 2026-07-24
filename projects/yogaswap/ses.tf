@@ -1,49 +1,49 @@
-# Optional: SES Email Identity für die Absender-E-Mail-Adresse
-# Hinweis: Die E-Mail-Adresse muss trotzdem manuell verifiziert werden (Verifizierungs-E-Mail bestätigen)
+# SES Domain Identity für yogaswap.de (#80).
 #
-# Wenn du eine Domain verwendest, nutze stattdessen aws_ses_domain_identity (siehe unten)
+# Account-/region-weit (nicht pro Env-Stack). Deshalb nur im Workspace `prod`
+# verwaltet — sonst würden default/staging/prod um dieselbe AWS-Ressource kämpfen.
+# Absender in allen Envs: noreply@yogaswap.de (env.<workspace>.json).
 #
-# Uncomment um zu aktivieren:
-# resource "aws_ses_email_identity" "source_email" {
-#   email = local.ses_source_email
-# }
-#
-# output "ses_verification_token" {
-#   value = aws_ses_email_identity.source_email.verification_token
-#   description = "Verifizierungs-Token (für E-Mail-Adressen nicht relevant, wird per E-Mail versendet)"
-# }
+# Ablauf:
+# 1) tofu workspace select prod && tofu apply  → Outputs: Verify-TXT + DKIM-CNAMEs
+# 2) DNS bei IONOS setzen (siehe docs/ses-production.md)
+# 3) Verifizierung abwarten, dann Production Access beantragen
 
-# Optional: SES Domain Identity (empfohlen für Produktion)
-# Wenn du eine Domain verifizieren möchtest, nutze diese Ressource
-# Dann kannst du alle E-Mails von *@deine-domain.de senden
-#
-# Uncomment und ersetze "example.com" mit deiner Domain:
-# resource "aws_ses_domain_identity" "yogaswap_domain" {
-#   domain = "yogaswap.de"
-# }
-#
-# Output zeigt die benötigten DNS-Einträge:
-# output "ses_domain_verification_token" {
-#   value = aws_ses_domain_identity.yogaswap_domain.verification_token
-#   description = "DNS TXT Record: _amazonses.yogaswap.de -> ${aws_ses_domain_identity.yogaswap_domain.verification_token}"
-# }
+locals {
+  manage_ses_domain = terraform.workspace == "prod"
+  ses_mail_domain   = "yogaswap.de"
+}
 
-# Optional: Easy DKIM für Domain (automatische DKIM-Signatur)
-# Wenn du eine Domain verwendest, aktiviere Easy DKIM:
-#
-# resource "aws_ses_domain_identity_verification" "yogaswap_domain_verification" {
-#   domain = aws_ses_domain_identity.yogaswap_domain.id
-#
-#   timeouts {
-#     create = "5m"
-#   }
-# }
-#
-# resource "aws_ses_domain_dkim" "yogaswap_domain_dkim" {
-#   domain = aws_ses_domain_identity.yogaswap_domain.id
-# }
-#
-# output "ses_dkim_tokens" {
-#   value = aws_ses_domain_dkim.yogaswap_domain_dkim.dkim_tokens
-#   description = "DNS CNAME Records für DKIM (3 Tokens)"
-# }
+resource "aws_ses_domain_identity" "yogaswap" {
+  count  = local.manage_ses_domain ? 1 : 0
+  domain = local.ses_mail_domain
+}
+
+resource "aws_ses_domain_dkim" "yogaswap" {
+  count  = local.manage_ses_domain ? 1 : 0
+  domain = aws_ses_domain_identity.yogaswap[0].domain
+}
+
+# Kein aws_ses_domain_identity_verification hier: erster Apply soll sofort
+# die DNS-Tokens ausgeben. Verifizierung danach manuell/CLI prüfen
+# (docs/ses-production.md), optional später als Resource nachziehen.
+
+output "ses_domain" {
+  value       = local.manage_ses_domain ? local.ses_mail_domain : null
+  description = "SES-Mail-Domain (nur Workspace prod)"
+}
+
+output "ses_domain_verification_token" {
+  value       = try(aws_ses_domain_identity.yogaswap[0].verification_token, null)
+  description = "DNS TXT: Name=_amazonses.yogaswap.de, Value=<token>"
+}
+
+output "ses_dkim_tokens" {
+  value       = try(aws_ses_domain_dkim.yogaswap[0].dkim_tokens, null)
+  description = "DNS CNAME je Token: <token>._domainkey.yogaswap.de → <token>.dkim.amazonses.com"
+}
+
+output "ses_source_email_effective" {
+  value       = local.ses_source_email
+  description = "Aktueller SES-Absender aus env.<workspace>.json"
+}
