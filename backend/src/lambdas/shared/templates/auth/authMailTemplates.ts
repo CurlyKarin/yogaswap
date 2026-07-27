@@ -220,3 +220,35 @@ export function buildRoleChangedMail(input: RoleChangedMailInput): MailTemplate 
     html: "",
   };
 }
+
+type CognitoPasswordResetCodeMailInput = {
+  locale?: string;
+  nickname: string;
+  /** Cognito placeholder, typically `{####}` — must appear literally in the body. */
+  codeParameter: string;
+};
+
+/** Cognito Custom Message body for ForgotPassword / AdminResetUserPassword (#107). */
+export function buildCognitoPasswordResetCodeMail(
+  input: CognitoPasswordResetCodeMailInput,
+): MailTemplate {
+  const locale = normalizeLocale(input.locale);
+  const code = input.codeParameter || "{####}";
+  if (locale === "de") {
+    return {
+      subject: "YogaSwap Bestaetigungscode",
+      html: `
+        <h2>Hallo ${input.nickname}!</h2>
+        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
+        <p>Dein Bestaetigungscode fuer YogaSwap lautet:</p>
+        <p style="font-size:1.4em;font-weight:bold;letter-spacing:0.05em;">${code}</p>
+        <p>Gib diesen Code in der App ein, um dein neues Passwort festzulegen.</p>
+        <p>Wenn du das nicht angefordert hast, kannst du diese E-Mail ignorieren.</p>
+      `,
+    };
+  }
+  return {
+    subject: "YogaSwap Bestaetigungscode",
+    html: "",
+  };
+}

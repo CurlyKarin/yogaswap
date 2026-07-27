@@ -1,4 +1,5 @@
 import {
+  buildCognitoPasswordResetCodeMail,
   buildEmailChangedNewAddressMail,
   buildEmailChangedOldAddressMail,
   buildInviteMail,
@@ -36,6 +37,19 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("Accountname (Spitzname): Karin");
     expect(mail.html).toContain("https://example.com/recovery-token");
     expect(mail.html).toContain("Passwort fuer YogaSwap wurde zurueckgesetzt");
+  });
+
+  test("buildCognitoPasswordResetCodeMail includes Cognito code placeholder", () => {
+    const mail = buildCognitoPasswordResetCodeMail({
+      locale: "de",
+      nickname: "Karin",
+      codeParameter: "{####}",
+    });
+
+    expect(mail.subject).toBe("YogaSwap Bestaetigungscode");
+    expect(mail.html).toContain("Hallo Karin");
+    expect(mail.html).toContain("{####}");
+    expect(mail.html).toContain("Bestaetigungscode fuer YogaSwap");
   });
 
   test("buildReactivationMail returns german template with placeholders", () => {

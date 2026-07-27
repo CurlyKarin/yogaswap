@@ -2,7 +2,7 @@
 
 Stand: **MVP Teilnehmer-Benachrichtigungen implementiert** (Issue [#45](https://github.com/CurlyKarin/yogaswap/issues/45)). Dieses Dokument ist Inventar, Produktentscheidungen und Zielbild für Folgearbeit (Trainer:in, Schalter, Digest).
 
-Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-Anhang). Absender `SES_SOURCE_EMAIL` (Rollout: `noreply@yogaswap.de`). App-Auth (Invite/Reset-Token) unterdrückt Cognito-Mails (`MessageAction: SUPPRESS`) und nutzt eigene Templates. Cognito-Code-Mails (Forgot/Admin-Reset) gehen über denselben SES-Absender (`email_sending_account = DEVELOPER`, #106). Domain/Production: [`docs/ses-production.md`](./ses-production.md) (#80).
+Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-Anhang). Absender `SES_SOURCE_EMAIL` (Rollout: `noreply@yogaswap.de`). App-Auth (Invite/Reset-Token) unterdrückt Cognito-Mails (`MessageAction: SUPPRESS`) und nutzt eigene Templates. Cognito-Code-Mails (Forgot/Admin-Reset) gehen über denselben SES-Absender (`email_sending_account = DEVELOPER`, #106) mit deutschen Custom-Message-Texten (#107/#108). Domain/Production: [`docs/ses-production.md`](./ses-production.md) (#80).
 
 ### MVP #45 — Umsetzungsstand (Teilnehmer:innen)
 

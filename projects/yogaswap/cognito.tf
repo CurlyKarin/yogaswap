@@ -13,6 +13,13 @@ resource "aws_cognito_user_pool" "yogaswap" {
     source_arn            = local.ses_domain_identity_arn
   }
 
+  # DE Custom Message für Forgot/Admin-Reset-Codes (#107/#108).
+  # Eigene Lambda-Ressource (nicht in local.lambda_configs), sonst Zyklus:
+  # lambda_configs → Cognito Pool → custom_message Lambda → lambda_configs.
+  lambda_config {
+    custom_message = aws_lambda_function.cognito_custom_message.arn
+  }
+
   # Admin erstellt User
   admin_create_user_config {
     allow_admin_create_user_only = true
@@ -113,6 +120,63 @@ resource "aws_cognito_user_group" "participant" {
   precedence   = 20
 }
 
+# Cognito Custom Message (#107/#108) — bewusst außerhalb von lambda_configs (Zyklus-Vermeidung).
+resource "aws_iam_role" "cognito_custom_message" {
+  name = "${local.project}-cognito-custom-message"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "cognito_custom_message" {
+  name = "${local.project}-cognito-custom-message"
+  role = aws_iam_role.cognito_custom_message.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_lambda_function" "cognito_custom_message" {
+  function_name = "${local.project}-cognito-custom-message"
+  handler       = "index.handler"
+  runtime       = "nodejs18.x"
+  timeout       = 5
+  role          = aws_iam_role.cognito_custom_message.arn
+  filename      = "${path.module}/../../backend/zips/cognitoCustomMessage.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../backend/zips/cognitoCustomMessage.zip")
+
+  environment {
+    variables = {
+      MAIL_LOCALE = "de"
+    }
+  }
+}
+
+resource "aws_lambda_permission" "cognito_custom_message" {
+  statement_id  = "AllowCognitoInvokeCustomMessage"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cognito_custom_message.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.yogaswap.arn
+}
 
 # Checkmark Outputs
 output "cognito_user_pool_id" {
