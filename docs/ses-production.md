@@ -171,5 +171,16 @@ Alarm-Schwellen später (Post-Rollout): Bounce ≫ 5 %, Complaint ≫ 0,1 %.
 ## Abgrenzung
 
 - **#106:** Cognito User Pools (demo/staging/prod) nutzen SES `DEVELOPER` mit From `YogaSwap <noreply@yogaswap.de>` (gleiche Adresse wie App-Mails, kein `no-reply@`). IaC: `cognito.tf` + SES Identity-Policy in `ses.tf` (prod).
-- **#107+:** Custom-Message-Lambda (DE-Texte) und QA folgen separat.
-- Cognito `MessageAction: SUPPRESS` bleibt für Invite/Reset über App-Token; wo Cognito trotzdem Codes schickt (z. B. Forgot/Admin-Reset), geht der Absender über SES.
+- **#107 / #108:** Cognito Custom Message Lambda `cognito-custom-message` setzt deutsche Betreff/Body-Texte für `ForgotPassword` und `AdminResetUserPassword` (Bestaetigungscode). Trigger + IAM in `cognito.tf` / `main.tf`.
+- Cognito `MessageAction: SUPPRESS` bleibt für Invite/Reset über App-Token; die zweite Code-Mail nach dem Link läuft über Custom Message + SES.
+
+### Smoke-Test Cognito-Code-Mail (#107/#108)
+
+1. Demo oder Staging: Admin → Passwort zurücksetzen (oder Invite-Link öffnen)
+2. App-Mail mit Link kommt (Betreff `YogaSwap Passwort zuruecksetzen` / Einladung)
+3. Link öffnen → Passwort setzen → Cognito sendet Code-Mail
+4. Erwartung Code-Mail:
+   - From: `YogaSwap <noreply@yogaswap.de>`
+   - Subject: `YogaSwap Bestaetigungscode`
+   - Body deutsch, enthält den Code / Hinweis „Bestaetigungscode“
+5. Optional Logs: `/aws/lambda/<project>-cognito-custom-message`
