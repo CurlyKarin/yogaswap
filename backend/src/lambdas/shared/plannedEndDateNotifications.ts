@@ -1,4 +1,5 @@
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
+import { formatSesFromAddress } from "./notifications/sesFromAddress";
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { resolveParticipantEmail } from "./participantEmailLookup";
 import {
@@ -101,7 +102,7 @@ export async function notifyParticipantsPlannedEndDate(
     try {
       await ses.send(
         new SendEmailCommand({
-          Source: params.sesSourceEmail,
+          Source: formatSesFromAddress(params.sesSourceEmail),
           Destination: { ToAddresses: [email] },
           Message: {
             Subject: { Data: mail.subject },

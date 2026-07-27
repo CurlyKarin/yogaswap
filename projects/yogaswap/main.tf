@@ -85,7 +85,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = local.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_from_address
         BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST = local.tenant_base_host
       }
@@ -114,7 +114,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = local.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_from_address
         BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST = local.tenant_base_host
       }
@@ -180,7 +180,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = local.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_from_address
         BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST = local.tenant_base_host
       }
@@ -218,7 +218,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = local.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_from_address
         BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST = local.tenant_base_host
       }
@@ -245,7 +245,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = local.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_from_address
         BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST = local.tenant_base_host
       }
@@ -298,7 +298,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = local.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_from_address
         BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST = local.tenant_base_host
       }
@@ -325,7 +325,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL           = local.ses_source_email
+        SES_SOURCE_EMAIL           = local.ses_from_address
         STUDIO_NOTIFICATION_EMAILS = local.studio_notification_emails
         BASE_URL                   = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST           = local.tenant_base_host
@@ -390,7 +390,7 @@ locals {
         USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
         BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST = local.tenant_base_host
-        SES_SOURCE_EMAIL = local.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_from_address
       }
     },
     "delete_participant" = {
@@ -414,7 +414,7 @@ locals {
         }
       ]
       environment = {
-        SES_SOURCE_EMAIL = local.ses_source_email
+        SES_SOURCE_EMAIL = local.ses_from_address
       }
     },
     "create_participants" = {
@@ -452,7 +452,7 @@ locals {
         USER_POOL_ID      = aws_cognito_user_pool.yogaswap.id
         BASE_URL          = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST  = local.tenant_base_host
-        SES_SOURCE_EMAIL  = local.ses_source_email # E-Mail-Adresse für SES-Absender (muss verifiziert sein)
+        SES_SOURCE_EMAIL  = local.ses_from_address # Display-Name + Adresse (Domain muss verifiziert sein)
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },
@@ -486,7 +486,7 @@ locals {
         USER_POOL_ID      = aws_cognito_user_pool.yogaswap.id
         BASE_URL          = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST  = local.tenant_base_host
-        SES_SOURCE_EMAIL  = local.ses_source_email
+        SES_SOURCE_EMAIL  = local.ses_from_address
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },
@@ -512,7 +512,7 @@ locals {
       environment = {
         BASE_URL          = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
         TENANT_BASE_HOST  = local.tenant_base_host
-        SES_SOURCE_EMAIL  = local.ses_source_email
+        SES_SOURCE_EMAIL  = local.ses_from_address
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },

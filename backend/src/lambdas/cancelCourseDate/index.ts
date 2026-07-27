@@ -11,6 +11,7 @@ import { notifyStudioTermCancelled } from "../shared/notifications/termAbsenceNo
 import { resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
+import { formatSesFromAddress } from "../shared/notifications/sesFromAddress";
 
 const client = dynamoClient;
 const ses = new SESClient({});
@@ -64,7 +65,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const swapsTable = process.env.SWAPS_TABLE;
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const participantsTable = process.env.PARTICIPANTS_TABLE;
-  const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "";
+  const sesSourceEmail = formatSesFromAddress(process.env.SES_SOURCE_EMAIL || "");
   const studioNotificationEmails = parseCsvEmails(process.env.STUDIO_NOTIFICATION_EMAILS);
   if (!coursesTable || !overridesTable || !swapsTable || !membershipsTable) {
     return {

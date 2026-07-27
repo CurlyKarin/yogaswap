@@ -6,6 +6,7 @@ import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import crypto from "crypto";
 import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
+import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 
 const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 const ses = new SESClient({});
@@ -26,7 +27,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const participantsTable = process.env.PARTICIPANTS_TABLE;
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const authTokensTable = process.env.AUTH_TOKENS_TABLE;
-  const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+  const sesSourceEmail = resolveSesSourceEmail();
   const mailLocale = process.env.MAIL_LOCALE || "de";
 
   if (!participantsTable || !membershipsTable || !authTokensTable) {

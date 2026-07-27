@@ -53,16 +53,40 @@ Hinweise IONOS:
 - TTL kann erst niedrig (300 s), später erhöhen.
 - Propagation: Minuten bis wenige Stunden.
 
-Optional (Zustellbarkeit / DMARC — empfohlen vor Go-Live):
+Optional (Zustellbarkeit — **vor Go-Live setzen**, sonst oft Spam):
 
-| Typ | Name | Wert (Beispiel) |
+### SPF (bestehenden TXT am Domain-Root **ersetzen**, nicht zweiten `v=spf1` anlegen)
+
+Aktuell bei IONOS typischerweise nur IONOS-Mail:
+
+```text
+v=spf1 include:_spf-eu.ionos.com ~all
+```
+
+**Soll** (IONOS + Amazon SES in einem Record):
+
+| Typ | Name / Host | Wert |
 |---|---|---|
-| TXT | `@` oder Domain-Root | `v=spf1 include:amazonses.com ~all` (mit bestehendem SPF zusammenführen, nicht zweimal `v=spf1`) |
-| TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:karin.schrader@online.de` |
+| TXT | `@` (Domain-Root) | `v=spf1 include:_spf-eu.ionos.com include:amazonses.com ~all` |
 
-`p=none` erst beobachten; später ggf. `quarantine`.
+### DMARC
+
+IONOS liefert oft nur einen CNAME auf `dmarc.ionos.de`. Besser eigener TXT:
+
+| Typ | Name / Host | Wert |
+|---|---|---|
+| TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:karin.schrader@online.de; adkim=s; aspf=s` |
+
+`p=none` erst beobachten; später ggf. `quarantine`. Prüfen:
+
+```bash
+dig +short TXT yogaswap.de @8.8.8.8
+dig +short TXT _dmarc.yogaswap.de @8.8.8.8
+```
 
 **Mailbox:** Fürs *Senden* von `noreply@…` brauchst du kein Postfach. Antworten landen sonst im Nichts — Absender bewusst „noreply“.
+
+**Absender-Anzeige:** App- und Cognito-Mails nutzen `YogaSwap <noreply@yogaswap.de>` (Display-Name, kein separates Postfach).
 
 ## 3) Verifizierung prüfen
 
@@ -146,5 +170,6 @@ Alarm-Schwellen später (Post-Rollout): Bounce ≫ 5 %, Complaint ≫ 0,1 %.
 
 ## Abgrenzung
 
-- **#87 / #106+:** Cognito-Code-Mails auf denselben SES-Absender — Domain muss vorher stehen.
-- Cognito `MessageAction: SUPPRESS` bleibt für Invite/Reset über App-Token; Cognito-eigene Templates sind Folgearbeit.
+- **#106:** Cognito User Pools (demo/staging/prod) nutzen SES `DEVELOPER` mit From `YogaSwap <noreply@yogaswap.de>` (gleiche Adresse wie App-Mails, kein `no-reply@`). IaC: `cognito.tf` + SES Identity-Policy in `ses.tf` (prod).
+- **#107+:** Custom-Message-Lambda (DE-Texte) und QA folgen separat.
+- Cognito `MessageAction: SUPPRESS` bleibt für Invite/Reset über App-Token; wo Cognito trotzdem Codes schickt (z. B. Forgot/Admin-Reset), geht der Absender über SES.
