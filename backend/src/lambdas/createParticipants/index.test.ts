@@ -233,7 +233,7 @@ describe('createParticipants Lambda', () => {
     expect(sesMockSend).toHaveBeenCalledTimes(1);
     expect(sesMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        Source: 'yogaswap@example.com',
+        Source: 'YogaSwap <yogaswap@example.com>',
         Destination: { ToAddresses: ['test@example.com'] },
       })
     );

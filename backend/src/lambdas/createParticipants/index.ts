@@ -13,6 +13,7 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { buildInviteMail, buildReactivationMail } from "../shared/templates/auth/authMailTemplates";
+import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
@@ -312,7 +313,7 @@ export const handler = async (event: any) => {
       // use the existing profile email to notify about reactivation.
       if (reactivated && existingEmail?.trim()) {
         const baseUrl = resolveAppBaseUrlForTenant(tenantId);
-        const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+        const sesSourceEmail = resolveSesSourceEmail();
         const reactivationMail = buildReactivationMail({
           locale: mailLocale,
           nickname: nicknameRaw,
@@ -608,7 +609,7 @@ export const handler = async (event: any) => {
 
   let emailSent = false;
   try {
-    const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+    const sesSourceEmail = resolveSesSourceEmail();
     // Debug: Zeige die verwendete E-Mail-Adresse
     console.log(`📧 Verwende SES Source Email: "${sesSourceEmail}"`);
     console.log(`📧 process.env.SES_SOURCE_EMAIL = "${process.env.SES_SOURCE_EMAIL}"`);

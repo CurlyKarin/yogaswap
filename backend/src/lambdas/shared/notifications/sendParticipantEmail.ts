@@ -1,6 +1,7 @@
 import { SendEmailCommand, SendRawEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { resolveParticipantEmail } from "../participantEmailLookup";
+import { formatSesFromAddress } from "./sesFromAddress";
 
 const ses = new SESClient({});
 
@@ -75,9 +76,10 @@ export async function sendParticipantEmail(params: {
   html: string;
   attachment?: ParticipantMailAttachment;
 }): Promise<void> {
+  const from = formatSesFromAddress(params.sesSourceEmail);
   if (params.attachment) {
     const raw = buildRawMimeMessage({
-      from: params.sesSourceEmail,
+      from,
       to: params.to,
       subject: params.subject,
       html: params.html,
@@ -85,7 +87,7 @@ export async function sendParticipantEmail(params: {
     });
     await ses.send(
       new SendRawEmailCommand({
-        Source: params.sesSourceEmail,
+        Source: from,
         Destinations: [params.to],
         RawMessage: { Data: Buffer.from(raw, "utf-8") },
       }),
@@ -95,7 +97,7 @@ export async function sendParticipantEmail(params: {
 
   await ses.send(
     new SendEmailCommand({
-      Source: params.sesSourceEmail,
+      Source: from,
       Destination: { ToAddresses: [params.to] },
       Message: {
         Subject: { Data: params.subject },

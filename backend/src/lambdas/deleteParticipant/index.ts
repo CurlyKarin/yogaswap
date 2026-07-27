@@ -12,6 +12,7 @@ import type { ParticipantProfile } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { buildStudioAccessRemovedMail } from "../shared/templates/auth/authMailTemplates";
+import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
@@ -162,7 +163,7 @@ export const handler = async (
     // Optional notification email only for participants with login history.
     // Never-registered invited/no-login users are removed quietly to avoid confusing mails.
     if (profile?.email && hasRegistrationHistory) {
-      const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+      const sesSourceEmail = resolveSesSourceEmail();
       const mailLocale = process.env.MAIL_LOCALE || "de";
       const removedMail = buildStudioAccessRemovedMail({
         locale: mailLocale,

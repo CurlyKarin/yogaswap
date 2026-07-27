@@ -5,6 +5,14 @@ resource "aws_cognito_user_pool" "yogaswap" {
   # Self-Sign-Up erlauben
   auto_verified_attributes = ["email"]
 
+  # Cognito-Code-Mails über SES (#106), nicht no-reply@verificationemail.com.
+  # Absender = ses_source_email (noreply@yogaswap.de) in allen Envs.
+  email_configuration {
+    email_sending_account = "DEVELOPER"
+    from_email_address    = local.cognito_from_email_address
+    source_arn            = local.ses_domain_identity_arn
+  }
+
   # Admin erstellt User
   admin_create_user_config {
     allow_admin_create_user_only = true

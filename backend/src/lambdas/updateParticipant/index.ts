@@ -28,6 +28,7 @@ import {
   buildRecoveryMail,
   buildRoleChangedMail,
 } from "../shared/templates/auth/authMailTemplates";
+import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 
 const client = dynamoClient;
 const cognito = new CognitoIdentityProviderClient({});
@@ -297,7 +298,7 @@ export const handler = async (
 
             if (emailChanged && existingStatus === "active") {
               const baseUrl = resolveAppBaseUrlForTenant(tenantId);
-              const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+              const sesSourceEmail = resolveSesSourceEmail();
               const mailLocale = process.env.MAIL_LOCALE || "de";
               const oldEmail = (existing.email ?? "").trim();
 
@@ -381,7 +382,7 @@ export const handler = async (
               passwordResetTriggered = true;
 
               const baseUrl = resolveAppBaseUrlForTenant(tenantId);
-              const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+              const sesSourceEmail = resolveSesSourceEmail();
               const mailLocale = process.env.MAIL_LOCALE || "de";
               const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
               const recoveryMail = buildRecoveryMail({
@@ -490,7 +491,7 @@ export const handler = async (
 
     if (roleChanged && existingStatus === "active" && updated.email) {
       const baseUrl = resolveAppBaseUrlForTenant(tenantId);
-      const sesSourceEmail = process.env.SES_SOURCE_EMAIL || "yogaswap@example.com";
+      const sesSourceEmail = resolveSesSourceEmail();
       const mailLocale = process.env.MAIL_LOCALE || "de";
       try {
         const roleChangedMail = buildRoleChangedMail({
