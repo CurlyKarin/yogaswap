@@ -1,5 +1,8 @@
 import { Link } from "react-router-dom";
 
+const CONTACT_EMAIL = "support@yogaswap.de";
+const APP_URL = "https://app.yogaswap.de";
+
 export default function Datenschutz() {
   return (
     <div className="legal-page">
@@ -14,7 +17,7 @@ export default function Datenschutz() {
           Karin Schrader<br />
           Zum Ackerberg 35<br />
           38126 Braunschweig<br />
-          E-Mail: kaschra@online.de
+          E-Mail: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         </p>
       </section>
 
@@ -36,10 +39,14 @@ export default function Datenschutz() {
         <h2>4. Hosting, Anmeldung und Speicherort</h2>
         <p>
           Die Anwendung wird über Amazon CloudFront und AWS bereitgestellt und ist unter{" "}
+          <a href={APP_URL} target="_blank" rel="noopener noreferrer">
+            {APP_URL}
+          </a>{" "}
+          erreichbar (Demo parallel unter{" "}
           <a href="https://demo.yogaswap.de" target="_blank" rel="noopener noreferrer">
             https://demo.yogaswap.de
-          </a>{" "}
-          erreichbar. Dabei können technisch bedingt Verbindungsdaten (IP, Zeitpunkt) an den Betreiber übermittelt werden.
+          </a>
+          ). Dabei können technisch bedingt Verbindungsdaten (IP, Zeitpunkt) an den Betreiber übermittelt werden.
         </p>
         <p>
           Für Anmeldung und Kontenverwaltung nutzt YogaSwap den Dienst Amazon Cognito (Teil der AWS-Cloud). Dabei werden E-Mail, Anzeigename und Zugangsdaten bei AWS verarbeitet. Kurs- und Tauschdaten werden in der Datenbank DynamoDB (AWS) gespeichert. Die Speicherorte können außerhalb der EU liegen (USA u. a.); AWS bietet hierzu vertragliche Garantien (Auftragsverarbeitung).

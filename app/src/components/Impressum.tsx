@@ -1,5 +1,9 @@
 import { Link } from "react-router-dom";
 
+const CONTACT_EMAIL = "support@yogaswap.de";
+const APP_URL = "https://app.yogaswap.de";
+const DEMO_URL = "https://demo.yogaswap.de";
+
 export default function Impressum() {
   return (
     <div className="legal-page">
@@ -23,9 +27,15 @@ export default function Impressum() {
       <section>
         <h2>Angebot</h2>
         <p>
-          YogaSwap ist erreichbar unter:{" "}
-          <a href="https://demo.yogaswap.de" target="_blank" rel="noopener noreferrer">
-            https://demo.yogaswap.de
+          YogaSwap (Produktion):{" "}
+          <a href={APP_URL} target="_blank" rel="noopener noreferrer">
+            {APP_URL}
+          </a>
+        </p>
+        <p>
+          Öffentliche Demo:{" "}
+          <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
+            {DEMO_URL}
           </a>
         </p>
       </section>
@@ -33,7 +43,8 @@ export default function Impressum() {
       <section>
         <h2>Kontakt</h2>
         <p>
-          E-Mail: kaschra@online.de
+          E-Mail:{" "}
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         </p>
       </section>
 
