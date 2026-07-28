@@ -184,3 +184,5 @@ Alarm-Schwellen später (Post-Rollout): Bounce ≫ 5 %, Complaint ≫ 0,1 %.
    - Subject: `YogaSwap Bestaetigungscode`
    - Body deutsch, enthält den Code / Hinweis „Bestaetigungscode“
 5. Optional Logs: `/aws/lambda/<project>-cognito-custom-message`
+
+Vollständige QA-Checkliste, Testergebnisse, Freigabe und Rollback: [`docs/cognito-mail-qa.md`](./cognito-mail-qa.md) (#109).
