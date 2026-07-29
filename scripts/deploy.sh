@@ -101,12 +101,17 @@ if [ ! -f "env.$ENV.json" ]; then
     exit 1
 fi
 
-# Projektname aus der Single Source (env.tf) ableiten
-PROJECT_NAME=$(echo 'local.project' | $TERRAFORM_CMD console 2>/dev/null | tr -d '"' | tr -d '\r' | head -n1 | xargs)
-if [ -z "$PROJECT_NAME" ]; then
-    echo "❌ Projektname konnte nicht aus env.tf ($ENV) ermittelt werden."
-    exit 1
-fi
+# Projektname aus Workspace (muss mit env.tf / local.env_public übereinstimmen).
+# Kein `tofu console`: hält in CI mit S3-Backend einen State-Lock und hängt (#274).
+case "$ENV" in
+    default) PROJECT_NAME="yogaswap-demo" ;;
+    staging) PROJECT_NAME="yogaswap-staging" ;;
+    prod)    PROJECT_NAME="yogaswap-prod" ;;
+    *)
+        echo "❌ Unbekannter Workspace '$ENV' – kein Projektname-Mapping."
+        exit 1
+        ;;
+esac
 
 echo "✅ Tool:        $TERRAFORM_CMD"
 echo "✅ Environment: $ENV"
