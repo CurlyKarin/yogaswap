@@ -56,14 +56,22 @@ jobs:
           role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
           aws-region: eu-central-1
 
-      # Sensible Env-Dateien (gitignored) aus GitHub-Secrets schreiben.
+      # Sensible Env-Dateien aus Environment-Secrets.
+      # Wichtig: Secret zuerst in env: legen — direktes ${{ secrets.* }} in run:
+      # zerbricht JSON (u. a. wegen `}`), und printf kann `%` falsch interpretieren.
       - name: Write OpenTofu env.staging.json
+        env:
+          ENV_STAGING_JSON: ${{ secrets.ENV_STAGING_JSON }}
         run: |
-          printf '%s\n' "${{ secrets.ENV_STAGING_JSON }}" > projects/yogaswap/env.staging.json
+          python3 -c 'import os, pathlib; pathlib.Path("projects/yogaswap/env.staging.json").write_text(os.environ["ENV_STAGING_JSON"])'
+          python3 -c 'import json; json.load(open("projects/yogaswap/env.staging.json")); print("env.staging.json: OK")'
 
       - name: Write app/.env.staging
+        env:
+          APP_ENV_STAGING: ${{ secrets.APP_ENV_STAGING }}
         run: |
-          printf '%s\n' "${{ secrets.APP_ENV_STAGING }}" > app/.env.staging
+          python3 -c 'import os, pathlib; pathlib.Path("app/.env.staging").write_text(os.environ["APP_ENV_STAGING"])'
+          test -s app/.env.staging && echo "app/.env.staging: OK"
 
       # Wichtig: immer neu bauen — Workspace staging → Vite --mode staging.
       # Kein --skip-build: sonst riskiert man ein Bundle einer anderen Env.
