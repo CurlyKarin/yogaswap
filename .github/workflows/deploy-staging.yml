@@ -1,0 +1,71 @@
+# Staging-Deploy nach Merge auf main (#15).
+#
+# Voraussetzungen (noch nicht alles erledigt):
+# 1. OIDC-Rolle in AWS  ✅  (yogaswap-github-actions-deploy, Secret DEPLOY_ROLE_ARN)
+# 2. Remote-State (S3) für OpenTofu — sonst kennt CI die bestehenden Ressourcen nicht
+# 3. GitHub Environment Secrets "staging":
+#    - ENV_STAGING_JSON   → Inhalt von projects/yogaswap/env.staging.json
+#    - APP_ENV_STAGING    → Inhalt von app/.env.staging
+#
+# Warum Frontend-Build im Job?
+# deploy.sh lädt app/build nach S3. Ohne frischen Build für --mode staging
+# könnte ein falsches Bundle live gehen (wie schon einmal bei prod passiert).
+
+name: Deploy Staging
+
+on:
+  # Nach Merge auf main automatisch
+  push:
+    branches: [main]
+  # Manuell unter Actions → Deploy Staging → Run workflow
+  workflow_dispatch:
+
+# Keine dauerhaften AWS-Keys; OIDC liefert kurzlebige Credentials.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.8.0"
+
+      # OIDC: GitHub bekommt temporäre AWS-Credentials über die IAM-Rolle.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      # Sensible Env-Dateien (gitignored) aus GitHub-Secrets schreiben.
+      - name: Write OpenTofu env.staging.json
+        run: |
+          printf '%s\n' "${{ secrets.ENV_STAGING_JSON }}" > projects/yogaswap/env.staging.json
+
+      - name: Write app/.env.staging
+        run: |
+          printf '%s\n' "${{ secrets.APP_ENV_STAGING }}" > app/.env.staging
+
+      # Wichtig: immer neu bauen — Workspace staging → Vite --mode staging.
+      # Kein --skip-build: sonst riskiert man ein Bundle einer anderen Env.
+      - name: Deploy staging
+        run: ./scripts/deploy.sh staging --auto-approve
