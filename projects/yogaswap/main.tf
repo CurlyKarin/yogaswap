@@ -5,7 +5,15 @@ terraform {
       version = ">= 5.0.0"
     }
   }
-  backend "local" {}
+  # Remote-State (#274): Bucket + Lock einmalig per Bootstrap angelegt
+  # (scripts/bootstrap-opentofu-backend.sh). Migration: docs/opentofu-remote-state.md
+  backend "s3" {
+    bucket         = "yogaswap-opentofu-state"
+    key            = "yogaswap/terraform.tfstate"
+    region         = "eu-central-1"
+    dynamodb_table = "yogaswap-opentofu-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {

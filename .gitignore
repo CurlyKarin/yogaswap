@@ -67,6 +67,8 @@ projects/yogaswap/env.*.json
 *.tfstate.backup
 .terraform/
 .terraform.lock.hcl
+# Lokale State-Backups vor Remote-Migration (#274)
+.state-backup-*/
 tfplan
 tfplan.*
 crash.log
