@@ -29,3 +29,8 @@ make -C projects/yogaswap deploy ENV=prod
 ```
 
 Nutzt denselben S3-Remote-State wie CI (`docs/opentofu-remote-state.md`).
+
+## Provider-Lock
+
+`projects/yogaswap/.terraform.lock.hcl` ist im Repo (AWS z. B. 6.56.0).
+So holt CI nicht ungeprüft die neueste Provider-Version (6.57.0 hatte Prod-Deploy kaputtgemacht).

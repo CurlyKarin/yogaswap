@@ -66,7 +66,7 @@ projects/yogaswap/env.*.json
 *.tfstate.*
 *.tfstate.backup
 .terraform/
-.terraform.lock.hcl
+# .terraform.lock.hcl bewusst NICHT ignorieren — CI soll dieselbe Provider-Version nutzen
 # Lokale State-Backups vor Remote-Migration (#274)
 .state-backup-*/
 tfplan
