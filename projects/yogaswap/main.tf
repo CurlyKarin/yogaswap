@@ -2,7 +2,9 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0.0"
+      # 6.57.0 brach Prod-Deploy in CI (InvalidSignature/SerializationException).
+      # Lockfile projects/yogaswap/.terraform.lock.hcl pinnen die Version zusätzlich.
+      version = ">= 5.0.0, < 6.57.0"
     }
   }
   # Remote-State (#274): Bucket + Lock einmalig per Bootstrap angelegt
