@@ -1,0 +1,58 @@
+# Prod-Deploy nur manuell (#279).
+# Kein Auto-Deploy nach Merge — bewusster Knopf unter Actions.
+
+name: Deploy Prod
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to prod
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.8.0"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - name: Write OpenTofu env.prod.json
+        env:
+          ENV_PROD_JSON: ${{ secrets.ENV_PROD_JSON }}
+        run: |
+          python3 -c 'import os, pathlib; pathlib.Path("projects/yogaswap/env.prod.json").write_text(os.environ["ENV_PROD_JSON"])'
+          python3 -c 'import json; json.load(open("projects/yogaswap/env.prod.json")); print("env.prod.json: OK")'
+
+      - name: Write app/.env.prod
+        env:
+          APP_ENV_PROD: ${{ secrets.APP_ENV_PROD }}
+        run: |
+          python3 -c 'import os, pathlib; pathlib.Path("app/.env.prod").write_text(os.environ["APP_ENV_PROD"])'
+          test -s app/.env.prod && echo "app/.env.prod: OK"
+
+      - name: Deploy prod
+        run: ./scripts/deploy.sh prod --auto-approve
