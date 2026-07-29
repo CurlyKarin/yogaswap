@@ -1,0 +1,58 @@
+# Demo-Deploy nur manuell (#279).
+# Workspace OpenTofu: default → Frontend Vite --mode demo.
+
+name: Deploy Demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to demo
+    runs-on: ubuntu-latest
+    environment: demo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.8.0"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - name: Write OpenTofu env.default.json
+        env:
+          ENV_DEFAULT_JSON: ${{ secrets.ENV_DEFAULT_JSON }}
+        run: |
+          python3 -c 'import os, pathlib; pathlib.Path("projects/yogaswap/env.default.json").write_text(os.environ["ENV_DEFAULT_JSON"])'
+          python3 -c 'import json; json.load(open("projects/yogaswap/env.default.json")); print("env.default.json: OK")'
+
+      - name: Write app/.env.demo
+        env:
+          APP_ENV_DEMO: ${{ secrets.APP_ENV_DEMO }}
+        run: |
+          python3 -c 'import os, pathlib; pathlib.Path("app/.env.demo").write_text(os.environ["APP_ENV_DEMO"])'
+          test -s app/.env.demo && echo "app/.env.demo: OK"
+
+      - name: Deploy demo (workspace default)
+        run: ./scripts/deploy.sh default --auto-approve
