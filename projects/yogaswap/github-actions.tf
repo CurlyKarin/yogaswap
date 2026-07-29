@@ -207,12 +207,26 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Resource = ["*"]
       },
       {
-        Sid    = "TerraformState"
+        Sid    = "Sts"
         Effect = "Allow"
         Action = [
           "sts:GetCallerIdentity",
         ]
         Resource = ["*"]
+      },
+      {
+        # State-Lock (#274); Bucket-Zugriff steckt bereits in S3Deploy (arn:aws:s3:::*).
+        Sid    = "OpenTofuStateLock"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable",
+        ]
+        Resource = [
+          "arn:aws:dynamodb:eu-central-1:${data.aws_caller_identity.current.account_id}:table/yogaswap-opentofu-locks",
+        ]
       },
     ]
   })
