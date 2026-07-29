@@ -1,0 +1,19 @@
+---
+description: Sprache und Schreibstil für GitHub-Issues, Commits und Kommunikation
+alwaysApply: true
+---
+
+# Sprache und Schreibstil
+
+## GitHub Issues und PRs
+- Titel und Beschreibungen immer auf **Deutsch**
+- Keine Gendern mit `:` oder `*` (also nicht „Teilnehmer:in", „Nutzer*innen")
+- Stattdessen neutrale Begriffe verwenden:
+  - ✅ „Mitglied", „Person", „User", „Teilnehmende", „Nutzende", „Mitglieder"
+  - ❌ „Teilnehmer:in", „Nutzer*innen", „Trainer:innen"
+
+## Commits
+- Englisch (siehe commit-message.mdc)
+
+## Allgemeine Kommunikation
+- Mit der Nutzerin auf Deutsch kommunizieren
