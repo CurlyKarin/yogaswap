@@ -2,7 +2,7 @@
 
 Stand: **MVP Teilnehmer-Benachrichtigungen implementiert** (Issue [#45](https://github.com/CurlyKarin/yogaswap/issues/45)). Dieses Dokument ist Inventar, Produktentscheidungen und Zielbild für Folgearbeit (Trainer:in, Schalter, Digest).
 
-Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-Anhang). Absender `SES_SOURCE_EMAIL` (Rollout: `noreply@yogaswap.de`). App-Auth (Invite/Reset-Token) unterdrückt Cognito-Mails (`MessageAction: SUPPRESS`) und nutzt eigene Templates. Cognito-Code-Mails (Forgot/Admin-Reset) gehen über denselben SES-Absender (`email_sending_account = DEVELOPER`, #106) mit deutschen Custom-Message-Texten (#107/#108). Domain/Production: [`docs/ses-production.md`](./ses-production.md) (#80). QA/Freigabe Auth-Mails: [`docs/cognito-mail-qa.md`](./cognito-mail-qa.md) (#109).
+Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-Anhang). Absender `SES_SOURCE_EMAIL` (Rollout: `noreply@yogaswap.de`). App-Auth (Invite/Reset-Token) unterdrückt Cognito-Mails (`MessageAction: SUPPRESS`) und nutzt eigene Templates. App-Auth-Mails nennen den **Studio-Namen** (Tenant `name`, Fallback „YogaSwap“, #268). Cognito-Code-Mails (Forgot/Admin-Reset) gehen über denselben SES-Absender (`email_sending_account = DEVELOPER`, #106) mit deutschen Custom-Message-Texten (#107/#108) — ohne Studio-Name (nur Cognito-Attribute). Domain/Production: [`docs/ses-production.md`](./ses-production.md) (#80). QA/Freigabe Auth-Mails: [`docs/cognito-mail-qa.md`](./cognito-mail-qa.md) (#109).
 
 ### MVP #45 — Umsetzungsstand (Teilnehmer:innen)
 
@@ -22,7 +22,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 
 | Ereignis | Lambda | Empfänger | Template / Inhalt | Voraussetzungen / Skip |
 |----------|--------|-----------|-------------------|------------------------|
-| **Einladung (neu)** | `createParticipants` | Teilnehmer:in (E-Mail aus Request) | `buildInviteMail` | E-Mail im Request; `AUTH_TOKENS_TABLE`; SES-Fehler blockiert Anlage nicht |
+| **Einladung (neu)** | `createParticipants` | Teilnehmer:in (E-Mail aus Request) | `buildInviteMail` (Betreff/Body inkl. Studio-Name, #268) | E-Mail im Request; `AUTH_TOKENS_TABLE`; SES-Fehler blockiert Anlage nicht |
 | **Reaktivierung Studio-Zugang** | `createParticipants` | Bestehende aktive Profile | `buildReactivationMail` | Reaktivierung ohne E-Mail im Request, aber Profil-E-Mail vorhanden |
 | **Passwort-Reset (Admin)** | `resetParticipantPassword`, `updateParticipant` | Zielprofil | `buildRecoveryMail` | Admin-Aktion; aktives Profil mit E-Mail |
 | **Passwort-Reset (Self-Service)** | `requestSelfPasswordReset` | Bekannter Nickname | `buildRecoveryMail` | Generische 200-Antwort bei unbekanntem User (Enumeration-Schutz) |

@@ -29,6 +29,7 @@ import {
   buildRoleChangedMail,
 } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
+import { loadTenantName } from "../shared/tenantSettingsLoader";
 
 const client = dynamoClient;
 const cognito = new CognitoIdentityProviderClient({});
@@ -99,6 +100,15 @@ export const handler = async (
   }
 
   try {
+    let studioName: string | undefined;
+    let studioNameLoaded = false;
+    const getStudioName = async () => {
+      if (!studioNameLoaded) {
+        studioName = await loadTenantName(client, tenantsTable, tenantId);
+        studioNameLoaded = true;
+      }
+      return studioName;
+    };
     const hasAuthUserId =
       Object.prototype.hasOwnProperty.call(body, "authUserId") &&
       typeof body.authUserId === "string" &&
@@ -309,6 +319,7 @@ export const handler = async (
                   nickname: targetUserId,
                   loginUrl: baseUrl,
                   newEmail: email,
+                  studioName: await getStudioName(),
                 });
                 await ses.send(
                   new SendEmailCommand({
@@ -334,6 +345,7 @@ export const handler = async (
                     nickname: targetUserId,
                     loginUrl: baseUrl,
                     newEmail: email,
+                    studioName: await getStudioName(),
                   });
                   await ses.send(
                     new SendEmailCommand({
@@ -389,6 +401,7 @@ export const handler = async (
                 locale: mailLocale,
                 nickname: targetUserId,
                 link,
+                studioName: await getStudioName(),
               });
               try {
                 await ses.send(
@@ -500,6 +513,7 @@ export const handler = async (
           loginUrl: baseUrl,
           oldRole: previousRole ?? "participant",
           newRole: nextRoleForMail ?? "participant",
+          studioName: await getStudioName(),
         });
         await ses.send(
           new SendEmailCommand({

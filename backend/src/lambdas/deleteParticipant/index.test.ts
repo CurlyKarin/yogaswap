@@ -140,7 +140,13 @@ describe("deleteParticipant Lambda", () => {
         },
       })
       .mockResolvedValueOnce({}) // membership delete
-      .mockResolvedValueOnce({ Items: [] }); // courses query
+      .mockResolvedValueOnce({ Items: [] }) // courses query
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }); // studio name for access-removed mail
     sesMockSend.mockResolvedValueOnce({});
 
     const result = await handler(makeEvent());

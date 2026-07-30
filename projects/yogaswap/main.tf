@@ -431,12 +431,13 @@ locals {
       name             = "create-participants"
       file_name        = "createParticipants.zip"
       timeout          = 15
-      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn]
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn, module.tenants_table.table_arn]
       dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
         "AUTH_TOKENS_TABLE"  = module.auth_tokens_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -469,12 +470,13 @@ locals {
     "reset_participant_password" = {
       name             = "reset-participant-password"
       file_name        = "resetParticipantPassword.zip"
-      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn]
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn, module.tenants_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
         "AUTH_TOKENS_TABLE"  = module.auth_tokens_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -503,12 +505,13 @@ locals {
     "request_self_password_reset" = {
       name             = "request-self-password-reset"
       file_name        = "requestSelfPasswordReset.zip"
-      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn]
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn, module.tenants_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
         "AUTH_TOKENS_TABLE"  = module.auth_tokens_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []

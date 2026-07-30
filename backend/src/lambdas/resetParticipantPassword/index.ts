@@ -7,6 +7,7 @@ import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import crypto from "crypto";
 import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
+import { loadTenantName } from "../shared/tenantSettingsLoader";
 
 const ses = new SESClient({});
 const dynamodb = dynamoClient;
@@ -114,6 +115,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(
       cognitoUsername,
     )}&email=${encodeURIComponent(email)}`;
+    const studioName = await loadTenantName(
+      dynamodb,
+      process.env.TENANTS_TABLE,
+      tenantId,
+    );
 
     let emailSent = false;
     try {
@@ -121,6 +127,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         locale: mailLocale,
         nickname: targetUserId,
         link,
+        studioName,
       });
       await ses.send(
         new SendEmailCommand({

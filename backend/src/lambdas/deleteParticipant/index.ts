@@ -12,6 +12,7 @@ import type { ParticipantProfile } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { buildStudioAccessRemovedMail } from "../shared/templates/auth/authMailTemplates";
+import { loadTenantName } from "../shared/tenantSettingsLoader";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { getTenantContext } from "../shared/tenantContext";
 
@@ -165,9 +166,11 @@ export const handler = async (
     if (profile?.email && hasRegistrationHistory) {
       const sesSourceEmail = resolveSesSourceEmail();
       const mailLocale = process.env.MAIL_LOCALE || "de";
+      const studioName = await loadTenantName(client, tenantsTable, tenantId);
       const removedMail = buildStudioAccessRemovedMail({
         locale: mailLocale,
         nickname: profile.userId || userId,
+        studioName,
       });
       try {
         await ses.send(

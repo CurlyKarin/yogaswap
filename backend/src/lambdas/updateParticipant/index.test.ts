@@ -164,7 +164,13 @@ describe("updateParticipant Lambda", () => {
         },
       }) // target membership (current role)
       .mockResolvedValueOnce({}) // memberships PutItem (role change)
-      .mockResolvedValueOnce({}); // participants PutItem
+      .mockResolvedValueOnce({}) // participants PutItem
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }); // studio name for role-changed mail
     sesMockSend.mockResolvedValueOnce({});
 
     const result = await handler(
@@ -470,8 +476,15 @@ describe("updateParticipant Lambda", () => {
           cognitoUsername: { S: "Alice" },
         },
       })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }) // studio name for email-change mails
       .mockResolvedValueOnce({});
     cognitoMockSend.mockResolvedValueOnce({});
+    sesMockSend.mockResolvedValue({});
 
     const result = await handler(
       makeEvent({
@@ -568,9 +581,16 @@ describe("updateParticipant Lambda", () => {
           cognitoUsername: { S: "Alice" },
         },
       }) // existing participant
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }) // studio name for auth mails
+      .mockResolvedValueOnce({}) // AUTH_TOKENS PutItem
       .mockResolvedValueOnce({}); // participants PutItem
     cognitoMockSend.mockResolvedValue({});
-    sesMockSend.mockResolvedValueOnce({});
+    sesMockSend.mockResolvedValue({});
 
     const result = await handler(
       makeEvent({
