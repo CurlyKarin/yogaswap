@@ -79,9 +79,13 @@ vi.mock("aws-amplify/auth", () => ({
   fetchAuthSession: vi.fn(),
 }));
 
-vi.mock("./api/tenantContext", () => ({
-  getTenantContext: vi.fn(),
-}));
+vi.mock("./api/tenantContext", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./api/tenantContext")>();
+  return {
+    ...actual,
+    getTenantContext: vi.fn(),
+  };
+});
 
 vi.mock("./api/participants", () => ({
   getParticipants: vi.fn(),
@@ -116,6 +120,8 @@ async function renderLoggedInAdmin() {
   } as unknown as never);
 
   vi.mocked(getTenantContext).mockResolvedValue({
+    tenantId: "default-tenant",
+    userId: "admin",
     tenant: { tenantId: "default-tenant", name: "Default" },
     membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
   } as unknown as never);
