@@ -8,8 +8,9 @@
 #   3. default-tenant + UserTenantMembership (role=admin) via create-tenant (#53)
 #      -> ohne die Membership kann der Admin keine Teilnehmer verwalten
 #
-# Alle umgebungsabhaengigen Werte (Projektname, Cognito-Pool, Region) werden aus
-# dem OpenTofu-Workspace abgeleitet (Single Source: env.tf + tofu outputs).
+# Cognito-Pool/Region kommen aus tofu outputs; der Projektname aus dem
+# Workspace-Mapping (muss mit env.tf / local.env_public übereinstimmen).
+# Kein `tofu console`: hält mit S3-Backend einen State-Lock und kann hängen (#274).
 # Voraussetzung: Die Umgebung wurde zuvor deployt (tofu state vorhanden).
 #
 # Aufruf:
@@ -32,6 +33,17 @@ if [ -z "$ENV" ] || [ -z "$EMAIL" ] || [ -z "$NICKNAME" ]; then
     exit 1
 fi
 
+# Projektname aus Workspace (analog deploy.sh / Makefile).
+case "$ENV" in
+    default) PROJECT_NAME="yogaswap-demo" ;;
+    staging) PROJECT_NAME="yogaswap-staging" ;;
+    prod)    PROJECT_NAME="yogaswap-prod" ;;
+    *)
+        echo "❌ Unbekannter Workspace '$ENV' – kein Projektname-Mapping."
+        exit 1
+        ;;
+esac
+
 if command -v tofu &> /dev/null; then
     TERRAFORM_CMD="tofu"
 elif command -v terraform &> /dev/null; then
@@ -44,12 +56,11 @@ fi
 cd "$TF_DIR"
 $TERRAFORM_CMD workspace select "$ENV"
 
-PROJECT_NAME=$(echo 'local.project' | $TERRAFORM_CMD console 2>/dev/null | tr -d '"' | tr -d '\r' | head -n1 | xargs)
 POOL_ID=$($TERRAFORM_CMD output -raw cognito_user_pool_id 2>/dev/null || true)
 REGION=$($TERRAFORM_CMD output -raw cognito_region 2>/dev/null || echo "eu-central-1")
 
-if [ -z "$PROJECT_NAME" ] || [ -z "$POOL_ID" ]; then
-    echo "❌ Konnte Projektname/Cognito-Pool für '$ENV' nicht ermitteln."
+if [ -z "$POOL_ID" ]; then
+    echo "❌ Konnte Cognito-Pool für '$ENV' nicht ermitteln."
     echo "   Wurde die Umgebung schon deployt (tofu apply)?"
     exit 1
 fi

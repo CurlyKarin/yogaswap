@@ -41,23 +41,23 @@ test:
 
 # Projektname aus Workspace (muss mit env.tf / local.env_public übereinstimmen).
 # Kein `tofu console`: hält mit S3-Backend einen State-Lock und kann hängen (#274/#261).
-project_name = \
-	$(if $(filter default,$(ENV)),yogaswap-demo,\
-	$(if $(filter staging,$(ENV)),yogaswap-staging,\
-	$(if $(filter prod,$(ENV)),yogaswap-prod,$(error Unbekannter ENV=$(ENV)))))
+# Einzeilig: Fortsetzungszeilen würden führendes Whitespace in den Wert ziehen.
+project_name = $(if $(filter default,$(ENV)),yogaswap-demo,$(if $(filter staging,$(ENV)),yogaswap-staging,$(if $(filter prod,$(ENV)),yogaswap-prod,$(error Unbekannter ENV=$(ENV)))))
 
 # default-tenant in der ENV anlegen (Projektname aus Workspace-Mapping).
 seed-tenants: workspace
 	cd $(REPO_ROOT)/backend && \
-	  PROJECT_NAME=$(project_name) \
+	  PROJECT_NAME="$(project_name)" \
 	  npm run seed:tenants
 
 # Tenant anlegen + bestehenden Admin verknüpfen (#53).
+# Legt standardmäßig auch ein Participant-Profil an (Admin als User sichtbar).
 #   make create-tenant ENV=staging TENANT=studio-x ADMIN=karin \
-#     [ARGS="--name \"Studio X\" --with-participant-profile"]
+#     [ARGS="--name \"Studio X\""]
+# Cognito-User muss bereits existieren (bootstrap-admin bzw. createAdminUser.js).
 create-tenant: workspace
 	cd $(REPO_ROOT)/backend && \
-	  PROJECT_NAME=$(project_name) \
+	  PROJECT_NAME="$(project_name)" \
 	  npm run create-tenant -- --tenant "$(TENANT)" --admin-nickname "$(ADMIN)" $(ARGS)
 
 # Ersten Admin der ENV anlegen (Gruppen + Admin-User + Tenant + Membership).

@@ -10,7 +10,7 @@
 // Aufruf:
 //   PROJECT_NAME="<project>" npm run create-tenant -- \
 //     --tenant <tenantId> --admin-nickname <nickname> [--name "<Anzeigename>"] \
-//     [--role <role>] [--with-participant-profile]
+//     [--role <role>] [--skip-participant-profile]
 //
 // Die Zielumgebung MUSS explizit gesetzt sein (kein Demo-Fallback, #74) – über
 // PROJECT_NAME, projects/yogaswap/terraform.tfvars oder direkt
@@ -36,7 +36,9 @@ interface CliArgs {
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { role: "admin", withParticipantProfile: false };
+  // Profil standardmäßig an: sonst erscheint der Admin nicht in der
+  // Teilnehmerliste und kann dort nicht als User verwaltet werden (#261).
+  const args: CliArgs = { role: "admin", withParticipantProfile: true };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
@@ -55,6 +57,9 @@ function parseArgs(argv: string[]): CliArgs {
       case "--with-participant-profile":
         args.withParticipantProfile = true;
         break;
+      case "--skip-participant-profile":
+        args.withParticipantProfile = false;
+        break;
       default:
         console.warn(`⚠️  Unbekanntes Argument ignoriert: ${arg}`);
     }
@@ -67,7 +72,7 @@ function usage(): never {
     [
       "Verwendung:",
       "  npm run create-tenant -- --tenant <tenantId> --admin-nickname <nickname> \\",
-      '    [--name "<Anzeigename>"] [--role admin] [--with-participant-profile]',
+      '    [--name "<Anzeigename>"] [--role admin] [--skip-participant-profile]',
       "",
       "Zielumgebung explizit setzen, z. B.:",
       '  PROJECT_NAME="<project>" npm run create-tenant -- --tenant studio-x --admin-nickname karin',
@@ -223,8 +228,8 @@ async function run(): Promise<void> {
     `✅ Membership gesetzt: ${adminNickname} → ${tenantId} (role=${args.role}).`,
   );
 
-  // 3. Optionales Participant-Profil (sonst erscheint der Admin nicht in der
-  //    Teilnehmerliste – bewusst standardmäßig AUS, ein Admin ist kein Teilnehmer).
+  // 3. Participant-Profil (Standard): ohne Profil erscheint der Admin nicht in
+  //    der Teilnehmerliste. Abschalten mit --skip-participant-profile.
   if (PARTICIPANTS_TABLE) {
     try {
       await client.send(
