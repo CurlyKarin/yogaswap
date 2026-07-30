@@ -645,7 +645,8 @@ module "yogaswap_api" {
     "PUT /courses/{courseId}",
     "POST /courses/{courseId}/dates/{date}/cancel",
     "DELETE /courses/{courseId}",
-    "GET /tenant-context",
+    # GET /tenant-context bewusst öffentlich (#261): Studio-Existenz vor Login prüfen.
+    # Membership kommt nur mit JWT/User-Kontext; ohne Auth nur tenant-Lookup.
     "PUT /tenant-settings",
   ]
 }

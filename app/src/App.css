@@ -1372,6 +1372,26 @@ a:focus-visible {
 .legal-page section a:hover {
   color: #333;
 }
+
+.unknown-studio {
+  text-align: left;
+  max-width: 36rem;
+  margin: 1.5rem auto;
+}
+.unknown-studio h2 {
+  margin-bottom: 0.75rem;
+}
+.unknown-studio p {
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+.unknown-studio code {
+  font-size: 0.9em;
+  background: #f3f4f6;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
 .legal-back {
   margin-bottom: 1rem;
 }

@@ -13,7 +13,8 @@ import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/s
 import { User, UserRole, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
 import { fetchAuthSession } from "aws-amplify/auth";
-import { getTenantContext } from "./api/tenantContext";
+import { getTenantContext, TenantNotFoundError } from "./api/tenantContext";
+import UnknownStudio from "./components/UnknownStudio";
 import { canInviteParticipants, canManageParticipants } from "shared/permissions";
 import { getParticipants, type ParticipantWithStatus } from "./api/participants";
 import { setActingForUserId, setActorUserId } from "./api/delegation";
@@ -28,11 +29,15 @@ function LegalPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<LegalPageFallback />}>{children}</Suspense>;
 }
 
+type StudioGate = "loading" | "ready" | "not_found";
+
 // Checkmark Haupt-App als Komponente
 function MainApp() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [membership, setMembership] = useState<UserTenantMembership | null>(null);
+  const [studioGate, setStudioGate] = useState<StudioGate>("loading");
+  const [unknownTenantId, setUnknownTenantId] = useState<string>("");
   const [canInvite, setCanInvite] = useState(false);
   const [canDelegate, setCanDelegate] = useState(false);
   const [delegationCandidates, setDelegationCandidates] = useState<ParticipantWithStatus[]>([]);
@@ -41,6 +46,33 @@ function MainApp() {
   const [delegationPickerOpen, setDelegationPickerOpen] = useState(false);
   const [delegationSearch, setDelegationSearch] = useState("");
   const { logout, isLoading, error } = useAppAuth();
+
+  // Studio-Existenz vor Login prüfen (#261) — GET /tenant-context ist öffentlich.
+  useEffect(() => {
+    let cancelled = false;
+    const checkStudio = async () => {
+      try {
+        const ctx = await getTenantContext();
+        if (cancelled) return;
+        setTenant(ctx.tenant);
+        setStudioGate("ready");
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof TenantNotFoundError) {
+          setUnknownTenantId(err.tenantId);
+          setStudioGate("not_found");
+          return;
+        }
+        console.error("Studio-Check fehlgeschlagen:", err);
+        // Netzwerk/5xx: Login nicht blockieren (Tenant kommt ggf. nach Auth).
+        setStudioGate("ready");
+      }
+    };
+    void checkStudio();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // App.tsx
   useEffect(() => {
@@ -81,10 +113,11 @@ function MainApp() {
 
   // Tenant-Kontext laden, sobald ein User existiert
   useEffect(() => {
-    if (!currentUser) {
-      setTenant(null);
-      setMembership(null);
-      setCanInvite(false);
+    if (!currentUser || studioGate !== "ready") {
+      if (!currentUser) {
+        setMembership(null);
+        setCanInvite(false);
+      }
       return;
     }
 
@@ -108,7 +141,13 @@ function MainApp() {
         }
       } catch (err) {
         console.error("Fehler beim Laden des Tenant-Kontexts:", err);
-        setTenant(null);
+        if (err instanceof TenantNotFoundError) {
+          setUnknownTenantId(err.tenantId);
+          setStudioGate("not_found");
+          setTenant(null);
+          setMembership(null);
+          return;
+        }
         setMembership(null);
         // Im Fehlerfall ebenfalls auf Admin-Rolle zurückfallen
         setCanInvite(currentUser.role === "admin");
@@ -117,7 +156,7 @@ function MainApp() {
     };
 
     loadTenantContext();
-  }, [currentUser]);
+  }, [currentUser, studioGate]);
 
   useEffect(() => {
     if (!currentUser || !canDelegate) {
@@ -297,7 +336,13 @@ function MainApp() {
       )}
 
       <main>
-        {!effectiveUser ? (
+        {studioGate === "loading" ? (
+          <section id="main-content" className="main-section" aria-busy="true" aria-label="Studio wird geprüft">
+            <p className="muted">Studio wird geprüft …</p>
+          </section>
+        ) : studioGate === "not_found" ? (
+          <UnknownStudio tenantId={unknownTenantId} />
+        ) : !effectiveUser ? (
           <section id="main-content" className="main-section" aria-label="Anmeldung">
             <Login onLogin={handleLogin} />
           </section>
@@ -319,7 +364,7 @@ function MainApp() {
           </section>
         )}
 
-        {currentUser && canInvite && !actingForUserIdState && (
+        {studioGate === "ready" && currentUser && canInvite && !actingForUserIdState && (
           <section className="main-section main-section-admin" aria-labelledby="admin-heading">
             <h2 id="admin-heading" className="visually-hidden">
               Verwaltung

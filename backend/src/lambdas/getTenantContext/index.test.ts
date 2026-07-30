@@ -88,5 +88,20 @@ describe("getTenantContext Lambda", () => {
     expect(result.statusCode).toBe(500);
     expect(JSON.parse(result.body).error).toMatch(/TENANTS_TABLE or MEMBERSHIPS_TABLE/);
   });
+
+  test("returns 400 when tenant does not exist (#261)", async () => {
+    mockSend.mockResolvedValueOnce({ Item: undefined });
+
+    const event = makeEvent({
+      headers: { "x-tenant-id": "yogastudio-test" },
+    });
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe("tenant_not_found");
+    expect(body.tenantId).toBe("yogastudio-test");
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
 });
 

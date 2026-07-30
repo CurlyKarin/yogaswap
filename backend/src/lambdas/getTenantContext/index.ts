@@ -36,7 +36,6 @@ export const handler = async (
   }
 
   try {
-    // 1) Tenant laden
     const tenantResp = await client.send(
       new GetItemCommand({
         TableName: tenantsTable,
@@ -46,12 +45,24 @@ export const handler = async (
     );
 
     const tenantItem = tenantResp.Item;
-    const tenant: Tenant | undefined = tenantItem
-      ? (unmarshall(tenantItem) as Tenant)
-      : undefined;
+    if (!tenantItem) {
+      // Unbekannte Subdomain / tenantId (#261) — kein stilles leeres Studio.
+      // Kein HTTP 404: CloudFront mapped 404 → index.html (SPA), dann sieht das
+      // Frontend keinen JSON-Fehler und zeigt weiter den Login.
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: "tenant_not_found",
+          tenantId,
+          message: "Studio nicht gefunden",
+        }),
+      };
+    }
 
-    // 2) Membership laden (falls userId vorhanden)
-    let membership: UserTenantMembership | undefined;
+    const tenant = unmarshall(tenantItem) as Tenant;
+
+    // Membership nur bei bekanntem User (JWT / Authorizer); ohne Auth reicht Existenz-Check.
+    let membership: UserTenantMembership | null = null;
 
     if (userId) {
       const membershipResp = await client.send(
@@ -68,7 +79,7 @@ export const handler = async (
       const membershipItem = membershipResp.Item;
       membership = membershipItem
         ? (unmarshall(membershipItem) as UserTenantMembership)
-        : undefined;
+        : null;
     }
 
     return {
@@ -76,8 +87,8 @@ export const handler = async (
       body: JSON.stringify({
         tenantId,
         userId: userId ?? null,
-        tenant: tenant ?? null,
-        membership: membership ?? null,
+        tenant,
+        membership,
       }),
     };
   } catch (error) {
@@ -88,4 +99,3 @@ export const handler = async (
     };
   }
 };
-

@@ -39,10 +39,17 @@ test:
 	cd $(REPO_ROOT)/backend && npm test
 	cd $(REPO_ROOT)/app && npx tsc -b
 
-# default-tenant in der ENV anlegen (Projektname aus env.tf abgeleitet).
+# Projektname aus Workspace (muss mit env.tf / local.env_public übereinstimmen).
+# Kein `tofu console`: hält mit S3-Backend einen State-Lock und kann hängen (#274/#261).
+project_name = \
+	$(if $(filter default,$(ENV)),yogaswap-demo,\
+	$(if $(filter staging,$(ENV)),yogaswap-staging,\
+	$(if $(filter prod,$(ENV)),yogaswap-prod,$(error Unbekannter ENV=$(ENV)))))
+
+# default-tenant in der ENV anlegen (Projektname aus Workspace-Mapping).
 seed-tenants: workspace
 	cd $(REPO_ROOT)/backend && \
-	  PROJECT_NAME=$$(cd $(CURDIR) && echo 'local.project' | tofu console 2>/dev/null | tr -d '"') \
+	  PROJECT_NAME=$(project_name) \
 	  npm run seed:tenants
 
 # Tenant anlegen + bestehenden Admin verknüpfen (#53).
@@ -50,7 +57,7 @@ seed-tenants: workspace
 #     [ARGS="--name \"Studio X\" --with-participant-profile"]
 create-tenant: workspace
 	cd $(REPO_ROOT)/backend && \
-	  PROJECT_NAME=$$(cd $(CURDIR) && echo 'local.project' | tofu console 2>/dev/null | tr -d '"') \
+	  PROJECT_NAME=$(project_name) \
 	  npm run create-tenant -- --tenant "$(TENANT)" --admin-nickname "$(ADMIN)" $(ARGS)
 
 # Ersten Admin der ENV anlegen (Gruppen + Admin-User + Tenant + Membership).
