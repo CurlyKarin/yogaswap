@@ -1,11 +1,25 @@
 export type AuthMailLocale = "de";
 
 const DEFAULT_STUDIO_LABEL = "YogaSwap";
+const PLATFORM_BLURB =
+  "YogaSwap, einer Plattform zum Tauschen von Yogakurs-Terminen";
 
 /** Anzeigename für Auth-Mails; Fallback „YogaSwap“, wenn Name fehlt (#268). */
 export function resolveStudioDisplayName(studioName?: string | null): string {
   const trimmed = studioName?.trim();
   return trimmed || DEFAULT_STUDIO_LABEL;
+}
+
+function hasNamedStudio(studio: string): boolean {
+  return studio !== DEFAULT_STUDIO_LABEL;
+}
+
+/** Kurzer Herkunftshinweis: Studio + Plattform (ohne doppeltes „YogaSwap“). */
+function originPhrase(studio: string): string {
+  if (hasNamedStudio(studio)) {
+    return `<strong>${studio}</strong> auf ${PLATFORM_BLURB}`;
+  }
+  return PLATFORM_BLURB;
 }
 
 type StudioMailFields = {
@@ -43,15 +57,19 @@ function normalizeLocale(locale?: string): AuthMailLocale {
 export function buildInviteMail(input: InviteMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const invitedBy = hasNamedStudio(studio)
+    ? `von <strong>${studio}</strong> zu ${PLATFORM_BLURB}`
+    : `zu ${PLATFORM_BLURB}`;
   if (locale === "de") {
     return {
       subject: `${studio}: Einladung`,
       html: `
-        <h2>Hallo ${input.nickname}!</h2>
-        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
-        <p>Du wurdest zu <strong>${studio}</strong> (YogaSwap) eingeladen.</p>
-        <p><a href="${input.link}">Klicke hier, um ein neues Passwort festzulegen</a></p>
-        <p>Danach erhältst du eine E-Mail mit einem Code zur Bestätigung.</p>
+        <h2>Willkommen ${input.nickname}!</h2>
+        <p>Du wurdest ${invitedBy} eingeladen.</p>
+        <p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>
+        <p><a href="${input.link}">Klicke hier, um dein Passwort festzulegen</a></p>
+        <p>Danach erhaeltst du eine weitere E-Mail mit einem Bestaetigungscode.</p>
+        <p>Falls du diese Einladung nicht erwartet hast, kannst du die E-Mail ignorieren oder dein Studio kontaktieren.</p>
       `,
     };
   }
@@ -69,10 +87,12 @@ export function buildRecoveryMail(input: RecoveryMailInput): MailTemplate {
       subject: `${studio}: Passwort zuruecksetzen`,
       html: `
         <h2>Hallo ${input.nickname}!</h2>
-        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
-        <p>Dein Passwort fuer <strong>${studio}</strong> (YogaSwap) wurde zurueckgesetzt.</p>
+        <p>Fuer deinen Zugang bei ${originPhrase(studio)} wurde ein Passwort-Reset ausgeloest
+        (durch dich selbst oder durch dein Studio).</p>
+        <p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>
         <p><a href="${input.link}">Klicke hier, um ein neues Passwort festzulegen</a></p>
-        <p>Danach erhältst du eine E-Mail mit einem Code zur Bestätigung.</p>
+        <p>Danach erhaeltst du eine weitere E-Mail mit einem Bestaetigungscode.</p>
+        <p>Falls du das nicht angefordert hast, kontaktiere bitte dein Studio.</p>
       `,
     };
   }
@@ -90,8 +110,8 @@ export function buildReactivationMail(input: ReactivationMailInput): MailTemplat
       subject: `${studio}: Reaktivierung`,
       html: `
         <h2>Hallo ${input.nickname}!</h2>
-        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
-        <p>Dein Zugang zu <strong>${studio}</strong> (YogaSwap) wurde reaktiviert.</p>
+        <p>Dein Studio hat deinen Zugang bei ${originPhrase(studio)} wieder freigeschaltet.</p>
+        <p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>
         <p>Du kannst dich mit deinem bestehenden Passwort wieder anmelden.</p>
         <p><a href="${input.loginUrl}">Zur Anmeldung</a></p>
       `,
@@ -114,9 +134,9 @@ export function buildInvitePreparationMail(input: InvitePreparationMailInput): M
     return {
       subject: `${studio}: Einladung`,
       html: `
-        <h2>Hallo ${input.nickname}!</h2>
-        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
-        <p>Dein Zugang zu <strong>${studio}</strong> wird vorbereitet.</p>
+        <h2>Willkommen ${input.nickname}!</h2>
+        <p>Dein Zugang bei ${originPhrase(studio)} wird vorbereitet.</p>
+        <p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>
         <p>Bitte kontaktiere dein Studio, falls du keinen gueltigen Einladungslink erhalten hast.</p>
       `,
     };
@@ -157,11 +177,12 @@ export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput
     return {
       subject: `${studio}: Zugang entfernt`,
       html:
-        `<p>Dein Zugang zu <strong>${studio}</strong> (YogaSwap) wurde entfernt.</p>` +
-        `<p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>` +
+        `<h2>Hallo ${input.nickname}!</h2>` +
+        `<p>Dein Studio hat deinen Zugang bei ${originPhrase(studio)} entfernt.</p>` +
+        `<p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>` +
         "<p>Dein Konto ist aktuell nur deaktiviert und noch nicht vollstaendig geloescht.</p>" +
         "<p>Wenn du eine vollstaendige Entfernung deines Kontos moechtest, schreibe bitte an support@yogaswap.de.</p>" +
-        "<p>Falls das ein Versehen war, melde dich bitte beim Studio-Team.</p>",
+        "<p>Falls das ein Versehen war, melde dich bitte bei deinem Studio.</p>",
     };
   }
   return {
@@ -180,8 +201,9 @@ export function buildEmailChangedNewAddressMail(
       subject: `${studio}: E-Mail-Adresse aktualisiert`,
       html: `
         <h2>Hallo ${input.nickname}!</h2>
-        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
-        <p>Deine Login-E-Mail-Adresse fuer <strong>${studio}</strong> wurde auf <strong>${input.newEmail}</strong> geaendert.</p>
+        <p>Fuer deinen Zugang bei ${originPhrase(studio)} wurde die Login-E-Mail-Adresse
+        auf <strong>${input.newEmail}</strong> geaendert (durch dich oder dein Studio).</p>
+        <p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>
         <p><a href="${input.loginUrl}">Zur Anmeldung</a></p>
       `,
     };
@@ -202,8 +224,9 @@ export function buildEmailChangedOldAddressMail(
       subject: `${studio}: Sicherheitshinweis E-Mail geaendert`,
       html: `
         <h2>Hallo ${input.nickname}!</h2>
-        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
-        <p>Fuer deinen Zugang zu <strong>${studio}</strong> wurde die Login-E-Mail-Adresse auf <strong>${input.newEmail}</strong> geaendert.</p>
+        <p>Fuer deinen Zugang bei ${originPhrase(studio)} wurde die Login-E-Mail-Adresse
+        auf <strong>${input.newEmail}</strong> geaendert.</p>
+        <p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>
         <p>Falls das nicht von dir veranlasst wurde, kontaktiere bitte umgehend dein Studio.</p>
         <p><a href="${input.loginUrl}">Zur Anmeldung</a></p>
       `,
@@ -223,8 +246,9 @@ export function buildRoleChangedMail(input: RoleChangedMailInput): MailTemplate 
       subject: `${studio}: Rolle aktualisiert`,
       html: `
         <h2>Hallo ${input.nickname}!</h2>
-        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
-        <p>Deine Rolle in <strong>${studio}</strong> wurde geaendert: <strong>${input.oldRole}</strong> -> <strong>${input.newRole}</strong>.</p>
+        <p>Dein Studio hat deine Rolle bei ${originPhrase(studio)} geaendert:
+        <strong>${input.oldRole}</strong> -> <strong>${input.newRole}</strong>.</p>
+        <p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>
         <p><a href="${input.loginUrl}">Zur Anmeldung</a></p>
       `,
     };
@@ -253,9 +277,9 @@ export function buildCognitoPasswordResetCodeMail(
       subject: "YogaSwap Bestaetigungscode",
       html: `
         <h2>Hallo ${input.nickname}!</h2>
-        <p><strong>Dein Accountname (Spitzname): ${input.nickname}</strong></p>
         <p>Dein Bestaetigungscode fuer YogaSwap lautet:</p>
         <p style="font-size:1.4em;font-weight:bold;letter-spacing:0.05em;">${code}</p>
+        <p><strong>${input.nickname}</strong> ist dein Accountname auf der Plattform.</p>
         <p>Gib diesen Code in der App ein, um dein neues Passwort festzulegen.</p>
         <p>Wenn du das nicht angefordert hast, kannst du diese E-Mail ignorieren.</p>
       `,
