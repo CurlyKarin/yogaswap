@@ -27,6 +27,7 @@ import {
   buildEmailChangedOldAddressMail,
   buildRecoveryMail,
   buildRoleChangedMail,
+  toSesAuthMessage,
 } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { loadTenantName } from "../shared/tenantSettingsLoader";
@@ -320,17 +321,13 @@ export const handler = async (
                   loginUrl: baseUrl,
                   newEmail: email,
                   studioName: await getStudioName(),
+                  studioUrl: baseUrl,
                 });
                 await ses.send(
                   new SendEmailCommand({
                     Source: sesSourceEmail,
                     Destination: { ToAddresses: [email] },
-                    Message: {
-                      Subject: { Data: changedNewMail.subject },
-                      Body: {
-                        Html: { Data: changedNewMail.html },
-                      },
-                    },
+                    Message: toSesAuthMessage(changedNewMail),
                   }),
                 );
               } catch (mailErr) {
@@ -346,17 +343,13 @@ export const handler = async (
                     loginUrl: baseUrl,
                     newEmail: email,
                     studioName: await getStudioName(),
+                    studioUrl: baseUrl,
                   });
                   await ses.send(
                     new SendEmailCommand({
                       Source: sesSourceEmail,
                       Destination: { ToAddresses: [oldEmail] },
-                      Message: {
-                        Subject: { Data: changedOldMail.subject },
-                        Body: {
-                          Html: { Data: changedOldMail.html },
-                        },
-                      },
+                      Message: toSesAuthMessage(changedOldMail),
                     }),
                   );
                 } catch (mailErr) {
@@ -402,20 +395,14 @@ export const handler = async (
                 nickname: targetUserId,
                 link,
                 studioName: await getStudioName(),
+                studioUrl: baseUrl,
               });
               try {
                 await ses.send(
                   new SendEmailCommand({
                     Source: sesSourceEmail,
                     Destination: { ToAddresses: [email] },
-                    Message: {
-                      Subject: { Data: recoveryMail.subject },
-                      Body: {
-                        Html: {
-                          Data: recoveryMail.html,
-                        },
-                      },
-                    },
+                    Message: toSesAuthMessage(recoveryMail),
                   }),
                 );
                 passwordResetEmailSent = true;
@@ -514,17 +501,13 @@ export const handler = async (
           oldRole: previousRole ?? "participant",
           newRole: nextRoleForMail ?? "participant",
           studioName: await getStudioName(),
+          studioUrl: baseUrl,
         });
         await ses.send(
           new SendEmailCommand({
             Source: sesSourceEmail,
             Destination: { ToAddresses: [updated.email] },
-            Message: {
-              Subject: { Data: roleChangedMail.subject },
-              Body: {
-                Html: { Data: roleChangedMail.html },
-              },
-            },
+            Message: toSesAuthMessage(roleChangedMail),
           }),
         );
         roleChangedEmailSent = true;

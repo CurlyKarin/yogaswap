@@ -11,9 +11,10 @@ import { unmarshall } from "@aws-sdk/util-dynamodb";
 import type { ParticipantProfile } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
-import { buildStudioAccessRemovedMail } from "../shared/templates/auth/authMailTemplates";
+import { buildStudioAccessRemovedMail, toSesAuthMessage } from "../shared/templates/auth/authMailTemplates";
 import { loadTenantName } from "../shared/tenantSettingsLoader";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
+import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { getTenantContext } from "../shared/tenantContext";
 
 const client = dynamoClient;
@@ -171,20 +172,14 @@ export const handler = async (
         locale: mailLocale,
         nickname: profile.userId || userId,
         studioName,
+        studioUrl: resolveAppBaseUrlForTenant(tenantId),
       });
       try {
         await ses.send(
           new SendEmailCommand({
             Source: sesSourceEmail,
             Destination: { ToAddresses: [profile.email] },
-            Message: {
-              Subject: { Data: removedMail.subject },
-              Body: {
-                Html: {
-                  Data: removedMail.html,
-                },
-              },
-            },
+            Message: toSesAuthMessage(removedMail),
           }),
         );
         notificationEmailSent = true;

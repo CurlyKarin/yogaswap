@@ -5,7 +5,7 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import crypto from "crypto";
-import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
+import { buildRecoveryMail, toSesAuthMessage } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { loadTenantName } from "../shared/tenantSettingsLoader";
 
@@ -128,19 +128,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         nickname: targetUserId,
         link,
         studioName,
+        studioUrl: baseUrl,
       });
       await ses.send(
         new SendEmailCommand({
           Source: sesSourceEmail,
           Destination: { ToAddresses: [email] },
-          Message: {
-            Subject: { Data: recoveryMail.subject },
-            Body: {
-              Html: {
-                Data: recoveryMail.html,
-              },
-            },
-          },
+          Message: toSesAuthMessage(recoveryMail),
         }),
       );
       emailSent = true;
