@@ -5,8 +5,9 @@ import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import crypto from "crypto";
-import { buildRecoveryMail } from "../shared/templates/auth/authMailTemplates";
+import { buildRecoveryMail, toSesAuthMessage } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
+import { loadTenantName } from "../shared/tenantSettingsLoader";
 
 const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 const ses = new SESClient({});
@@ -148,24 +149,24 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const link = `${baseUrl}/invite?mode=password_recovery&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(
       canonicalUserId,
     )}&email=${encodeURIComponent(targetEmail)}`;
+    const studioName = await loadTenantName(
+      dynamodb,
+      process.env.TENANTS_TABLE,
+      tenantId,
+    );
     const recoveryMail = buildRecoveryMail({
       locale: mailLocale,
       nickname: canonicalUserId,
       link,
+      studioName,
+      studioUrl: baseUrl,
     });
 
     await ses.send(
       new SendEmailCommand({
         Source: sesSourceEmail,
         Destination: { ToAddresses: [targetEmail] },
-        Message: {
-          Subject: { Data: recoveryMail.subject },
-          Body: {
-            Html: {
-              Data: recoveryMail.html,
-            },
-          },
-        },
+        Message: toSesAuthMessage(recoveryMail),
       }),
     );
 

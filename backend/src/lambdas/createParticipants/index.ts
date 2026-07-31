@@ -12,8 +12,9 @@ import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
-import { buildInviteMail, buildReactivationMail } from "../shared/templates/auth/authMailTemplates";
+import { buildInviteMail, buildReactivationMail, toSesAuthMessage } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
+import { loadTenantName } from "../shared/tenantSettingsLoader";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
@@ -155,6 +156,11 @@ export const handler = async (event: any) => {
   const { userId: actorUserId } = getTenantContext(event as any);
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
   const mailLocale = process.env.MAIL_LOCALE || "de";
+  const studioName = await loadTenantName(
+    dynamodb,
+    process.env.TENANTS_TABLE,
+    tenantId,
+  );
 
   const emailNormalized = typeof email === "string" ? email.trim() : "";
   const hasEmail = emailNormalized.length > 0;
@@ -318,16 +324,15 @@ export const handler = async (event: any) => {
           locale: mailLocale,
           nickname: nicknameRaw,
           loginUrl: baseUrl,
+          studioName,
+          studioUrl: baseUrl,
         });
         try {
           await ses.send(
             new SendEmailCommand({
               Source: sesSourceEmail,
               Destination: { ToAddresses: [existingEmail.trim()] },
-              Message: {
-                Subject: { Data: reactivationMail.subject },
-                Body: { Html: { Data: reactivationMail.html } },
-              },
+              Message: toSesAuthMessage(reactivationMail),
             }),
           );
           emailSent = true;
@@ -600,11 +605,15 @@ export const handler = async (event: any) => {
     locale: mailLocale,
     nickname: nicknameRaw,
     loginUrl: baseUrl,
+    studioName,
+    studioUrl: baseUrl,
   });
   const inviteMail = buildInviteMail({
     locale: mailLocale,
     nickname: nicknameRaw,
     link,
+    studioName,
+    studioUrl: baseUrl,
   });
 
   let emailSent = false;
@@ -616,20 +625,7 @@ export const handler = async (event: any) => {
     await ses.send(new SendEmailCommand({
       Source: sesSourceEmail,
       Destination: { ToAddresses: [emailNormalized] },
-      Message: {
-        Subject: {
-          Data: reactivated
-            ? reactivationMail.subject
-            : inviteMail.subject,
-        },
-        Body: {
-          Html: {
-            Data: reactivated
-              ? reactivationMail.html
-              : inviteMail.html,
-          },
-        }
-      }
+      Message: toSesAuthMessage(reactivated ? reactivationMail : inviteMail),
     }));
     emailSent = true;
     console.log("SES email sent successfully to", emailNormalized);
