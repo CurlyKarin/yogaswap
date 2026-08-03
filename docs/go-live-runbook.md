@@ -101,35 +101,35 @@ Alles muss für **Go** erfüllt sein. No-Go → kein Prod-Deploy bzw. Stop.
 
 ## 4. Smoke-Test (Skript)
 
-Umgebung ankreuzen: Staging ☐ · Demo ☐ · Prod ☐  
-Basis-URL Studio: `https://________.app.yogaswap.de` (oder Staging-Äquivalent)  
-Apex / Default: `https://app.yogaswap.de` bzw. Staging-Apex
+Umgebung ankreuzen: Staging ☑ · Demo ☐ · Prod ☐  
+Basis-URL Studio: `https://staging.yogaswap.de` (keine Studio-Wildcards; Tenant = `default-tenant`)  
+Apex / Default: `https://staging.yogaswap.de`
 
 ### 4.1 Host / Tenant
 
 | # | Schritt | Erwartung | OK |
 |---|---|---|---|
-| H1 | Unbekannte Subdomain öffnen | „Studio nicht gefunden“, kein Login | ☐ |
-| H2 | Bekanntes Studio öffnen | Login / App lädt, korrektes Studio | ☐ |
-| H3 | Apex (falls Prod) | `default-tenant` bzw. erwartetes Default-Studio | ☐ |
+| H1 | Unbekannte Subdomain öffnen | „Studio nicht gefunden“, kein Login | ☑ API: unbekannte `tenantId` → 400 (Browser-Subdomain auf Staging n/a) |
+| H2 | Bekanntes Studio öffnen | Login / App lädt, korrektes Studio | ☑ `default-tenant` / „Test Studio“, SPA 200 |
+| H3 | Apex (falls Prod) | `default-tenant` bzw. erwartetes Default-Studio | ☐ n/a Staging |
 
 ### 4.2 Login & Rollen
 
 | # | Schritt | Erwartung | OK |
 |---|---|---|---|
-| L1 | Admin-Login (Studio-Subdomain) | Session ok, Admin-UI sichtbar | ☐ |
-| L2 | Teilnehmer-Login (falls vorhanden) | Keine Admin-Aktionen | ☐ |
+| L1 | Admin-Login (Studio-Subdomain) | Session ok, Admin-UI sichtbar | ☑ (Session-Hinweis im Dry-Run) |
+| L2 | Teilnehmer-Login (falls vorhanden) | Keine Admin-Aktionen | ☐ skip |
 
 ### 4.3 Teilnehmer / Invite / Reset / Mail
 
 | # | Schritt | Erwartung | OK |
 |---|---|---|---|
-| P1 | Teilnehmer anlegen **ohne** E-Mail | Profil/Membership ok, keine SES-Pflicht | ☐ |
-| P2 | Teilnehmer **mit** neuer E-Mail einladen | `emailSent=true` (oder dokumentierter Fallback) | ☐ |
-| P3 | Invite-Mail | Betreff mit Studio-Namen (falls gesetzt), Absender YogaSwap/`noreply@` | ☐ |
-| P4 | Link → Passwort → Code-Mail | Code kommt, Login gelingt | ☐ |
-| P5 | Admin: Passwort zurücksetzen | Recovery-Mail + Code-Flow ok | ☐ |
-| P6 | Optional: Self-Service Passwort-Reset | Mail + Flow ok | ☐ |
+| P1 | Teilnehmer anlegen **ohne** E-Mail | Profil/Membership ok, keine SES-Pflicht | ☑ |
+| P2 | Teilnehmer **mit** neuer E-Mail einladen | `emailSent=true` (oder dokumentierter Fallback) | ☑ |
+| P3 | Invite-Mail | Betreff mit Studio-Namen (falls gesetzt), Absender YogaSwap/`noreply@` | ☑ |
+| P4 | Link → Passwort → Code-Mail | Code kommt, Login gelingt | ☑ |
+| P5 | Admin: Passwort zurücksetzen | Recovery-Mail + Code-Flow ok | ☑ tags zuvor; unverändert |
+| P6 | Optional: Self-Service Passwort-Reset | Mail + Flow ok | ☐ skip |
 
 Detail-Checks Auth-Mails: [`cognito-mail-qa.md`](./cognito-mail-qa.md).  
 Bei Spam: „Kein Spam“ + Notiz (Provider); Domain-Reputation kann frisch sein.
@@ -138,17 +138,17 @@ Bei Spam: „Kein Spam“ + Notiz (Provider); Domain-Reputation kann frisch sein
 
 | # | Schritt | Erwartung | OK |
 |---|---|---|---|
-| C1 | Kursliste sichtbar (aktive Kurse) | Kein leerer Fehlerzustand | ☐ |
-| C2 | Optional: eine Buchung / ein Tausch-Smoke | Happy Path oder bewusst skippen und notieren | ☐ |
+| C1 | Kursliste sichtbar (aktive Kurse) | Kein leerer Fehlerzustand | ☐ skip |
+| C2 | Optional: eine Buchung / ein Tausch-Smoke | Happy Path oder bewusst skippen und notieren | ☐ skip |
 
 ### 4.5 Logs / SES (Minimum)
 
 | # | Schritt | Erwartung | OK |
 |---|---|---|---|
-| M1 | CloudWatch Lambda `*-create-participants` | Kein wiederholter SES-Send-Fehler | ☐ |
-| M2 | SES Metrics (Send/Bounce/Complaint) kurz ansehen | Keine Complaint-Spitze; Bounce im Rahmen | ☐ |
+| M1 | CloudWatch Lambda `*-create-participants` | Kein wiederholter SES-Send-Fehler | ☐ skip (Invite ok) |
+| M2 | SES Metrics (Send/Bounce/Complaint) kurz ansehen | Keine Complaint-Spitze; Bounce im Rahmen | ☐ skip |
 
-**Smoke-Ergebnis:** Pass ☐ / Fail ☐ · Notizen: ________
+**Smoke-Ergebnis:** Pass ☑ / Fail ☐ · Notizen: Session-Konflikt beim Admin-Login (s. Dry-Run)
 
 ---
 
@@ -163,12 +163,12 @@ Vor dem echten Prod-Go-Live **mindestens einmal** durchspielen.
 
 | Feld | Wert |
 |---|---|
-| Datum | ________ |
-| `main` SHA / Deploy | ________ |
-| Tenant / URL | ________ |
-| Smoke Pass/Fail | ________ |
-| Offene Punkte | ________ |
-| Durchgeführt von | ________ |
+| Datum | 2026-08-03 |
+| `main` SHA / Deploy | `293a405` (Runbook gemergt; Staging SPA/API erreichbar) |
+| Tenant / URL | `default-tenant` („Test Studio“) · https://staging.yogaswap.de |
+| Smoke Pass/Fail | **Pass** (H1/H2 API, L1, P1–P5) |
+| Offene Punkte | UX: andere Session noch aktiv (Passwort-Reset-View); Admin-Login erst nach Browser-Zurück + Logout. Follow-up optional. |
+| Durchgeführt von | Karin (+ Assist) |
 
 Dry-Run gilt als erfüllt, wenn Smoke **Pass** (oder Fail mit dokumentiertem, behobenem Blocker und Wiederholung).
 
