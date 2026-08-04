@@ -15,6 +15,7 @@ import { getSwaps, getSwapsByStatus } from "../api/swaps";
 import { getCourseDates } from "../lib/dates";
 import { canShowCourseInPastWeek, computeEarliestWeekAnchor } from "../lib/courseTermActions";
 import { collectWeekOccurrences, type WeekCourseRow } from "../lib/courseWeekOccurrences";
+import { isPersonallyInvolvedInCourse } from "../lib/weekMyCoursesFilter";
 import { useCourseSwaps } from "../components/useCourseSwaps";
 
 const WEEKDAY_ORDER: Record<string, number> = {
@@ -60,6 +61,8 @@ type Options = {
   membership?: UserTenantMembership;
   forceParticipantView?: boolean;
   weekAnchor: Date;
+  /** When true, week rows are limited to courses with personal involvement. */
+  onlyMyCourses?: boolean;
 };
 
 export function useCoursesData({
@@ -68,6 +71,7 @@ export function useCoursesData({
   membership,
   forceParticipantView = false,
   weekAnchor,
+  onlyMyCourses = false,
 }: Options) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
@@ -179,6 +183,13 @@ export function useCoursesData({
         if (!show) continue;
       }
 
+      if (
+        onlyMyCourses &&
+        !isPersonallyInvolvedInCourse(course, currentUser.nickname, swaps)
+      ) {
+        continue;
+      }
+
       rows.push({ course, occurrences });
     }
     return {
@@ -192,6 +203,9 @@ export function useCoursesData({
     membershipForPermissions,
     tenant?.settings,
     courseContext,
+    onlyMyCourses,
+    currentUser.nickname,
+    swaps,
   ]);
 
   const earliestWeekAnchor = useMemo(

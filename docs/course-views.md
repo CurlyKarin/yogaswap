@@ -97,12 +97,17 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 ```text
 [ Wochenansicht | Kursübersicht ]     ← nur Admin/Kursleitung
 
-[ ‹ ]  KW 22 · 26. Mai – 1. Juni 2026  [ › ]  [ Heute ]   ← nur Wochenansicht
+[ ‹ ]  KW …  [ › ]  [ Heute ]  [Person]   ← nur Wochenansicht; Person = „nur meine Kurse“
 ```
 
 - Default **Wochenansicht** für alle Rollen mit Kurszugang.
 - Hinweis unter der Toolbar in der Wochenansicht (Absagen/Tauschen).
-- **Noch nicht:** Persistenz der KW beim Reload ([#187](https://github.com/CurlyKarin/yogaswap/issues/187): `sessionStorage` in der Tab-Session, Vertretung in gleicher KW), URL-Parameter, globales `selectedOccurrence` im Shell-State.
+- **„Nur meine Kurse“** (#258): Person-Icon in der Wochen-Navigation.
+  - **Teilnehmende:** standardmäßig an (nur Kurse mit eigener Beteiligung: Stammplatz, Swap oder Instructor-Zuordnung).
+  - **Admin/Kursleitung mit Kurszuordnung:** standardmäßig an, umschaltbar.
+  - **Admin/Kursleitung ohne Zuordnung:** Button deaktiviert, immer alle Kurse.
+  - Zustand wird **nicht** in `sessionStorage` gemerkt (Rollen-Default bei jedem Laden) — bewusst einfach für Teilnehmende.
+- KW-Persistenz in der Tab-Session: [#187](https://github.com/CurlyKarin/yogaswap/issues/187).
 
 ### Vergangenheit (Nachlauf)
 
