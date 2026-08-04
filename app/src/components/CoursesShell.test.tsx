@@ -19,7 +19,16 @@ const { mockUseCoursesData, createCoursesDataMock } = vi.hoisted(() => {
   type MockCoursesData = {
     loading: boolean;
     error: string | null;
-    courses: [];
+    courses: Array<{
+      id: number;
+      name: string;
+      weekday: string;
+      time: string;
+      capacity: number;
+      participants: string[];
+      dates: string[];
+      instructors?: string[];
+    }>;
     weekCourseRows: [];
     hiddenPastCourseCount: number;
     overrides: [];
@@ -28,6 +37,8 @@ const { mockUseCoursesData, createCoursesDataMock } = vi.hoisted(() => {
     requestSwap: ReturnType<typeof vi.fn>;
     cancelSwap: ReturnType<typeof vi.fn>;
     onToggleAbsence: ReturnType<typeof vi.fn>;
+    adjustGuestCount: ReturnType<typeof vi.fn>;
+    canManageGuestSeats: boolean;
     earliestWeekAnchor: Date;
   };
 
@@ -43,6 +54,8 @@ const { mockUseCoursesData, createCoursesDataMock } = vi.hoisted(() => {
     requestSwap: vi.fn(),
     cancelSwap: vi.fn(),
     onToggleAbsence: vi.fn(),
+    adjustGuestCount: vi.fn(),
+    canManageGuestSeats: false,
     earliestWeekAnchor: new Date(2026, 0, 5),
     ...overrides,
   });
@@ -343,5 +356,82 @@ describe("CoursesShell", () => {
 
     expect(within(nav).getByText(formatWeekNavLabel(currentWeek))).toBeInTheDocument();
     expect(readStoredWeekAnchor(storageKey)?.getTime()).toBe(currentWeek.getTime());
+  });
+
+  it("aktiviert „nur meine Kurse“ standardmäßig für Teilnehmende", () => {
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(toggle).not.toBeDisabled();
+  });
+
+  it("lässt Teilnehmende zwischen nur-meine und allen Kursen umschalten", async () => {
+    const user = userEvent.setup();
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("deaktiviert den Toggle für Admin ohne Kurszuordnung", () => {
+    render(
+      <CoursesShell
+        currentUser={{ ...baseUser, nickname: "admin", role: "admin" }}
+        tenant={baseTenant}
+        membership={adminMembership}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("aktiviert den Toggle für Admin mit Kurszuordnung", () => {
+    mockUseCoursesData.mockReturnValue(
+      createCoursesDataMock({
+        courses: [
+          {
+            id: 1,
+            name: "Yoga",
+            weekday: "Monday",
+            time: "10:00",
+            capacity: 10,
+            participants: [],
+            dates: ["2099-06-16"],
+            instructors: ["admin"],
+          },
+        ],
+      }),
+    );
+
+    render(
+      <CoursesShell
+        currentUser={{ ...baseUser, nickname: "admin", role: "admin" }}
+        tenant={baseTenant}
+        membership={adminMembership}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
   });
 });

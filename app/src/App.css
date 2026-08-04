@@ -208,6 +208,16 @@ body {
   background: #fff;
 }
 
+.course-week-nav-my-courses.is-active {
+  background: #111827;
+  border-color: #111827;
+  color: #fff;
+}
+
+.course-week-nav-my-courses.is-active:hover {
+  background: #1f2937;
+}
+
 .course-week-panel,
 .course-list-panel {
   margin: 0;

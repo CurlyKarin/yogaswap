@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, User as UserIcon } from "lucide-react";
 import CourseList from "./CourseList";
 import CourseWeekView from "./CourseWeekView";
 import { User, Tenant, UserTenantMembership, DEFAULT_TENANT_ID } from "shared/types";
@@ -11,6 +11,10 @@ import {
   resolveInitialWeekAnchor,
   writeStoredWeekAnchor,
 } from "../lib/weekNavPersistence";
+import {
+  hasInstructorAssignment,
+  resolveMyCoursesToggle,
+} from "../lib/weekMyCoursesFilter";
 import { getActorUserId } from "../api/delegation";
 import { useCoursesData } from "../hooks/useCoursesData";
 
@@ -54,6 +58,12 @@ export default function CoursesShell({
   });
   const prevWeekAnchorStorageKeyRef = useRef(weekAnchorStorageKey);
 
+  // Role default only — not persisted (keeps the week view predictable for participants).
+  const [onlyMyCourses, setOnlyMyCourses] = useState(
+    () => resolveMyCoursesToggle(resolvedRole, false).defaultOnlyMy,
+  );
+  const [myCoursesToggleTouched, setMyCoursesToggleTouched] = useState(false);
+
   const {
     loading,
     error,
@@ -75,7 +85,31 @@ export default function CoursesShell({
     membership,
     forceParticipantView,
     weekAnchor,
+    onlyMyCourses,
   });
+
+  const hasAssignment = useMemo(
+    () => hasInstructorAssignment(courses, currentUser.nickname),
+    [courses, currentUser.nickname],
+  );
+  const myCoursesToggle = useMemo(
+    () => resolveMyCoursesToggle(resolvedRole, hasAssignment),
+    [resolvedRole, hasAssignment],
+  );
+
+  useEffect(() => {
+    if (!myCoursesToggle.canToggle) {
+      setOnlyMyCourses(false);
+      return;
+    }
+    if (!myCoursesToggleTouched) {
+      setOnlyMyCourses(myCoursesToggle.defaultOnlyMy);
+    }
+  }, [myCoursesToggle.canToggle, myCoursesToggle.defaultOnlyMy, myCoursesToggleTouched]);
+
+  useEffect(() => {
+    setMyCoursesToggleTouched(false);
+  }, [resolvedRole]);
 
   const setWeekAnchor = useCallback(
     (update: Date | ((prev: Date) => Date)) => {
@@ -210,6 +244,28 @@ export default function CoursesShell({
               onClick={() => setWeekAnchor(startOfWeekMonday(new Date()))}
             >
               Heute
+            </button>
+            <button
+              type="button"
+              className={`course-week-nav-btn course-week-nav-my-courses${onlyMyCourses ? " is-active" : ""}`}
+              aria-pressed={onlyMyCourses}
+              aria-label={
+                onlyMyCourses ? "Nur meine Kurse anzeigen (aktiv)" : "Nur meine Kurse anzeigen"
+              }
+              title={
+                !myCoursesToggle.canToggle
+                  ? "Keine Kurszuordnung — es werden immer alle Kurse gezeigt"
+                  : onlyMyCourses
+                    ? "Nur Kurse mit deiner Beteiligung — Klick zeigt alle Kurse"
+                    : "Alle Kurse der Woche — Klick filtert auf deine Beteiligung"
+              }
+              disabled={!myCoursesToggle.canToggle}
+              onClick={() => {
+                setMyCoursesToggleTouched(true);
+                setOnlyMyCourses((prev) => !prev);
+              }}
+            >
+              <UserIcon size={18} aria-hidden="true" />
             </button>
           </nav>
         )}
