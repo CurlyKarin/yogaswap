@@ -238,6 +238,12 @@ body {
   padding: 1.5rem 0;
 }
 
+.course-list-empty {
+  width: 100%;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
 .course-week-view-error {
   color: #b91c1c;
 }
