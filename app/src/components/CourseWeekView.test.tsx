@@ -6,10 +6,7 @@ import type { Course, User } from "shared/types";
 const courseCardMock = vi.fn();
 
 vi.mock("./CourseCard", () => ({
-  default: (props: unknown) => {
-    courseCardMock(props);
-    return <div data-testid="course-card-mock">CourseCard</div>;
-  },
+  default: (props: unknown) => courseCardMock(props),
 }));
 
 const baseUser: User = {
@@ -121,5 +118,62 @@ describe("CourseWeekView", () => {
       />,
     );
     expect(screen.getByText(/2 weitere Kurse/i)).toBeInTheDocument();
+  });
+
+  it("scrolls and highlights the focused course from Heute", () => {
+    const scrollIntoView = vi.fn();
+    const focus = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+    const focusCourse: Course = {
+      ...sampleCourse,
+      id: 42,
+      time: "10:00",
+      dates: ["2099-06-16"],
+    };
+
+    courseCardMock.mockImplementation((props: { highlighted?: boolean; course: Course }) => (
+      <article
+        className={`course-card${props.highlighted ? " course-card--today-focus" : ""}`}
+        tabIndex={-1}
+        data-testid={`course-card-${props.course.id}`}
+      >
+        CourseCard
+      </article>
+    ));
+
+    const { rerender } = render(
+      <CourseWeekView
+        {...baseProps}
+        weekAnchor={new Date(2099, 5, 15)}
+        rows={[{ course: focusCourse, occurrences: [{ dateIso: "2099-06-16", kind: "scheduled" }] }]}
+      />,
+    );
+
+    const hostCard = screen.getByTestId("course-card-42");
+    hostCard.focus = focus;
+
+    rerender(
+      <CourseWeekView
+        {...baseProps}
+        weekAnchor={new Date(2099, 5, 15)}
+        rows={[{ course: focusCourse, occurrences: [{ dateIso: "2099-06-16", kind: "scheduled" }] }]}
+        todayFocusRequest={{ courseId: 42, dateIso: "2099-06-16", nonce: 1 }}
+      />,
+    );
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(hostCard).toHaveClass("course-card--today-focus");
+
+    const props = courseCardMock.mock.calls.at(-1)?.[0] as {
+      initialSelectedDate?: Date;
+      highlighted?: boolean;
+    };
+    expect(props.highlighted).toBe(true);
+    expect(props.initialSelectedDate?.getFullYear()).toBe(2099);
+    expect(props.initialSelectedDate?.getMonth()).toBe(5);
+    expect(props.initialSelectedDate?.getDate()).toBe(16);
+    expect(props.initialSelectedDate?.getHours()).toBe(10);
   });
 });

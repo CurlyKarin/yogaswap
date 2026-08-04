@@ -1,4 +1,5 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { buildCourseOccurrenceLocal } from "shared/courseStatus";
 import type { Course, CourseDateOverride, Swap, TenantSettings, User } from "shared/types";
 import { weekAnchorForOccurrence } from "../lib/courseWeek";
 import { isParticipantCourseWindDown } from "../lib/courseTermActions";
@@ -7,7 +8,10 @@ import {
   preferredWeekCardDate,
   type WeekCourseRow,
 } from "../lib/courseWeekOccurrences";
+import type { TodayFocusTarget } from "../lib/weekTodayFocus";
 import CourseCard from "./CourseCard";
+
+export type TodayFocusRequest = TodayFocusTarget & { nonce: number };
 
 type Props = {
   weekAnchor: Date;
@@ -22,6 +26,8 @@ type Props = {
   currentUser: User;
   canSeeCourseManagement: boolean;
   tenantSettings?: TenantSettings;
+  /** One-shot focus from „Heute“ (scroll + highlight + select occurrence). */
+  todayFocusRequest?: TodayFocusRequest | null;
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => Promise<boolean>;
   confirmSwap: (
     fromCourse: Course,
@@ -55,6 +61,7 @@ export default function CourseWeekView({
   currentUser,
   canSeeCourseManagement,
   tenantSettings,
+  todayFocusRequest = null,
   onToggleAbsence,
   confirmSwap,
   requestSwap,
@@ -62,6 +69,9 @@ export default function CourseWeekView({
   canManageGuestSeats = false,
   onAdjustGuestCount,
 }: Props) {
+  const cardHostRefs = useRef(new Map<number, HTMLDivElement>());
+  const [highlightedCourseId, setHighlightedCourseId] = useState<number | null>(null);
+
   const handleDateChange = useCallback(
     (date: Date) => {
       const nextAnchor = weekAnchorForOccurrence(date, weekAnchor);
@@ -71,6 +81,24 @@ export default function CourseWeekView({
     },
     [weekAnchor, onWeekAnchorChange],
   );
+
+  useEffect(() => {
+    if (!todayFocusRequest) return;
+    const host = cardHostRefs.current.get(todayFocusRequest.courseId);
+    if (!host) return;
+
+    host.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const card = host.querySelector<HTMLElement>(".course-card");
+    card?.focus({ preventScroll: true });
+    setHighlightedCourseId(todayFocusRequest.courseId);
+
+    const clearHighlight = window.setTimeout(() => {
+      setHighlightedCourseId((current) =>
+        current === todayFocusRequest.courseId ? null : current,
+      );
+    }, 1600);
+    return () => window.clearTimeout(clearHighlight);
+  }, [todayFocusRequest]);
 
   if (loading) {
     return (
@@ -108,10 +136,21 @@ export default function CourseWeekView({
       <div className="grid">
         {rows.map(({ course }) => {
           const cardDates = getWeekViewCardDates(course, weekAnchor, tenantSettings);
-          const initialSelectedDate = preferredWeekCardDate(course, weekAnchor);
+          const focusDate =
+            todayFocusRequest?.courseId === course.id
+              ? buildCourseOccurrenceLocal(todayFocusRequest.dateIso, course.time)
+              : null;
+          const initialSelectedDate =
+            focusDate ?? preferredWeekCardDate(course, weekAnchor);
 
           return (
-            <div key={`${course.id}-${weekAnchor.getTime()}`}>
+            <div
+              key={`${course.id}-${weekAnchor.getTime()}`}
+              ref={(node) => {
+                if (node) cardHostRefs.current.set(course.id, node);
+                else cardHostRefs.current.delete(course.id);
+              }}
+            >
               <CourseCard
                 course={course}
                 allCourses={courses}
@@ -128,6 +167,7 @@ export default function CourseWeekView({
                 }
                 tenantSettings={tenantSettings}
                 initialSelectedDate={initialSelectedDate}
+                highlighted={highlightedCourseId === course.id}
                 includePastTermsInSelect
                 onDateChange={handleDateChange}
                 onToggleAbsence={onToggleAbsence}
