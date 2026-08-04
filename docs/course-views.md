@@ -107,6 +107,11 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
   - **Admin/Kursleitung mit Kurszuordnung:** standardmäßig an, umschaltbar.
   - **Admin/Kursleitung ohne Zuordnung:** Button deaktiviert, immer alle Kurse.
   - Zustand wird **nicht** in `sessionStorage` gemerkt (Rollen-Default bei jedem Laden) — bewusst einfach für Teilnehmende.
+- **„Heute“** (#259): **ein Klick** setzt die aktuelle KW und fokussiert den relevanten Kurs unter den **sichtbaren** Kacheln (Filter unverändert).
+  - Vorrang: **laufender** Termin (`start ≤ jetzt < start + 90 Min`, ICS-Default bis #239).
+  - Sonst: nächster Termin in der KW (chronologisch); Beteiligung nur als Tiebreaker.
+  - Typischer Fall Admin/Kursleitung mit allen Kursen: Sprung zum gerade laufenden Studio-Kurs.
+  - Teilnehmende mit „alle Kurse“ (Überblick): ebenfalls zum laufenden Studio-Kurs; mit „nur meine“ nur innerhalb der eigenen Kacheln.
 - KW-Persistenz in der Tab-Session: [#187](https://github.com/CurlyKarin/yogaswap/issues/187).
 
 ### Vergangenheit (Nachlauf)

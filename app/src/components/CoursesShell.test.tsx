@@ -10,12 +10,21 @@ import {
   writeStoredWeekAnchor,
 } from "../lib/weekNavPersistence";
 import { getActorUserId } from "../api/delegation";
+import { pickTodayFocusTarget } from "../lib/weekTodayFocus";
 
 vi.mock("../api/delegation", () => ({
   getActorUserId: vi.fn(() => "maya"),
 }));
 
-const { mockUseCoursesData, createCoursesDataMock } = vi.hoisted(() => {
+vi.mock("../lib/weekTodayFocus", async () => {
+  const actual = await vi.importActual<typeof import("../lib/weekTodayFocus")>("../lib/weekTodayFocus");
+  return {
+    ...actual,
+    pickTodayFocusTarget: vi.fn(actual.pickTodayFocusTarget),
+  };
+});
+
+const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hoisted(() => {
   type MockCoursesData = {
     loading: boolean;
     error: string | null;
@@ -29,7 +38,19 @@ const { mockUseCoursesData, createCoursesDataMock } = vi.hoisted(() => {
       dates: string[];
       instructors?: string[];
     }>;
-    weekCourseRows: [];
+    weekCourseRows: Array<{
+      course: {
+        id: number;
+        name: string;
+        weekday: string;
+        time: string;
+        capacity: number;
+        participants: string[];
+        dates: string[];
+        instructors?: string[];
+      };
+      occurrences: Array<{ dateIso: string; kind: "scheduled" | "excluded" }>;
+    }>;
     hiddenPastCourseCount: number;
     overrides: [];
     swaps: [];
@@ -63,6 +84,7 @@ const { mockUseCoursesData, createCoursesDataMock } = vi.hoisted(() => {
   return {
     createCoursesDataMock,
     mockUseCoursesData: vi.fn(() => createCoursesDataMock()),
+    lastWeekViewProps: { current: null as Record<string, unknown> | null },
   };
 });
 
@@ -75,16 +97,17 @@ vi.mock("../hooks/useCoursesData", () => ({
 }));
 
 vi.mock("./CourseWeekView", () => ({
-  default: ({ loading, error }: { loading?: boolean; error?: string | null }) => {
-    if (loading) {
+  default: (props: Record<string, unknown>) => {
+    lastWeekViewProps.current = props;
+    if (props.loading) {
       return (
         <div role="status" aria-live="polite">
           Kurse werden geladen…
         </div>
       );
     }
-    if (error) {
-      return <div role="alert">{error}</div>;
+    if (props.error) {
+      return <div role="alert">{String(props.error)}</div>;
     }
     return <div>CourseWeekView Mock</div>;
   },
@@ -118,7 +141,9 @@ describe("CoursesShell", () => {
     cleanup();
     sessionStorage.clear();
     vi.mocked(getActorUserId).mockReturnValue("maya");
+    vi.mocked(pickTodayFocusTarget).mockReset();
     mockUseCoursesData.mockReturnValue(createCoursesDataMock());
+    lastWeekViewProps.current = null;
   });
 
   afterEach(() => {
@@ -352,10 +377,54 @@ describe("CoursesShell", () => {
     await user.click(within(nav).getByRole("button", { name: /nächste woche/i }));
     expect(within(nav).getByText(formatWeekNavLabel(futureWeek))).toBeInTheDocument();
 
-    await user.click(within(nav).getByRole("button", { name: /zur aktuellen kalenderwoche springen/i }));
+    await user.click(within(nav).getByRole("button", { name: /zur aktuellen kalenderwoche/i }));
 
     expect(within(nav).getByText(formatWeekNavLabel(currentWeek))).toBeInTheDocument();
     expect(readStoredWeekAnchor(storageKey)?.getTime()).toBe(currentWeek.getTime());
+  });
+
+  it("fokussiert mit Heute den laufenden Kurs in der aktuellen Woche", async () => {
+    const user = userEvent.setup();
+    const currentWeek = startOfWeekMonday(new Date());
+    vi.mocked(pickTodayFocusTarget).mockReturnValue({ courseId: 7, dateIso: "2099-06-16" });
+
+    mockUseCoursesData.mockReturnValue(
+      createCoursesDataMock({
+        earliestWeekAnchor: addWeeks(currentWeek, -2),
+        weekCourseRows: [
+          {
+            course: {
+              id: 7,
+              name: "Laufend",
+              weekday: "Tuesday",
+              time: "10:00",
+              capacity: 10,
+              participants: [],
+              dates: ["2099-06-16"],
+            },
+            occurrences: [{ dateIso: "2099-06-16", kind: "scheduled" }],
+          },
+        ],
+      }),
+    );
+
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    const nav = screen.getByRole("navigation", { name: /kalenderwoche/i });
+    await user.click(within(nav).getByRole("button", { name: /nächste woche/i }));
+    await user.click(within(nav).getByRole("button", { name: /zur aktuellen kalenderwoche/i }));
+
+    expect(within(nav).getByText(formatWeekNavLabel(currentWeek))).toBeInTheDocument();
+    expect(pickTodayFocusTarget).toHaveBeenCalled();
+    expect(lastWeekViewProps.current?.todayFocusRequest).toEqual(
+      expect.objectContaining({ courseId: 7, dateIso: "2099-06-16", nonce: expect.any(Number) }),
+    );
   });
 
   it("aktiviert „nur meine Kurse“ standardmäßig für Teilnehmende", () => {

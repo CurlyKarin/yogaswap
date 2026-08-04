@@ -15,8 +15,10 @@ import {
   hasInstructorAssignment,
   resolveMyCoursesToggle,
 } from "../lib/weekMyCoursesFilter";
+import { pickTodayFocusTarget } from "../lib/weekTodayFocus";
 import { getActorUserId } from "../api/delegation";
 import { useCoursesData } from "../hooks/useCoursesData";
+import type { TodayFocusRequest } from "./CourseWeekView";
 
 export type CourseViewMode = "week" | "courses";
 
@@ -63,6 +65,8 @@ export default function CoursesShell({
     () => resolveMyCoursesToggle(resolvedRole, false).defaultOnlyMy,
   );
   const [myCoursesToggleTouched, setMyCoursesToggleTouched] = useState(false);
+  const [pendingTodayFocus, setPendingTodayFocus] = useState(false);
+  const [todayFocusRequest, setTodayFocusRequest] = useState<TodayFocusRequest | null>(null);
 
   const {
     loading,
@@ -122,6 +126,21 @@ export default function CoursesShell({
     },
     [earliestWeekAnchor, weekAnchorStorageKey],
   );
+
+  useEffect(() => {
+    if (!pendingTodayFocus || loading) return;
+    const currentWeek = startOfWeekMonday(new Date());
+    if (weekAnchor.getTime() !== currentWeek.getTime()) return;
+
+    const target = pickTodayFocusTarget(weekCourseRows, currentUser.nickname, swaps);
+    setTodayFocusRequest(target ? { ...target, nonce: Date.now() } : null);
+    setPendingTodayFocus(false);
+  }, [pendingTodayFocus, loading, weekAnchor, weekCourseRows, currentUser.nickname, swaps]);
+
+  const jumpToToday = useCallback(() => {
+    setWeekAnchor(startOfWeekMonday(new Date()));
+    setPendingTodayFocus(true);
+  }, [setWeekAnchor]);
 
   useEffect(() => {
     if (prevWeekAnchorStorageKeyRef.current === weekAnchorStorageKey) return;
@@ -240,8 +259,9 @@ export default function CoursesShell({
             <button
               type="button"
               className="course-week-nav-today"
-              aria-label="Zur aktuellen Kalenderwoche springen"
-              onClick={() => setWeekAnchor(startOfWeekMonday(new Date()))}
+              aria-label="Zur aktuellen Kalenderwoche und zum laufenden oder nächsten Kurs springen"
+              title="Aktuelle Woche und laufenden bzw. nächsten Kurs anzeigen"
+              onClick={jumpToToday}
             >
               Heute
             </button>
@@ -294,6 +314,7 @@ export default function CoursesShell({
             currentUser={currentUser}
             canSeeCourseManagement={canSeeCourseManagement}
             tenantSettings={tenant?.settings}
+            todayFocusRequest={todayFocusRequest}
             onToggleAbsence={onToggleAbsence}
             confirmSwap={confirmSwap}
             requestSwap={requestSwap}

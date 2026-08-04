@@ -776,7 +776,7 @@ export default function CourseList({
 
   if (!canSeeCourseManagement && participantCoursesToRender.length === 0) {
     return (
-      <div className="muted" style={{ textAlign: "center", padding: "2rem" }} role="status" aria-live="polite">
+      <div className="course-list-empty muted" role="status" aria-live="polite">
         Aktuell keine Kurse in dieser Ansicht — z. B. keine anstehenden Termine, Kurse in Planung, Sichtbarkeit nach Buchung/Lehrkraft oder abgelaufener Nachlauf bei inaktiven Kursen.
       </div>
     );
@@ -813,107 +813,108 @@ export default function CourseList({
         </div>
       )}
 
-      <div className="grid" role="region" aria-label="Kursübersicht">
-        {coursesToRender.length === 0 && (
-          <div className="muted" style={{ textAlign: "center", padding: "2rem" }} role="status" aria-live="polite">
-            Aktuell sind noch keine Kurse angelegt. Lege oben den ersten Kurs an.
-          </div>
-        )}
-        {coursesToRender.map((course) => {
-          const dates = getCourseDates(course);
-          const hasUpcomingDates = dates.length > 0;
-          const statusLabel =
-            STATUS_OPTIONS.find((entry) => entry.value === (course.status ?? "active"))?.label ?? "Aktiv";
-          const statusHint = looksLikeAutomaticallyInactive(course, hasUpcomingDates)
-            ? " · automatisch inaktiv"
-            : wouldAutoDeactivateOnReconcile(course, hasUpcomingDates)
-              ? " · wird beim Speichern inaktiv"
-              : "";
-          return (
-            <div key={course.id}>
-              {canSeeCourseManagement && (
-                <div className="course-card-actions-row">
-                  <span className="course-card-actions-status">
-                    Status:{" "}
-                    <strong>
-                      {statusLabel}
-                      {statusHint}
-                    </strong>
-                  </span>
-                  <div className="course-card-actions-buttons">
-                    <button
-                      type="button"
-                      title={canManageCourses ? "Mitglieder bearbeiten" : "Nur Admin kann Mitglieder bearbeiten"}
-                      aria-label={`Mitglieder bearbeiten ${course.name}`}
-                      disabled={!canManageCourses || saving}
-                      onClick={() => openMembersModal(course.id)}
-                    >
-                      <Users size={14} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      title={canManageCourses ? "Termine bearbeiten" : "Nur Admin kann Termine bearbeiten"}
-                      aria-label={`Termine bearbeiten ${course.name}`}
-                      disabled={!canManageCourses || saving}
-                      onClick={() => openDatesModal(course.id)}
-                    >
-                      <CalendarDays size={14} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      title={
-                        canManageCourses
-                          ? "Kurs bearbeiten"
-                          : canConfigureOverbooking
-                            ? "Überplanung bearbeiten"
-                            : "Nur Admin kann Kurse bearbeiten"
-                      }
-                      aria-label={
-                        canManageCourses
-                          ? `Kurs bearbeiten ${course.name}`
-                          : `Überplanung bearbeiten ${course.name}`
-                      }
-                      disabled={!(canManageCourses || canConfigureOverbooking) || saving}
-                      onClick={() => openEditModal(course)}
-                    >
-                      <Pencil size={14} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      title={canManageCourses ? "Kurs löschen" : "Nur Admin kann Kurse löschen"}
-                      aria-label={`Kurs löschen ${course.name}`}
-                      disabled={!canManageCourses || saving}
-                      onClick={() => openDeleteModal(course.id)}
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                    </button>
+      {coursesToRender.length === 0 ? (
+        <div className="course-list-empty muted" role="status" aria-live="polite">
+          Aktuell sind noch keine Kurse angelegt. Lege oben den ersten Kurs an.
+        </div>
+      ) : (
+        <div className="grid" role="region" aria-label="Kursübersicht">
+          {coursesToRender.map((course) => {
+            const dates = getCourseDates(course);
+            const hasUpcomingDates = dates.length > 0;
+            const statusLabel =
+              STATUS_OPTIONS.find((entry) => entry.value === (course.status ?? "active"))?.label ?? "Aktiv";
+            const statusHint = looksLikeAutomaticallyInactive(course, hasUpcomingDates)
+              ? " · automatisch inaktiv"
+              : wouldAutoDeactivateOnReconcile(course, hasUpcomingDates)
+                ? " · wird beim Speichern inaktiv"
+                : "";
+            return (
+              <div key={course.id}>
+                {canSeeCourseManagement && (
+                  <div className="course-card-actions-row">
+                    <span className="course-card-actions-status">
+                      Status:{" "}
+                      <strong>
+                        {statusLabel}
+                        {statusHint}
+                      </strong>
+                    </span>
+                    <div className="course-card-actions-buttons">
+                      <button
+                        type="button"
+                        title={canManageCourses ? "Mitglieder bearbeiten" : "Nur Admin kann Mitglieder bearbeiten"}
+                        aria-label={`Mitglieder bearbeiten ${course.name}`}
+                        disabled={!canManageCourses || saving}
+                        onClick={() => openMembersModal(course.id)}
+                      >
+                        <Users size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        title={canManageCourses ? "Termine bearbeiten" : "Nur Admin kann Termine bearbeiten"}
+                        aria-label={`Termine bearbeiten ${course.name}`}
+                        disabled={!canManageCourses || saving}
+                        onClick={() => openDatesModal(course.id)}
+                      >
+                        <CalendarDays size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        title={
+                          canManageCourses
+                            ? "Kurs bearbeiten"
+                            : canConfigureOverbooking
+                              ? "Überplanung bearbeiten"
+                              : "Nur Admin kann Kurse bearbeiten"
+                        }
+                        aria-label={
+                          canManageCourses
+                            ? `Kurs bearbeiten ${course.name}`
+                            : `Überplanung bearbeiten ${course.name}`
+                        }
+                        disabled={!(canManageCourses || canConfigureOverbooking) || saving}
+                        onClick={() => openEditModal(course)}
+                      >
+                        <Pencil size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        title={canManageCourses ? "Kurs löschen" : "Nur Admin kann Kurse löschen"}
+                        aria-label={`Kurs löschen ${course.name}`}
+                        disabled={!canManageCourses || saving}
+                        onClick={() => openDeleteModal(course.id)}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-              <CourseCard
-                course={course}
-                allCourses={courses}
-                currentUser={currentUser}
-                showOverbookingDetails={canSeeCourseManagement}
-                canManageGuestSeats={canManageGuestSeats}
-                onAdjustGuestCount={adjustGuestCount}
-                dates={dates}
-                overrides={filteredOverrides}
-                swaps={swaps}
-                participantActionsLocked={
-                  !canSeeCourseManagement &&
-                  isParticipantCourseWindDown(course, tenant?.settings)
-                }
-                tenantSettings={tenant?.settings}
-                onToggleAbsence={onToggleAbsence}
-                confirmSwap={confirmSwap}
-                requestSwap={requestSwap}
-                cancelSwap={cancelSwap}
-              />
-            </div>
-          );
-        })}
-      </div>
+                )}
+                <CourseCard
+                  course={course}
+                  allCourses={courses}
+                  currentUser={currentUser}
+                  showOverbookingDetails={canSeeCourseManagement}
+                  canManageGuestSeats={canManageGuestSeats}
+                  onAdjustGuestCount={adjustGuestCount}
+                  dates={dates}
+                  overrides={filteredOverrides}
+                  swaps={swaps}
+                  participantActionsLocked={
+                    !canSeeCourseManagement &&
+                    isParticipantCourseWindDown(course, tenant?.settings)
+                  }
+                  tenantSettings={tenant?.settings}
+                  onToggleAbsence={onToggleAbsence}
+                  confirmSwap={confirmSwap}
+                  requestSwap={requestSwap}
+                  cancelSwap={cancelSwap}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <CourseCreateDialog
         open={createOpen}

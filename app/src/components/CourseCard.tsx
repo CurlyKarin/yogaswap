@@ -29,6 +29,8 @@ type Props = {
   onDateChange?: (date: Date) => void;
   /** Wochenansicht: Termine der angezeigten KW auch in der Vergangenheit im Dropdown. */
   includePastTermsInSelect?: boolean;
+  /** Kurz hervorheben (z. B. nach „Heute“). */
+  highlighted?: boolean;
   canManageGuestSeats?: boolean;
   onAdjustGuestCount?: (course: Course, dateIso: string, delta: 1 | -1) => Promise<void>;
 };
@@ -50,6 +52,7 @@ export default function CourseCard({
   initialSelectedDate,
   onDateChange,
   includePastTermsInSelect = false,
+  highlighted = false,
   canManageGuestSeats = false,
   onAdjustGuestCount,
 }: Props) {
@@ -147,7 +150,8 @@ export default function CourseCard({
 
   return (
     <article
-      className={`course-card${participantActionsLocked ? " course-card--inactive-participant" : ""}`}
+      tabIndex={-1}
+      className={`course-card${participantActionsLocked ? " course-card--inactive-participant" : ""}${highlighted ? " course-card--today-focus" : ""}`}
       aria-labelledby={titleId}
       aria-describedby={scheduleDescId}
     >
