@@ -14,7 +14,7 @@ import {
 } from '../shared/cutoffOverrideValidation';
 import { mapOverrideItem, mapStringList, stringListAttribute, anonymousTrialCountAttribute } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
-import { validateAnonymousTrialCount } from '@yogaswap/shared';
+import { resolveEffectiveTermParticipants, validateAnonymousTrialCount } from '@yogaswap/shared';
 import { resolveSelfServiceAbsenceKind } from '../shared/notifications/resolveSelfServiceAbsenceKind';
 import { notifyParticipantTermReleased } from '../shared/notifications/termAbsenceNotifications';
 
@@ -61,6 +61,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const hasUpdatableField =
       updates.participants !== undefined ||
+      updates.cancelledParticipants !== undefined ||
       updates.swapped !== undefined ||
       updates.waitlist !== undefined ||
       updates.shortNoticeCancellations !== undefined ||
@@ -72,6 +73,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (updates.participants) {
       if (!Array.isArray(updates.participants) || updates.participants.some((p: unknown) => typeof p !== 'string')) {
         return { statusCode: 400, body: JSON.stringify({ error: 'Invalid participants array' }) };
+      }
+    }
+    if (updates.cancelledParticipants !== undefined) {
+      if (
+        !Array.isArray(updates.cancelledParticipants) ||
+        updates.cancelledParticipants.some((p: unknown) => typeof p !== 'string')
+      ) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid cancelledParticipants array' }) };
       }
     }
     if (updates.swapped) {
@@ -129,7 +138,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const touchesCutoffFields =
-      updates.participants !== undefined || updates.shortNoticeCancellations !== undefined;
+      updates.participants !== undefined ||
+      updates.cancelledParticipants !== undefined ||
+      updates.shortNoticeCancellations !== undefined;
 
     const subjectNickname = actingForUserId ?? userId;
     let selfServiceAbsenceKind: ReturnType<typeof resolveSelfServiceAbsenceKind> = null;
@@ -139,7 +150,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       merged.courseId = Number(legacyCourseId);
       merged.date = date;
 
-      const invariantError = validateShortNoticeParticipantsInvariant(merged);
+      const invariantError = validateShortNoticeParticipantsInvariant(merged, baseParticipants);
       if (invariantError) {
         return { statusCode: 400, body: JSON.stringify({ error: invariantError }) };
       }
@@ -168,10 +179,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    if (updates.participants !== undefined || updates.anonymousTrialCount !== undefined) {
+    if (
+      updates.participants !== undefined ||
+      updates.cancelledParticipants !== undefined ||
+      updates.swapped !== undefined ||
+      updates.anonymousTrialCount !== undefined
+    ) {
       const merged = mergeOverrideUpdate(before, baseParticipants, updates);
+      const effective = resolveEffectiveTermParticipants(
+        { participants: baseParticipants },
+        merged,
+      );
       const capacityError = validateParticipantsForCourse(
-        merged.participants,
+        effective.participants,
         capacityFields,
         merged.anonymousTrialCount ?? 0,
       );
@@ -184,25 +204,33 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const expressionAttributeValues: Record<string, any> = {};
     const expressionAttributeNames: Record<string, string> = {};
 
-    if (updates.participants) {
+    if (updates.participants !== undefined) {
       updateExpression += ' #participants = :participants,';
       expressionAttributeNames['#participants'] = 'participants';
       expressionAttributeValues[':participants'] = stringListAttribute(updates.participants);
     }
 
-    if (updates.swapped) {
+    if (updates.cancelledParticipants !== undefined) {
+      updateExpression += ' #cancelledParticipants = :cancelledParticipants,';
+      expressionAttributeNames['#cancelledParticipants'] = 'cancelledParticipants';
+      expressionAttributeValues[':cancelledParticipants'] = stringListAttribute(
+        updates.cancelledParticipants,
+      );
+    }
+
+    if (updates.swapped !== undefined) {
       updateExpression += ' #swapped = :swapped,';
       expressionAttributeNames['#swapped'] = 'swapped';
       expressionAttributeValues[':swapped'] = stringListAttribute(updates.swapped);
     }
 
-    if (updates.waitlist) {
+    if (updates.waitlist !== undefined) {
       updateExpression += ' #waitlist = :waitlist,';
       expressionAttributeNames['#waitlist'] = 'waitlist';
       expressionAttributeValues[':waitlist'] = stringListAttribute(updates.waitlist);
     }
 
-    if (updates.shortNoticeCancellations) {
+    if (updates.shortNoticeCancellations !== undefined) {
       updateExpression += ' #shortNotice = :shortNotice,';
       expressionAttributeNames['#shortNotice'] = 'shortNoticeCancellations';
       expressionAttributeValues[':shortNotice'] = stringListAttribute(updates.shortNoticeCancellations);

@@ -25,14 +25,27 @@ describe("cutoffOverrideValidation", () => {
     baseParticipants: ["alice"],
   };
 
-  it("fordert für SN-Einträge auch participants", () => {
+  it("fordert für SN-Einträge eine effektive Belegung", () => {
     const error = validateShortNoticeParticipantsInvariant(
       makeOverride({
         participants: [],
         shortNoticeCancellations: ["alice"],
       }),
+      ["alice"],
     );
     expect(error).toBe("Kurzfristig abgesagte Teilnehmer müssen in der Teilnehmerliste stehen.");
+  });
+
+  it("erlaubt SN im Delta-Modell wenn Person noch im Stamm steht", () => {
+    const error = validateShortNoticeParticipantsInvariant(
+      makeOverride({
+        participants: [],
+        cancelledParticipants: [],
+        shortNoticeCancellations: ["alice"],
+      }),
+      ["alice"],
+    );
+    expect(error).toBeNull();
   });
 
   it("blockiert SN-Setzen außerhalb des Cutoff", () => {

@@ -5,8 +5,10 @@ import {
   includesUserCaseInsensitive,
   isSwapTargetInCutoffWindow,
   removeUserCaseInsensitive,
+  resolveEffectiveTermParticipants,
   resolveGuestCount,
   validateTermOccupancy,
+  withRegularCancellation,
 } from "@yogaswap/shared";
 import type { RingCycle } from "./ringSwapGraph";
 
@@ -57,6 +59,9 @@ function cloneOverride(override: CourseDateOverride): CourseDateOverride {
   return {
     ...override,
     participants: [...override.participants],
+    cancelledParticipants: override.cancelledParticipants
+      ? [...override.cancelledParticipants]
+      : undefined,
     swapped: [...(override.swapped ?? [])],
     waitlist: [...(override.waitlist ?? [])],
     shortNoticeCancellations: override.shortNoticeCancellations
@@ -65,6 +70,7 @@ function cloneOverride(override: CourseDateOverride): CourseDateOverride {
   };
 }
 
+/** Fresh delta override or migrate legacy snapshot into cancelled/swapped. */
 function resolveOverrideState(
   courseId: number,
   date: string,
@@ -72,13 +78,34 @@ function resolveOverrideState(
   courses: Course[],
 ): CourseDateOverride {
   const existing = overrides.find((o) => o.courseId === courseId && o.date === date);
-  if (existing) return cloneOverride(existing);
-
   const course = courses.find((c) => c.id === courseId);
+
+  if (existing) {
+    const cloned = cloneOverride(existing);
+    if (Array.isArray(cloned.cancelledParticipants)) {
+      return cloned;
+    }
+    if (course) {
+      const resolved = resolveEffectiveTermParticipants(course, cloned);
+      return {
+        ...cloned,
+        participants: [],
+        cancelledParticipants: resolved.cancelledParticipants,
+        swapped: resolved.swapped,
+      };
+    }
+    return {
+      ...cloned,
+      participants: [],
+      cancelledParticipants: [],
+    };
+  }
+
   return {
     courseId,
     date,
-    participants: course ? [...course.participants] : [],
+    participants: [],
+    cancelledParticipants: [],
     swapped: [],
     waitlist: [],
   };
@@ -113,14 +140,12 @@ function applyEdgeToState(
 
   const originOverride = state.get(originKey)!;
   const targetOverride = state.get(targetKey)!;
+  const originEffective = resolveEffectiveTermParticipants(originCourse, originOverride);
   const originallyParticipant = originCourse.participants.some(
     (p) => normalized(p) === normalized(swap.user),
   );
 
-  if (
-    !includesUserCaseInsensitive(originOverride.participants, swap.user) &&
-    !includesUserCaseInsensitive(originOverride.swapped, swap.user)
-  ) {
+  if (!includesUserCaseInsensitive(originEffective.participants, swap.user)) {
     return { ok: false, reason: `${swap.user} is not booked on origin ${originKey}` };
   }
 
@@ -131,7 +156,7 @@ function applyEdgeToState(
       tenantSettings,
       override: originOverride,
       userName: swap.user,
-      participants: originOverride.participants,
+      participants: originEffective.participants,
       originallyParticipant,
       now,
     })
@@ -143,26 +168,26 @@ function applyEdgeToState(
     return { ok: false, reason: `Target cutoff blocks swap for ${swap.user}` };
   }
 
+  const nextOriginCancelled = originallyParticipant
+    ? withRegularCancellation(originOverride.cancelledParticipants, swap.user)
+    : [...(originOverride.cancelledParticipants ?? [])];
   const nextOrigin: CourseDateOverride = {
     ...originOverride,
-    participants: removeUserCaseInsensitive(originOverride.participants, swap.user),
+    participants: [],
+    cancelledParticipants: nextOriginCancelled,
     swapped: removeUserCaseInsensitive(originOverride.swapped ?? [], swap.user),
     waitlist: removeUserCaseInsensitive(originOverride.waitlist ?? [], swap.user),
   };
-  const nextTargetParticipants = includesUserCaseInsensitive(targetOverride.participants, swap.user)
-    ? targetOverride.participants
-    : addUserUniqueCaseInsensitive(targetOverride.participants, swap.user);
   const nextTarget: CourseDateOverride = {
     ...targetOverride,
-    participants: nextTargetParticipants,
+    participants: [],
+    cancelledParticipants: targetOverride.cancelledParticipants ?? [],
     swapped: addUserUniqueCaseInsensitive(targetOverride.swapped ?? [], swap.user),
     waitlist: removeUserCaseInsensitive(targetOverride.waitlist ?? [], swap.user),
   };
 
-  if (
-    includesUserCaseInsensitive(nextOrigin.participants, swap.user) ||
-    includesUserCaseInsensitive(nextOrigin.swapped, swap.user)
-  ) {
+  const nextOriginEffective = resolveEffectiveTermParticipants(originCourse, nextOrigin);
+  if (includesUserCaseInsensitive(nextOriginEffective.participants, swap.user)) {
     return { ok: false, reason: `${swap.user} would remain on origin ${originKey}` };
   }
 
@@ -212,8 +237,8 @@ export function planRingCycleExecution(
       ctx.overrides,
       ctx.courses,
     );
-    const beforeCount = beforeOverride.participants.length;
-    const afterCount = override.participants.length;
+    const beforeCount = resolveEffectiveTermParticipants(course, beforeOverride).participants.length;
+    const afterCount = resolveEffectiveTermParticipants(course, override).participants.length;
     const guestCount = resolveGuestCount(override.anonymousTrialCount);
     if (afterCount > beforeCount) {
       const capacityError = validateTermOccupancy(afterCount, course, guestCount);
@@ -269,11 +294,13 @@ export function planRingCycleExecution(
       !original ||
       JSON.stringify({
         participants: original.participants,
+        cancelledParticipants: original.cancelledParticipants ?? null,
         swapped: original.swapped ?? [],
         waitlist: original.waitlist ?? [],
       }) !==
         JSON.stringify({
           participants: next.participants,
+          cancelledParticipants: next.cancelledParticipants ?? null,
           swapped: next.swapped ?? [],
           waitlist: next.waitlist ?? [],
         });

@@ -3,7 +3,9 @@ import {
   includesUserCaseInsensitive,
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
+  resolveEffectiveTermParticipants,
 } from "@yogaswap/shared";
+
 export function resolveSelfServiceAbsenceKind(input: {
   actorNickname: string;
   courseTime: string;
@@ -19,10 +21,16 @@ export function resolveSelfServiceAbsenceKind(input: {
   const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
   const inCutoff = isWithinCancellationSwapCutoff(dateIso, courseTime, cutoffMinutes, now);
 
-  const wasParticipant =
-    includesUserCaseInsensitive(before?.participants, actorNickname) ||
-    includesUserCaseInsensitive(baseParticipants, actorNickname);
-  const isParticipant = includesUserCaseInsensitive(after.participants, actorNickname);
+  const beforeEffective = resolveEffectiveTermParticipants(
+    { participants: baseParticipants },
+    before,
+  );
+  const afterEffective = resolveEffectiveTermParticipants(
+    { participants: baseParticipants },
+    after,
+  );
+  const wasParticipant = includesUserCaseInsensitive(beforeEffective.participants, actorNickname);
+  const isParticipant = includesUserCaseInsensitive(afterEffective.participants, actorNickname);
   const isSn = includesUserCaseInsensitive(after.shortNoticeCancellations, actorNickname);
 
   if (wasParticipant && !isParticipant && !isSn && !inCutoff) {

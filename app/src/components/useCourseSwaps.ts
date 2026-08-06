@@ -16,6 +16,11 @@ import {
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
 import { hasRegularBookingCapacity, resolveMaxCapacity, validateTermOccupancy } from "shared/courseCapacity";
+import {
+  resolveEffectiveTermParticipants,
+  withRegularCancellation,
+  withoutRegularCancellation,
+} from "shared/overrideOccupancy";
 import { createSwap, deleteSwap, processPromotions, processRingSwaps } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
 
@@ -35,11 +40,23 @@ function buildOverridePatch(
   if (JSON.stringify(before.participants) !== JSON.stringify(after.participants)) {
     patch.participants = after.participants;
   }
+  if (
+    JSON.stringify(before.cancelledParticipants ?? null) !==
+    JSON.stringify(after.cancelledParticipants ?? null)
+  ) {
+    patch.cancelledParticipants = after.cancelledParticipants ?? [];
+  }
   if (JSON.stringify(before.swapped) !== JSON.stringify(after.swapped)) {
     patch.swapped = after.swapped;
   }
   if (JSON.stringify(before.waitlist) !== JSON.stringify(after.waitlist)) {
     patch.waitlist = after.waitlist;
+  }
+  if (
+    JSON.stringify(before.shortNoticeCancellations ?? []) !==
+    JSON.stringify(after.shortNoticeCancellations ?? [])
+  ) {
+    patch.shortNoticeCancellations = after.shortNoticeCancellations ?? [];
   }
   return patch;
 }
@@ -67,16 +84,63 @@ function upsertCourseDateOverride(
   return [...prev, next];
 }
 
+/** Delta-Override: kein Stamm-Copy; Legacy-Snapshots beim Schreiben migrieren. */
+function toDeltaOverrideBase(
+  course: Course | undefined,
+  courseId: number,
+  dateIso: string,
+  existing?: CourseDateOverride | null,
+): CourseDateOverride {
+  if (existing && Array.isArray(existing.cancelledParticipants)) {
+    return {
+      ...existing,
+      participants: existing.participants ?? [],
+      cancelledParticipants: [...existing.cancelledParticipants],
+      swapped: [...(existing.swapped ?? [])],
+      waitlist: [...(existing.waitlist ?? [])],
+      shortNoticeCancellations: [...(existing.shortNoticeCancellations ?? [])],
+    };
+  }
+  if (existing && course) {
+    const resolved = resolveEffectiveTermParticipants(course, existing);
+    return {
+      ...existing,
+      participants: [],
+      cancelledParticipants: resolved.cancelledParticipants,
+      swapped: resolved.swapped,
+      waitlist: [...(existing.waitlist ?? [])],
+      shortNoticeCancellations: [...(existing.shortNoticeCancellations ?? [])],
+    };
+  }
+  return {
+    courseId,
+    date: dateIso,
+    participants: [],
+    cancelledParticipants: [],
+    swapped: [],
+    waitlist: [],
+    shortNoticeCancellations: [],
+    ...(course ? overrideCourseUidFields(course) : {}),
+    ...(existing?.anonymousTrialCount ? { anonymousTrialCount: existing.anonymousTrialCount } : {}),
+  };
+}
+
 async function persistCourseDateOverride(
   courseId: number,
   dateIso: string,
   next: CourseDateOverride,
   exists: boolean,
 ): Promise<void> {
-  const payload = {
+  const payload: Partial<CourseDateOverride> = {
     participants: next.participants,
+    cancelledParticipants: next.cancelledParticipants ?? [],
+    swapped: next.swapped ?? [],
+    waitlist: next.waitlist ?? [],
     shortNoticeCancellations: next.shortNoticeCancellations ?? [],
   };
+  if (next.anonymousTrialCount !== undefined) {
+    payload.anonymousTrialCount = next.anonymousTrialCount;
+  }
   if (exists) {
     await updateOverride(courseId, dateIso, payload);
   } else {
@@ -261,10 +325,11 @@ export function useCourseSwaps(
         (o) => o.courseId === course.id && o.date === dateIso,
       );
       const isSn = isShortNoticeCancelled(existingOverride, userName);
-      const isIn = includesUserCaseInsensitive(
-        existingOverride?.participants ?? course.participants,
-        userName,
-      );
+      const effectiveParticipants = resolveEffectiveTermParticipants(
+        course,
+        existingOverride,
+      ).participants;
+      const isIn = includesUserCaseInsensitive(effectiveParticipants, userName);
 
       if (isIn && !isSn && !inCutoff) {
         const waitlist = getEffectiveWaitlist(course, filteredOverrides, dateIso);
@@ -314,40 +379,50 @@ export function useCourseSwaps(
       }
 
       const existingIndex = findOverrideIndex(filteredOverrides, course.id, dateIso);
-      const baseOverride: CourseDateOverride =
-        existingIndex >= 0
-          ? { ...filteredOverrides[existingIndex] }
-          : {
-              courseId: course.id,
-              date: dateIso,
-              participants: [...course.participants],
-              swapped: [],
-              waitlist: [],
-              shortNoticeCancellations: [],
-              ...overrideCourseUidFields(course),
-            };
+      const baseOverride = toDeltaOverrideBase(
+        course,
+        course.id,
+        dateIso,
+        existingIndex >= 0 ? filteredOverrides[existingIndex] : null,
+      );
 
       const maxCapacity = resolveMaxCapacity(course);
-      let nextParticipants = [...baseOverride.participants];
+      let nextCancelled = [...(baseOverride.cancelledParticipants ?? [])];
+      let nextSwapped = [...(baseOverride.swapped ?? [])];
       let nextShortNotice = [...(baseOverride.shortNoticeCancellations ?? [])];
+      const onStem = includesUserCaseInsensitive(course.participants, userName);
 
       if (isSn) {
         nextShortNotice = removeUserCaseInsensitive(nextShortNotice, userName);
       } else if (isIn && inCutoff) {
         nextShortNotice = addUserUniqueCaseInsensitive(nextShortNotice, userName);
       } else if (isIn) {
-        nextParticipants = removeUserCaseInsensitive(nextParticipants, userName);
+        if (onStem) {
+          nextCancelled = withRegularCancellation(nextCancelled, userName);
+        }
+        nextSwapped = removeUserCaseInsensitive(nextSwapped, userName);
       } else {
-        if (nextParticipants.length >= maxCapacity) {
+        const afterUndo = withoutRegularCancellation(nextCancelled, userName);
+        nextCancelled = afterUndo;
+        if (!onStem) {
+          nextSwapped = addUserUniqueCaseInsensitive(nextSwapped, userName);
+        }
+        const preview = resolveEffectiveTermParticipants(course, {
+          ...baseOverride,
+          cancelledParticipants: nextCancelled,
+          swapped: nextSwapped,
+        });
+        if (preview.participants.length > maxCapacity) {
           alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
           return false;
         }
-        nextParticipants = addUserUniqueCaseInsensitive(nextParticipants, userName);
       }
 
       const nextOverride: CourseDateOverride = {
         ...baseOverride,
-        participants: nextParticipants,
+        participants: [],
+        cancelledParticipants: nextCancelled,
+        swapped: nextSwapped,
         shortNoticeCancellations: nextShortNotice,
       };
 
@@ -396,7 +471,7 @@ export function useCourseSwaps(
     const override = filteredOverrides.find(
       (o) => o.courseId === fromCourse.id && o.date === fromDateIso,
     );
-    const participants = override?.participants ?? fromCourse.participants;
+    const participants = resolveEffectiveTermParticipants(fromCourse, override).participants;
     const originallyParticipant = fromCourse.participants.some((p) =>
       equalsIgnoreCase(p, userName),
     );
@@ -469,9 +544,10 @@ export function useCourseSwaps(
           return;
         }
 
-        const effectiveTargetParticipants = existingTargetOverride
-          ? existingTargetOverride.participants
-          : targetCourse.participants;
+        const effectiveTargetParticipants = resolveEffectiveTermParticipants(
+          targetCourse,
+          existingTargetOverride,
+        ).participants;
 
         if (!hasRegularBookingCapacity(effectiveTargetParticipants.length, targetCourse)) {
           alert("Der gewählte Ersatztermin ist inzwischen voll.");
@@ -489,7 +565,12 @@ export function useCourseSwaps(
           const updated = [...prev];
           if (idx >= 0) {
             updated[idx] = nextOverride;
-            updateOverride(courseId, dateIso, { participants: nextOverride.participants, swapped: nextOverride.swapped });
+            updateOverride(courseId, dateIso, {
+              participants: nextOverride.participants,
+              cancelledParticipants: nextOverride.cancelledParticipants ?? [],
+              swapped: nextOverride.swapped,
+              waitlist: nextOverride.waitlist,
+            });
           } else {
             updated.push(nextOverride);
             createOverride(nextOverride);
@@ -501,55 +582,45 @@ export function useCourseSwaps(
         setOverrides((prev: CourseDateOverride[]) => {
           let updated = [...prev];
 
-          // Ursprungstermin: Benutzer austragen
+          // Ursprungstermin: Stamm → cancelledParticipants; Swap-in → aus swapped
           const originIdx = updated.findIndex(
             (o: CourseDateOverride) => o.courseId === fromCourse.id && o.date === fromDateIso
           );
-          const originOverride: CourseDateOverride =
-            originIdx >= 0
-              ? { ...updated[originIdx] }
-              : {
-                  courseId: fromCourse.id,
-                  date: fromDateIso,
-                  participants: fromCourse.participants.filter((p) => p.toLowerCase() !== userName.toLowerCase()),
-                  swapped: [],
-                  waitlist: [],
-                  ...overrideCourseUidFields(fromCourse),
-                };
+          const originOverride = toDeltaOverrideBase(
+            fromCourse,
+            fromCourse.id,
+            fromDateIso,
+            originIdx >= 0 ? updated[originIdx] : null,
+          );
+          const onOriginStem = includesUserCaseInsensitive(fromCourse.participants, userName);
           const originNextOverride: CourseDateOverride = {
             ...originOverride,
-            participants: originOverride.participants.filter((p) => p.toLowerCase() !== userName.toLowerCase()),
-            swapped: originOverride.swapped ?? [],
-            waitlist: originOverride.waitlist ?? [],
+            participants: [],
+            cancelledParticipants: onOriginStem
+              ? withRegularCancellation(originOverride.cancelledParticipants, userName)
+              : [...(originOverride.cancelledParticipants ?? [])],
+            swapped: removeUserCaseInsensitive(originOverride.swapped ?? [], userName),
+            waitlist: removeUserCaseInsensitive(originOverride.waitlist ?? [], userName),
           };
           console.log('call updateOrCreateOverride');
           updated = updateOrCreateOverride(updated, originNextOverride, originIdx, fromCourse.id, fromDateIso);
 
-          // Zieltermin: Benutzer hinzufügen und swapped aktualisieren
+          // Zieltermin: User → swapped
           const targetIdx = updated.findIndex(
             (o: CourseDateOverride) => o.courseId === toCourseId && o.date === toDateIso
           );
-          const targetOverride: CourseDateOverride =
-            targetIdx >= 0
-              ? { ...updated[targetIdx] }
-              : {
-                  courseId: toCourseId,
-                  date: toDateIso,
-                  participants: [...targetCourse.participants],
-                  swapped: [],
-                  waitlist: [],
-                  ...overrideCourseUidFields(targetCourse),
-                };
-          const newParticipants = targetOverride.participants.some(
-            (p) => p.toLowerCase() === userName.toLowerCase()
-          )
-            ? targetOverride.participants
-            : [...targetOverride.participants.filter((p) => p.toLowerCase() !== userName.toLowerCase()), userName];
+          const targetOverride = toDeltaOverrideBase(
+            targetCourse,
+            toCourseId,
+            toDateIso,
+            targetIdx >= 0 ? updated[targetIdx] : null,
+          );
           const targetNextOverride: CourseDateOverride = {
             ...targetOverride,
-            participants: newParticipants,
-            swapped: [...new Set([...(targetOverride.swapped ?? []), userName])],
-            waitlist: targetOverride.waitlist ?? [],
+            participants: [],
+            cancelledParticipants: targetOverride.cancelledParticipants ?? [],
+            swapped: addUserUniqueCaseInsensitive(targetOverride.swapped ?? [], userName),
+            waitlist: removeUserCaseInsensitive(targetOverride.waitlist ?? [], userName),
           };
           updated = updateOrCreateOverride(updated, targetNextOverride, targetIdx, toCourseId, toDateIso);
 
@@ -655,25 +726,22 @@ export function useCourseSwaps(
             (o) => o.courseId === swap.toCourseId && o.date === swap.toDate,
           );
           const isSn = isShortNoticeCancelled(targetOverride, swap.user);
-          const baseOverride: CourseDateOverride = targetOverride ?? {
-            courseId: swap.toCourseId,
-            date: swap.toDate,
-            participants: targetCourse?.participants ?? [],
-            swapped: [],
-            waitlist: [],
-            shortNoticeCancellations: [],
-            ...(targetCourse ? overrideCourseUidFields(targetCourse) : {}),
-          };
+          const baseOverride = toDeltaOverrideBase(
+            targetCourse,
+            swap.toCourseId,
+            swap.toDate,
+            targetOverride,
+          );
           const nextShortNotice = isSn
             ? removeUserCaseInsensitive(baseOverride.shortNoticeCancellations ?? [], swap.user)
             : addUserUniqueCaseInsensitive(baseOverride.shortNoticeCancellations ?? [], swap.user);
-          const nextParticipants = includesUserCaseInsensitive(baseOverride.participants, swap.user)
-            ? baseOverride.participants
-            : addUserUniqueCaseInsensitive(baseOverride.participants, swap.user);
+          const nextSwapped = addUserUniqueCaseInsensitive(baseOverride.swapped ?? [], swap.user);
 
           const nextOverride: CourseDateOverride = {
             ...baseOverride,
-            participants: nextParticipants,
+            participants: [],
+            cancelledParticipants: baseOverride.cancelledParticipants ?? [],
+            swapped: nextSwapped,
             shortNoticeCancellations: nextShortNotice,
           };
           const idx = findOverrideIndex(filteredOverrides, swap.toCourseId, swap.toDate);
@@ -739,8 +807,15 @@ export function useCourseSwaps(
               overrideMatchesCourseDate(o, s.fromCourseId, s.fromDate) &&
               s.status === "active"
             ) {
+              // Ursprung bleibt RC; nur Swap-Reste bereinigen
               newO.swapped = (newO.swapped ?? []).filter((u) => u.toLowerCase() !== userLower);
-              newO.participants = (newO.participants ?? []).filter((p) => p.toLowerCase() !== userLower);
+              if (Array.isArray(newO.cancelledParticipants)) {
+                newO.participants = [];
+              } else {
+                newO.participants = (newO.participants ?? []).filter(
+                  (p) => p.toLowerCase() !== userLower,
+                );
+              }
             }
 
             const cleansTarget =
@@ -749,8 +824,14 @@ export function useCourseSwaps(
 
             if (cleansTarget) {
               if (s.status === "active") {
-                newO.participants = (newO.participants ?? []).filter((p) => p.toLowerCase() !== userLower);
                 newO.swapped = (newO.swapped ?? []).filter((u) => u.toLowerCase() !== userLower);
+                if (Array.isArray(newO.cancelledParticipants)) {
+                  newO.participants = [];
+                } else {
+                  newO.participants = (newO.participants ?? []).filter(
+                    (p) => p.toLowerCase() !== userLower,
+                  );
+                }
               } else if (s.status === "pending") {
                 newO.waitlist = (newO.waitlist ?? []).filter((u) => u.toLowerCase() !== userLower);
               }
@@ -894,7 +975,8 @@ export function useCourseSwaps(
             const nextOverride: CourseDateOverride = {
               courseId: toCourseId,
               date: targetDateKey,
-              participants: [...targetCourse.participants],
+              participants: [],
+              cancelledParticipants: [],
               swapped: [],
               waitlist: [userName],
               ...overrideCourseUidFields(targetCourse),
@@ -968,27 +1050,24 @@ export function useCourseSwaps(
     async (course: Course, dateIso: string, delta: 1 | -1) => {
       const existingIndex = findOverrideIndex(filteredOverrides, course.id, dateIso);
       const existing = existingIndex >= 0 ? filteredOverrides[existingIndex] : null;
-      const participants = existing?.participants ?? [...course.participants];
+      const effectiveNamed = resolveEffectiveTermParticipants(course, existing).participants;
       const currentGuests = existing?.anonymousTrialCount ?? 0;
       const nextGuests = currentGuests + delta;
       if (nextGuests < 0) return;
 
-      const capacityError = validateTermOccupancy(participants.length, course, nextGuests);
+      const capacityError = validateTermOccupancy(effectiveNamed.length, course, nextGuests);
       if (capacityError) {
         alert(capacityError);
         return;
       }
 
       const nextOverride: CourseDateOverride = {
-        courseId: course.id,
-        date: dateIso,
-        participants,
-        swapped: existing?.swapped ?? [],
-        waitlist: existing?.waitlist ?? [],
-        shortNoticeCancellations: existing?.shortNoticeCancellations ?? [],
-        ...overrideCourseUidFields(course),
+        ...toDeltaOverrideBase(course, course.id, dateIso, existing),
         ...(nextGuests > 0 ? { anonymousTrialCount: nextGuests } : {}),
       };
+      if (nextGuests <= 0) {
+        delete nextOverride.anonymousTrialCount;
+      }
 
       setOverrides((prev) => upsertCourseDateOverride(prev, nextOverride, course.id, dateIso));
 

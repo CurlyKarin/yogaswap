@@ -117,7 +117,10 @@ describe("useCourseSwaps", () => {
     });
 
     expect(updateOverride).toHaveBeenCalledWith(1, "2099-06-16", {
-      participants: ["alice"],
+      participants: [],
+      cancelledParticipants: [],
+      swapped: [],
+      waitlist: [],
       shortNoticeCancellations: ["alice"],
     });
     expect(processPromotions).toHaveBeenCalledTimes(1);
@@ -937,7 +940,11 @@ describe("useCourseSwaps", () => {
     });
 
     expect(createOverride).toHaveBeenCalledWith(
-      expect.objectContaining({ anonymousTrialCount: 1, participants: ["alice"] }),
+      expect.objectContaining({
+        anonymousTrialCount: 1,
+        participants: [],
+        cancelledParticipants: [],
+      }),
     );
     expect(fetchData).toHaveBeenCalled();
   });

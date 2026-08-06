@@ -6,6 +6,8 @@ import {
   Course,
   canPromoteFromWaitlist,
   resolveCancellationSwapCutoffMinutes,
+  resolveEffectiveTermParticipants,
+  withRegularCancellation,
 } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
@@ -71,6 +73,7 @@ async function updateOverrideHelper(
   date: string,
   updates: {
     participants?: string[];
+    cancelledParticipants?: string[];
     swapped?: string[];
     waitlist?: string[];
   }
@@ -79,17 +82,24 @@ async function updateOverrideHelper(
   const expressionAttributeNames: Record<string, string> = {};
   const expressionAttributeValues: Record<string, any> = {};
 
-  if (updates.participants) {
+  if (updates.participants !== undefined) {
     updateExpressionParts.push("#participants = :participants");
     expressionAttributeNames["#participants"] = "participants";
     expressionAttributeValues[":participants"] = { L: updates.participants.map((p) => ({ S: p })) };
   }
-  if (updates.swapped) {
+  if (updates.cancelledParticipants !== undefined) {
+    updateExpressionParts.push("#cancelledParticipants = :cancelledParticipants");
+    expressionAttributeNames["#cancelledParticipants"] = "cancelledParticipants";
+    expressionAttributeValues[":cancelledParticipants"] = {
+      L: updates.cancelledParticipants.map((p) => ({ S: p })),
+    };
+  }
+  if (updates.swapped !== undefined) {
     updateExpressionParts.push("#swapped = :swapped");
     expressionAttributeNames["#swapped"] = "swapped";
     expressionAttributeValues[":swapped"] = { L: updates.swapped.map((s) => ({ S: s })) };
   }
-  if (updates.waitlist) {
+  if (updates.waitlist !== undefined) {
     updateExpressionParts.push("#waitlist = :waitlist");
     expressionAttributeNames["#waitlist"] = "waitlist";
     expressionAttributeValues[":waitlist"] = { L: updates.waitlist.map((w) => ({ S: w })) };
@@ -138,6 +148,13 @@ async function createOverrideHelper(tenantId: string, override: CourseDateOverri
       courseId: { S: override.courseId.toString() },
       date: { S: override.date },
       participants: { L: (override.participants || []).map((p) => ({ S: p })) },
+      ...(Array.isArray(override.cancelledParticipants)
+        ? {
+            cancelledParticipants: {
+              L: override.cancelledParticipants.map((p) => ({ S: p })),
+            },
+          }
+        : {}),
       swapped: { L: (override.swapped || []).map((s) => ({ S: s })) },
       waitlist: { L: (override.waitlist || []).map((w) => ({ S: w })) },
       shortNoticeCancellations: {
@@ -255,7 +272,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         const overrideCourse = courses.find((c) => c.id === override.courseId);
         if (!overrideCourse) continue;
 
-        const participantCount = override.participants.length;
+        const participantCount = resolveEffectiveTermParticipants(
+          overrideCourse,
+          override,
+        ).participants.length;
         const guestCount = override.anonymousTrialCount ?? 0;
         console.log('waitlist promotion check:', {
           participantCount,
@@ -328,56 +348,91 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         await client.send(updateSwapCommand);
         console.log(`[processPromotions] Swap updated to active: ${swapId}`);
 
-        // 6) Ziel-Override aktualisieren
-        const newParticipants = addUserUniqueCaseInsensitive(override.participants, promotedSwapUser);
-        const newSwapped = addUserUniqueCaseInsensitive(override.swapped, promotedSwapUser);
+        // 6) Ziel-Override aktualisieren (Delta: nur swapped + Waitlist)
+        const targetResolved = resolveEffectiveTermParticipants(overrideCourse, override);
+        const newSwapped = addUserUniqueCaseInsensitive(
+          Array.isArray(override.cancelledParticipants)
+            ? (override.swapped ?? [])
+            : targetResolved.swapped,
+          promotedSwapUser,
+        );
         const newWaitlist = removeUserCaseInsensitive(override.waitlist, promotedSwapUser);
+        const newCancelled = Array.isArray(override.cancelledParticipants)
+          ? (override.cancelledParticipants ?? [])
+          : targetResolved.cancelledParticipants;
         console.log('Updating target override:', {
           courseId: override.courseId,
           date: override.date,
-          newParticipants,
           newSwapped,
           newWaitlist,
+          newCancelled,
         });
         await updateOverrideHelper(tenantId, override.courseId, override.date, {
-          participants: newParticipants,
+          participants: [],
+          cancelledParticipants: newCancelled,
           swapped: newSwapped,
           waitlist: newWaitlist,
         });
 
-        // 7) Ursprung-Override bereinigen
+        // 7) Ursprung-Override bereinigen (Delta: RC am Stamm)
         const originOverride = allOverrides.find(
           (o) => o.courseId === correspondingSwap.fromCourseId && o.date === correspondingSwap.fromDate
         );
+        const originCourse = courses.find((c) => c.id === correspondingSwap.fromCourseId);
         if (originOverride) {
-          const newOriginParticipants = removeUserCaseInsensitive(originOverride.participants, promotedSwapUser);
-          const newOriginSwapped = removeUserCaseInsensitive(originOverride.swapped, promotedSwapUser);
+          const originResolved = originCourse
+            ? resolveEffectiveTermParticipants(originCourse, originOverride)
+            : {
+                cancelledParticipants: originOverride.cancelledParticipants ?? [],
+                swapped: originOverride.swapped ?? [],
+              };
+          const onStem =
+            !!originCourse &&
+            includesUserCaseInsensitive(originCourse.participants, promotedSwapUser);
+          const newOriginCancelled = onStem
+            ? withRegularCancellation(
+                Array.isArray(originOverride.cancelledParticipants)
+                  ? originOverride.cancelledParticipants
+                  : originResolved.cancelledParticipants,
+                promotedSwapUser,
+              )
+            : Array.isArray(originOverride.cancelledParticipants)
+              ? (originOverride.cancelledParticipants ?? [])
+              : originResolved.cancelledParticipants;
+          const newOriginSwapped = removeUserCaseInsensitive(
+            Array.isArray(originOverride.cancelledParticipants)
+              ? (originOverride.swapped ?? [])
+              : originResolved.swapped,
+            promotedSwapUser,
+          );
           const newOriginWaitlist = removeUserCaseInsensitive(originOverride.waitlist, promotedSwapUser);
           console.log('Updating origin override:', {
             courseId: correspondingSwap.fromCourseId,
             date: correspondingSwap.fromDate,
-            newOriginParticipants,
+            newOriginCancelled,
             newOriginSwapped,
             newOriginWaitlist,
           });
           await updateOverrideHelper(tenantId, correspondingSwap.fromCourseId, correspondingSwap.fromDate, {
-            participants: newOriginParticipants,
+            participants: [],
+            cancelledParticipants: newOriginCancelled,
             swapped: newOriginSwapped,
             waitlist: newOriginWaitlist,
           });
-        } else {
-          const originCourse = courses.find((c) => c.id === correspondingSwap.fromCourseId);
-          if (originCourse && includesUserCaseInsensitive(originCourse.participants, promotedSwapUser)) {
-            const newOriginOverride: CourseDateOverride = {
-              courseId: correspondingSwap.fromCourseId,
-              date: correspondingSwap.fromDate,
-              participants: removeUserCaseInsensitive(originCourse.participants, promotedSwapUser),
-              swapped: [],
-              waitlist: [],
-            };
-            console.log('Creating origin override:', newOriginOverride);
-            await createOverrideHelper(tenantId, newOriginOverride);
-          }
+        } else if (
+          originCourse &&
+          includesUserCaseInsensitive(originCourse.participants, promotedSwapUser)
+        ) {
+          const newOriginOverride: CourseDateOverride = {
+            courseId: correspondingSwap.fromCourseId,
+            date: correspondingSwap.fromDate,
+            participants: [],
+            cancelledParticipants: [promotedSwapUser],
+            swapped: [],
+            waitlist: [],
+          };
+          console.log('Creating origin override:', newOriginOverride);
+          await createOverrideHelper(tenantId, newOriginOverride);
         }
 
         // 8) Andere pending Swaps des Users stornieren

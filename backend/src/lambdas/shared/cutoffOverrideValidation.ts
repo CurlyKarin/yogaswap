@@ -3,10 +3,12 @@ import {
   includesUserCaseInsensitive,
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
+  resolveEffectiveTermParticipants,
 } from "@yogaswap/shared";
 
 export type OverrideUpdateBody = {
   participants?: string[];
+  cancelledParticipants?: string[];
   swapped?: string[];
   waitlist?: string[];
   shortNoticeCancellations?: string[];
@@ -29,6 +31,12 @@ export function mergeOverrideUpdate(
   return {
     ...base,
     participants: updates.participants ?? base.participants,
+    ...(updates.cancelledParticipants !== undefined || base.cancelledParticipants !== undefined
+      ? {
+          cancelledParticipants:
+            updates.cancelledParticipants ?? base.cancelledParticipants ?? [],
+        }
+      : {}),
     swapped: updates.swapped ?? base.swapped ?? [],
     waitlist: updates.waitlist ?? base.waitlist ?? [],
     shortNoticeCancellations:
@@ -41,9 +49,16 @@ export function mergeOverrideUpdate(
   };
 }
 
-export function validateShortNoticeParticipantsInvariant(override: CourseDateOverride): string | null {
+export function validateShortNoticeParticipantsInvariant(
+  override: CourseDateOverride,
+  baseParticipants: string[] = [],
+): string | null {
+  const effective = resolveEffectiveTermParticipants(
+    { participants: baseParticipants },
+    override,
+  );
   for (const user of override.shortNoticeCancellations ?? []) {
-    if (!includesUserCaseInsensitive(override.participants, user)) {
+    if (!includesUserCaseInsensitive(effective.participants, user)) {
       return "Kurzfristig abgesagte Teilnehmer müssen in der Teilnehmerliste stehen.";
     }
   }
@@ -68,14 +83,20 @@ export function validateSelfServiceOverrideTransition(input: {
   const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
   const inCutoff = isWithinCancellationSwapCutoff(dateIso, courseTime, cutoffMinutes, now);
   const actor = actorNickname;
-  const wasParticipant =
-    includesUserCaseInsensitive(before?.participants, actor) ||
-    includesUserCaseInsensitive(baseParticipants, actor);
-  const isParticipant = includesUserCaseInsensitive(after.participants, actor);
+  const beforeEffective = resolveEffectiveTermParticipants(
+    { participants: baseParticipants },
+    before,
+  );
+  const afterEffective = resolveEffectiveTermParticipants(
+    { participants: baseParticipants },
+    after,
+  );
+  const wasParticipant = includesUserCaseInsensitive(beforeEffective.participants, actor);
+  const isParticipant = includesUserCaseInsensitive(afterEffective.participants, actor);
   const wasSn = includesUserCaseInsensitive(before?.shortNoticeCancellations, actor);
   const isSn = includesUserCaseInsensitive(after.shortNoticeCancellations, actor);
 
-  const invariantError = validateShortNoticeParticipantsInvariant(after);
+  const invariantError = validateShortNoticeParticipantsInvariant(after, baseParticipants);
   if (invariantError) return invariantError;
 
   if (isSn && !isParticipant) {
