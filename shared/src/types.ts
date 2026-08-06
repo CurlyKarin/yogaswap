@@ -14,10 +14,19 @@ export type CourseDateOverride = {
   /** Stabile technische Kurs-ID (UUID), Dual-Write mit {@link Course.courseUid}. */
   courseUid?: string;
   date: string; // ISO-String
+  /**
+   * Legacy: volle Termin-Roster (Snapshot). Neu: leer lassen; Belegung über
+   * {@link cancelledParticipants} / {@link swapped} / Stamm (siehe `overrideOccupancy`).
+   */
   participants: string[];
-  swapped?: string[]; // aktive Tausch-Teilnehmer
+  /**
+   * Reguläre Absagen (RC) von Stamm-Personen an diesem Termin — Slot frei.
+   * Fehlt das Feld, leiten Reader Deltas aus dem Legacy-Snapshot `participants` ab (#291).
+   */
+  cancelledParticipants?: string[];
+  swapped?: string[]; // Termin-Zugänge (meist aktiver Tausch rein)
   waitlist?: string[]; // Nachrücker für volle Termine
-  /** Kurzfristig abgesagt — bleiben in {@link participants} (Slot bleibt belegt). */
+  /** Kurzfristig abgesagt — bleiben in der effektiven Belegung (Slot bleibt belegt). */
   shortNoticeCancellations?: string[];
   // Anonyme Schnupperteilnehmer / Blocker ohne expliziten User
   // Belegt Kapazität, ohne eine konkrete Person zu modellieren

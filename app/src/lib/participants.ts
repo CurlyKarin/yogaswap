@@ -1,13 +1,14 @@
 import { Course, CourseDateOverride } from "shared/types";
+import { resolveEffectiveTermParticipants } from "shared/overrideOccupancy";
 import type { ParticipantWithStatus } from "../api/participants";
 
-export const getEffectiveParticipants = (course: Course, overrides: CourseDateOverride[], dateIso: string) => {
+export const getEffectiveParticipants = (
+  course: Course,
+  overrides: CourseDateOverride[],
+  dateIso: string,
+) => {
   const override = overrides.find((o) => o.courseId === course.id && o.date === dateIso);
-  if (override) {
-    return override.participants;
-  } else {
-    return course.participants;
-  }
+  return resolveEffectiveTermParticipants(course, override).participants;
 };
 
 export type ParticipantStatusPresentation = {
