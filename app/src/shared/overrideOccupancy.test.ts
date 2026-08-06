@@ -50,6 +50,18 @@ describe("resolveEffectiveTermParticipants", () => {
     expect(resolved.participants).toEqual(["luna", "maya"]);
     expect(resolved.usedLegacySnapshot).toBe(true);
   });
+
+  it("uses legacy snapshot roster as effective even when swapped lists differ", () => {
+    const resolved = resolveEffectiveTermParticipants(
+      { participants: ["alice", "bob"] },
+      {
+        participants: ["carol"],
+        swapped: ["alice"],
+      },
+    );
+    expect(resolved.participants).toEqual(["carol"]);
+    expect(resolved.usedLegacySnapshot).toBe(true);
+  });
 });
 
 describe("deriveLegacyOverrideDeltas", () => {

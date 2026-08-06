@@ -75,12 +75,18 @@ export function resolveEffectiveTermParticipants(
   let usedLegacySnapshot = false;
 
   if (!hasExplicitCancellations) {
+    // Legacy snapshot: effective roster is override.participants as stored.
     const legacy = deriveLegacyOverrideDeltas(stem, override.participants ?? []);
     cancelledParticipants = legacy.cancelledParticipants;
-    if ((override.swapped ?? []).length === 0 && legacy.swapped.length > 0) {
+    if ((override.swapped ?? []).length === 0) {
       swapped = legacy.swapped;
     }
-    usedLegacySnapshot = true;
+    return {
+      participants: uniqueCaseInsensitive(override.participants ?? []),
+      cancelledParticipants: uniqueCaseInsensitive(cancelledParticipants),
+      swapped: uniqueCaseInsensitive(swapped),
+      usedLegacySnapshot: true,
+    };
   }
 
   let effective = stem.filter(

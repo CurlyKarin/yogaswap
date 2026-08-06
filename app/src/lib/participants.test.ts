@@ -33,6 +33,35 @@ describe("getEffectiveParticipants", () => {
     ]);
   });
 
+  it("behält Stamm bei Guest-only-Override (Delta ohne cancelledParticipants)", () => {
+    const overrides: CourseDateOverride[] = [
+      {
+        courseId: 1,
+        date: "2025-06-16",
+        participants: [],
+        cancelledParticipants: [],
+        anonymousTrialCount: 1,
+      },
+    ];
+    expect(getEffectiveParticipants(baseCourse, overrides, "2025-06-16")).toEqual(["alice", "bob"]);
+  });
+
+  it("wendet cancelledParticipants und swapped im Delta-Modus an", () => {
+    const overrides: CourseDateOverride[] = [
+      {
+        courseId: 1,
+        date: "2025-06-16",
+        participants: [],
+        cancelledParticipants: ["bob"],
+        swapped: ["charlie"],
+      },
+    ];
+    expect(getEffectiveParticipants(baseCourse, overrides, "2025-06-16")).toEqual([
+      "alice",
+      "charlie",
+    ]);
+  });
+
   it("ignoriert Override mit anderem courseId", () => {
     const overrides: CourseDateOverride[] = [
       {
