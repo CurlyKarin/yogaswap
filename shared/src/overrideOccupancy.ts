@@ -27,9 +27,18 @@ export type EffectiveTermParticipants = {
   usedLegacySnapshot: boolean;
 };
 
+export type OverrideDeltaFields = {
+  participants: string[];
+  cancelledParticipants: string[];
+  swapped: string[];
+};
+
 /**
  * Derive delta lists from a legacy full-roster override.participants snapshot.
  * RC = stem members missing from snapshot; additions = snapshot members not on stem.
+ *
+ * Important: pass the stem **as it was when the snapshot was written** (or the
+ * pre-change stem). Using a newer, larger stem treats new members as RC.
  */
 export function deriveLegacyOverrideDeltas(
   stemParticipants: string[],
@@ -45,12 +54,52 @@ export function deriveLegacyOverrideDeltas(
 }
 
 /**
+ * Convert a legacy snapshot override into explicit delta fields.
+ * Empty named roster (typical guest/waitlist stub) → no cancellations.
+ * Already-delta overrides are normalized to `participants: []`.
+ */
+export function migrateLegacyOverrideToDeltas(
+  previousStem: string[],
+  override: Pick<CourseDateOverride, "participants" | "cancelledParticipants" | "swapped">,
+): OverrideDeltaFields {
+  if (Array.isArray(override.cancelledParticipants)) {
+    return {
+      participants: [],
+      cancelledParticipants: uniqueCaseInsensitive(override.cancelledParticipants),
+      swapped: uniqueCaseInsensitive(override.swapped ?? []),
+    };
+  }
+
+  const snapshot = override.participants ?? [];
+  const explicitSwapped = override.swapped ?? [];
+
+  // Guest/waitlist-only stubs stored `participants: []` without meaning "everyone RC".
+  if (snapshot.length === 0 && explicitSwapped.length === 0) {
+    return {
+      participants: [],
+      cancelledParticipants: [],
+      swapped: [],
+    };
+  }
+
+  const legacy = deriveLegacyOverrideDeltas(previousStem, snapshot);
+  return {
+    participants: [],
+    cancelledParticipants: uniqueCaseInsensitive(legacy.cancelledParticipants),
+    swapped: uniqueCaseInsensitive(
+      explicitSwapped.length > 0 ? explicitSwapped : legacy.swapped,
+    ),
+  };
+}
+
+/**
  * Effective named participants for a course term (Stamm ⊕ Override-Deltas).
  *
  * - RC (`cancelledParticipants`): removed from stem for this term
  * - `swapped`: term additions
  * - SN flags are orthogonal: SN users remain in the returned list
- * - Legacy: if `cancelledParticipants` is absent, derive deltas from snapshot `participants`
+ * - Legacy: if `cancelledParticipants` is absent, derive from snapshot — except
+ *   empty named stubs, which keep the stem (guest/waitlist-only overrides)
  */
 export function resolveEffectiveTermParticipants(
   course: Pick<Course, "participants">,
@@ -70,25 +119,34 @@ export function resolveEffectiveTermParticipants(
   }
 
   const hasExplicitCancellations = Array.isArray(override.cancelledParticipants);
-  let cancelledParticipants = override.cancelledParticipants ?? [];
-  let swapped = override.swapped ?? [];
-  let usedLegacySnapshot = false;
 
   if (!hasExplicitCancellations) {
-    // Legacy snapshot: effective roster is override.participants as stored.
-    const legacy = deriveLegacyOverrideDeltas(stem, override.participants ?? []);
-    cancelledParticipants = legacy.cancelledParticipants;
-    if ((override.swapped ?? []).length === 0) {
-      swapped = legacy.swapped;
+    const snapshot = override.participants ?? [];
+    const explicitSwapped = override.swapped ?? [];
+
+    // Empty named roster without cancelledParticipants = stub, not full wipe.
+    if (snapshot.length === 0 && explicitSwapped.length === 0) {
+      return {
+        participants: uniqueCaseInsensitive(stem),
+        cancelledParticipants: [],
+        swapped: [],
+        usedLegacySnapshot: true,
+      };
     }
+
+    const legacy = deriveLegacyOverrideDeltas(stem, snapshot);
+    const swapped =
+      explicitSwapped.length > 0 ? explicitSwapped : legacy.swapped;
     return {
-      participants: uniqueCaseInsensitive(override.participants ?? []),
-      cancelledParticipants: uniqueCaseInsensitive(cancelledParticipants),
+      participants: uniqueCaseInsensitive(snapshot),
+      cancelledParticipants: uniqueCaseInsensitive(legacy.cancelledParticipants),
       swapped: uniqueCaseInsensitive(swapped),
       usedLegacySnapshot: true,
     };
   }
 
+  const cancelledParticipants = override.cancelledParticipants ?? [];
+  let swapped = override.swapped ?? [];
   let effective = stem.filter(
     (user) => !includesUserCaseInsensitive(cancelledParticipants, user),
   );
@@ -102,7 +160,7 @@ export function resolveEffectiveTermParticipants(
     participants: uniqueCaseInsensitive(effective),
     cancelledParticipants: uniqueCaseInsensitive(cancelledParticipants),
     swapped: uniqueCaseInsensitive(swapped),
-    usedLegacySnapshot,
+    usedLegacySnapshot: false,
   };
 }
 

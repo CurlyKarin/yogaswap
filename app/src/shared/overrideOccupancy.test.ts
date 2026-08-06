@@ -41,6 +41,15 @@ describe("resolveEffectiveTermParticipants", () => {
     expect(resolved.usedLegacySnapshot).toBe(false);
   });
 
+  it("legacy empty named stub keeps stem (guest/waitlist without cancelledParticipants)", () => {
+    const resolved = resolveEffectiveTermParticipants(course, {
+      participants: [],
+    });
+    expect(resolved.participants).toEqual(["luna", "karin"]);
+    expect(resolved.cancelledParticipants).toEqual([]);
+    expect(resolved.usedLegacySnapshot).toBe(true);
+  });
+
   it("derives legacy snapshot: RC and swap-in", () => {
     const resolved = resolveEffectiveTermParticipants(course, {
       participants: ["luna", "maya"],

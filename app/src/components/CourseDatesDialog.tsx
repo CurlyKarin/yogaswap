@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { Calendar } from "lucide-react";
 import type { Course, CourseDateOverride, Swap, TenantSettings } from "shared/types";
 import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
+import { resolveEffectiveTermParticipants } from "shared/overrideOccupancy";
 import { cancelCourseDate, updateCourse } from "../api/courses";
 import CourseModalFrame from "./CourseModalFrame";
 import {
@@ -292,7 +293,9 @@ export default function CourseDatesDialog({
     if (!course || !selectedCancellationDate) return null;
     const overrideForDate =
       overrides.find((entry) => entry.courseId === course.id && entry.date === selectedCancellationDate) ?? null;
-    const bookedParticipants = [...(overrideForDate?.participants ?? course.participants)];
+    const bookedParticipants = [
+      ...resolveEffectiveTermParticipants(course, overrideForDate).participants,
+    ];
     const swappedInParticipants = [...(overrideForDate?.swapped ?? [])];
     const waitlistParticipants = [...(overrideForDate?.waitlist ?? [])];
     const bookedSetNormalized = new Set(bookedParticipants.map((userId) => userId.toLowerCase()));

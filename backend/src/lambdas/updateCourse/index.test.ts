@@ -719,7 +719,7 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).status).toBe("inactive");
   });
 
-  test("does not copy added stem participants into future overrides", async () => {
+  test("migrates legacy overrides to deltas when stem participants are added", async () => {
     const futureDateIso = "2099-01-06";
     const pastDateIso = "2020-01-01";
 
@@ -758,6 +758,7 @@ describe("updateCourse Lambda", () => {
           },
         ],
       })
+      .mockResolvedValueOnce({}) // migrate future override
       .mockResolvedValueOnce({ Items: [] }); // swaps for maya
 
     const result = await handler(
@@ -776,7 +777,11 @@ describe("updateCourse Lambda", () => {
     const overrideWrites = (PutItemCommand as unknown as jest.Mock).mock.calls
       .map((call) => call[0])
       .filter((input) => input?.TableName === "test-overrides");
-    expect(overrideWrites).toHaveLength(0);
+    expect(overrideWrites).toHaveLength(1);
+    expect(overrideWrites[0].Item.courseId_date.S).toBe(`1_${futureDateIso}`);
+    expect(overrideWrites[0].Item.participants.L).toEqual([]);
+    expect(overrideWrites[0].Item.cancelledParticipants.L).toEqual([]);
+    expect(overrideWrites[0].Item.swapped.L).toEqual([]);
   });
 
   test("cleans removed stem participants from future override deltas", async () => {
@@ -838,7 +843,8 @@ describe("updateCourse Lambda", () => {
     expect(overrideWrites).toHaveLength(1);
     expect(overrideWrites[0].Item.courseId_date.S).toBe(`1_${futureDateIso}`);
     expect(overrideWrites[0].Item.courseUid.S).toMatch(COURSE_UID_REGEX);
-    expect(overrideWrites[0].Item.participants.L).toEqual([{ S: "luna" }]);
+    expect(overrideWrites[0].Item.participants.L).toEqual([]);
+    expect(overrideWrites[0].Item.cancelledParticipants.L).toEqual([]);
     expect(overrideWrites[0].Item.waitlist.L).toEqual([]);
     expect(overrideWrites[0].Item.shortNoticeCancellations.L).toEqual([]);
     expect(overrideWrites[0].Item.anonymousTrialCount).toEqual({ N: "1" });

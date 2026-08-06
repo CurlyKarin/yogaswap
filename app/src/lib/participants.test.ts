@@ -33,6 +33,18 @@ describe("getEffectiveParticipants", () => {
     ]);
   });
 
+  it("behält Stamm bei Legacy-Override mit leerem participants (Gast-Stub)", () => {
+    const overrides: CourseDateOverride[] = [
+      {
+        courseId: 1,
+        date: "2025-06-16",
+        participants: [],
+        anonymousTrialCount: 1,
+      },
+    ];
+    expect(getEffectiveParticipants(baseCourse, overrides, "2025-06-16")).toEqual(["alice", "bob"]);
+  });
+
   it("behält Stamm bei Guest-only-Override (Delta ohne cancelledParticipants)", () => {
     const overrides: CourseDateOverride[] = [
       {
@@ -84,7 +96,7 @@ describe("getEffectiveParticipants", () => {
     expect(getEffectiveParticipants(baseCourse, overrides, "2025-06-16")).toEqual(["alice", "bob"]);
   });
 
-  it("gibt leeres Array zurück, wenn Override leere participants hat", () => {
+  it("gibt leeres Array zurück, wenn Legacy-Override bewusst leere Belegung speichert und swapped leer ist — Gast-Stub behält Stamm", () => {
     const overrides: CourseDateOverride[] = [
       {
         courseId: 1,
@@ -92,7 +104,7 @@ describe("getEffectiveParticipants", () => {
         participants: [],
       },
     ];
-    expect(getEffectiveParticipants(baseCourse, overrides, "2025-06-16")).toEqual([]);
+    expect(getEffectiveParticipants(baseCourse, overrides, "2025-06-16")).toEqual(["alice", "bob"]);
   });
 });
 

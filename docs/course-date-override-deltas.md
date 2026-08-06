@@ -38,13 +38,14 @@ Override speichert **keine** parallele Stamm-Kopie mehr.
 
 ## Lesen (Legacy-Adapter)
 
-Solange `cancelledParticipants` fehlt und `participants` wie ein alter Snapshot aussieht:
+Solange `cancelledParticipants` fehlt:
 
-1. `cancelledParticipants` ≈ Stamm-Mitglieder, die **nicht** in `participants` stehen  
-2. `swapped`-Zugänge ≈ Einträge in `participants`, die **nicht** im Stamm stehen (falls `swapped` leer)  
-3. Effektive Liste entspricht dem bisherigen Snapshot-Verhalten
+1. **Leerer Named-Roster** (`participants: []`, kein `swapped`) → Stamm bleibt sichtbar (Gast-/Waitlist-Stub, kein Full-Wipe)
+2. Sonst: `cancelledParticipants` ≈ Stamm-Mitglieder, die **nicht** in `participants` stehen  
+3. `swapped`-Zugänge ≈ Einträge in `participants`, die **nicht** im Stamm stehen (falls `swapped` leer)  
+4. Effektive Liste bei nicht-leerem Snapshot = Snapshot (wie bisher)
 
-Neue Overrides: `participants: []`, Deltas nur in den Delta-Feldern.
+Neue Overrides: `participants: []`, Deltas nur in den Delta-Feldern. Bei Stamm-Änderungen werden Legacy-Overrides auf Delta migriert (`migrateLegacyOverrideToDeltas` mit dem **bisherigen** Stamm).
 
 ## Schreiben (neu)
 

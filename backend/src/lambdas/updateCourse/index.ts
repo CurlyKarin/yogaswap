@@ -36,7 +36,12 @@ import {
   notifyCourseMembershipAdded,
   notifyInstructorParticipantListChanged,
 } from "../shared/notifications/courseMembershipNotifications";
-import { validateOverbookLimit, validateParticipantListSize, removeUserCaseInsensitive } from "@yogaswap/shared";
+import {
+  migrateLegacyOverrideToDeltas,
+  removeUserCaseInsensitive,
+  validateOverbookLimit,
+  validateParticipantListSize,
+} from "@yogaswap/shared";
 import {
   collectOverrideKeysForReactivationCleanup,
   isScheduleExceptionPatchBody,
@@ -907,6 +912,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
           let changed = false;
 
+          // Legacy-Snapshot → Delta anhand des bisherigen Stamms, damit Stem-Adds sichtbar bleiben
+          if (!hasCancelledAttr) {
+            const migrated = migrateLegacyOverrideToDeltas(previousParticipants, {
+              participants: currentOverrideParticipants,
+              swapped: currentSwapped,
+            });
+            currentOverrideParticipants = migrated.participants;
+            currentCancelled = migrated.cancelledParticipants;
+            currentSwapped = migrated.swapped;
+            changed = true;
+          }
+
           // Stem-Add: Delta-Reste der Person am Kurs bereinigen (kein Snapshot-Copy)
           for (const added of addedParticipants) {
             const beforeWaitlist = currentWaitlist.length;
@@ -927,23 +944,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             }
           }
 
-          // Stem-Remove: Person aus allen Termin-Deltas (inkl. Legacy-Snapshot) entfernen
+          // Stem-Remove: Person aus allen Termin-Deltas entfernen
           for (const removed of removedParticipants) {
-            const beforeParticipants = currentOverrideParticipants.length;
             const beforeWaitlist = currentWaitlist.length;
             const beforeSwapped = currentSwapped.length;
             const beforeShortNotice = currentShortNotice.length;
             const beforeCancelled = currentCancelled.length;
-            currentOverrideParticipants = removeUserCaseInsensitive(
-              currentOverrideParticipants,
-              removed,
-            );
             currentWaitlist = removeUserCaseInsensitive(currentWaitlist, removed);
             currentSwapped = removeUserCaseInsensitive(currentSwapped, removed);
             currentShortNotice = removeUserCaseInsensitive(currentShortNotice, removed);
             currentCancelled = removeUserCaseInsensitive(currentCancelled, removed);
             if (
-              currentOverrideParticipants.length !== beforeParticipants ||
               currentWaitlist.length !== beforeWaitlist ||
               currentSwapped.length !== beforeSwapped ||
               currentShortNotice.length !== beforeShortNotice ||
@@ -973,13 +984,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 shortNoticeCancellations: {
                   L: currentShortNotice.map((entry) => ({ S: entry })),
                 },
-                ...(hasCancelledAttr
-                  ? {
-                      cancelledParticipants: {
-                        L: currentCancelled.map((entry) => ({ S: entry })),
-                      },
-                    }
-                  : {}),
+                cancelledParticipants: {
+                  L: currentCancelled.map((entry) => ({ S: entry })),
+                },
                 actorUserId: { S: actorUserId },
               },
             }),
