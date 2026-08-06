@@ -719,7 +719,7 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).status).toBe("inactive");
   });
 
-  test("syncs added participants into relevant future overrides for active courses", async () => {
+  test("does not copy added stem participants into future overrides", async () => {
     const futureDateIso = "2099-01-06";
     const pastDateIso = "2020-01-01";
 
@@ -758,7 +758,7 @@ describe("updateCourse Lambda", () => {
           },
         ],
       })
-      .mockResolvedValueOnce({}); // future override update
+      .mockResolvedValueOnce({ Items: [] }); // swaps for maya
 
     const result = await handler(
       makeEvent({
@@ -776,13 +776,10 @@ describe("updateCourse Lambda", () => {
     const overrideWrites = (PutItemCommand as unknown as jest.Mock).mock.calls
       .map((call) => call[0])
       .filter((input) => input?.TableName === "test-overrides");
-    expect(overrideWrites).toHaveLength(1);
-    expect(overrideWrites[0].Item.courseId_date.S).toBe(`1_${futureDateIso}`);
-    expect(overrideWrites[0].Item.courseUid.S).toMatch(COURSE_UID_REGEX);
-    expect(overrideWrites[0].Item.participants.L).toEqual([{ S: "luna" }, { S: "maya" }]);
+    expect(overrideWrites).toHaveLength(0);
   });
 
-  test("syncs removed participants out of relevant future overrides for active courses", async () => {
+  test("cleans removed stem participants from future override deltas", async () => {
     const futureDateIso = "2099-01-06";
     const pastDateIso = "2020-01-01";
 
@@ -824,7 +821,8 @@ describe("updateCourse Lambda", () => {
           },
         ],
       })
-      .mockResolvedValueOnce({}); // future override update
+      .mockResolvedValueOnce({}) // future override update
+      .mockResolvedValueOnce({ Items: [] }); // swaps for karin
 
     const result = await handler(
       makeEvent({
@@ -839,10 +837,130 @@ describe("updateCourse Lambda", () => {
       .filter((input) => input?.TableName === "test-overrides");
     expect(overrideWrites).toHaveLength(1);
     expect(overrideWrites[0].Item.courseId_date.S).toBe(`1_${futureDateIso}`);
+    expect(overrideWrites[0].Item.courseUid.S).toMatch(COURSE_UID_REGEX);
     expect(overrideWrites[0].Item.participants.L).toEqual([{ S: "luna" }]);
     expect(overrideWrites[0].Item.waitlist.L).toEqual([]);
     expect(overrideWrites[0].Item.shortNoticeCancellations.L).toEqual([]);
     expect(overrideWrites[0].Item.anonymousTrialCount).toEqual({ N: "1" });
+  });
+
+  test("deletes future origin swaps when stem participant is removed", async () => {
+    const futureDateIso = "2099-01-06";
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [{ S: "luna" }, { S: "karin" }] },
+          time: { S: "18:00" },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course update
+      .mockResolvedValueOnce({ Items: [] }) // overrides for course
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            user_swapId: { S: `karin#${futureDateIso}_1_${futureDateIso}_2` },
+            user: { S: "karin" },
+            fromCourseId: { S: "1" },
+            fromDate: { S: futureDateIso },
+            toCourseId: { S: "2" },
+            toDate: { S: futureDateIso },
+            status: { S: "pending" },
+          },
+        ],
+      }) // swaps for karin
+      .mockResolvedValueOnce({}) // delete swap
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: `2_${futureDateIso}` },
+          courseId: { S: "2" },
+          date: { S: futureDateIso },
+          participants: { L: [{ S: "bob" }] },
+          waitlist: { L: [{ S: "karin" }] },
+          swapped: { L: [] },
+        },
+      }) // target override get
+      .mockResolvedValueOnce({}); // target override put
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-swaps",
+        Key: expect.objectContaining({
+          user_swapId: { S: `karin#${futureDateIso}_1_${futureDateIso}_2` },
+        }),
+      }),
+    );
+  });
+
+  test("deletes future target swaps when stem participant is added", async () => {
+    const futureDateIso = "2099-01-06";
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [{ S: "luna" }] },
+          time: { S: "18:00" },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course update
+      .mockResolvedValueOnce({ Items: [] }) // overrides
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            user_swapId: { S: `maya#${futureDateIso}_9_${futureDateIso}_1` },
+            user: { S: "maya" },
+            fromCourseId: { S: "9" },
+            fromDate: { S: futureDateIso },
+            toCourseId: { S: "1" },
+            toDate: { S: futureDateIso },
+            status: { S: "pending" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // delete
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId_date: { S: `1_${futureDateIso}` },
+          waitlist: { L: [{ S: "maya" }] },
+          swapped: { L: [] },
+          participants: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna", "maya"],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-swaps",
+      }),
+    );
   });
 
   test("deletes override when excluded date is reactivated", async () => {

@@ -61,10 +61,10 @@ Neue Overrides: `participants: []`, Deltas nur in den Delta-Feldern.
 
 | | Overrides | Swaps |
 |--|-----------|-------|
-| **Remove** | nur Deltas der Person (Absage/SN/Waitlist/`swapped`) | zukünftige Swaps **Ursprung = Kurs**, `user` = Person |
-| **Add** | Deltas wo nötig (z. B. Waitlist/`swapped` am Ziel) | zukünftige Swaps **Ziel = Kurs**, `user` = Person |
+| **Remove** | Person aus Deltas (Legacy-`participants`, `cancelledParticipants`, SN, Waitlist, `swapped`) | zukünftige Swaps **Ursprung = Kurs**, `user` = Person (+ Ziel-Waitlist/`swapped` bereinigen) |
+| **Add** | Person aus Waitlist/`swapped`/`cancelledParticipants`/SN am Kurs (kein Snapshot-Copy) | zukünftige Swaps **Ziel = Kurs**, `user` = Person |
 
-Snapshot-Sync (#148/#290) entfällt nach Umstellung der Lese-/Schreibpfade.
+Snapshot-Sync (#148/#290) entfällt — Writer schreiben Deltas, Reader nutzen Stamm ⊕ Deltas.
 
 ## Pilot / Migration
 
