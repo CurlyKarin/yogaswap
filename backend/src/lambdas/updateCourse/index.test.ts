@@ -782,6 +782,69 @@ describe("updateCourse Lambda", () => {
     expect(overrideWrites[0].Item.participants.L).toEqual([{ S: "luna" }, { S: "maya" }]);
   });
 
+  test("syncs removed participants out of relevant future overrides for active courses", async () => {
+    const futureDateIso = "2099-01-06";
+    const pastDateIso = "2020-01-01";
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [{ S: "luna" }, { S: "karin" }] },
+          time: { S: "18:00" },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course update
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_date: { S: `1_${futureDateIso}` },
+            courseId: { S: "1" },
+            date: { S: futureDateIso },
+            participants: { L: [{ S: "luna" }, { S: "karin" }] },
+            swapped: { L: [] },
+            waitlist: { L: [{ S: "karin" }] },
+            shortNoticeCancellations: { L: [{ S: "karin" }] },
+            anonymousTrialCount: { N: "1" },
+          },
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_date: { S: `1_${pastDateIso}` },
+            courseId: { S: "1" },
+            date: { S: pastDateIso },
+            participants: { L: [{ S: "luna" }, { S: "karin" }] },
+            swapped: { L: [] },
+            waitlist: { L: [] },
+            anonymousTrialCount: { N: "1" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}); // future override update
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+
+    const overrideWrites = (PutItemCommand as unknown as jest.Mock).mock.calls
+      .map((call) => call[0])
+      .filter((input) => input?.TableName === "test-overrides");
+    expect(overrideWrites).toHaveLength(1);
+    expect(overrideWrites[0].Item.courseId_date.S).toBe(`1_${futureDateIso}`);
+    expect(overrideWrites[0].Item.participants.L).toEqual([{ S: "luna" }]);
+    expect(overrideWrites[0].Item.waitlist.L).toEqual([]);
+    expect(overrideWrites[0].Item.shortNoticeCancellations.L).toEqual([]);
+    expect(overrideWrites[0].Item.anonymousTrialCount).toEqual({ N: "1" });
+  });
+
   test("deletes override when excluded date is reactivated", async () => {
     const reactivatedIso = "2026-02-02";
 

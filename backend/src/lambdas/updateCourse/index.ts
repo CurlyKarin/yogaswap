@@ -36,7 +36,7 @@ import {
   notifyCourseMembershipAdded,
   notifyInstructorParticipantListChanged,
 } from "../shared/notifications/courseMembershipNotifications";
-import { validateOverbookLimit, validateParticipantListSize } from "@yogaswap/shared";
+import { validateOverbookLimit, validateParticipantListSize, removeUserCaseInsensitive } from "@yogaswap/shared";
 import {
   collectOverrideKeysForReactivationCleanup,
   isScheduleExceptionPatchBody,
@@ -867,10 +867,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const previousParticipants =
         item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
       const previousParticipantsSet = new Set(previousParticipants.map((entry) => entry.toLowerCase()));
+      const nextParticipantsSet = new Set(participants.map((entry) => entry.toLowerCase()));
       const addedParticipants = participants.filter(
         (entry) => !previousParticipantsSet.has(entry.toLowerCase()),
       );
-      if (addedParticipants.length > 0) {
+      const removedParticipants = previousParticipants.filter(
+        (entry) => !nextParticipantsSet.has(entry.toLowerCase()),
+      );
+
+      if (addedParticipants.length > 0 || removedParticipants.length > 0) {
         const overridesResp = await client.send(
           new QueryCommand({
             TableName: overridesTable,
@@ -887,13 +892,49 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           const overrideDate = overrideItem.date?.S;
           if (!overrideDate) continue;
           if (!isCourseInFutureWithBuffer(overrideDate, nextTime, now)) continue;
-          const currentOverrideParticipants =
+
+          let currentOverrideParticipants =
             overrideItem.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+          let currentWaitlist =
+            overrideItem.waitlist?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+          let currentSwapped =
+            overrideItem.swapped?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+          let currentShortNotice =
+            overrideItem.shortNoticeCancellations?.L?.map((entry) => entry.S ?? "").filter(
+              (entry) => entry.length > 0,
+            ) ?? [];
+
           const currentOverrideSet = new Set(currentOverrideParticipants.map((entry) => entry.toLowerCase()));
           const participantsToAdd = addedParticipants.filter(
             (entry) => !currentOverrideSet.has(entry.toLowerCase()),
           );
-          if (participantsToAdd.length === 0) continue;
+
+          let changed = participantsToAdd.length > 0;
+          if (participantsToAdd.length > 0) {
+            currentOverrideParticipants = [...currentOverrideParticipants, ...participantsToAdd];
+          }
+
+          for (const removed of removedParticipants) {
+            const beforeParticipants = currentOverrideParticipants.length;
+            const beforeWaitlist = currentWaitlist.length;
+            const beforeSwapped = currentSwapped.length;
+            const beforeShortNotice = currentShortNotice.length;
+            currentOverrideParticipants = removeUserCaseInsensitive(currentOverrideParticipants, removed);
+            currentWaitlist = removeUserCaseInsensitive(currentWaitlist, removed);
+            currentSwapped = removeUserCaseInsensitive(currentSwapped, removed);
+            currentShortNotice = removeUserCaseInsensitive(currentShortNotice, removed);
+            if (
+              currentOverrideParticipants.length !== beforeParticipants ||
+              currentWaitlist.length !== beforeWaitlist ||
+              currentSwapped.length !== beforeSwapped ||
+              currentShortNotice.length !== beforeShortNotice
+            ) {
+              changed = true;
+            }
+          }
+
+          if (!changed) continue;
+
           await client.send(
             new PutItemCommand({
               TableName: overridesTable,
@@ -901,7 +942,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 ...overrideItem,
                 courseUid: { S: nextCourseUid },
                 participants: {
-                  L: [...currentOverrideParticipants, ...participantsToAdd].map((entry) => ({ S: entry })),
+                  L: currentOverrideParticipants.map((entry) => ({ S: entry })),
+                },
+                waitlist: {
+                  L: currentWaitlist.map((entry) => ({ S: entry })),
+                },
+                swapped: {
+                  L: currentSwapped.map((entry) => ({ S: entry })),
+                },
+                shortNoticeCancellations: {
+                  L: currentShortNotice.map((entry) => ({ S: entry })),
                 },
                 actorUserId: { S: actorUserId },
               },
