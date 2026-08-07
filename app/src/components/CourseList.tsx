@@ -52,6 +52,8 @@ type Props = {
   tenant?: Tenant;
   membership?: UserTenantMembership;
   forceParticipantView?: boolean;
+  /** Aktualisiert die Wochenansicht (gemeinsamer Datenstand in CoursesShell). */
+  onDataChanged?: () => void | Promise<void>;
 };
 
 type CourseEditorState = {
@@ -203,6 +205,7 @@ export default function CourseList({
   tenant,
   membership,
   forceParticipantView = false,
+  onDataChanged,
 }: Props) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
@@ -300,6 +303,11 @@ export default function CourseList({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const refreshAfterMutation = useCallback(async () => {
+    await fetchData();
+    await onDataChanged?.();
+  }, [fetchData, onDataChanged]);
 
   const canManageGuestSeats = canManageParticipants(membershipForPermissions, tenant?.settings);
 
@@ -600,7 +608,7 @@ export default function CourseList({
         ...buildSchedulingFromMode(createState.planningMode),
       });
       closeCreateModal();
-      await fetchData();
+      await refreshAfterMutation();
     } catch (err) {
       console.error("Failed to create course", err);
       setFormError("Kurs konnte nicht angelegt werden.");
@@ -633,7 +641,7 @@ export default function CourseList({
       try {
         await updateCourse(courseApiPathKey(courseForEdit), { overbookLimit });
         closeEditModal();
-        await fetchData();
+        await refreshAfterMutation();
       } catch (err) {
         console.error("Failed to update course overbooking", err);
         setFormError(err instanceof Error ? err.message : "Überplanung konnte nicht gespeichert werden.");
@@ -716,7 +724,7 @@ export default function CourseList({
           : {}),
       });
       closeEditModal();
-      await fetchData();
+      await refreshAfterMutation();
     } catch (err) {
       console.error("Failed to update course", err);
       setFormError(err instanceof Error ? err.message : "Kurs konnte nicht gespeichert werden.");
@@ -732,7 +740,7 @@ export default function CourseList({
     try {
       await deleteCourse(courseApiPathKey(deleteTargetCourse));
       closeDeleteModal();
-      await fetchData();
+      await refreshAfterMutation();
     } catch (err) {
       console.error("Failed to delete course", err);
       setFormError(err instanceof Error ? err.message : "Kurs konnte nicht gelöscht werden.");
@@ -753,7 +761,7 @@ export default function CourseList({
     try {
       await updateCourse(courseApiPathKey(targetCourse), { participants });
       closeMembersModal();
-      await fetchData();
+      await refreshAfterMutation();
     } catch (err) {
       console.error("Failed to update course members", err);
       setFormError(err instanceof Error ? err.message : "Mitglieder konnten nicht gespeichert werden.");
@@ -994,7 +1002,7 @@ export default function CourseList({
         canManageCourses={canManageCourses}
         tenantSettings={tenant?.settings}
         onClose={closeDatesModal}
-        onSaved={fetchData}
+        onSaved={refreshAfterMutation}
       />
 
       <CourseDeleteDialog

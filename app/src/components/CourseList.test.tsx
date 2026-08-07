@@ -720,6 +720,62 @@ describe("CourseList", () => {
     expect(screen.getByText(/Durchlaufend \(rollend\)/i)).toBeInTheDocument();
   });
 
+  it("benachrichtigt onDataChanged nach Mitglieder-Speichern", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        planningMode: "rolling_continuous",
+        participants: [],
+        dates: ["2099-06-16"],
+      },
+    ];
+    const onDataChanged = vi.fn().mockResolvedValue(undefined);
+
+    mockedGetCourses.mockResolvedValue(mockCourses);
+    mockedGetOverrides.mockResolvedValue([]);
+    mockedGetSwaps.mockResolvedValue([]);
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "luna", status: "active" },
+    ]);
+    mockedUpdateCourse.mockResolvedValue({
+      ...mockCourses[0],
+      participants: ["luna"],
+    });
+
+    render(
+      <CourseList
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={adminMembership}
+        onDataChanged={onDataChanged}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await screen.findAllByText("Kurs A");
+    const membersButtons = screen.getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i });
+    await user.click(membersButtons[membersButtons.length - 1]);
+
+    await screen.findByLabelText("Kursmitglieder bearbeiten");
+    await user.click(await screen.findByRole("option", { name: /luna/i }));
+    await user.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateCourse).toHaveBeenCalled();
+      expect(onDataChanged).toHaveBeenCalled();
+    });
+  });
+
   it("speichert Serienplanung mit excludedDates im Termine-Dialog", async () => {
     const adminMembership: UserTenantMembership = {
       ...baseMembership,

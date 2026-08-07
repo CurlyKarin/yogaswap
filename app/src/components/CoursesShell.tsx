@@ -71,6 +71,7 @@ export default function CoursesShell({
   const {
     loading,
     error,
+    fetchData,
     courses,
     weekCourseRows,
     hiddenPastCourseCount,
@@ -332,6 +333,7 @@ export default function CoursesShell({
             tenant={tenant}
             membership={membership}
             forceParticipantView={forceParticipantView}
+            onDataChanged={fetchData}
           />
         </section>
       )}
