@@ -71,7 +71,8 @@ describe("ringSwapExecution", () => {
           override: expect.objectContaining({
             courseId: 1,
             date: "2099-06-01",
-            participants: ["Bob"],
+            participants: [],
+            cancelledParticipants: ["Alice"],
             swapped: ["Bob"],
           }),
         }),
@@ -80,7 +81,8 @@ describe("ringSwapExecution", () => {
           override: expect.objectContaining({
             courseId: 2,
             date: "2099-06-02",
-            participants: ["Alice"],
+            participants: [],
+            cancelledParticipants: ["Bob"],
             swapped: ["Alice"],
           }),
         }),
@@ -244,30 +246,24 @@ describe("ringSwapExecution", () => {
     expect(planned.ok).toBe(true);
   });
 
-  test("rejects when ring increases participants beyond room capacity", () => {
+  test("rejects when origin user is not effectively booked", () => {
     const tightCourses: Course[] = [
       { ...courses[0]!, participants: ["Alice"] },
       { ...courses[1]!, capacity: 1, overbookLimit: 0, participants: ["Bob"] },
     ];
     const overrides: CourseDateOverride[] = [
       {
-        courseId: 1,
-        date: "2099-06-01",
-        participants: ["Alice"],
-        swapped: [],
-        waitlist: [],
-      },
-      {
         courseId: 2,
         date: "2099-06-02",
-        participants: ["Bob"],
-        swapped: ["Carol"],
+        participants: [],
+        cancelledParticipants: ["Bob"],
+        swapped: ["Extra"],
         waitlist: [],
       },
     ];
     const pendingSwaps = [
       pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Carol", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));
@@ -281,6 +277,6 @@ describe("ringSwapExecution", () => {
 
     expect(planned.ok).toBe(false);
     if (planned.ok) return;
-    expect(planned.reason).toMatch(/Maximal/i);
+    expect(planned.reason).toMatch(/not booked on origin/i);
   });
 });

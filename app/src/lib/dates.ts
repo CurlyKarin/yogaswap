@@ -3,6 +3,7 @@ import { CourseDateOverride, Course, User, TenantSettings } from "shared/types";
 import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
 import { isSwapTargetInCutoffWindow } from "shared/cancellationSwapCutoff";
 import { buildCourseOccurrenceLocal } from "shared/courseStatus";
+import { resolveEffectiveTermParticipants } from "shared/overrideOccupancy";
 import type { SwapSettings } from "../types";
 
 export function getCourseDates(course: Course, now: Date = new Date()) {
@@ -117,7 +118,7 @@ function collectCourseDates(
         const override = overrides.find(
           (o) => o.courseId === course.id && sameInstant(o.date, courseTime)
         );
-        const participants = override ? override.participants : course.participants;
+        const participants = resolveEffectiveTermParticipants(course, override).participants;
         const guestCount = override?.anonymousTrialCount ?? 0;
 
         const count = participants.length;

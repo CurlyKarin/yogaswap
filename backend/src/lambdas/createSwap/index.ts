@@ -4,6 +4,7 @@ import {
   canCreateSwapFromOrigin,
   hasRegularBookingCapacity,
   isSwapTargetInCutoffWindow,
+  resolveEffectiveTermParticipants,
   resolveGuestCount,
   validateTermOccupancy,
 } from '@yogaswap/shared';
@@ -76,7 +77,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         override = mapOverrideItem(overrideResp.Item);
       }
     }
-    const participants = override?.participants ?? baseParticipants;
+    const participants = resolveEffectiveTermParticipants(
+      { participants: baseParticipants },
+      override,
+    ).participants;
     const originallyParticipant = baseParticipants.some(
       (p) => p.toLowerCase() === swap.user.toLowerCase(),
     );
@@ -125,7 +129,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ? Number.parseInt(toCourseResp.Item.overbookLimit.N, 10)
         : 0,
     };
-    let targetParticipants = mapStringList(toCourseResp.Item.participants);
+    const toBaseParticipants = mapStringList(toCourseResp.Item.participants);
+    let targetOverride;
     let targetGuestCount = 0;
     if (overridesTable) {
       const targetOverrideKey = `${toLegacyId}_${swap.toDate}`;
@@ -137,11 +142,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }),
       );
       if (targetOverrideResp.Item) {
-        const targetOverride = mapOverrideItem(targetOverrideResp.Item);
-        targetParticipants = targetOverride.participants;
+        targetOverride = mapOverrideItem(targetOverrideResp.Item);
         targetGuestCount = resolveGuestCount(targetOverride.anonymousTrialCount);
       }
     }
+    const targetParticipants = resolveEffectiveTermParticipants(
+      { participants: toBaseParticipants },
+      targetOverride,
+    ).participants;
     const swapUserLower = swap.user.toLowerCase();
     const userOnTarget = targetParticipants.some((p) => p.toLowerCase() === swapUserLower);
     const countAfterSwap = userOnTarget

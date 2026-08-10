@@ -7,7 +7,7 @@ import { getDelegationErrorResponse } from '../shared/delegation';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
 import { mapOverrideItem, mapStringList, anonymousTrialCountAttribute } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
-import { validateAnonymousTrialCount } from '@yogaswap/shared';
+import { resolveEffectiveTermParticipants, validateAnonymousTrialCount } from '@yogaswap/shared';
 
 function normalizedRoster(values: string[]): string[] {
   return values.map((entry) => entry.trim().toLowerCase()).sort();
@@ -44,6 +44,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Validierung der Eingaben
     const participants = override.participants || [];
+    const cancelledParticipants = Array.isArray(override.cancelledParticipants)
+      ? override.cancelledParticipants
+      : undefined;
     const swapped = override.swapped || [];
     const waitlist = override.waitlist || [];
     const shortNoticeCancellations = override.shortNoticeCancellations || [];
@@ -51,6 +54,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (!Array.isArray(participants) || participants.some((p: any) => typeof p !== 'string')) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Invalid participants array' }) };
+    }
+    if (
+      cancelledParticipants !== undefined &&
+      cancelledParticipants.some((p: any) => typeof p !== 'string')
+    ) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid cancelledParticipants array' }) };
     }
     if (!Array.isArray(swapped) || swapped.some((s: any) => typeof s !== 'string')) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Invalid swapped array' }) };
@@ -84,11 +93,26 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
     const baseParticipants = mapStringList(courseResp.Item.participants);
-    const capacityError = validateParticipantsForCourse(participants, capacityFields, anonymousTrialCount);
+    const overrideForOccupancy = {
+      participants,
+      cancelledParticipants,
+      swapped,
+      shortNoticeCancellations,
+    };
+    const effective = resolveEffectiveTermParticipants(
+      { participants: baseParticipants },
+      overrideForOccupancy,
+    );
+    const capacityError = validateParticipantsForCourse(
+      effective.participants,
+      capacityFields,
+      anonymousTrialCount,
+    );
     const waitlistEnrollmentOnly =
       waitlist.length > 0 &&
       swapped.length === 0 &&
-      sameParticipantRoster(participants, baseParticipants);
+      (cancelledParticipants?.length ?? 0) === 0 &&
+      sameParticipantRoster(effective.participants, baseParticipants);
     if (capacityError && !waitlistEnrollmentOnly) {
       return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
     }
@@ -121,6 +145,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       courseId: { S: legacyCourseId },
       date: { S: override.date },
       participants: { L: participants.map((p: string) => ({ S: p })) },
+      ...(cancelledParticipants !== undefined
+        ? { cancelledParticipants: { L: cancelledParticipants.map((p: string) => ({ S: p })) } }
+        : {}),
       swapped: { L: swapped.map((s: string) => ({ S: s })) },
       waitlist: { L: waitlist.map((w: string) => ({ S: w })) },
       shortNoticeCancellations: { L: shortNoticeCancellations.map((w: string) => ({ S: w })) },

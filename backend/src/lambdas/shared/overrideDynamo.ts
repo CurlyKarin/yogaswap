@@ -14,11 +14,15 @@ function mapAnonymousTrialCount(attr: AttributeValue | undefined): number | unde
 
 export function mapOverrideItem(item: Record<string, AttributeValue>): CourseDateOverride {
   const anonymousTrialCount = mapAnonymousTrialCount(item.anonymousTrialCount);
+  const hasCancelledParticipants = item.cancelledParticipants !== undefined;
   return {
     courseId: Number(item.courseId.S!),
     ...(item.courseUid?.S ? { courseUid: item.courseUid.S } : {}),
     date: item.date.S!,
     participants: mapStringList(item.participants),
+    ...(hasCancelledParticipants
+      ? { cancelledParticipants: mapStringList(item.cancelledParticipants) }
+      : {}),
     swapped: mapStringList(item.swapped),
     waitlist: mapStringList(item.waitlist),
     shortNoticeCancellations: mapStringList(item.shortNoticeCancellations),

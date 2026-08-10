@@ -154,6 +154,7 @@ describe("CourseCard", () => {
         {
           ...baseOverride,
           participants: [],
+          cancelledParticipants: ["alice"],
           anonymousTrialCount: 1,
         },
       ],
@@ -531,6 +532,7 @@ describe("CourseCard", () => {
     const cancelledOverride: CourseDateOverride = {
       ...baseOverride,
       participants: [],
+      cancelledParticipants: ["alice"],
     };
 
     renderCourseCard({
@@ -638,6 +640,7 @@ describe("CourseCard", () => {
       courseId: 1,
       date: "2099-06-16",
       participants: [],
+      cancelledParticipants: ["alice"],
       swapped: [],
       waitlist: [],
     };

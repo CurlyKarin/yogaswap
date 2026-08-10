@@ -19,6 +19,7 @@ import {
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
+import { resolveEffectiveTermParticipants } from "shared/overrideOccupancy";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
 import { resolveInactiveParticipantNotice, resolvePastTermNotice } from "../lib/courseCardLabels";
 import { canRequestSwapFromPastCancelledOrigin, isTermInParticipantSwapGrace } from "../lib/courseTermActions";
@@ -92,9 +93,11 @@ export function useCourseCardTermState({
   const useTermScopedParticipantState =
     !hasNoUpcomingDates ||
     (hasNoUpcomingDates && inPostEndGrace && lastActualOccurrenceIso != null);
-  const participants = useTermScopedParticipantState
-    ? (override?.participants ?? course.participants)
-    : course.participants;
+  const effectiveTerm = useTermScopedParticipantState
+    ? resolveEffectiveTermParticipants(course, override)
+    : null;
+  const participants = effectiveTerm?.participants ?? course.participants;
+  // Chip-Markierung „getauscht“ nur aus dem Override-Feld, nicht aus Legacy-Ableitung.
   const swapped = useTermScopedParticipantState ? (override?.swapped ?? []) : [];
   const shortNotice = useTermScopedParticipantState
     ? (override?.shortNoticeCancellations ?? [])

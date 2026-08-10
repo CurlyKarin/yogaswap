@@ -7,5 +7,6 @@ export * from './tenantHost';
 export * from './rollingHorizonShrink';
 export * from './cancellationSwapCutoff';
 export * from './courseCapacity';
+export * from './overrideOccupancy';
 export * from './lib/storage';
 export * from './data/mockUsers';

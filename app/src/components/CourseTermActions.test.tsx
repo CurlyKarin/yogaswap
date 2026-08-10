@@ -111,6 +111,7 @@ describe("CourseTermActions", () => {
       courseId: 1,
       date: "2099-06-16",
       participants: [],
+      cancelledParticipants: ["alice"],
       swapped: [],
       waitlist: [],
     };
@@ -133,6 +134,7 @@ describe("CourseTermActions", () => {
       courseId: 1,
       date: "2099-06-16",
       participants: [],
+      cancelledParticipants: ["alice"],
       swapped: [],
       waitlist: [],
     };
@@ -172,6 +174,7 @@ describe("CourseTermActions", () => {
       courseId: 1,
       date: "2099-06-16",
       participants: [],
+      cancelledParticipants: ["alice"],
       swapped: [],
       waitlist: [],
     };
@@ -219,6 +222,7 @@ describe("CourseTermActions", () => {
       courseId: 1,
       date: "2099-06-16",
       participants: [],
+      cancelledParticipants: ["alice"],
       swapped: [],
       waitlist: [],
     };

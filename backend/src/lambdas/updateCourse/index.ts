@@ -36,7 +36,12 @@ import {
   notifyCourseMembershipAdded,
   notifyInstructorParticipantListChanged,
 } from "../shared/notifications/courseMembershipNotifications";
-import { validateOverbookLimit, validateParticipantListSize, removeUserCaseInsensitive } from "@yogaswap/shared";
+import {
+  migrateLegacyOverrideToDeltas,
+  removeUserCaseInsensitive,
+  validateOverbookLimit,
+  validateParticipantListSize,
+} from "@yogaswap/shared";
 import {
   collectOverrideKeysForReactivationCleanup,
   isScheduleExceptionPatchBody,
@@ -876,6 +881,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       );
 
       if (addedParticipants.length > 0 || removedParticipants.length > 0) {
+        const mapAttrList = (
+          attr: { L?: Array<{ S?: string }> } | undefined,
+        ): string[] =>
+          attr?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+
         const overridesResp = await client.send(
           new QueryCommand({
             TableName: overridesTable,
@@ -893,41 +903,62 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           if (!overrideDate) continue;
           if (!isCourseInFutureWithBuffer(overrideDate, nextTime, now)) continue;
 
-          let currentOverrideParticipants =
-            overrideItem.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
-          let currentWaitlist =
-            overrideItem.waitlist?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
-          let currentSwapped =
-            overrideItem.swapped?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
-          let currentShortNotice =
-            overrideItem.shortNoticeCancellations?.L?.map((entry) => entry.S ?? "").filter(
-              (entry) => entry.length > 0,
-            ) ?? [];
+          const hasCancelledAttr = overrideItem.cancelledParticipants !== undefined;
+          let currentOverrideParticipants = mapAttrList(overrideItem.participants);
+          let currentWaitlist = mapAttrList(overrideItem.waitlist);
+          let currentSwapped = mapAttrList(overrideItem.swapped);
+          let currentShortNotice = mapAttrList(overrideItem.shortNoticeCancellations);
+          let currentCancelled = mapAttrList(overrideItem.cancelledParticipants);
 
-          const currentOverrideSet = new Set(currentOverrideParticipants.map((entry) => entry.toLowerCase()));
-          const participantsToAdd = addedParticipants.filter(
-            (entry) => !currentOverrideSet.has(entry.toLowerCase()),
-          );
+          let changed = false;
 
-          let changed = participantsToAdd.length > 0;
-          if (participantsToAdd.length > 0) {
-            currentOverrideParticipants = [...currentOverrideParticipants, ...participantsToAdd];
+          // Legacy-Snapshot → Delta anhand des bisherigen Stamms, damit Stem-Adds sichtbar bleiben
+          if (!hasCancelledAttr) {
+            const migrated = migrateLegacyOverrideToDeltas(previousParticipants, {
+              participants: currentOverrideParticipants,
+              swapped: currentSwapped,
+            });
+            currentOverrideParticipants = migrated.participants;
+            currentCancelled = migrated.cancelledParticipants;
+            currentSwapped = migrated.swapped;
+            changed = true;
           }
 
+          // Stem-Add: Delta-Reste der Person am Kurs bereinigen (kein Snapshot-Copy)
+          for (const added of addedParticipants) {
+            const beforeWaitlist = currentWaitlist.length;
+            const beforeSwapped = currentSwapped.length;
+            const beforeCancelled = currentCancelled.length;
+            const beforeShortNotice = currentShortNotice.length;
+            currentWaitlist = removeUserCaseInsensitive(currentWaitlist, added);
+            currentSwapped = removeUserCaseInsensitive(currentSwapped, added);
+            currentCancelled = removeUserCaseInsensitive(currentCancelled, added);
+            currentShortNotice = removeUserCaseInsensitive(currentShortNotice, added);
+            if (
+              currentWaitlist.length !== beforeWaitlist ||
+              currentSwapped.length !== beforeSwapped ||
+              currentCancelled.length !== beforeCancelled ||
+              currentShortNotice.length !== beforeShortNotice
+            ) {
+              changed = true;
+            }
+          }
+
+          // Stem-Remove: Person aus allen Termin-Deltas entfernen
           for (const removed of removedParticipants) {
-            const beforeParticipants = currentOverrideParticipants.length;
             const beforeWaitlist = currentWaitlist.length;
             const beforeSwapped = currentSwapped.length;
             const beforeShortNotice = currentShortNotice.length;
-            currentOverrideParticipants = removeUserCaseInsensitive(currentOverrideParticipants, removed);
+            const beforeCancelled = currentCancelled.length;
             currentWaitlist = removeUserCaseInsensitive(currentWaitlist, removed);
             currentSwapped = removeUserCaseInsensitive(currentSwapped, removed);
             currentShortNotice = removeUserCaseInsensitive(currentShortNotice, removed);
+            currentCancelled = removeUserCaseInsensitive(currentCancelled, removed);
             if (
-              currentOverrideParticipants.length !== beforeParticipants ||
               currentWaitlist.length !== beforeWaitlist ||
               currentSwapped.length !== beforeSwapped ||
-              currentShortNotice.length !== beforeShortNotice
+              currentShortNotice.length !== beforeShortNotice ||
+              currentCancelled.length !== beforeCancelled
             ) {
               changed = true;
             }
@@ -953,10 +984,102 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 shortNoticeCancellations: {
                   L: currentShortNotice.map((entry) => ({ S: entry })),
                 },
+                cancelledParticipants: {
+                  L: currentCancelled.map((entry) => ({ S: entry })),
+                },
                 actorUserId: { S: actorUserId },
               },
             }),
           );
+        }
+
+        // Swap-Cleanup: Remove → Ursprung=Kurs; Add → Ziel=Kurs (zukünftige Termine)
+        const todayIso = toIsoDateOnlyLocal(now);
+        const usersForSwapCleanup = [...new Set([...removedParticipants, ...addedParticipants])];
+        for (const userName of usersForSwapCleanup) {
+          const userSwapsResp = await client.send(
+            new QueryCommand({
+              TableName: swapsTable,
+              KeyConditionExpression: "tenantId = :tid AND begins_with(user_swapId, :uprefix)",
+              ExpressionAttributeValues: {
+                ":tid": { S: tenantId },
+                ":uprefix": { S: `${userName}#` },
+              },
+            }),
+          );
+
+          for (const swapItem of userSwapsResp.Items ?? []) {
+            const swapUser = swapItem.user?.S ?? userName;
+            const fromCourseId = Number(swapItem.fromCourseId?.S ?? swapItem.fromCourseId?.N ?? 0);
+            const toCourseId = Number(swapItem.toCourseId?.S ?? swapItem.toCourseId?.N ?? 0);
+            const fromDate = swapItem.fromDate?.S;
+            const toDate = swapItem.toDate?.S;
+            const status = swapItem.status?.S;
+            const user_swapId = swapItem.user_swapId?.S;
+            if (!fromDate || !toDate || !user_swapId || !status) continue;
+
+            const isRemovedOrigin =
+              removedParticipants.some((u) => u.toLowerCase() === swapUser.toLowerCase()) &&
+              fromCourseId === Number(courseId) &&
+              fromDate >= todayIso;
+            const isAddedTarget =
+              addedParticipants.some((u) => u.toLowerCase() === swapUser.toLowerCase()) &&
+              toCourseId === Number(courseId) &&
+              toDate >= todayIso;
+
+            if (!isRemovedOrigin && !isAddedTarget) continue;
+
+            await client.send(
+              new DeleteItemCommand({
+                TableName: swapsTable,
+                Key: {
+                  tenantId: { S: tenantId },
+                  user_swapId: { S: user_swapId },
+                },
+              }),
+            );
+
+            // Ziel-Override bereinigen (Waitlist bei pending, swapped bei active)
+            const targetKey = `${toCourseId}_${toDate}`;
+            const targetOverrideResp = await client.send(
+              new GetItemCommand({
+                TableName: overridesTable,
+                Key: {
+                  tenantId: { S: tenantId },
+                  courseId_date: { S: targetKey },
+                },
+              }),
+            );
+            if (targetOverrideResp.Item) {
+              const targetItem = targetOverrideResp.Item;
+              let waitlist = mapAttrList(targetItem.waitlist);
+              let swapped = mapAttrList(targetItem.swapped);
+              let participantsList = mapAttrList(targetItem.participants);
+              const before = JSON.stringify({ waitlist, swapped, participantsList });
+              if (status === "pending") {
+                waitlist = removeUserCaseInsensitive(waitlist, swapUser);
+              } else if (status === "active") {
+                swapped = removeUserCaseInsensitive(swapped, swapUser);
+                participantsList = removeUserCaseInsensitive(participantsList, swapUser);
+              }
+              if (JSON.stringify({ waitlist, swapped, participantsList }) !== before) {
+                await client.send(
+                  new PutItemCommand({
+                    TableName: overridesTable,
+                    Item: {
+                      ...targetItem,
+                      waitlist: { L: waitlist.map((entry) => ({ S: entry })) },
+                      swapped: { L: swapped.map((entry) => ({ S: entry })) },
+                      participants: {
+                        L: participantsList.map((entry) => ({ S: entry })),
+                      },
+                      actorUserId: { S: actorUserId },
+                    },
+                  }),
+                );
+              }
+            }
+          }
         }
       }
     }

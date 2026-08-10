@@ -117,7 +117,10 @@ describe("useCourseSwaps", () => {
     });
 
     expect(updateOverride).toHaveBeenCalledWith(1, "2099-06-16", {
-      participants: ["alice"],
+      participants: [],
+      cancelledParticipants: [],
+      swapped: [],
+      waitlist: [],
       shortNoticeCancellations: ["alice"],
     });
     expect(processPromotions).toHaveBeenCalledTimes(1);
@@ -737,7 +740,8 @@ describe("useCourseSwaps", () => {
       updater([
         {
           ...baseOverride,
-          participants: [], // RC: user ist ausgetragen
+          participants: [],
+          cancelledParticipants: ["alice"], // RC: user ist ausgetragen
         },
         {
           courseId: 2,
@@ -769,7 +773,7 @@ describe("useCourseSwaps", () => {
       useCourseSwaps(
         [course],
         [
-          { ...baseOverride, participants: [] },
+          { ...baseOverride, participants: [], cancelledParticipants: ["alice"] },
           { courseId: 2, date: "2099-06-17", participants: ["bob"], swapped: [], waitlist: ["alice", "mia"] },
         ],
         setOverrides as unknown as (
@@ -805,7 +809,7 @@ describe("useCourseSwaps", () => {
   it("RC-Rücknahme bricht bei Warnung-Abbruch ab", async () => {
     const fetchData = vi.fn().mockResolvedValue(undefined);
     const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
-      updater([{ ...baseOverride, participants: [] }]),
+      updater([{ ...baseOverride, participants: [], cancelledParticipants: ["alice"] }]),
     );
     const setSwaps = vi.fn();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -813,7 +817,7 @@ describe("useCourseSwaps", () => {
     const { result } = renderHook(() =>
       useCourseSwaps(
         [course],
-        [{ ...baseOverride, participants: [] }],
+        [{ ...baseOverride, participants: [], cancelledParticipants: ["alice"] }],
         setOverrides as unknown as (
           value:
             | CourseDateOverride[]
@@ -840,7 +844,7 @@ describe("useCourseSwaps", () => {
   it("RC-Rücknahme blockiert bei aktivem Swap in der Vergangenheit", async () => {
     const fetchData = vi.fn().mockResolvedValue(undefined);
     const setOverrides = vi.fn((updater: (prev: CourseDateOverride[]) => CourseDateOverride[]) =>
-      updater([{ ...baseOverride, participants: [] }]),
+      updater([{ ...baseOverride, participants: [], cancelledParticipants: ["alice"] }]),
     );
     const setSwaps = vi.fn();
     const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
@@ -857,7 +861,7 @@ describe("useCourseSwaps", () => {
     const { result } = renderHook(() =>
       useCourseSwaps(
         [course],
-        [{ ...baseOverride, participants: [] }],
+        [{ ...baseOverride, participants: [], cancelledParticipants: ["alice"] }],
         setOverrides as unknown as (
           value:
             | CourseDateOverride[]
@@ -937,7 +941,11 @@ describe("useCourseSwaps", () => {
     });
 
     expect(createOverride).toHaveBeenCalledWith(
-      expect.objectContaining({ anonymousTrialCount: 1, participants: ["alice"] }),
+      expect.objectContaining({
+        anonymousTrialCount: 1,
+        participants: [],
+        cancelledParticipants: [],
+      }),
     );
     expect(fetchData).toHaveBeenCalled();
   });
