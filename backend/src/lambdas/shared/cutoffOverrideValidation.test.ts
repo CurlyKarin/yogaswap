@@ -29,6 +29,7 @@ describe("cutoffOverrideValidation", () => {
     const error = validateShortNoticeParticipantsInvariant(
       makeOverride({
         participants: [],
+        cancelledParticipants: ["alice"],
         shortNoticeCancellations: ["alice"],
       }),
       ["alice"],
@@ -86,7 +87,10 @@ describe("cutoffOverrideValidation", () => {
 
   it("sperrt RC-Entfernung aus participants im Cutoff", () => {
     const before = makeOverride();
-    const after = makeOverride({ participants: [] });
+    const after = makeOverride({
+      participants: [],
+      cancelledParticipants: ["alice"],
+    });
     const error = validateSelfServiceOverrideTransition({
       ...baseInput,
       before,
