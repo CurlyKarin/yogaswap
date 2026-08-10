@@ -67,6 +67,7 @@ describe("useCourseCardTermState", () => {
     const cancelledOverride: CourseDateOverride = {
       ...baseOverride,
       participants: [],
+      cancelledParticipants: ["alice"],
     };
 
     const { result } = renderTermState({ overrides: [cancelledOverride] });
@@ -102,6 +103,7 @@ describe("useCourseCardTermState", () => {
     const cancelledOverride: CourseDateOverride = {
       ...baseOverride,
       participants: [],
+      cancelledParticipants: ["alice"],
     };
     const { result: cancelled } = renderTermState({ overrides: [cancelledOverride] });
     expect(cancelled.current.swapModalTitle).toBe("Anderen Termin wählen");
@@ -114,6 +116,7 @@ describe("useCourseCardTermState", () => {
       ...baseOverride,
       date: pastOrigin,
       participants: [],
+      cancelledParticipants: ["alice"],
     };
     const activeSwap: Swap = {
       user: "alice",
