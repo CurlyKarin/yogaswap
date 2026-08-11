@@ -92,6 +92,20 @@ module "memberships_table" {
   ]
 }
 
+# Course enrollments (Stamm-Segmente, #302 / #293):
+# PK = tenantId, SK = courseId#userId#validFrom
+# Ein Segment pro Mitgliedschaftszeitraum; Rejoin = neues Segment.
+module "course_enrollments_table" {
+  source    = "../modules/dynamodb"
+  name      = "${local.project}-courseEnrollments-table"
+  hash_key  = "tenantId"
+  range_key = "courseId_userId_validFrom"
+  attributes = [
+    { name = "tenantId", type = "S" },
+    { name = "courseId_userId_validFrom", type = "S" }
+  ]
+}
+
 # Participants: PK = tenantId, SK = userId (Nickname)
 # Speichert Teilnehmerprofil-Daten (optional E-Mail, Einladungsstatus, Settings)
 module "participants_table" {
@@ -134,6 +148,7 @@ output "table_names" {
     module.courses_table.table_name,
     module.tenants_table.table_name,
     module.memberships_table.table_name,
+    module.course_enrollments_table.table_name,
     module.participants_table.table_name,
     module.auth_tokens_table.table_name
   ]

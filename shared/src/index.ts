@@ -8,5 +8,6 @@ export * from './rollingHorizonShrink';
 export * from './cancellationSwapCutoff';
 export * from './courseCapacity';
 export * from './overrideOccupancy';
+export * from './courseEnrollment';
 export * from './lib/storage';
 export * from './data/mockUsers';

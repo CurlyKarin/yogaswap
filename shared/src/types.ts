@@ -95,6 +95,10 @@ export type Course = {
   excludedDates?: string[];
   includedDates?: string[];
   visibleDates?: string[];
+  /**
+   * Aktueller Stamm-Cache (Nicknames). Parallel zu CourseEnrollments (#302);
+   * Occupancy pro Termin folgt später `stemOn(date)` aus Enrollments (#303).
+   */
   participants: string[]; // Nicknames
   dates: string[]; // Liste der Termine
   // Optional zugeordnete Kursleiter (Nicknames oder User-IDs)
@@ -103,6 +107,31 @@ export type Course = {
   studioId?: string;
   // Optionaler Raum für zeitliche/örtliche Planung
   roomId?: string;
+};
+
+/**
+ * Ein Stamm-Mitgliedschaftssegment für einen Kurs (#293 / #302).
+ * Rejoin = neues Segment; Vergangenheit wird nicht überschrieben.
+ */
+export type CourseEnrollmentSource = "manual" | "migration" | "reactivation" | "seed";
+
+export type CourseEnrollment = {
+  tenantId?: string;
+  /** Legacy-Kurs-ID (numerisch), analog Course.id / Override.courseId. */
+  courseId: number;
+  /** Dynamo SK-Teil und API: Nickname. */
+  userId: string;
+  /**
+   * Erster gültiger Kurstermin (YYYY-MM-DD).
+   * Migration ohne bekanntes Startdatum: `0001-01-01` (siehe `ENROLLMENT_OPEN_START`).
+   */
+  validFrom: string;
+  /** Letzter gültiger Kurstermin (inkl.); fehlt = noch offen. */
+  validUntil?: string;
+  actorUserId?: string;
+  createdAt?: string;
+  closedAt?: string;
+  source?: CourseEnrollmentSource;
 };
 
 // Union-Typ für Benutzerrollen
