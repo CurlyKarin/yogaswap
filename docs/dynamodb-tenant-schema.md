@@ -1,6 +1,6 @@
 # DynamoDB-Schema mit tenantId (Multi-Tenancy)
 
-Alle drei Tabellen nutzen `tenantId` im Partition Key, sodass jede Abfrage tenant-scoped ist. Es werden **keine neuen Tabellentypen** eingeführt (keine Room-/Studio-Tabellen).
+Alle Kern-Tabellen nutzen `tenantId` im Partition Key, sodass jede Abfrage tenant-scoped ist.
 
 ## Hinweis: Schlüsseländerung = Tabellen-Ersatz
 
@@ -72,6 +72,25 @@ DynamoDB erlaubt keine Änderung von Partition- oder Sort-Key bestehender Tabell
 
 ---
 
+## 4. Course Enrollments (Stamm-Segmente)
+
+Siehe auch [course-enrollments.md](./course-enrollments.md) (#302 / #293).
+
+| Attribut | Typ | Schlüssel | Beschreibung |
+|----------|-----|-----------|--------------|
+| tenantId | S | Hash (PK) | Tenant-ID |
+| courseId_userId_validFrom | S | Range (SK) | `courseId#userId#validFrom`, z. B. `1#luna#2026-03-10` |
+| courseId | S | – | Kurs-ID (String) |
+| courseIdNumeric | N | – | Numerische Kurs-ID |
+| userId | S | – | Nickname |
+| validFrom | S | – | Erster gültiger Termin |
+| validUntil | S | – | Optional letzter gültiger Termin (inkl.) |
+
+- **Zugriff:** `Query(tenantId)` mit `begins_with(courseId_userId_validFrom, courseId + "#")`.
+- **Nicht** die Tenant-`Memberships`-Tabelle (Rollen).
+
+---
+
 ## Konventionen
 
 - **tenantId:** Immer aus dem Request-Kontext (z. B. JWT oder Default) und in **jeder** DynamoDB-Operation (Query/Get/Put/Update/Delete) verwenden.
@@ -89,3 +108,5 @@ Wenn bereits Daten in den **alten** Tabellen (Keys ohne tenantId) liegen:
 1. **Vor dem Terraform-Apply:** Tabellen ersetzen (Terraform plant `replace`), dadurch gehen bestehende Daten verloren, sofern nicht migriert.
 2. **Option A – Neu aufsetzen:** Tabellen ersetzen, danach im Backend `npm run seed` ausführen (Seed schreibt mit `tenantId = "default-tenant"`).
 3. **Option B – Daten mitnehmen:** Vor dem Apply Daten aus den alten Tabellen exportieren (z. B. Scan + Speicherung als JSON). Nach dem Apply ein Migrationsskript ausführen, das jedes Item mit `tenantId = "default-tenant"` und den neuen Keys (courseId, courseId_date, user_swapId, tenantId_user) in die neuen Tabellen schreibt.
+
+Für **CourseEnrollments** aus bestehenden `course.participants`: Shared-Helfer `migrateParticipantsToEnrollments` bzw. Seed. Die Tabelle ist neu (kein Key-Replace einer bestehenden Tabelle).

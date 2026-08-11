@@ -76,12 +76,10 @@ fi
 
 cd "$TF_DIR"
 
-# Initialisieren (falls nötig)
-if [ ! -d ".terraform" ]; then
-    echo "🔧 Initialisiere $TERRAFORM_CMD..."
-    $TERRAFORM_CMD init -input=false
-    echo ""
-fi
+# Immer init: neue Module (z. B. course_enrollments_table) sonst „Module not installed“.
+echo "🔧 $TERRAFORM_CMD init..."
+$TERRAFORM_CMD init -input=false
+echo ""
 
 # Workspace muss existieren (kein Auto-Create -> kein versehentliches Anlegen)
 if ! $TERRAFORM_CMD workspace list | sed 's/[*]//g' | tr -d ' ' | grep -qx "$ENV"; then

@@ -10,12 +10,15 @@
 // SWAPS_TABLE="<PROJECT_NAME>-swaps-table" \
 // OVERRIDES_TABLE="<PROJECT_NAME>-courseOverrides-table" \
 // COURSES_TABLE="<PROJECT_NAME>-courses-table" \
+// COURSE_ENROLLMENTS_TABLE="<PROJECT_NAME>-courseEnrollments-table" \
 // npm run seed
 //
 // Alternativ wird der Projektname aus projects/yogaswap/terraform.tfvars gelesen,
 // falls vorhanden.
 
 import { DynamoDBClient, PutItemCommand, DescribeTableCommand, ResourceNotFoundException, ListTablesCommand } from "@aws-sdk/client-dynamodb";
+import { migrateParticipantsToEnrollments } from "@yogaswap/shared";
+import { enrollmentToDynamoItem } from "../lambdas/shared/courseEnrollmentDynamo";
 import { swaps } from "./swaps";
 import { courseDateOverrides } from "./overrides";
 import { courses } from "./courses";
@@ -85,6 +88,10 @@ function resolveTable(directEnv: string | undefined, suffix: string): string {
 const SWAPS_TABLE = resolveTable(process.env.SWAPS_TABLE, "swaps-table");
 const OVERRIDES_TABLE = resolveTable(process.env.OVERRIDES_TABLE, "courseOverrides-table");
 const COURSES_TABLE = resolveTable(process.env.COURSES_TABLE, "courses-table");
+const COURSE_ENROLLMENTS_TABLE = resolveTable(
+  process.env.COURSE_ENROLLMENTS_TABLE,
+  "courseEnrollments-table",
+);
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "eu-central-1";
 
 const DEFAULT_TENANT_ID = "default-tenant";
@@ -129,7 +136,8 @@ async function findMatchingTables(
   const patterns: Record<string, string[]> = {
     "swaps": ["swap"],
     "courseOverrides": ["override", "course"],
-    "courses": ["course"]
+    "courses": ["course"],
+    "courseEnrollments": ["enrollment"],
   };
   
   const patternsForType = patterns[missingTableType.toLowerCase()] || [missingTableType.toLowerCase()];
@@ -146,6 +154,7 @@ async function checkTablesExist(): Promise<void> {
     { name: SWAPS_TABLE, type: "Swaps", expected: "swaps-table" },
     { name: OVERRIDES_TABLE, type: "Course Overrides", expected: "courseOverrides-table" },
     { name: COURSES_TABLE, type: "Courses", expected: "courses-table" },
+    { name: COURSE_ENROLLMENTS_TABLE, type: "Course Enrollments", expected: "courseEnrollments-table" },
   ];
 
   const missingTables: Array<{ name: string; type: string; expected: string }> = [];
@@ -296,6 +305,36 @@ async function seedCourses(tableName: string, items: any[]) {
   }
 }
 
+async function seedCourseEnrollmentsFromCourses(tableName: string, courseItems: any[]) {
+  const createdAt = new Date().toISOString();
+  for (const item of courseItems) {
+    if (!item?.id) continue;
+    const enrollments = migrateParticipantsToEnrollments(
+      {
+        id: item.id,
+        tenantId: DEFAULT_TENANT_ID,
+        participants: item.participants ?? [],
+        seriesStartDate: item.seriesStartDate,
+        visibleFrom: item.visibleFrom,
+      },
+      { source: "seed", createdAt },
+    );
+    for (const enrollment of enrollments) {
+      await client.send(
+        new PutItemCommand({
+          TableName: tableName,
+          Item: enrollmentToDynamoItem(enrollment, DEFAULT_TENANT_ID),
+        }),
+      );
+      console.log(`✅ Inserted enrollment into ${tableName}:`, {
+        courseId: enrollment.courseId,
+        userId: enrollment.userId,
+        validFrom: enrollment.validFrom,
+      });
+    }
+  }
+}
+
 // Seed-Funktion für CourseOverrides-Tabelle (tenant-scoped: tenantId + courseId_date)
 async function seedOverrides(tableName: string, items: any[]) {
   for (const item of items) {
@@ -327,6 +366,7 @@ async function seedOverrides(tableName: string, items: any[]) {
     console.log(`   Swaps Table: ${SWAPS_TABLE}`);
     console.log(`   Overrides Table: ${OVERRIDES_TABLE}`);
     console.log(`   Courses Table: ${COURSES_TABLE}`);
+    console.log(`   Course Enrollments Table: ${COURSE_ENROLLMENTS_TABLE}`);
     console.log("");
     console.log("🔍 Prüfe ob Tabellen existieren...");
     console.log("");
@@ -341,6 +381,7 @@ async function seedOverrides(tableName: string, items: any[]) {
     await seedSwaps(SWAPS_TABLE, swaps);
     await seedOverrides(OVERRIDES_TABLE, courseDateOverrides);
     await seedCourses(COURSES_TABLE, courses);
+    await seedCourseEnrollmentsFromCourses(COURSE_ENROLLMENTS_TABLE, courses);
     
     console.log("");
     console.log("🎉 Seeding completed!");
@@ -355,7 +396,7 @@ async function seedOverrides(tableName: string, items: any[]) {
       console.error("💡 Die Tabellen müssen zuerst mit Terraform erstellt werden:");
       console.error("");
       console.error("   cd projects/yogaswap");
-      console.error("   tofu apply -target=module.swaps_table -target=module.course_overrides_table -target=module.courses_table");
+      console.error("   tofu apply -target=module.swaps_table -target=module.course_overrides_table -target=module.courses_table -target=module.course_enrollments_table");
       console.error("");
       console.error("   Siehe auch: projects/yogaswap/DEPLOYMENT_STEPS.md");
       console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
