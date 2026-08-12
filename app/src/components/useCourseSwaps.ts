@@ -3,7 +3,7 @@ import axios from "axios";
 import { getEffectiveWaitlist } from "../lib/waitlist";
 import { findOverrideForCourseDate, sameInstant } from "../lib/dates";
 import { overrideCourseUidFields, swapCourseUidFields } from "../lib/courseUid";
-import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
+import { Swap, CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import {
   addUserUniqueCaseInsensitive,
   canCancelSwap,
@@ -16,6 +16,7 @@ import {
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
 import { hasRegularBookingCapacity, resolveMaxCapacity, validateTermOccupancy } from "shared/courseCapacity";
+import { resolveEffectiveTermOccupancy, resolveStemForDate } from "shared/courseEnrollment";
 import {
   resolveEffectiveTermParticipants,
   withRegularCancellation,
@@ -174,6 +175,7 @@ export function useCourseSwaps(
   currentUser: User,
   fetchData: () => Promise<void>,
   tenantSettings?: TenantSettings,
+  enrollments: CourseEnrollment[] = [],
 ) {
   const equalsIgnoreCase = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
   const requestSwapRef = useRef<(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => Promise<void>>(null!);
@@ -325,9 +327,11 @@ export function useCourseSwaps(
         (o) => o.courseId === course.id && o.date === dateIso,
       );
       const isSn = isShortNoticeCancelled(existingOverride, userName);
-      const effectiveParticipants = resolveEffectiveTermParticipants(
+      const effectiveParticipants = resolveEffectiveTermOccupancy(
         course,
         existingOverride,
+        enrollments,
+        dateIso,
       ).participants;
       const isIn = includesUserCaseInsensitive(effectiveParticipants, userName);
 
@@ -390,7 +394,10 @@ export function useCourseSwaps(
       let nextCancelled = [...(baseOverride.cancelledParticipants ?? [])];
       let nextSwapped = [...(baseOverride.swapped ?? [])];
       let nextShortNotice = [...(baseOverride.shortNoticeCancellations ?? [])];
-      const onStem = includesUserCaseInsensitive(course.participants, userName);
+      const onStem = includesUserCaseInsensitive(
+        resolveStemForDate(course, enrollments, dateIso),
+        userName,
+      );
 
       if (isSn) {
         nextShortNotice = removeUserCaseInsensitive(nextShortNotice, userName);
@@ -407,11 +414,16 @@ export function useCourseSwaps(
         if (!onStem) {
           nextSwapped = addUserUniqueCaseInsensitive(nextSwapped, userName);
         }
-        const preview = resolveEffectiveTermParticipants(course, {
-          ...baseOverride,
-          cancelledParticipants: nextCancelled,
-          swapped: nextSwapped,
-        });
+        const preview = resolveEffectiveTermOccupancy(
+          course,
+          {
+            ...baseOverride,
+            cancelledParticipants: nextCancelled,
+            swapped: nextSwapped,
+          },
+          enrollments,
+          dateIso,
+        );
         if (preview.participants.length > maxCapacity) {
           alert("Dieser Termin ist inzwischen voll – Rücknahme nicht möglich.");
           return false;
@@ -455,7 +467,7 @@ export function useCourseSwaps(
     },
     // courses, currentUser.nickname kept so callback updates when they change
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setOverrides/setSwaps stable; courses/nickname intentional
-    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings, cleanupPendingSwapsFromOrigin, cleanupAllSwapsFromOrigin]
+    [courses, filteredOverrides, enrollments, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings, cleanupPendingSwapsFromOrigin, cleanupAllSwapsFromOrigin]
   );
 
   /**
@@ -471,8 +483,13 @@ export function useCourseSwaps(
     const override = filteredOverrides.find(
       (o) => o.courseId === fromCourse.id && o.date === fromDateIso,
     );
-    const participants = resolveEffectiveTermParticipants(fromCourse, override).participants;
-    const originallyParticipant = fromCourse.participants.some((p) =>
+    const participants = resolveEffectiveTermOccupancy(
+      fromCourse,
+      override,
+      enrollments,
+      fromDateIso,
+    ).participants;
+    const originallyParticipant = resolveStemForDate(fromCourse, enrollments, fromDateIso).some((p) =>
       equalsIgnoreCase(p, userName),
     );
     if (
@@ -544,9 +561,11 @@ export function useCourseSwaps(
           return;
         }
 
-        const effectiveTargetParticipants = resolveEffectiveTermParticipants(
+        const effectiveTargetParticipants = resolveEffectiveTermOccupancy(
           targetCourse,
           existingTargetOverride,
+          enrollments,
+          toDateIso,
         ).participants;
 
         if (!hasRegularBookingCapacity(effectiveTargetParticipants.length, targetCourse)) {
@@ -693,7 +712,7 @@ export function useCourseSwaps(
     },
     // requestSwap via ref to avoid circular dependency (confirmSwap -> requestSwap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [courses, filteredOverrides, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
+    [courses, filteredOverrides, enrollments, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   /**
@@ -881,7 +900,7 @@ export function useCourseSwaps(
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentUser.nickname intentional for refresh
-    [swaps, courses, filteredOverrides, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
+    [swaps, courses, filteredOverrides, enrollments, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   /**
@@ -1041,7 +1060,7 @@ export function useCourseSwaps(
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentUser.nickname intentional for refresh
-    [courses, swaps, filteredOverrides, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
+    [courses, swaps, filteredOverrides, enrollments, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   requestSwapRef.current = requestSwap;
@@ -1050,7 +1069,12 @@ export function useCourseSwaps(
     async (course: Course, dateIso: string, delta: 1 | -1) => {
       const existingIndex = findOverrideIndex(filteredOverrides, course.id, dateIso);
       const existing = existingIndex >= 0 ? filteredOverrides[existingIndex] : null;
-      const effectiveNamed = resolveEffectiveTermParticipants(course, existing).participants;
+      const effectiveNamed = resolveEffectiveTermOccupancy(
+        course,
+        existing,
+        enrollments,
+        dateIso,
+      ).participants;
       const currentGuests = existing?.anonymousTrialCount ?? 0;
       const nextGuests = currentGuests + delta;
       if (nextGuests < 0) return;
@@ -1094,7 +1118,7 @@ export function useCourseSwaps(
         await fetchData();
       }
     },
-    [filteredOverrides, fetchData, setOverrides],
+    [filteredOverrides, enrollments, fetchData, setOverrides],
   );
 
   console.log("return useCourseSwaps");

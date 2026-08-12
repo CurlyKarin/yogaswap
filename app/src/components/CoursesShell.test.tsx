@@ -53,6 +53,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     }>;
     hiddenPastCourseCount: number;
     overrides: [];
+    enrollments: [];
     swaps: [];
     confirmSwap: ReturnType<typeof vi.fn>;
     requestSwap: ReturnType<typeof vi.fn>;
@@ -70,6 +71,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     weekCourseRows: [],
     hiddenPastCourseCount: 0,
     overrides: [],
+    enrollments: [],
     swaps: [],
     confirmSwap: vi.fn(),
     requestSwap: vi.fn(),

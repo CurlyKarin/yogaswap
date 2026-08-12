@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { Calendar } from "lucide-react";
-import type { Course, CourseDateOverride, Swap, TenantSettings } from "shared/types";
+import type { Course, CourseDateOverride, CourseEnrollment, Swap, TenantSettings } from "shared/types";
 import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
-import { resolveEffectiveTermParticipants } from "shared/overrideOccupancy";
+import { resolveEffectiveTermOccupancy, resolveStemForDate } from "shared/courseEnrollment";
 import { cancelCourseDate, updateCourse } from "../api/courses";
 import CourseModalFrame from "./CourseModalFrame";
 import {
@@ -29,6 +29,7 @@ import { courseApiPathKey } from "../lib/courseUid";
 type CourseDatesDialogProps = {
   course: Course | null;
   overrides: CourseDateOverride[];
+  enrollments?: CourseEnrollment[];
   swaps: Swap[];
   canManageCourses: boolean;
   tenantSettings?: TenantSettings;
@@ -74,6 +75,7 @@ function isIsoDateInFuture(isoDate: string): boolean {
 export default function CourseDatesDialog({
   course,
   overrides,
+  enrollments = [],
   swaps,
   canManageCourses,
   tenantSettings,
@@ -294,12 +296,18 @@ export default function CourseDatesDialog({
     const overrideForDate =
       overrides.find((entry) => entry.courseId === course.id && entry.date === selectedCancellationDate) ?? null;
     const bookedParticipants = [
-      ...resolveEffectiveTermParticipants(course, overrideForDate).participants,
+      ...resolveEffectiveTermOccupancy(
+        course,
+        overrideForDate,
+        enrollments,
+        selectedCancellationDate,
+      ).participants,
     ];
     const swappedInParticipants = [...(overrideForDate?.swapped ?? [])];
     const waitlistParticipants = [...(overrideForDate?.waitlist ?? [])];
     const bookedSetNormalized = new Set(bookedParticipants.map((userId) => userId.toLowerCase()));
-    const alreadyCancelledParticipants = course.participants.filter(
+    const stemOnDate = resolveStemForDate(course, enrollments, selectedCancellationDate);
+    const alreadyCancelledParticipants = stemOnDate.filter(
       (userId) => !bookedSetNormalized.has(userId.toLowerCase()),
     );
     const cancelledSetNormalized = new Set(alreadyCancelledParticipants.map((userId) => userId.toLowerCase()));
@@ -337,7 +345,7 @@ export default function CourseDatesDialog({
       outgoingSwapsFromCancelledParticipants: dedupeAndSortUsers(outgoingSwapsFromCancelledParticipants),
       pendingSwapsWithOriginCount: pendingSwapsWithOriginOnCancelledDate.length,
     };
-  }, [course, overrides, selectedCancellationDate, swaps]);
+  }, [course, overrides, enrollments, selectedCancellationDate, swaps]);
 
   const toggleRangeDatePicker = () => {
     if (saving) return;

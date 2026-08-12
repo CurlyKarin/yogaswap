@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Course,
   CourseDateOverride,
+  CourseEnrollment,
   Swap,
   User,
   Tenant,
@@ -10,6 +11,7 @@ import {
 } from "shared/types";
 import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
 import { getCourses } from "../api/courses";
+import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getOverrides } from "../api/overrides";
 import { getSwaps, getSwapsByStatus } from "../api/swaps";
 import { getCourseDates } from "../lib/dates";
@@ -75,6 +77,7 @@ export function useCoursesData({
 }: Options) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
+  const [enrollments, setEnrollments] = useState<CourseEnrollment[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,20 +125,23 @@ export function useCoursesData({
           )
         : getSwaps(currentUser.nickname);
 
-      const [courseData, overrideData, swapsData] = await Promise.all([
+      const [courseData, overrideData, enrollmentData, swapsData] = await Promise.all([
         getCourses(),
         getOverrides(),
+        getCourseEnrollments(),
         swapsPromise,
       ]);
 
       setCourses(courseData.sort(sortCoursesForDisplay));
       setOverrides(Array.isArray(overrideData) ? overrideData : []);
+      setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
       setSwaps(swapsData);
       setError(null);
     } catch (err) {
       console.error("Error in useCoursesData:", err);
       setError("Failed to load data");
       setSwaps([]);
+      setEnrollments([]);
     } finally {
       setLoading(false);
     }
@@ -154,6 +160,7 @@ export function useCoursesData({
     currentUser,
     fetchData,
     tenant?.settings,
+    enrollments,
   );
 
   const visibleCourses = useMemo(() => {
@@ -219,6 +226,7 @@ export function useCoursesData({
     fetchData,
     courses,
     overrides: swapHandlers.overrides,
+    enrollments,
     swaps,
     visibleCourses,
     weekCourseRows: weekCourseRows.rows,

@@ -101,14 +101,23 @@ export function migrateLegacyOverrideToDeltas(
  * - Legacy: if `cancelledParticipants` is absent, derive from snapshot — except
  *   empty named stubs, which keep the stem (guest/waitlist-only overrides)
  */
+export type ResolveEffectiveTermOptions = {
+  /**
+   * Stamm für diesen Termin. Fehlt der Wert, gilt `course.participants`
+   * (Cache / Legacy, bis CourseEnrollments flächendeckend genutzt werden).
+   */
+  stemParticipants?: string[];
+};
+
 export function resolveEffectiveTermParticipants(
   course: Pick<Course, "participants">,
   override: Pick<
     CourseDateOverride,
     "participants" | "cancelledParticipants" | "swapped" | "shortNoticeCancellations"
   > | null | undefined,
+  options?: ResolveEffectiveTermOptions,
 ): EffectiveTermParticipants {
-  const stem = course.participants ?? [];
+  const stem = options?.stemParticipants ?? course.participants ?? [];
   if (!override) {
     return {
       participants: [...stem],

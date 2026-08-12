@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Course, CourseDateOverride, Swap, TenantSettings, User } from "shared/types";
+import type { Course, CourseDateOverride, CourseEnrollment, Swap, TenantSettings, User } from "shared/types";
 import {
   buildCourseOccurrenceLocal,
   getInactiveGraceLastDayIso,
@@ -19,7 +19,7 @@ import {
   isWithinCancellationSwapCutoff,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
-import { resolveEffectiveTermParticipants } from "shared/overrideOccupancy";
+import { resolveEffectiveTermOccupancy, resolveStemForDate } from "shared/courseEnrollment";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
 import { resolveInactiveParticipantNotice, resolvePastTermNotice } from "../lib/courseCardLabels";
 import { canRequestSwapFromPastCancelledOrigin, isTermInParticipantSwapGrace } from "../lib/courseTermActions";
@@ -43,6 +43,7 @@ export type UseCourseCardTermStateParams = {
   currentUser: User;
   dates: Date[];
   overrides: CourseDateOverride[];
+  enrollments?: CourseEnrollment[];
   swaps: Swap[];
   participantActionsLocked?: boolean;
   tenantSettings?: TenantSettings;
@@ -56,6 +57,7 @@ export function useCourseCardTermState({
   currentUser,
   dates,
   overrides,
+  enrollments = [],
   swaps,
   participantActionsLocked = false,
   tenantSettings,
@@ -93,8 +95,9 @@ export function useCourseCardTermState({
   const useTermScopedParticipantState =
     !hasNoUpcomingDates ||
     (hasNoUpcomingDates && inPostEndGrace && lastActualOccurrenceIso != null);
+  const stemForSelectedDate = resolveStemForDate(course, enrollments, selectedDateKey);
   const effectiveTerm = useTermScopedParticipantState
-    ? resolveEffectiveTermParticipants(course, override)
+    ? resolveEffectiveTermOccupancy(course, override, enrollments, selectedDateKey)
     : null;
   const participants = effectiveTerm?.participants ?? course.participants;
   // Chip-Markierung „getauscht“ nur aus dem Override-Feld, nicht aus Legacy-Ableitung.
@@ -107,7 +110,9 @@ export function useCourseCardTermState({
 
   const userNameLower = userName.toLowerCase();
   const isParticipant = participants.some((p) => p.toLowerCase() === userNameLower);
-  const originallyParticipant = course.participants.some((p) => p.toLowerCase() === userNameLower);
+  const originallyParticipant = useTermScopedParticipantState
+    ? stemForSelectedDate.some((p) => p.toLowerCase() === userNameLower)
+    : course.participants.some((p) => p.toLowerCase() === userNameLower);
   const isShortNotice = isShortNoticeCancelled(override, userName);
   const hasCancelled = hasEffectiveCancellation(
     originallyParticipant,
@@ -183,10 +188,11 @@ export function useCourseCardTermState({
         new Date(selectedDate),
         undefined,
         tenantSettings,
+        enrollments,
       )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings],
+    [allCourses, overrides, enrollments, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings],
   );
 
   const waitlistDates = useMemo(
@@ -199,10 +205,11 @@ export function useCourseCardTermState({
         new Date(selectedDate),
         undefined,
         tenantSettings,
+        enrollments,
       )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings],
+    [allCourses, overrides, enrollments, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings],
   );
 
   const swapForThisTerm = useMemo(

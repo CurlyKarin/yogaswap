@@ -1,9 +1,9 @@
 // lib/dates.ts
-import { CourseDateOverride, Course, User, TenantSettings } from "shared/types";
+import { CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
 import { isSwapTargetInCutoffWindow } from "shared/cancellationSwapCutoff";
 import { buildCourseOccurrenceLocal } from "shared/courseStatus";
-import { resolveEffectiveTermParticipants } from "shared/overrideOccupancy";
+import { resolveEffectiveTermOccupancy, resolveStemForDate } from "shared/courseEnrollment";
 import type { SwapSettings } from "../types";
 
 export function getCourseDates(course: Course, now: Date = new Date()) {
@@ -84,6 +84,7 @@ function collectCourseDates(
   referenceDate: Date,
   now: Date = new Date(),
   tenantSettings?: TenantSettings,
+  enrollments: CourseEnrollment[] = [],
 ) {
   if (isNaN(referenceDate.getTime())) return []; // ungültiges Datum → keine Termine
 
@@ -118,22 +119,29 @@ function collectCourseDates(
         const override = overrides.find(
           (o) => o.courseId === course.id && sameInstant(o.date, courseTime)
         );
-        const participants = resolveEffectiveTermParticipants(course, override).participants;
+        const dateKey = toDateKey(courseTime);
+        const participants = resolveEffectiveTermOccupancy(
+          course,
+          override,
+          enrollments,
+          dateKey,
+        ).participants;
         const guestCount = override?.anonymousTrialCount ?? 0;
 
         const count = participants.length;
         const regularFull = isAtRegularCapacity(count, course, guestCount);
         const maxFull = isAtMaxCapacity(count, course, guestCount);
         const targetInCutoff = isSwapTargetInCutoffWindow(
-          toDateKey(courseTime),
+          dateKey,
           course.time,
           tenantSettings,
           now,
         );
         const currentUserLower = currentUser.nickname.toLowerCase();
+        const stem = resolveStemForDate(course, enrollments, dateKey);
         const userAlreadyInThisCourse =
           participants.some((p) => p.toLowerCase() === currentUserLower) ||
-          course.participants.some((p) => p.toLowerCase() === currentUserLower);
+          stem.some((p) => p.toLowerCase() === currentUserLower);
 
         return {
           course,
@@ -173,6 +181,7 @@ export function getAvailableDates(
   referenceDate: Date,
   now: Date = new Date(),
   tenantSettings?: TenantSettings,
+  enrollments: CourseEnrollment[] = [],
 ) {
   return collectCourseDates(
     allCourses,
@@ -182,6 +191,7 @@ export function getAvailableDates(
     referenceDate,
     now,
     tenantSettings,
+    enrollments,
   )
     .filter((x) => !x.regularFull && !x.userAlreadyInThisCourse && !x.targetInCutoff)
     .map(({ course, date, time }) => ({ course, date, time }));
@@ -196,6 +206,7 @@ export function getWaitlistDates(
   referenceDate: Date,
   now: Date = new Date(),
   tenantSettings?: TenantSettings,
+  enrollments: CourseEnrollment[] = [],
 ) {
   return collectCourseDates(
     allCourses,
@@ -205,6 +216,7 @@ export function getWaitlistDates(
     referenceDate,
     now,
     tenantSettings,
+    enrollments,
   )
     .filter((entry) => isWaitlistSwapTarget(entry))
     .map(({ course, date, time }) => ({ course, date, time }));

@@ -14,7 +14,8 @@ import {
 } from '../shared/cutoffOverrideValidation';
 import { mapOverrideItem, mapStringList, stringListAttribute, anonymousTrialCountAttribute } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
-import { resolveEffectiveTermParticipants, validateAnonymousTrialCount } from '@yogaswap/shared';
+import { resolveEffectiveTermOccupancy, resolveStemForDate, validateAnonymousTrialCount } from '@yogaswap/shared';
+import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
 import { resolveSelfServiceAbsenceKind } from '../shared/notifications/resolveSelfServiceAbsenceKind';
 import { notifyParticipantTermReleased } from '../shared/notifications/termAbsenceNotifications';
 
@@ -122,6 +123,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const courseName = courseResp.Item.name?.S ?? `Kurs ${legacyCourseId}`;
     const baseParticipants = mapStringList(courseResp.Item.participants);
     const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
+    const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+    const enrollments = enrollmentsTable
+      ? await queryCourseEnrollments({
+          client,
+          tableName: enrollmentsTable,
+          tenantId,
+          courseId: Number(legacyCourseId),
+        })
+      : [];
+    const courseForOccupancy = {
+      id: Number(legacyCourseId),
+      participants: baseParticipants,
+    };
+    const stemOnDate = resolveStemForDate(courseForOccupancy, enrollments, date);
 
     const courseId_date = `${legacyCourseId}_${date}`;
     const existingResp = await client.send(
@@ -150,7 +165,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       merged.courseId = Number(legacyCourseId);
       merged.date = date;
 
-      const invariantError = validateShortNoticeParticipantsInvariant(merged, baseParticipants);
+      const invariantError = validateShortNoticeParticipantsInvariant(merged, stemOnDate);
       if (invariantError) {
         return { statusCode: 400, body: JSON.stringify({ error: invariantError }) };
       }
@@ -162,7 +177,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         tenantSettings,
         before,
         after: merged,
-        baseParticipants,
+        baseParticipants: stemOnDate,
       });
       if (transitionError) {
         return { statusCode: 400, body: JSON.stringify({ error: transitionError }) };
@@ -175,7 +190,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         tenantSettings,
         before,
         after: merged,
-        baseParticipants,
+        baseParticipants: stemOnDate,
       });
     }
 
@@ -186,9 +201,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       updates.anonymousTrialCount !== undefined
     ) {
       const merged = mergeOverrideUpdate(before, baseParticipants, updates);
-      const effective = resolveEffectiveTermParticipants(
-        { participants: baseParticipants },
+      const effective = resolveEffectiveTermOccupancy(
+        courseForOccupancy,
         merged,
+        enrollments,
+        date,
       );
       const capacityError = validateParticipantsForCourse(
         effective.participants,

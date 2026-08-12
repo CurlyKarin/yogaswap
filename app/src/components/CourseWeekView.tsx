@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { buildCourseOccurrenceLocal } from "shared/courseStatus";
-import type { Course, CourseDateOverride, Swap, TenantSettings, User } from "shared/types";
+import type { Course, CourseDateOverride, CourseEnrollment, Swap, TenantSettings, User } from "shared/types";
 import { weekAnchorForOccurrence } from "../lib/courseWeek";
 import { isParticipantCourseWindDown } from "../lib/courseTermActions";
 import {
@@ -22,6 +22,7 @@ type Props = {
   hiddenPastCourseCount?: number;
   courses: Course[];
   overrides: CourseDateOverride[];
+  enrollments?: CourseEnrollment[];
   swaps: Swap[];
   currentUser: User;
   canSeeCourseManagement: boolean;
@@ -57,6 +58,7 @@ export default function CourseWeekView({
   hiddenPastCourseCount = 0,
   courses,
   overrides,
+  enrollments = [],
   swaps,
   currentUser,
   canSeeCourseManagement,
@@ -160,6 +162,7 @@ export default function CourseWeekView({
                 onAdjustGuestCount={onAdjustGuestCount}
                 dates={cardDates}
                 overrides={overrides}
+                enrollments={enrollments}
                 swaps={swaps}
                 participantActionsLocked={
                   !canSeeCourseManagement &&
