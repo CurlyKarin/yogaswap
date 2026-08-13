@@ -10,6 +10,7 @@ import { Plus, Pencil, Trash2, Users, CalendarDays } from "lucide-react";
 import {
   Course,
   CourseDateOverride,
+  CourseEnrollment,
   CoursePlanningMode,
   CourseStatus,
   Swap,
@@ -31,6 +32,7 @@ import { resolveMaxCapacity, validateOverbookLimit } from "shared/courseCapacity
 import { getSwaps } from "../api/swaps";
 import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
+import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getCourseDates } from "../lib/dates";
 import { WEEKDAY_OPTIONS } from "../lib/weekdayLabels";
 import {
@@ -209,6 +211,7 @@ export default function CourseList({
 }: Props) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
+  const [enrollments, setEnrollments] = useState<CourseEnrollment[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -276,25 +279,29 @@ export default function CourseList({
           )
         : getSwaps(currentUser.nickname);
 
-      const [courseData, overrideData, swapsData] = await Promise.all([
+      const [courseData, overrideData, enrollmentData, swapsData] = await Promise.all([
         getCourses(),
         getOverrides(),
+        getCourseEnrollments(),
         swapsPromise,
       ]);
 
       console.log("Data fetched:", {
         courseData,
         overrideData,
+        enrollmentData,
         swapsData,
       });
       setCourses(courseData.sort(sortCoursesForDisplay));
       setOverrides(Array.isArray(overrideData) ? overrideData : []);
+      setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
       setSwaps(swapsData);
       setError(null);
     } catch (err) {
       console.error("Error in fetchData:", err);
       setError("Failed to load data");
       setSwaps([]);
+      setEnrollments([]);
     } finally {
       setLoading(false);
     }
@@ -327,6 +334,7 @@ export default function CourseList({
     currentUser,
     fetchData,
     tenant?.settings,
+    enrollments,
   );
 
   // 👉 Debug-Ausgabe bei jedem Swaps-Update
@@ -907,6 +915,7 @@ export default function CourseList({
                   onAdjustGuestCount={adjustGuestCount}
                   dates={dates}
                   overrides={filteredOverrides}
+                  enrollments={enrollments}
                   swaps={swaps}
                   participantActionsLocked={
                     !canSeeCourseManagement &&
@@ -998,6 +1007,7 @@ export default function CourseList({
       <CourseDatesDialog
         course={datesTargetCourse ?? null}
         overrides={filteredOverrides}
+        enrollments={enrollments}
         swaps={swaps}
         canManageCourses={canManageCourses}
         tenantSettings={tenant?.settings}

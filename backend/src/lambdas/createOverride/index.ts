@@ -7,7 +7,8 @@ import { getDelegationErrorResponse } from '../shared/delegation';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
 import { mapOverrideItem, mapStringList, anonymousTrialCountAttribute } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
-import { resolveEffectiveTermParticipants, validateAnonymousTrialCount } from '@yogaswap/shared';
+import { resolveEffectiveTermOccupancy, resolveStemForDate, validateAnonymousTrialCount } from '@yogaswap/shared';
+import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
 
 function normalizedRoster(values: string[]): string[] {
   return values.map((entry) => entry.trim().toLowerCase()).sort();
@@ -93,16 +94,29 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
     const baseParticipants = mapStringList(courseResp.Item.participants);
+    const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+    const enrollments = enrollmentsTable
+      ? await queryCourseEnrollments({
+          client,
+          tableName: enrollmentsTable,
+          tenantId,
+          courseId: Number(legacyCourseId),
+        })
+      : [];
     const overrideForOccupancy = {
       participants,
       cancelledParticipants,
       swapped,
       shortNoticeCancellations,
     };
-    const effective = resolveEffectiveTermParticipants(
-      { participants: baseParticipants },
+    const courseForOccupancy = { id: Number(legacyCourseId), participants: baseParticipants };
+    const effective = resolveEffectiveTermOccupancy(
+      courseForOccupancy,
       overrideForOccupancy,
+      enrollments,
+      override.date,
     );
+    const stemOnDate = resolveStemForDate(courseForOccupancy, enrollments, override.date);
     const capacityError = validateParticipantsForCourse(
       effective.participants,
       capacityFields,
@@ -112,7 +126,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       waitlist.length > 0 &&
       swapped.length === 0 &&
       (cancelledParticipants?.length ?? 0) === 0 &&
-      sameParticipantRoster(effective.participants, baseParticipants);
+      sameParticipantRoster(effective.participants, stemOnDate);
     if (capacityError && !waitlistEnrollmentOnly) {
       return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
     }

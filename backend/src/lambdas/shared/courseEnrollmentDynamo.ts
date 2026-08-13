@@ -1,5 +1,7 @@
 import type { AttributeValue } from "@aws-sdk/client-dynamodb";
+import { QueryCommand, type DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
+  buildCourseEnrollmentCoursePrefix,
   buildCourseEnrollmentSortKey,
   type CourseEnrollment,
   type CourseEnrollmentSource,
@@ -50,4 +52,38 @@ export function dynamoItemToEnrollment(
     ...(item.closedAt?.S ? { closedAt: item.closedAt.S } : {}),
     ...(source ? { source } : {}),
   };
+}
+
+/** Query enrollments for a tenant, optionally scoped to one course. */
+export async function queryCourseEnrollments(params: {
+  client: DynamoDBClient;
+  tableName: string;
+  tenantId: string;
+  courseId?: number;
+}): Promise<CourseEnrollment[]> {
+  const { client, tableName, tenantId, courseId } = params;
+  const expressionValues: Record<string, AttributeValue> = {
+    ":tid": { S: tenantId },
+  };
+  let keyCondition = "tenantId = :tid";
+  if (courseId !== undefined) {
+    keyCondition += " AND begins_with(courseId_userId_validFrom, :prefix)";
+    expressionValues[":prefix"] = { S: buildCourseEnrollmentCoursePrefix(courseId) };
+  }
+
+  const result = await client.send(
+    new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: keyCondition,
+      ExpressionAttributeValues: expressionValues,
+      ConsistentRead: true,
+    }),
+  );
+
+  const enrollments: CourseEnrollment[] = [];
+  for (const item of result.Items ?? []) {
+    const mapped = dynamoItemToEnrollment(item);
+    if (mapped) enrollments.push(mapped);
+  }
+  return enrollments;
 }

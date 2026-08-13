@@ -5,6 +5,7 @@ import React from "react";
 import CourseList from "./CourseList";
 import { createCourse, deleteCourse, getCourses, updateCourse } from "../api/courses";
 import { getOverrides } from "../api/overrides";
+import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getSwaps, getSwapsByStatus } from "../api/swaps";
 import { getParticipants } from "../api/participants";
 import type { User, Tenant, UserTenantMembership, Course } from "shared/types";
@@ -12,6 +13,7 @@ import { canSeeCourse } from "shared/permissions";
 
 vi.mock("../api/courses");
 vi.mock("../api/overrides");
+vi.mock("../api/courseEnrollments");
 vi.mock("../api/swaps");
 vi.mock("../api/participants");
 vi.mock("./useCourseSwaps", () => {
@@ -33,6 +35,7 @@ const mockedCreateCourse = createCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateCourse = updateCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedDeleteCourse = deleteCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedGetOverrides = getOverrides as unknown as ReturnType<typeof vi.fn>;
+const mockedGetCourseEnrollments = getCourseEnrollments as unknown as ReturnType<typeof vi.fn>;
 const mockedGetSwaps = getSwaps as unknown as ReturnType<typeof vi.fn>;
 const mockedGetSwapsByStatus = getSwapsByStatus as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
@@ -75,6 +78,7 @@ describe("CourseList", () => {
     vi.clearAllMocks();
     mockedGetCourses.mockReset();
     mockedGetOverrides.mockReset();
+    mockedGetCourseEnrollments.mockReset();
     mockedGetSwaps.mockReset();
     mockedGetSwapsByStatus.mockReset();
     mockedCreateCourse.mockReset();
@@ -82,6 +86,7 @@ describe("CourseList", () => {
     mockedDeleteCourse.mockReset();
     mockedGetParticipants.mockReset();
     mockedGetParticipants.mockResolvedValue([]);
+    mockedGetCourseEnrollments.mockResolvedValue([]);
     mockedCanSeeCourse.mockImplementation(() => true);
     mockedGetSwapsByStatus.mockResolvedValue([]);
   });

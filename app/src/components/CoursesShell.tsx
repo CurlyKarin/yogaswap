@@ -76,6 +76,7 @@ export default function CoursesShell({
     weekCourseRows,
     hiddenPastCourseCount,
     overrides,
+    enrollments,
     swaps,
     confirmSwap,
     requestSwap,
@@ -311,6 +312,7 @@ export default function CoursesShell({
             hiddenPastCourseCount={hiddenPastCourseCount}
             courses={courses}
             overrides={overrides}
+            enrollments={enrollments}
             swaps={swaps}
             currentUser={currentUser}
             canSeeCourseManagement={canSeeCourseManagement}

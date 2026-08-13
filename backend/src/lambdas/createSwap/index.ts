@@ -4,8 +4,9 @@ import {
   canCreateSwapFromOrigin,
   hasRegularBookingCapacity,
   isSwapTargetInCutoffWindow,
-  resolveEffectiveTermParticipants,
+  resolveEffectiveTermOccupancy,
   resolveGuestCount,
+  resolveStemForDate,
   validateTermOccupancy,
 } from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
@@ -15,6 +16,7 @@ import { getDelegationErrorResponse } from '../shared/delegation';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
 import { loadTenantSettings } from '../shared/tenantSettingsLoader';
 import { mapOverrideItem, mapStringList } from '../shared/overrideDynamo';
+import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
 import { notifySwapSuccess } from '../shared/notifications/swapSuccessNotification';
 
 const client = dynamoClient;
@@ -33,6 +35,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const coursesTable = process.env.COURSES_TABLE;
   const overridesTable = process.env.OVERRIDES_TABLE;
   const tenantsTable = process.env.TENANTS_TABLE;
+  const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
 
   try {
     if (!tableName) {
@@ -59,9 +62,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     const courseTime = courseResp.Item.time?.S ?? '';
     const baseParticipants = mapStringList(courseResp.Item.participants);
+    const fromCourse = { id: Number(fromLegacyId), participants: baseParticipants };
     const tenantSettings = tenantsTable
       ? await loadTenantSettings(client, tenantsTable, tenantId)
       : undefined;
+
+    const fromEnrollments = enrollmentsTable
+      ? await queryCourseEnrollments({
+          client,
+          tableName: enrollmentsTable,
+          tenantId,
+          courseId: Number(fromLegacyId),
+        })
+      : [];
 
     let override;
     if (overridesTable) {
@@ -77,11 +90,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         override = mapOverrideItem(overrideResp.Item);
       }
     }
-    const participants = resolveEffectiveTermParticipants(
-      { participants: baseParticipants },
+    const originEffective = resolveEffectiveTermOccupancy(
+      fromCourse,
       override,
-    ).participants;
-    const originallyParticipant = baseParticipants.some(
+      fromEnrollments,
+      swap.fromDate,
+    );
+    const participants = originEffective.participants;
+    const stemOnOrigin = resolveStemForDate(fromCourse, fromEnrollments, swap.fromDate);
+    const originallyParticipant = stemOnOrigin.some(
       (p) => p.toLowerCase() === swap.user.toLowerCase(),
     );
     if (
@@ -130,6 +147,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         : 0,
     };
     const toBaseParticipants = mapStringList(toCourseResp.Item.participants);
+    const toCourse = { id: Number(toLegacyId), participants: toBaseParticipants };
+    const toEnrollments = enrollmentsTable
+      ? await queryCourseEnrollments({
+          client,
+          tableName: enrollmentsTable,
+          tenantId,
+          courseId: Number(toLegacyId),
+        })
+      : [];
     let targetOverride;
     let targetGuestCount = 0;
     if (overridesTable) {
@@ -146,9 +172,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         targetGuestCount = resolveGuestCount(targetOverride.anonymousTrialCount);
       }
     }
-    const targetParticipants = resolveEffectiveTermParticipants(
-      { participants: toBaseParticipants },
+    const targetParticipants = resolveEffectiveTermOccupancy(
+      toCourse,
       targetOverride,
+      toEnrollments,
+      swap.toDate,
     ).participants;
     const swapUserLower = swap.user.toLowerCase();
     const userOnTarget = targetParticipants.some((p) => p.toLowerCase() === swapUserLower);

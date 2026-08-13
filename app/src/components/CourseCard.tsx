@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Swap, CourseDateOverride, Course, User, TenantSettings } from "shared/types";
+import { Swap, CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import { formatAbsenceAnnouncement } from "../lib/courseCardLabels";
 import CourseCardDetails from "./CourseCardDetails";
 import CourseTermActions from "./CourseTermActions";
@@ -15,6 +15,7 @@ type Props = {
   showOverbookingDetails?: boolean;
   dates: Date[];
   overrides: CourseDateOverride[];
+  enrollments?: CourseEnrollment[];
   swaps: Swap[];
   /** Teilnehmer-Ansicht: keine neuen Absagen/Tauschanfragen bei inaktivem Kurs. */
   participantActionsLocked?: boolean;
@@ -42,6 +43,7 @@ export default function CourseCard({
   showOverbookingDetails = false,
   dates,
   overrides,
+  enrollments = [],
   swaps,
   participantActionsLocked = false,
   tenantSettings,
@@ -62,6 +64,7 @@ export default function CourseCard({
     currentUser,
     dates,
     overrides,
+    enrollments,
     swaps,
     participantActionsLocked,
     tenantSettings,

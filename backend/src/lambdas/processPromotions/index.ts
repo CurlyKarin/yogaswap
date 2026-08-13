@@ -6,12 +6,13 @@ import {
   Course,
   canPromoteFromWaitlist,
   resolveCancellationSwapCutoffMinutes,
-  resolveEffectiveTermParticipants,
+  resolveEffectiveTermOccupancy,
   withRegularCancellation,
 } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { dynamoClient } from "../shared/dynamoClient";
+import { queryCourseEnrollments } from "../shared/courseEnrollmentDynamo";
 import { mapOverrideItem } from "../shared/overrideDynamo";
 import { loadTenantSettings } from "../shared/tenantSettingsLoader";
 import { notifyWaitlistPromotion } from "../shared/notifications/waitlistPromotionNotification";
@@ -245,6 +246,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }));
       console.log('courses:', courses);
 
+      const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+      const allEnrollments = enrollmentsTable
+        ? await queryCourseEnrollments({
+            client,
+            tableName: enrollmentsTable,
+            tenantId,
+          })
+        : [];
+
       // 3) Alle Overrides des Tenants laden
       const overridesCommand = new QueryCommand({
         TableName: process.env.OVERRIDES_TABLE,
@@ -272,9 +282,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         const overrideCourse = courses.find((c) => c.id === override.courseId);
         if (!overrideCourse) continue;
 
-        const participantCount = resolveEffectiveTermParticipants(
+        const participantCount = resolveEffectiveTermOccupancy(
           overrideCourse,
           override,
+          allEnrollments,
+          override.date,
         ).participants.length;
         const guestCount = override.anonymousTrialCount ?? 0;
         console.log('waitlist promotion check:', {
@@ -349,7 +361,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         console.log(`[processPromotions] Swap updated to active: ${swapId}`);
 
         // 6) Ziel-Override aktualisieren (Delta: nur swapped + Waitlist)
-        const targetResolved = resolveEffectiveTermParticipants(overrideCourse, override);
+        const targetResolved = resolveEffectiveTermOccupancy(overrideCourse, override, allEnrollments, override.date);
         const newSwapped = addUserUniqueCaseInsensitive(
           Array.isArray(override.cancelledParticipants)
             ? (override.swapped ?? [])
@@ -381,7 +393,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         const originCourse = courses.find((c) => c.id === correspondingSwap.fromCourseId);
         if (originOverride) {
           const originResolved = originCourse
-            ? resolveEffectiveTermParticipants(originCourse, originOverride)
+            ? resolveEffectiveTermOccupancy(originCourse, originOverride, allEnrollments, originOverride.date)
             : {
                 cancelledParticipants: originOverride.cancelledParticipants ?? [],
                 swapped: originOverride.swapped ?? [],

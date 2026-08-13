@@ -71,6 +71,19 @@ describe("resolveEffectiveTermParticipants", () => {
     expect(resolved.participants).toEqual(["carol"]);
     expect(resolved.usedLegacySnapshot).toBe(true);
   });
+
+  it("accepts explicit stemParticipants override (#303)", () => {
+    const resolved = resolveEffectiveTermParticipants(
+      course,
+      {
+        participants: [],
+        cancelledParticipants: ["mia"],
+        swapped: [],
+      },
+      { stemParticipants: ["mia", "zoe"] },
+    );
+    expect(resolved.participants).toEqual(["zoe"]);
+  });
 });
 
 describe("deriveLegacyOverrideDeltas", () => {

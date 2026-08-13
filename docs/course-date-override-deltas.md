@@ -12,7 +12,7 @@ Effektive Terminbelegung = **Stamm ⊕ Deltas**:
 
 ```text
 effectiveNamed =
-  (course.participants
+  (stemOn(T)   // CourseEnrollments; Fallback: course.participants (#303)
     minus cancelledParticipants   // reguläre Absage RC: Slot frei
     minus (implizit: nicht in Stamm))
   union swapped                   // Termin-Zugänge (meist Tausch rein)

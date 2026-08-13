@@ -8,7 +8,9 @@ import {
   migrateParticipantsToEnrollments,
   openEnrollmentUserIds,
   parseCourseEnrollmentSortKey,
+  resolveEffectiveTermOccupancy,
   resolveMigrationValidFrom,
+  resolveStemForDate,
   stemOnDate,
 } from "shared/courseEnrollment";
 import type { CourseEnrollment } from "shared/types";
@@ -87,5 +89,42 @@ describe("courseEnrollment", () => {
       { courseId: 1, userId: "c", validFrom: "2026-01-01" },
     ];
     expect(openEnrollmentUserIds(enrollments, "2026-06-01")).toEqual(["b", "c"]);
+  });
+
+  it("resolveStemForDate falls back to course.participants without enrollments", () => {
+    const course = { id: 1, participants: ["luna", "kai"] };
+    expect(resolveStemForDate(course, [], "2026-03-10")).toEqual(["luna", "kai"]);
+    expect(resolveStemForDate(course, undefined, "2026-03-10")).toEqual(["luna", "kai"]);
+  });
+
+  it("resolveStemForDate uses stemOnDate when enrollments exist", () => {
+    const course = { id: 1, participants: ["luna", "kai"] };
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-03-01" },
+      { courseId: 1, userId: "mia", validFrom: "2026-04-01" },
+      { courseId: 2, userId: "other", validFrom: "2026-01-01" },
+    ];
+    expect(resolveStemForDate(course, enrollments, "2026-03-15")).toEqual(["luna"]);
+    expect(resolveStemForDate(course, enrollments, "2026-04-01")).toEqual(["luna", "mia"]);
+  });
+
+  it("resolveEffectiveTermOccupancy applies deltas on enrollment stem", () => {
+    const course = { id: 1, participants: ["legacy-only"] };
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-01-01" },
+      { courseId: 1, userId: "kai", validFrom: "2026-01-01" },
+    ];
+    const resolved = resolveEffectiveTermOccupancy(
+      course,
+      {
+        participants: [],
+        cancelledParticipants: ["kai"],
+        swapped: ["mia"],
+      },
+      enrollments,
+      "2026-02-01",
+    );
+    expect(resolved.participants).toEqual(["luna", "mia"]);
+    expect(resolved.cancelledParticipants).toEqual(["kai"]);
   });
 });

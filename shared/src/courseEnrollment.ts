@@ -1,4 +1,8 @@
-import type { Course, CourseEnrollment, CourseEnrollmentSource } from "./types";
+import {
+  resolveEffectiveTermParticipants,
+  type EffectiveTermParticipants,
+} from "./overrideOccupancy";
+import type { Course, CourseDateOverride, CourseEnrollment, CourseEnrollmentSource } from "./types";
 
 /**
  * Sentinel for migrated / unknown start ("schon immer").
@@ -68,6 +72,42 @@ export function stemOnDate(
     result.push(enrollment.userId);
   }
   return result;
+}
+
+export type EnrollmentStemInput = Pick<
+  CourseEnrollment,
+  "courseId" | "userId" | "validFrom" | "validUntil"
+>;
+
+/**
+ * Stamm an Termin T: aus CourseEnrollments via `stemOnDate`.
+ * Ohne Segmente für den Kurs → Fallback auf `course.participants` (Cache / vor Migration).
+ */
+export function resolveStemForDate(
+  course: Pick<Course, "id" | "participants">,
+  enrollments: EnrollmentStemInput[] | null | undefined,
+  dateIso: string,
+): string[] {
+  const forCourse = (enrollments ?? []).filter((entry) => entry.courseId === course.id);
+  if (forCourse.length === 0) {
+    return [...(course.participants ?? [])];
+  }
+  return stemOnDate(forCourse, dateIso);
+}
+
+/** Occupancy an Termin T: stemOn(T) ⊕ Override-Deltas (#303). */
+export function resolveEffectiveTermOccupancy(
+  course: Pick<Course, "id" | "participants">,
+  override: Pick<
+    CourseDateOverride,
+    "participants" | "cancelledParticipants" | "swapped" | "shortNoticeCancellations"
+  > | null | undefined,
+  enrollments: EnrollmentStemInput[] | null | undefined,
+  dateIso: string,
+): EffectiveTermParticipants {
+  return resolveEffectiveTermParticipants(course, override, {
+    stemParticipants: resolveStemForDate(course, enrollments, dateIso),
+  });
 }
 
 export function resolveMigrationValidFrom(

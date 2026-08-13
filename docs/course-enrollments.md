@@ -18,7 +18,9 @@ Stamm-Mitgliedschaft als **Segmente mit Gültigkeit**, parallel zu `course.parti
 **Zugriff:** `Query(tenantId, begins_with(SK, "{courseId}#"))`; Segmente einer Person: `begins_with(SK, "{courseId}#{userId}#")`.
 
 Terraform: `module.course_enrollments_table` → `{project}-courseEnrollments-table`.  
-Env: `COURSE_ENROLLMENTS_TABLE` (create/update/delete/get course Lambdas).
+Env: `COURSE_ENROLLMENTS_TABLE` (create/update/delete/get course Lambdas; Occupancy-Reads #303).
+
+API: `GET /course-enrollments` (optional `?courseId=`).
 
 ## Regeln
 
@@ -37,16 +39,31 @@ Env: `COURSE_ENROLLMENTS_TABLE` (create/update/delete/get course Lambdas).
 
 Seed schreibt Enrollments aus denselben Kursdaten mit.
 
+## Occupancy (#303)
+
+```text
+stemOn(T) = Segmente mit validFrom ≤ T ∧ (kein validUntil ∨ T ≤ validUntil)
+effective = stemOn(T) ⊕ Override-Deltas (#291)
+```
+
+Shared:
+
+- `stemOnDate` / `resolveStemForDate` — ohne Segmente für den Kurs → Fallback `course.participants`
+- `resolveEffectiveTermOccupancy(course, override, enrollments, dateIso)`
+- `resolveEffectiveTermParticipants(..., { stemParticipants })` — optionaler Stem-Override
+
+Reads (App + Backend): Kachel, Wochenansicht, Swap-Ziele, `createSwap`, Override-Kapazität, Promotions.
+
 ## Shared API
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
-- `stemOnDate` / `isEnrollmentActiveOnDate`
+- `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy`
 - `migrateParticipantsToEnrollments` / `openEnrollmentUserIds`
 
-Backend: `courseEnrollmentDynamo.ts` (Put/Get-Mapping).
+Backend: `courseEnrollmentDynamo.ts` (Put/Get/Query-Mapping).
 
 ## Nächste Schritte
 
-- #303 Occupancy-Reads auf `stemOn(date)`
 - #304 Schreibpfade Add/Remove + Draft→Active
+- #305 UI Teilnehmer mit Segmenten
 - Später: `participants[]` entfernen
