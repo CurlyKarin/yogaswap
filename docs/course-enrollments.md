@@ -18,7 +18,7 @@ Stamm-Mitgliedschaft als **Segmente mit Gültigkeit**, parallel zu `course.parti
 **Zugriff:** `Query(tenantId, begins_with(SK, "{courseId}#"))`; Segmente einer Person: `begins_with(SK, "{courseId}#{userId}#")`.
 
 Terraform: `module.course_enrollments_table` → `{project}-courseEnrollments-table`.  
-Env: `COURSE_ENROLLMENTS_TABLE` (create/update/delete/get course Lambdas; Occupancy-Reads #303).
+Env: `COURSE_ENROLLMENTS_TABLE` (create/update/delete/get course Lambdas; Occupancy-Reads #303; Writes #304).
 
 API: `GET /course-enrollments` (optional `?courseId=`).
 
@@ -28,6 +28,20 @@ API: `GET /course-enrollments` (optional `?courseId=`).
 - Remove bis T → `validUntil` setzen (nicht löschen im Normalpfad)
 - Rejoin → neues Segment, altes unverändert
 - `validUntil` ist **inklusiv** (`stemOn` / `isEnrollmentActiveOnDate`)
+
+## Schreibpfade (#304)
+
+`updateCourse` mit `participants[]` (und Draft→Active):
+
+1. Bestehende Segmente laden; Tabelle leer → Bootstrap aus bisherigem Stamm (`source: migration`)
+2. **Add:** neues offenes Segment  
+   - Active: `validFrom` = nächster Kurstermin (sonst heute)  
+   - Draft: `validFrom` = `seriesStartDate` / `visibleFrom` / Sentinel
+3. **Remove:** offenes Segment schließen mit `validUntil` = heute (Dialog-Referenz R; inklusiv)
+4. `course.participants[]` bleibt Cache der offenen Stamm-Liste (UI unverändert)
+5. Override-/Swap-Cleanup bei Active bleibt (zukünftige Termine); UI mit explizitem ab/bis folgt in #305
+
+Shared: `planStemEnrollmentWrites`, `buildOpenEnrollment`, `closeEnrollmentSegment`, …
 
 ## Migration / Seed
 
@@ -46,24 +60,18 @@ stemOn(T) = Segmente mit validFrom ≤ T ∧ (kein validUntil ∨ T ≤ validUnt
 effective = stemOn(T) ⊕ Override-Deltas (#291)
 ```
 
-Shared:
-
-- `stemOnDate` / `resolveStemForDate` — ohne Segmente für den Kurs → Fallback `course.participants`
-- `resolveEffectiveTermOccupancy(course, override, enrollments, dateIso)`
-- `resolveEffectiveTermParticipants(..., { stemParticipants })` — optionaler Stem-Override
-
-Reads (App + Backend): Kachel, Wochenansicht, Swap-Ziele, `createSwap`, Override-Kapazität, Promotions.
+Ohne Segmente für den Kurs → Fallback `course.participants`.
 
 ## Shared API
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
 - `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy`
 - `migrateParticipantsToEnrollments` / `openEnrollmentUserIds`
+- `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForUser`
 
 Backend: `courseEnrollmentDynamo.ts` (Put/Get/Query-Mapping).
 
 ## Nächste Schritte
 
-- #304 Schreibpfade Add/Remove + Draft→Active
-- #305 UI Teilnehmer mit Segmenten
+- #305 UI Mitglieder-Dialog mit ab/bis (explizite Termine statt Defaults)
 - Später: `participants[]` entfernen

@@ -14,7 +14,7 @@ import {
   findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
-import { shouldAutoDeactivateCourse, type Course } from "@yogaswap/shared";
+import { shouldAutoDeactivateCourse, toIsoDateUtc, type Course } from "@yogaswap/shared";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
@@ -38,10 +38,16 @@ import {
 } from "../shared/notifications/courseMembershipNotifications";
 import {
   migrateLegacyOverrideToDeltas,
+  planStemEnrollmentWrites,
   removeUserCaseInsensitive,
+  resolveMigrationValidFrom,
   validateOverbookLimit,
   validateParticipantListSize,
 } from "@yogaswap/shared";
+import {
+  enrollmentToDynamoItem,
+  queryCourseEnrollments,
+} from "../shared/courseEnrollmentDynamo";
 import {
   collectOverrideKeysForReactivationCleanup,
   isScheduleExceptionPatchBody,
@@ -751,6 +757,84 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         Item: updateItem,
       }),
     );
+
+    const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+    const draftToActive = Boolean(status && currentStatus === "draft" && nextStatus === "active");
+    const shouldSyncEnrollments =
+      Boolean(enrollmentsTable) &&
+      (Boolean(participants) || draftToActive) &&
+      (effectiveStatus === "draft" || effectiveStatus === "active");
+    if (shouldSyncEnrollments && enrollmentsTable) {
+      const previousParticipantIds =
+        item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+      const nextParticipantIds = nextParticipants
+        .map((entry) => entry.S ?? "")
+        .filter((entry) => entry.length > 0);
+      const todayIso = toIsoDateUtc(new Date());
+      const upcomingTermIso = findNextUpcomingOccurrenceIso(nextDates, nextTime);
+      const migrationValidFrom = resolveMigrationValidFrom({
+        seriesStartDate: nextSeriesStartDate,
+        visibleFrom: nextVisibleFrom,
+      });
+      const addValidFrom =
+        effectiveStatus === "draft" && !draftToActive
+          ? migrationValidFrom
+          : (upcomingTermIso ?? todayIso);
+      const removeValidUntil = todayIso;
+      try {
+        const existingEnrollments = await queryCourseEnrollments({
+          client,
+          tableName: enrollmentsTable,
+          tenantId,
+          courseId: Number(courseId),
+        });
+        const planned = planStemEnrollmentWrites({
+          courseId: Number(courseId),
+          tenantId,
+          previousParticipants: previousParticipantIds,
+          nextParticipants: nextParticipantIds,
+          existingEnrollments,
+          addValidFrom,
+          removeValidUntil,
+          bootstrapValidFrom: migrationValidFrom,
+          actorUserId: actorUserId ?? undefined,
+          createdAt: new Date().toISOString(),
+          closedAt: new Date().toISOString(),
+        });
+        for (const enrollment of planned.puts) {
+          await client.send(
+            new PutItemCommand({
+              TableName: enrollmentsTable,
+              Item: enrollmentToDynamoItem(enrollment, tenantId),
+            }),
+          );
+        }
+        if (planned.puts.length > 0) {
+          console.info(
+            JSON.stringify({
+              actor: actorUserId,
+              timestamp: new Date().toISOString(),
+              courseId,
+              reason: "course_enrollments_sync",
+              bootstrapped: planned.bootstrapped,
+              added: planned.addedUserIds,
+              closed: planned.closedUserIds,
+              putCount: planned.puts.length,
+            }),
+          );
+        }
+      } catch (enrollmentError) {
+        console.error("updateCourse course enrollments sync failed", {
+          tenantId,
+          courseId,
+          error: enrollmentError,
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Failed to sync course enrollments" }),
+        };
+      }
+    }
 
     if (isScheduleExceptionPatchBody(body)) {
       const reactivatedExcludedDates = resolveReactivatedExcludedDates(

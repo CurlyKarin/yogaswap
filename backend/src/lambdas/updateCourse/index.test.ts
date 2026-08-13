@@ -98,6 +98,7 @@ describe("updateCourse Lambda", () => {
       SWAPS_TABLE: "test-swaps",
       TENANTS_TABLE: "test-tenants",
       PARTICIPANTS_TABLE: "test-participants",
+      COURSE_ENROLLMENTS_TABLE: "test-courseEnrollments",
       SES_SOURCE_EMAIL: "studio@example.com",
     };
     mockSend.mockReset();
@@ -606,6 +607,11 @@ describe("updateCourse Lambda", () => {
   test("updates course participants list", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({ Items: [] }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment puts (bootstrap/close/add)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({});
 
     const result = await handler(
@@ -623,6 +629,11 @@ describe("updateCourse Lambda", () => {
       }),
     );
     expect(JSON.parse(result.body).participants).toEqual(["alice", "bob"]);
+    expect(QueryCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+      }),
+    );
   });
 
   test("prunes out-of-window exceptions for bounded_series", async () => {
@@ -736,6 +747,9 @@ describe("updateCourse Lambda", () => {
         },
       })
       .mockResolvedValueOnce({}) // course update
+      .mockResolvedValueOnce({ Items: [] }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment put luna bootstrap
+      .mockResolvedValueOnce({}) // enrollment put maya add
       .mockResolvedValueOnce({
         Items: [
           {
@@ -801,6 +815,10 @@ describe("updateCourse Lambda", () => {
         },
       })
       .mockResolvedValueOnce({}) // course update
+      .mockResolvedValueOnce({ Items: [] }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment put luna bootstrap
+      .mockResolvedValueOnce({}) // enrollment put karin bootstrap
+      .mockResolvedValueOnce({}) // enrollment put karin close
       .mockResolvedValueOnce({
         Items: [
           {
@@ -866,6 +884,10 @@ describe("updateCourse Lambda", () => {
         },
       })
       .mockResolvedValueOnce({}) // course update
+      .mockResolvedValueOnce({ Items: [] }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment put luna bootstrap
+      .mockResolvedValueOnce({}) // enrollment put karin bootstrap
+      .mockResolvedValueOnce({}) // enrollment put karin close
       .mockResolvedValueOnce({ Items: [] }) // overrides for course
       .mockResolvedValueOnce({
         Items: [
@@ -928,6 +950,9 @@ describe("updateCourse Lambda", () => {
         },
       })
       .mockResolvedValueOnce({}) // course update
+      .mockResolvedValueOnce({ Items: [] }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment put luna bootstrap
+      .mockResolvedValueOnce({}) // enrollment put maya add
       .mockResolvedValueOnce({ Items: [] }) // overrides
       .mockResolvedValueOnce({
         Items: [
