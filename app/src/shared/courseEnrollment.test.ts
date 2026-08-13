@@ -8,6 +8,7 @@ import {
   migrateParticipantsToEnrollments,
   openEnrollmentUserIds,
   parseCourseEnrollmentSortKey,
+  planStemEnrollmentWrites,
   resolveEffectiveTermOccupancy,
   resolveMigrationValidFrom,
   resolveStemForDate,
@@ -126,5 +127,63 @@ describe("courseEnrollment", () => {
     );
     expect(resolved.participants).toEqual(["luna", "mia"]);
     expect(resolved.cancelledParticipants).toEqual(["kai"]);
+  });
+
+  it("planStemEnrollmentWrites bootstraps, adds and closes segments", () => {
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: ["luna", "kai"],
+      nextParticipants: ["luna", "mia"],
+      existingEnrollments: [],
+      addValidFrom: "2026-04-01",
+      removeValidUntil: "2026-03-20",
+      bootstrapValidFrom: "2026-01-01",
+      createdAt: "2026-03-20T10:00:00.000Z",
+    });
+    expect(planned.bootstrapped).toBe(true);
+    expect(planned.closedUserIds).toEqual(["kai"]);
+    expect(planned.addedUserIds).toEqual(["mia"]);
+    expect(planned.puts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ userId: "luna", validFrom: "2026-01-01" }),
+        expect.objectContaining({
+          userId: "kai",
+          validFrom: "2026-01-01",
+          validUntil: "2026-03-20",
+        }),
+        expect.objectContaining({
+          userId: "mia",
+          validFrom: "2026-04-01",
+          source: "manual",
+        }),
+      ]),
+    );
+  });
+
+  it("planStemEnrollmentWrites rejoins with a new open segment", () => {
+    const existing: CourseEnrollment[] = [
+      {
+        courseId: 1,
+        userId: "luna",
+        validFrom: "2026-01-01",
+        validUntil: "2026-02-01",
+      },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: [],
+      nextParticipants: ["luna"],
+      existingEnrollments: existing,
+      addValidFrom: "2026-04-01",
+      removeValidUntil: "2026-03-20",
+    });
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        userId: "luna",
+        validFrom: "2026-04-01",
+        source: "manual",
+      }),
+    ]);
+    expect(planned.puts[0]).not.toHaveProperty("validUntil");
   });
 });

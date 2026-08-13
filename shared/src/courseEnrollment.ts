@@ -184,3 +184,211 @@ export function openEnrollmentUserIds(
   }
   return result;
 }
+
+export function isEnrollmentOpen(
+  enrollment: Pick<CourseEnrollment, "validUntil">,
+): boolean {
+  return enrollment.validUntil == null || enrollment.validUntil === "";
+}
+
+/** Latest open segment for a user (by validFrom), or null. */
+export function findOpenEnrollmentForUser(
+  enrollments: Array<Pick<CourseEnrollment, "userId" | "validFrom" | "validUntil">>,
+  userId: string,
+): (typeof enrollments)[number] | null {
+  const key = userId.toLowerCase();
+  let best: (typeof enrollments)[number] | null = null;
+  for (const enrollment of enrollments) {
+    if (enrollment.userId.toLowerCase() !== key) continue;
+    if (!isEnrollmentOpen(enrollment)) continue;
+    if (!best || enrollment.validFrom > best.validFrom) best = enrollment;
+  }
+  return best;
+}
+
+export function diffParticipantLists(
+  previous: string[],
+  next: string[],
+): { added: string[]; removed: string[] } {
+  const previousSet = new Set(previous.map((entry) => entry.toLowerCase()));
+  const nextSet = new Set(next.map((entry) => entry.toLowerCase()));
+  return {
+    added: next.filter((entry) => !previousSet.has(entry.toLowerCase())),
+    removed: previous.filter((entry) => !nextSet.has(entry.toLowerCase())),
+  };
+}
+
+export type BuildOpenEnrollmentInput = {
+  courseId: number;
+  userId: string;
+  validFrom: string;
+  tenantId?: string;
+  source?: CourseEnrollmentSource;
+  actorUserId?: string;
+  createdAt?: string;
+};
+
+export function buildOpenEnrollment(input: BuildOpenEnrollmentInput): CourseEnrollment {
+  return {
+    ...(input.tenantId ? { tenantId: input.tenantId } : {}),
+    courseId: input.courseId,
+    userId: input.userId,
+    validFrom: input.validFrom,
+    source: input.source ?? "manual",
+    ...(input.actorUserId ? { actorUserId: input.actorUserId } : {}),
+    ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+  };
+}
+
+export function closeEnrollmentSegment<T extends CourseEnrollment>(
+  enrollment: T,
+  validUntil: string,
+  options: { closedAt?: string; actorUserId?: string } = {},
+): T {
+  return {
+    ...enrollment,
+    validUntil,
+    ...(options.closedAt ? { closedAt: options.closedAt } : {}),
+    ...(options.actorUserId ? { actorUserId: options.actorUserId } : {}),
+  };
+}
+
+export type PlanStemEnrollmentWritesInput = {
+  courseId: number;
+  tenantId?: string;
+  previousParticipants: string[];
+  nextParticipants: string[];
+  existingEnrollments: CourseEnrollment[];
+  /** Default validFrom for new open segments (active: next term; draft: series start / sentinel). */
+  addValidFrom: string;
+  /** Inclusive last day for closed segments (dialog R ≈ today). */
+  removeValidUntil: string;
+  /** When table empty, seed open segments from previousParticipants with this validFrom. */
+  bootstrapValidFrom?: string;
+  actorUserId?: string;
+  createdAt?: string;
+  closedAt?: string;
+};
+
+export type PlanStemEnrollmentWritesResult = {
+  puts: CourseEnrollment[];
+  bootstrapped: boolean;
+  addedUserIds: string[];
+  closedUserIds: string[];
+};
+
+/**
+ * Plan PutItems for CourseEnrollments from a flat participants[] diff (#304).
+ * Does not delete closed segments; rejoin opens a new segment.
+ */
+export function planStemEnrollmentWrites(
+  input: PlanStemEnrollmentWritesInput,
+): PlanStemEnrollmentWritesResult {
+  const puts: CourseEnrollment[] = [];
+  let working = [...input.existingEnrollments];
+  let bootstrapped = false;
+
+  if (working.length === 0 && input.previousParticipants.length > 0) {
+    const bootstrapFrom = input.bootstrapValidFrom ?? ENROLLMENT_OPEN_START;
+    const seeded = migrateParticipantsToEnrollments(
+      {
+        id: input.courseId,
+        participants: input.previousParticipants,
+        tenantId: input.tenantId,
+      },
+      {
+        tenantId: input.tenantId,
+        validFrom: bootstrapFrom,
+        source: "migration",
+        actorUserId: input.actorUserId,
+        createdAt: input.createdAt,
+      },
+    );
+    working = seeded;
+    puts.push(...seeded);
+    bootstrapped = true;
+  }
+
+  const { added, removed } = diffParticipantLists(
+    input.previousParticipants,
+    input.nextParticipants,
+  );
+  const addedUserIds: string[] = [];
+  const closedUserIds: string[] = [];
+
+  for (const userId of added) {
+    if (findOpenEnrollmentForUser(working, userId)) continue;
+    const open = buildOpenEnrollment({
+      courseId: input.courseId,
+      userId,
+      validFrom: input.addValidFrom,
+      tenantId: input.tenantId,
+      source: "manual",
+      actorUserId: input.actorUserId,
+      createdAt: input.createdAt,
+    });
+    working = [...working, open];
+    puts.push(open);
+    addedUserIds.push(userId);
+  }
+
+  for (const userId of removed) {
+    const open = findOpenEnrollmentForUser(working, userId);
+    if (!open) continue;
+    const closed = closeEnrollmentSegment(
+      open as CourseEnrollment,
+      input.removeValidUntil,
+      {
+        closedAt: input.closedAt ?? input.createdAt,
+        actorUserId: input.actorUserId,
+      },
+    );
+    working = working.map((entry) =>
+      entry.courseId === closed.courseId &&
+      entry.userId.toLowerCase() === closed.userId.toLowerCase() &&
+      entry.validFrom === closed.validFrom &&
+      isEnrollmentOpen(entry)
+        ? closed
+        : entry,
+    );
+    puts.push(closed);
+    closedUserIds.push(userId);
+  }
+
+  return { puts, bootstrapped, addedUserIds, closedUserIds };
+}
+
+/**
+ * Ensure every next participant has an open segment (Draft→Active / empty table).
+ * Does not close extras — callers should run planStemEnrollmentWrites for removes.
+ */
+export function planMissingOpenEnrollments(input: {
+  courseId: number;
+  tenantId?: string;
+  participants: string[];
+  existingEnrollments: CourseEnrollment[];
+  validFrom: string;
+  source?: CourseEnrollmentSource;
+  actorUserId?: string;
+  createdAt?: string;
+}): CourseEnrollment[] {
+  const puts: CourseEnrollment[] = [];
+  let working = [...input.existingEnrollments];
+  for (const userId of input.participants) {
+    const trimmed = userId.trim();
+    if (!trimmed) continue;
+    if (findOpenEnrollmentForUser(working, trimmed)) continue;
+    const open = buildOpenEnrollment({
+      courseId: input.courseId,
+      userId: trimmed,
+      validFrom: input.validFrom,
+      tenantId: input.tenantId,
+      source: input.source ?? "reactivation",
+      actorUserId: input.actorUserId,
+      createdAt: input.createdAt,
+    });
+    working = [...working, open];
+    puts.push(open);
+  }
+  return puts;
+}
