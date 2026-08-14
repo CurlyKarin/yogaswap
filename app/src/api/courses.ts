@@ -1,5 +1,6 @@
 import axios from "axios";
 import { Course, CoursePlanningMode, CourseStatus, CourseVisibilityMode } from "shared/types";
+import type { EnrollmentChange } from "shared/courseEnrollment";
 
 type ApiCourse = Omit<Course, "participants" | "dates"> & {
   participants?: string[];
@@ -56,7 +57,9 @@ export type CreateCourseRequest = {
   participants?: string[];
 };
 
-export type UpdateCourseRequest = Partial<CreateCourseRequest>;
+export type UpdateCourseRequest = Partial<CreateCourseRequest> & {
+  enrollmentChanges?: EnrollmentChange[];
+};
 
 export type CancelCourseDateRequest = {
   rollbackSuccessfulSwapsFromCancelledParticipants?: boolean;

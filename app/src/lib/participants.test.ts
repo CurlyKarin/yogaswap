@@ -129,4 +129,11 @@ describe("getStatusPresentation", () => {
       label: "ohne Login",
     });
   });
+
+  it("liefert ohne Login wenn der Status fehlt", () => {
+    expect(getStatusPresentation(undefined)).toEqual({
+      color: "#fb923c",
+      label: "ohne Login",
+    });
+  });
 });

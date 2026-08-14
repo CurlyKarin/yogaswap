@@ -39,9 +39,24 @@ API: `GET /course-enrollments` (optional `?courseId=`).
    - Draft: `validFrom` = `seriesStartDate` / `visibleFrom` / Sentinel
 3. **Remove:** offenes Segment schließen mit `validUntil` = heute (Dialog-Referenz R; inklusiv)
 4. `course.participants[]` bleibt Cache der offenen Stamm-Liste (UI unverändert)
-5. Override-/Swap-Cleanup bei Active bleibt (zukünftige Termine); UI mit explizitem ab/bis folgt in #305
+5. Override-/Swap-Cleanup bei Active bleibt (zukünftige Termine)
 
-Shared: `planStemEnrollmentWrites`, `buildOpenEnrollment`, `closeEnrollmentSegment`, …
+## Mitglieder-Dialog (#305)
+
+Referenzdatum **R = heute** (Inactive: letzter Kurstermin). Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas`.
+
+| Status | UI |
+|--------|----|
+| **Draft** | Flache Liste, keine ab/bis-Daten. Kopfzeile `Zugeordnet n / max`. |
+| **Active** | Dabei / endet / kommt. Add default = nächster Kurstermin; Remove default = heute. Kompakte Termin-Dropdowns. |
+| **Inactive** | Kein „kommt“, keine Neuplanung über den Dialog. |
+
+- `n/max` = Dabei an R (`stemOn(R)`), inkl. Personen mit `validUntil` solange `R ≤ validUntil`
+- Kommt zählen nicht in `n`
+- Kopfzeile z. B. `Teilnehmer 6/6 · 2 enden · 2 kommen neu dazu` (ohne Daten)
+- Obere Liste immer offen; untere Liste (nicht dabei / ehemals) eingeklappt
+- Speichern sendet `participants[]` (Dabei + Kommt) und `enrollmentChanges[]` (`add`/`remove` + `dateIso`)
+- „endet“ kann im Cache bleiben, während `validUntil` gesetzt wird
 
 ## Migration / Seed
 
@@ -68,10 +83,10 @@ Ohne Segmente für den Kurs → Fallback `course.participants`.
 - `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy`
 - `migrateParticipantsToEnrollments` / `openEnrollmentUserIds`
 - `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForUser`
+- `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`
 
 Backend: `courseEnrollmentDynamo.ts` (Put/Get/Query-Mapping).
 
 ## Nächste Schritte
 
-- #305 UI Mitglieder-Dialog mit ab/bis (explizite Termine statt Defaults)
 - Später: `participants[]` entfernen

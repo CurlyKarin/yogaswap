@@ -14,7 +14,7 @@ import {
   findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
-import { shouldAutoDeactivateCourse, toIsoDateUtc, type Course } from "@yogaswap/shared";
+import { shouldAutoDeactivateCourse, type Course } from "@yogaswap/shared";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
@@ -37,12 +37,14 @@ import {
   notifyInstructorParticipantListChanged,
 } from "../shared/notifications/courseMembershipNotifications";
 import {
+  enrollmentChangesToDateMaps,
   migrateLegacyOverrideToDeltas,
   planStemEnrollmentWrites,
   removeUserCaseInsensitive,
   resolveMigrationValidFrom,
   validateOverbookLimit,
   validateParticipantListSize,
+  type EnrollmentChange,
 } from "@yogaswap/shared";
 import {
   enrollmentToDynamoItem,
@@ -88,6 +90,7 @@ type UpdateCourseBody = {
   excludedDates?: string[];
   includedDates?: string[];
   participants?: string[];
+  enrollmentChanges?: EnrollmentChange[];
 };
 
 function parseBody(event: APIGatewayProxyEvent): UpdateCourseBody | null {
@@ -116,6 +119,24 @@ function normalizeParticipantListInput(value: unknown): string[] | null {
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter((entry) => entry.length > 0);
   return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeEnrollmentChangesInput(value: unknown): EnrollmentChange[] | null {
+  if (value == null) return [];
+  if (!Array.isArray(value)) return null;
+  const changes: EnrollmentChange[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    const record = entry as Record<string, unknown>;
+    const userId = typeof record.userId === "string" ? record.userId.trim() : "";
+    const action = record.action;
+    const dateIso = typeof record.dateIso === "string" ? record.dateIso.trim() : "";
+    if (!userId || (action !== "add" && action !== "remove") || !ISO_DATE_ONLY.test(dateIso)) {
+      return null;
+    }
+    changes.push({ userId, action, dateIso });
+  }
+  return changes;
 }
 
 function isValidDateRange(start?: string, end?: string): boolean {
@@ -281,6 +302,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     && !Object.prototype.hasOwnProperty.call(body, "excludedDates")
     && !Object.prototype.hasOwnProperty.call(body, "includedDates")
     && !Object.prototype.hasOwnProperty.call(body, "participants")
+    && !Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
   ) {
     return { statusCode: 400, body: JSON.stringify({ error: "No updatable fields provided" }) };
   }
@@ -304,6 +326,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     : undefined;
   const participants = Object.prototype.hasOwnProperty.call(body, "participants")
     ? normalizeParticipantListInput(body.participants)
+    : undefined;
+  const enrollmentChanges = Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
+    ? normalizeEnrollmentChangesInput(body.enrollmentChanges)
     : undefined;
   const capacity =
     Object.prototype.hasOwnProperty.call(body, "capacity") && Number.isFinite(body.capacity)
@@ -360,6 +385,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "participants must be an array of non-empty strings" }),
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "enrollmentChanges") && !enrollmentChanges) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: "enrollmentChanges must be an array of { userId, action: add|remove, dateIso }",
+      }),
     };
   }
   try {
@@ -762,7 +795,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const draftToActive = Boolean(status && currentStatus === "draft" && nextStatus === "active");
     const shouldSyncEnrollments =
       Boolean(enrollmentsTable) &&
-      (Boolean(participants) || draftToActive) &&
+      (participants != null || Boolean(enrollmentChanges?.length) || draftToActive) &&
       (effectiveStatus === "draft" || effectiveStatus === "active");
     if (shouldSyncEnrollments && enrollmentsTable) {
       const previousParticipantIds =
@@ -770,7 +803,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const nextParticipantIds = nextParticipants
         .map((entry) => entry.S ?? "")
         .filter((entry) => entry.length > 0);
-      const todayIso = toIsoDateUtc(new Date());
+      const todayIso = toIsoDateOnlyLocal(new Date());
       const upcomingTermIso = findNextUpcomingOccurrenceIso(nextDates, nextTime);
       const migrationValidFrom = resolveMigrationValidFrom({
         seriesStartDate: nextSeriesStartDate,
@@ -781,6 +814,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           ? migrationValidFrom
           : (upcomingTermIso ?? todayIso);
       const removeValidUntil = todayIso;
+      const dateMaps = enrollmentChangesToDateMaps(enrollmentChanges ?? undefined);
       try {
         const existingEnrollments = await queryCourseEnrollments({
           client,
@@ -796,6 +830,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           existingEnrollments,
           addValidFrom,
           removeValidUntil,
+          addValidFromByUser: dateMaps.addValidFromByUser,
+          removeValidUntilByUser: dateMaps.removeValidUntilByUser,
           bootstrapValidFrom: migrationValidFrom,
           actorUserId: actorUserId ?? undefined,
           createdAt: new Date().toISOString(),
@@ -957,12 +993,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
       const previousParticipantsSet = new Set(previousParticipants.map((entry) => entry.toLowerCase()));
       const nextParticipantsSet = new Set(participants.map((entry) => entry.toLowerCase()));
-      const addedParticipants = participants.filter(
-        (entry) => !previousParticipantsSet.has(entry.toLowerCase()),
-      );
-      const removedParticipants = previousParticipants.filter(
-        (entry) => !nextParticipantsSet.has(entry.toLowerCase()),
-      );
+      const addedFromChanges = (enrollmentChanges ?? [])
+        .filter((change) => change.action === "add")
+        .map((change) => change.userId);
+      const removedFromChanges = (enrollmentChanges ?? [])
+        .filter((change) => change.action === "remove")
+        .map((change) => change.userId);
+      const addedParticipants = [
+        ...participants.filter((entry) => !previousParticipantsSet.has(entry.toLowerCase())),
+        ...addedFromChanges.filter((entry) => !previousParticipantsSet.has(entry.toLowerCase())),
+      ];
+      const removedParticipants = [
+        ...previousParticipants.filter((entry) => !nextParticipantsSet.has(entry.toLowerCase())),
+        ...removedFromChanges,
+      ];
 
       if (addedParticipants.length > 0 || removedParticipants.length > 0) {
         const mapAttrList = (

@@ -772,6 +772,7 @@ describe("CourseList", () => {
     await user.click(membersButtons[membersButtons.length - 1]);
 
     await screen.findByLabelText("Kursmitglieder bearbeiten");
+    await user.click(screen.getByRole("button", { name: /weitere mitglieder/i }));
     await user.click(await screen.findByRole("option", { name: /luna/i }));
     await user.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
 

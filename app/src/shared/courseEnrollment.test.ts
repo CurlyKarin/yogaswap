@@ -4,6 +4,8 @@ import {
   buildCourseEnrollmentSortKey,
   buildCourseEnrollmentCoursePrefix,
   buildCourseEnrollmentUserPrefix,
+  classifyMembersForDialog,
+  formatMembersDialogHeadline,
   isEnrollmentActiveOnDate,
   migrateParticipantsToEnrollments,
   openEnrollmentUserIds,
@@ -185,5 +187,86 @@ describe("courseEnrollment", () => {
       }),
     ]);
     expect(planned.puts[0]).not.toHaveProperty("validUntil");
+  });
+
+  it("planStemEnrollmentWrites reopens a closed segment via addValidFromByUser", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-14" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: ["luna"],
+      nextParticipants: ["luna"],
+      existingEnrollments: existing,
+      addValidFrom: "2026-09-01",
+      removeValidUntil: "2026-08-14",
+      addValidFromByUser: { luna: "2026-01-01" },
+    });
+    expect(planned.addedUserIds).toEqual(["luna"]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        userId: "luna",
+        validFrom: "2026-01-01",
+        source: "manual",
+      }),
+    ]);
+    expect(planned.puts[0]).not.toHaveProperty("validUntil");
+  });
+
+  it("planStemEnrollmentWrites uses per-user dates and can close while keeping cache", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-01-01" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: ["luna"],
+      nextParticipants: ["luna", "mia"],
+      existingEnrollments: existing,
+      addValidFrom: "2026-04-01",
+      removeValidUntil: "2026-03-20",
+      addValidFromByUser: { mia: "2026-05-01" },
+      removeValidUntilByUser: { luna: "2026-03-25" },
+    });
+    expect(planned.addedUserIds).toEqual(["mia"]);
+    expect(planned.closedUserIds).toEqual(["luna"]);
+    expect(planned.puts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ userId: "mia", validFrom: "2026-05-01" }),
+        expect.objectContaining({ userId: "luna", validUntil: "2026-03-25" }),
+      ]),
+    );
+  });
+
+  it("classifyMembersForDialog splits dabei, kommt and ehemalig", () => {
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 1, userId: "dabei", validFrom: "2026-01-01" },
+      { courseId: 1, userId: "endet", validFrom: "2026-01-01", validUntil: "2026-03-20" },
+      { courseId: 1, userId: "kommt", validFrom: "2026-04-01" },
+      { courseId: 1, userId: "weg", validFrom: "2026-01-01", validUntil: "2026-02-01" },
+    ];
+    const groups = classifyMembersForDialog(enrollments, "2026-03-20");
+    expect(groups.dabei.map((row) => row.userId)).toEqual(["dabei", "endet"]);
+    expect(groups.dabei.find((row) => row.userId === "endet")?.ending).toBe(true);
+    expect(groups.kommt.map((row) => row.userId)).toEqual(["kommt"]);
+    expect(groups.ehemalig.map((row) => row.userId)).toEqual(["weg"]);
+  });
+
+  it("formatMembersDialogHeadline uses singular and plural", () => {
+    expect(
+      formatMembersDialogHeadline({
+        dabeiCount: 6,
+        capacity: 6,
+        endingCount: 2,
+        incomingCount: 2,
+      }),
+    ).toBe("Teilnehmer 6/6 · 2 enden · 2 kommen neu dazu");
+    expect(
+      formatMembersDialogHeadline({
+        dabeiCount: 6,
+        capacity: 6,
+        endingCount: 1,
+        incomingCount: 1,
+      }),
+    ).toBe("Teilnehmer 6/6 · 1 endet · 1 kommt neu dazu");
   });
 });

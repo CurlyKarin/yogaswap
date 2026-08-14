@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import CourseMembersDialog from "./CourseMembersDialog";
 import { getParticipants } from "../api/participants";
+import type { CourseEnrollment } from "shared/types";
 
 vi.mock("../api/participants");
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
@@ -17,43 +18,28 @@ beforeEach(() => {
   mockedGetParticipants.mockReset();
 });
 
+const defaultProps = {
+  saving: false,
+  courseId: 7,
+  courseName: "Yoga Flow",
+  maxCapacity: 10,
+  initialParticipants: [] as string[],
+  modalRef: createRef<HTMLDivElement>(),
+  onKeyDown: vi.fn(),
+  onClose: vi.fn(),
+  onSaveParticipants: vi.fn(),
+};
+
 describe("CourseMembersDialog", () => {
   it("renders nothing when closed", () => {
-    render(
-      <CourseMembersDialog
-        open={false}
-        saving={false}
-        courseId={1}
-        courseName="Yoga Flow"
-        maxCapacity={10}
-        initialParticipants={[]}
-        modalRef={createRef<HTMLDivElement>()}
-        onKeyDown={vi.fn()}
-        onClose={vi.fn()}
-        onSaveParticipants={vi.fn()}
-      />,
-    );
-
+    render(<CourseMembersDialog open={false} {...defaultProps} />);
     expect(screen.queryByRole("dialog", { name: "Kursmitglieder bearbeiten" })).not.toBeInTheDocument();
   });
 
   it("renders course info and calls close handler", async () => {
     const onClose = vi.fn();
     mockedGetParticipants.mockResolvedValue([]);
-    render(
-      <CourseMembersDialog
-        open
-        saving={false}
-        courseId={1}
-        courseName="Yoga Flow"
-        maxCapacity={10}
-        initialParticipants={[]}
-        modalRef={createRef<HTMLDivElement>()}
-        onKeyDown={vi.fn()}
-        onClose={onClose}
-        onSaveParticipants={vi.fn()}
-      />,
-    );
+    render(<CourseMembersDialog open {...defaultProps} onClose={onClose} />);
 
     expect(screen.getByRole("dialog", { name: "Kursmitglieder bearbeiten" })).toBeInTheDocument();
     expect(screen.getByText("Yoga Flow")).toBeInTheDocument();
@@ -62,7 +48,7 @@ describe("CourseMembersDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("allows selecting participants and saving", async () => {
+  it("allows selecting participants and saving in draft", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
       { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
@@ -71,18 +57,14 @@ describe("CourseMembersDialog", () => {
     render(
       <CourseMembersDialog
         open
-        saving={false}
-        courseId={7}
-        courseName="Yoga Flow"
-        maxCapacity={10}
+        {...defaultProps}
+        courseStatus="draft"
         initialParticipants={["alice"]}
-        modalRef={createRef<HTMLDivElement>()}
-        onKeyDown={vi.fn()}
-        onClose={vi.fn()}
         onSaveParticipants={onSaveParticipants}
       />,
     );
 
+    expect(await screen.findByText("Zugeordnet: 1 / 10")).toBeInTheDocument();
     const listbox = await screen.findByRole("listbox", { name: /teilnehmerliste/i });
     listbox.focus();
     fireEvent.keyDown(listbox, { key: "ArrowDown" });
@@ -91,7 +73,7 @@ describe("CourseMembersDialog", () => {
     expect(onSaveParticipants).toHaveBeenCalledWith(7, ["alice", "bob"]);
   });
 
-  it("prevents selecting above capacity and shows selected list", async () => {
+  it("prevents selecting above capacity in draft", async () => {
     mockedGetParticipants.mockResolvedValue([
       { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
       { userId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
@@ -99,132 +81,157 @@ describe("CourseMembersDialog", () => {
     render(
       <CourseMembersDialog
         open
-        saving={false}
-        courseId={7}
-        courseName="Yoga Flow"
+        {...defaultProps}
+        courseStatus="draft"
         maxCapacity={1}
         initialParticipants={["alice"]}
-        modalRef={createRef<HTMLDivElement>()}
-        onKeyDown={vi.fn()}
-        onClose={vi.fn()}
-        onSaveParticipants={vi.fn()}
       />,
     );
 
-    expect(await screen.findByText(/ausgewählte teilnehmer/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
-    const bobOption = await screen.findByRole("option", { name: /bob - eingeladen/i });
-    await userEvent.click(bobOption);
-    await userEvent.click(bobOption);
-    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
-    expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
+    expect(await screen.findByText("Zugeordnet: 1 / 1")).toBeInTheDocument();
+    const listbox = await screen.findByRole("listbox", { name: /teilnehmerliste/i });
+    listbox.focus();
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    fireEvent.keyDown(listbox, { key: " " });
+    expect(screen.getByText(/maximal 1 teilnehmer/i)).toBeInTheDocument();
     expect(screen.getByText(/kapazität erreicht/i)).toBeInTheDocument();
   });
 
-  it("removes selected participant on second click", async () => {
-    mockedGetParticipants.mockResolvedValue([{ userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" }]);
-    render(
-      <CourseMembersDialog
-        open
-        saving={false}
-        courseId={7}
-        courseName="Yoga Flow"
-        maxCapacity={5}
-        initialParticipants={["alice"]}
-        modalRef={createRef<HTMLDivElement>()}
-        onKeyDown={vi.fn()}
-        onClose={vi.fn()}
-        onSaveParticipants={vi.fn()}
-      />,
-    );
-
-    const chip = await screen.findByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
-    await userEvent.click(chip);
-    expect(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i }));
-    expect(screen.getByText(/noch keine teilnehmer ausgewählt/i)).toBeInTheDocument();
-  });
-
-  it("clears armed remove state when clicking outside chip", async () => {
-    mockedGetParticipants.mockResolvedValue([{ userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" }]);
-    render(
-      <CourseMembersDialog
-        open
-        saving={false}
-        courseId={7}
-        courseName="Yoga Flow"
-        maxCapacity={5}
-        initialParticipants={["alice"]}
-        modalRef={createRef<HTMLDivElement>()}
-        onKeyDown={vi.fn()}
-        onClose={vi.fn()}
-        onSaveParticipants={vi.fn()}
-      />,
-    );
-
-    const chip = await screen.findByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
-    await userEvent.click(chip);
-    expect(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /abbrechen/i }));
-    expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
-  });
-
-  it("clears armed remove state when focus moves away from chip", async () => {
+  it("deselects a draft participant from the list", async () => {
     mockedGetParticipants.mockResolvedValue([
       { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
-      { userId: "bob", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
+    const onSaveParticipants = vi.fn();
     render(
       <CourseMembersDialog
         open
-        saving={false}
-        courseId={7}
-        courseName="Yoga Flow"
+        {...defaultProps}
+        courseStatus="draft"
         maxCapacity={5}
-        initialParticipants={["alice", "bob"]}
-        modalRef={createRef<HTMLDivElement>()}
-        onKeyDown={vi.fn()}
-        onClose={vi.fn()}
-        onSaveParticipants={vi.fn()}
+        initialParticipants={["alice"]}
+        onSaveParticipants={onSaveParticipants}
       />,
     );
 
-    await screen.findByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
-    const aliceChip = screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i });
-    const searchInput = screen.getByLabelText(/mitglieder suchen/i);
-
-    await userEvent.click(aliceChip);
-    expect(screen.getByRole("button", { name: /teilnehmer jetzt entfernen alice/i })).toBeInTheDocument();
-
-    searchInput.focus();
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /teilnehmer zum entfernen markieren alice/i })).toBeInTheDocument();
-    });
+    const listbox = await screen.findByRole("listbox", { name: /teilnehmerliste/i });
+    listbox.focus();
+    fireEvent.keyDown(listbox, { key: " " });
+    expect(screen.getByText("Zugeordnet: 0 / 5")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(7, []);
   });
 
   it("keeps listbox connected to keyboard hint via aria-describedby", async () => {
     mockedGetParticipants.mockResolvedValue([
       { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
-    render(
-      <CourseMembersDialog
-        open
-        saving={false}
-        courseId={7}
-        courseName="Yoga Flow"
-        maxCapacity={5}
-        initialParticipants={[]}
-        modalRef={createRef<HTMLDivElement>()}
-        onKeyDown={vi.fn()}
-        onClose={vi.fn()}
-        onSaveParticipants={vi.fn()}
-      />,
-    );
+    render(<CourseMembersDialog open {...defaultProps} courseStatus="draft" />);
 
     const listbox = await screen.findByRole("listbox", { name: /teilnehmerliste/i });
     const hint = screen.getByText(/tastatur: tab zur liste/i);
     expect(listbox).toHaveAttribute("aria-describedby", "course-members-list-hint");
     expect(hint).toHaveAttribute("id", "course-members-list-hint");
+  });
+
+  it("groups active members and saves enrollment changes", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
+      { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 7, userId: "alice", validFrom: "2026-01-01" },
+      { courseId: 7, userId: "bob", validFrom: "2026-09-01" },
+    ];
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        courseDates={["2026-08-18", "2026-09-01"]}
+        courseTime="10:00"
+        enrollments={enrollments}
+        initialParticipants={["alice", "bob"]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    expect(await screen.findByText("Teilnehmer 1/10 · 1 kommt neu dazu")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /alice bis .* beenden/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /bob wieder entfernen/i })).toBeInTheDocument();
+    expect(screen.queryByRole("listbox", { name: /weitere mitglieder/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /alice bis .* beenden/i }));
+    expect(screen.getByText("Teilnehmer 1/10 · 1 endet · 1 kommt neu dazu")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(
+      7,
+      ["alice", "bob"],
+      expect.arrayContaining([
+        expect.objectContaining({ userId: "alice", action: "remove" }),
+      ]),
+    );
+  });
+
+  it("adds a member from the collapsed lower list with next term as validFrom", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        courseDates={["2099-06-16"]}
+        courseTime="10:00"
+        enrollments={[{ courseId: 7, userId: "alice", validFrom: "2026-01-01" }]}
+        initialParticipants={["alice"]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /weitere mitglieder/i }));
+    const listbox = await screen.findByRole("listbox", { name: /weitere mitglieder/i });
+    listbox.focus();
+    fireEvent.keyDown(listbox, { key: " " });
+    expect(screen.getByRole("button", { name: /cara wieder entfernen/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(
+      7,
+      expect.arrayContaining(["alice", "cara"]),
+      expect.arrayContaining([
+        expect.objectContaining({ userId: "cara", action: "add", dateIso: "2099-06-16" }),
+      ]),
+    );
+  });
+
+  it("hides incoming members and add actions for inactive courses", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="inactive"
+        courseDates={["2026-01-06"]}
+        enrollments={[
+          { courseId: 7, userId: "alice", validFrom: "2026-01-01" },
+          { courseId: 7, userId: "bob", validFrom: "2026-09-01" },
+        ]}
+        initialParticipants={["alice"]}
+      />,
+    );
+
+    expect(await screen.findByText("Teilnehmer 1/10")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /bob wieder entfernen/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /weitere mitglieder/i }));
+    expect(screen.queryByRole("button", { name: /wieder aufnehmen/i })).not.toBeInTheDocument();
   });
 });
