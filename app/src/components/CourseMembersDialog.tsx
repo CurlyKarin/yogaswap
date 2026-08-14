@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CourseModalFrame from "./CourseModalFrame";
 import type { ParticipantWithStatus } from "../api/participants";
 import { getParticipants } from "../api/participants";
-import { filterParticipantsBySearch, getStatusPresentation } from "../lib/participants";
+import { filterParticipantsBySearch, getStatusPresentation, type ParticipantStatusPresentation } from "../lib/participants";
 import {
   classifyMembersForDialog,
   findOpenEnrollmentForUser,
@@ -83,7 +83,7 @@ export default function CourseMembersDialog({
   const listBoxRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const pointerPrimedSelectionRef = useRef(false);
-  const listItemRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const listItemRefs = useRef<Array<HTMLElement | null>>([]);
 
   const refIso = useMemo(
     () => membersDialogReferenceIso({ status: courseStatus, dates: courseDates }),
@@ -403,9 +403,12 @@ export default function CourseMembersDialog({
                 : `${row.userId} bis ${defaultRemoveUntil} beenden`
           }
         >
-          <span className="course-members-status-dot" style={{ background: status.color }} aria-hidden="true" />
-          <strong>{row.userId}</strong>
-          {profile ? ` — ${status.label}` : " — nicht mehr vorhanden"}
+          <MemberIdentity
+            userId={row.userId}
+            email={profile?.email}
+            status={status}
+            missing={!profile}
+          />
         </button>
         {kind === "kommt" ? (
           <label className="course-members-date">
@@ -485,7 +488,7 @@ export default function CourseMembersDialog({
             aria-expanded={lowerListOpen}
             onClick={() => setLowerListOpen((openLower) => !openLower)}
           >
-            {lowerListOpen ? "Weitere Mitglieder einklappen" : "Weitere Mitglieder (nicht dabei / ehemals)"}
+            {lowerListOpen ? "Weitere Mitglieder einklappen" : "Weitere Mitglieder"}
           </button>
         )}
 
@@ -549,13 +552,9 @@ export default function CourseMembersDialog({
                       id={`participant-option-${entry.userId.toLowerCase()}`}
                       role="option"
                       aria-selected={isActive}
+                      className="course-members-row"
                       style={{
-                        display: "flex",
-                        gap: 8,
-                        alignItems: "center",
-                        padding: "6px 8px",
                         cursor: "pointer",
-                        borderRadius: 4,
                         background: checked ? "#ecfdf5" : isActive ? "#eff6ff" : "transparent",
                         border: checked ? "1px solid #86efac" : "1px solid transparent",
                         opacity: !checked && atCapacity ? 0.6 : 1,
@@ -565,25 +564,20 @@ export default function CourseMembersDialog({
                         pointerPrimedSelectionRef.current = document.activeElement !== listBoxRef.current;
                       }}
                       onClick={() => handleParticipantOptionClick(index, entry.userId)}
-                      title={entry.email ? `${entry.userId} (${entry.email})` : entry.userId}
                     >
-                      <div
+                      <span
                         ref={(element) => {
                           listItemRefs.current[index] = element;
                         }}
-                        aria-hidden="true"
-                        className="course-members-status-dot"
-                        style={{ background: status.color }}
-                      />
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        <strong>{entry.userId}</strong>
-                        {checked && (
-                          <span style={{ fontSize: 12, color: "#166534", fontWeight: 600 }} aria-label="zugeordnet">
-                            ✓ zugeordnet
-                          </span>
-                        )}
-                        {` - ${status.label}`}
+                        className="course-members-row-identity-wrap"
+                      >
+                        <MemberIdentity userId={entry.userId} email={entry.email} status={status} />
                       </span>
+                      {checked && (
+                        <span className="course-members-assigned" aria-label="zugeordnet">
+                          ✓ zugeordnet
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -615,21 +609,29 @@ export default function CourseMembersDialog({
                   const profile = profileById.get(row.userId.toLowerCase());
                   return (
                     <div key={`ex-${row.userId}`} className="course-members-row course-members-row-former">
-                      <span>
-                        <strong>{row.userId}</strong>
-                        {row.validUntil ? ` — ehemals bis ${formatIsoDateForDisplay(row.validUntil)}` : ""}
-                        {profile ? "" : " (nicht mehr vorhanden)"}
+                      <MemberIdentity
+                        userId={row.userId}
+                        email={profile?.email}
+                        status={getStatusPresentation(profile?.status)}
+                        missing={!profile}
+                      />
+                      <span className="course-members-row-meta">
+                        {row.validUntil ? (
+                          <span className="course-members-date">
+                            ehemals bis {formatIsoDateForDisplay(row.validUntil)}
+                          </span>
+                        ) : null}
+                        {!isInactive && (
+                          <button
+                            type="button"
+                            className="modal-action-btn"
+                            disabled={saving}
+                            onClick={() => addIntervalMember(row.userId)}
+                          >
+                            Wieder aufnehmen
+                          </button>
+                        )}
                       </span>
-                      {!isInactive && (
-                        <button
-                          type="button"
-                          className="modal-action-btn"
-                          disabled={saving}
-                          onClick={() => addIntervalMember(row.userId)}
-                        >
-                          Wieder aufnehmen
-                        </button>
-                      )}
                     </div>
                   );
                 })}
@@ -656,11 +658,7 @@ export default function CourseMembersDialog({
                         handleParticipantOptionClick(index, entry.userId);
                       }}
                     >
-                      <span className="course-members-status-dot" style={{ background: status.color }} aria-hidden="true" />
-                      <span>
-                        <strong>{entry.userId}</strong>
-                        {` - ${status.label}`}
-                      </span>
+                      <MemberIdentity userId={entry.userId} email={entry.email} status={status} />
                     </div>
                   );
                 })}
@@ -703,6 +701,38 @@ export default function CourseMembersDialog({
         </button>
       </div>
     </CourseModalFrame>
+  );
+}
+
+function MemberIdentity({
+  userId,
+  email,
+  status,
+  missing = false,
+}: {
+  userId: string;
+  email?: string | null;
+  status: ParticipantStatusPresentation;
+  missing?: boolean;
+}) {
+  const subtitle = missing ? "nicht mehr vorhanden" : email?.trim() || null;
+  return (
+    <span className="course-members-row-identity">
+      <span
+        className="course-members-status-dot"
+        style={{ background: status.color }}
+        title={status.label}
+        aria-label={status.label}
+      />
+      <span className="course-members-row-copy">
+        <strong>{userId}</strong>
+        {subtitle ? (
+          <span className="course-members-row-email" title={missing ? undefined : subtitle}>
+            {subtitle}
+          </span>
+        ) : null}
+      </span>
+    </span>
   );
 }
 

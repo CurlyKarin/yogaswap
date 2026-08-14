@@ -178,8 +178,8 @@ describe("CourseMembersDialog", () => {
   it("adds a member from the collapsed lower list with next term as validFrom", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
-      { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant", email: "alice@studio.test" },
+      { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant", email: "cara@studio.test" },
     ]);
     render(
       <CourseMembersDialog
@@ -194,7 +194,15 @@ describe("CourseMembersDialog", () => {
       />,
     );
 
-    await userEvent.click(await screen.findByRole("button", { name: /weitere mitglieder/i }));
+    expect(await screen.findByRole("button", { name: "Weitere Mitglieder" })).toBeInTheDocument();
+    expect(screen.getByText("alice@studio.test")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /alice bis .* beenden/i })).not.toHaveAttribute(
+      "title",
+      "alice@studio.test",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Weitere Mitglieder" }));
+    expect(screen.getByText("cara@studio.test")).toBeInTheDocument();
     const listbox = await screen.findByRole("listbox", { name: /weitere mitglieder/i });
     listbox.focus();
     fireEvent.keyDown(listbox, { key: " " });

@@ -1153,6 +1153,50 @@ a:focus-visible {
   cursor: pointer;
 }
 
+.course-members-row-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.course-members-row-identity-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.course-members-row-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.course-members-row-email {
+  font-size: 12px;
+  line-height: 1.2;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.course-members-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.course-members-assigned {
+  font-size: 12px;
+  color: #166534;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
 .course-members-row-main:disabled {
   cursor: default;
 }
