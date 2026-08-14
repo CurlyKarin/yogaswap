@@ -227,6 +227,32 @@ export function findOpenEnrollmentForUser(
   return best;
 }
 
+/** Latest segment for a user (open or closed), by validFrom then validUntil. */
+export function findLatestEnrollmentForUser(
+  enrollments: Array<Pick<CourseEnrollment, "userId" | "validFrom" | "validUntil">>,
+  userId: string,
+): (typeof enrollments)[number] | null {
+  const key = userId.toLowerCase();
+  let best: (typeof enrollments)[number] | null = null;
+  for (const enrollment of enrollments) {
+    if (enrollment.userId.toLowerCase() !== key) continue;
+    if (!best) {
+      best = enrollment;
+      continue;
+    }
+    if (enrollment.validFrom > best.validFrom) {
+      best = enrollment;
+      continue;
+    }
+    if (enrollment.validFrom === best.validFrom) {
+      const enrollmentUntil = enrollment.validUntil ?? "";
+      const bestUntil = best.validUntil ?? "";
+      if (enrollmentUntil > bestUntil) best = enrollment;
+    }
+  }
+  return best;
+}
+
 export function diffParticipantLists(
   previous: string[],
   next: string[],
@@ -286,7 +312,7 @@ export type PlanStemEnrollmentWritesInput = {
   removeValidUntil: string;
   /** Optional per-user validFrom (lowercase keys) from the members dialog (#305). */
   addValidFromByUser?: Record<string, string>;
-  /** Optional per-user validUntil (lowercase keys); also closes people who stay in nextParticipants. */
+  /** Optional per-user validUntil (lowercase keys); updates open or already-closed segments. */
   removeValidUntilByUser?: Record<string, string>;
   /** When table empty, seed open segments from previousParticipants with this validFrom. */
   bootstrapValidFrom?: string;
@@ -347,6 +373,8 @@ export function planStemEnrollmentWrites(
   ]);
 
   for (const userId of addUserIds) {
+    // Until correction on an existing segment: do not also open a new one.
+    if (input.removeValidUntilByUser?.[userId.toLowerCase()]) continue;
     const validFrom =
       input.addValidFromByUser?.[userId.toLowerCase()] ?? input.addValidFrom;
     const existingOpen = findOpenEnrollmentForUser(working, userId);
@@ -395,12 +423,15 @@ export function planStemEnrollmentWrites(
   ]);
 
   for (const userId of closeUserIds) {
-    const open = findOpenEnrollmentForUser(working, userId);
-    if (!open) continue;
     const validUntil =
       input.removeValidUntilByUser?.[userId.toLowerCase()] ?? input.removeValidUntil;
+    const target =
+      findOpenEnrollmentForUser(working, userId) ??
+      findLatestEnrollmentForUser(working, userId);
+    if (!target) continue;
+    if (!isEnrollmentOpen(target) && target.validUntil === validUntil) continue;
     const closed = closeEnrollmentSegment(
-      open as CourseEnrollment,
+      target as CourseEnrollment,
       validUntil,
       {
         closedAt: input.closedAt ?? input.createdAt,
@@ -410,8 +441,7 @@ export function planStemEnrollmentWrites(
     working = working.map((entry) =>
       entry.courseId === closed.courseId &&
       entry.userId.toLowerCase() === closed.userId.toLowerCase() &&
-      entry.validFrom === closed.validFrom &&
-      isEnrollmentOpen(entry)
+      entry.validFrom === closed.validFrom
         ? closed
         : entry,
     );

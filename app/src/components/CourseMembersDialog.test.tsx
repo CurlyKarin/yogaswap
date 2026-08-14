@@ -142,14 +142,14 @@ describe("CourseMembersDialog", () => {
     ]);
     const enrollments: CourseEnrollment[] = [
       { courseId: 7, userId: "alice", validFrom: "2026-01-01" },
-      { courseId: 7, userId: "bob", validFrom: "2026-09-01" },
+      { courseId: 7, userId: "bob", validFrom: "2099-06-23" },
     ];
     render(
       <CourseMembersDialog
         open
         {...defaultProps}
         courseStatus="active"
-        courseDates={["2026-08-18", "2026-09-01"]}
+        courseDates={["2020-01-06", "2099-06-16", "2099-06-23"]}
         courseTime="10:00"
         enrollments={enrollments}
         initialParticipants={["alice", "bob"]}
@@ -163,14 +163,14 @@ describe("CourseMembersDialog", () => {
     expect(screen.queryByRole("listbox", { name: /weitere mitglieder/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /alice bis .* beenden/i }));
-    expect(screen.getByText("Teilnehmer 1/10 · 1 endet · 1 kommt neu dazu")).toBeInTheDocument();
+    expect(screen.getByText("Teilnehmer 0/10 · 1 kommt neu dazu")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
     expect(onSaveParticipants).toHaveBeenCalledWith(
       7,
-      ["alice", "bob"],
+      ["bob"],
       expect.arrayContaining([
-        expect.objectContaining({ userId: "alice", action: "remove" }),
+        expect.objectContaining({ userId: "alice", action: "remove", dateIso: "2020-01-06" }),
       ]),
     );
   });
@@ -206,7 +206,7 @@ describe("CourseMembersDialog", () => {
     const listbox = await screen.findByRole("listbox", { name: /weitere mitglieder/i });
     listbox.focus();
     fireEvent.keyDown(listbox, { key: " " });
-    expect(screen.getByRole("button", { name: /cara wieder entfernen/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cara bis .* beenden/i })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
     expect(onSaveParticipants).toHaveBeenCalledWith(
@@ -241,5 +241,106 @@ describe("CourseMembersDialog", () => {
     expect(screen.queryByRole("button", { name: /bob wieder entfernen/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /weitere mitglieder/i }));
     expect(screen.queryByRole("button", { name: /wieder aufnehmen/i })).not.toBeInTheDocument();
+  });
+
+  it("saves a corrected validUntil on an already closed enrollment", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        courseDates={["2020-01-06", "2099-06-16", "2099-06-23"]}
+        courseTime="10:00"
+        enrollments={[
+          { courseId: 7, userId: "alice", validFrom: "2026-01-01", validUntil: "2099-06-16" },
+        ]}
+        initialParticipants={["alice"]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    const untilSelect = await screen.findByLabelText("alice gültig bis");
+    expect(untilSelect).toHaveValue("2099-06-16");
+    await userEvent.selectOptions(untilSelect, "2099-06-23");
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(7, ["alice"], [
+      { userId: "alice", action: "remove", dateIso: "2099-06-23" },
+    ]);
+  });
+
+  it("keeps a future validUntil edit when enrollments are replaced", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 7, userId: "alice", validFrom: "2026-01-01", validUntil: "2099-06-16" },
+    ];
+    const view = render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        courseDates={["2020-01-06", "2099-06-16", "2099-06-23"]}
+        courseTime="10:00"
+        enrollments={enrollments}
+        initialParticipants={["alice"]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    const untilSelect = await screen.findByLabelText("alice gültig bis");
+    await userEvent.selectOptions(untilSelect, "2099-06-23");
+    view.rerender(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        courseDates={["2020-01-06", "2099-06-16", "2099-06-23"]}
+        courseTime="10:00"
+        enrollments={[...enrollments]}
+        initialParticipants={["alice"]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+    expect(screen.getByLabelText("alice gültig bis")).toHaveValue("2099-06-23");
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(7, ["alice"], [
+      { userId: "alice", action: "remove", dateIso: "2099-06-23" },
+    ]);
+  });
+
+  it("saves a corrected validUntil for a former member", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        courseDates={["2020-01-06", "2020-01-13", "2099-06-16"]}
+        courseTime="10:00"
+        enrollments={[
+          { courseId: 7, userId: "alice", validFrom: "2026-01-01", validUntil: "2020-01-06" },
+        ]}
+        initialParticipants={[]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Weitere Mitglieder" }));
+    const untilSelect = await screen.findByLabelText("alice gültig bis");
+    expect(untilSelect).toHaveValue("2020-01-06");
+    await userEvent.selectOptions(untilSelect, "2020-01-13");
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(7, [], [
+      { userId: "alice", action: "remove", dateIso: "2020-01-13" },
+    ]);
   });
 });

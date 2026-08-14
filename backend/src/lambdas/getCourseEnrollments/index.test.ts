@@ -32,6 +32,9 @@ describe("getCourseEnrollments Lambda", () => {
     const result = await handler(event as APIGatewayProxyEvent);
 
     expect(result.statusCode).toBe(200);
+    expect(result.headers).toEqual(
+      expect.objectContaining({ "Cache-Control": "no-store" }),
+    );
     expect(JSON.parse(result.body)).toEqual([
       {
         tenantId: "default-tenant",

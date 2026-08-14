@@ -664,6 +664,54 @@ describe("updateCourse Lambda", () => {
     );
   });
 
+  test("updates validUntil on an already-closed enrollment", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            userId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2026-08-14" },
+          },
+        ],
+      }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment put (correct until)
+      .mockResolvedValueOnce({ Items: [] }) // overrides
+      .mockResolvedValueOnce({ Items: [] }); // swaps for luna
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+        enrollmentChanges: [{ userId: "luna", action: "remove", dateIso: "2026-08-21" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Item: expect.objectContaining({
+          userId: { S: "luna" },
+          validFrom: { S: "2026-01-01" },
+          validUntil: { S: "2026-08-21" },
+        }),
+      }),
+    );
+  });
+
   test("updates course participants list", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })

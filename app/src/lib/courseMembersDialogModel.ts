@@ -1,4 +1,9 @@
-import type { CourseEnrollment, CourseStatus } from "shared/types";
+import type { CourseEnrollment, CourseStatus, TenantSettings } from "shared/types";
+import {
+  findLastClosedCourseTermIso,
+  findNextOpenCourseTermIso,
+  resolveCancellationSwapCutoffMinutes,
+} from "shared/cancellationSwapCutoff";
 import {
   classifyMembersForDialog,
   ENROLLMENT_OPEN_START,
@@ -14,34 +19,91 @@ export function toIsoDateOnlyLocal(date: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+export type MembersDialogTermContext = {
+  dates: string[];
+  time: string;
+  tenantSettings?: TenantSettings;
+  now?: Date;
+};
+
+function cutoffMinutesFrom(settings?: TenantSettings): number {
+  return resolveCancellationSwapCutoffMinutes(settings);
+}
+
+export function nextOpenCourseTermIso(input: MembersDialogTermContext): string | undefined {
+  return findNextOpenCourseTermIso(
+    input.dates,
+    input.time,
+    cutoffMinutesFrom(input.tenantSettings),
+    input.now,
+  );
+}
+
+export function lastClosedCourseTermIso(input: MembersDialogTermContext): string | undefined {
+  return findLastClosedCourseTermIso(
+    input.dates,
+    input.time,
+    cutoffMinutesFrom(input.tenantSettings),
+    input.now,
+  );
+}
+
+/** Add default: next still-open term. */
 export function nextCourseTermIso(
   dates: string[],
   time: string,
   now: Date = new Date(),
+  tenantSettings?: TenantSettings,
 ): string {
-  const sorted = [...dates].filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry)).sort();
-  const [hours, minutes] = time.split(":").map(Number);
-  for (const iso of sorted) {
-    const [year, month, day] = iso.split("-").map(Number);
-    const occurrence = new Date(year, month - 1, day, hours || 0, minutes || 0);
-    if (occurrence >= now) return iso;
-  }
-  return toIsoDateOnlyLocal(now);
+  return (
+    findNextOpenCourseTermIso(dates, time, cutoffMinutesFrom(tenantSettings), now) ??
+    findLastClosedCourseTermIso(dates, time, cutoffMinutesFrom(tenantSettings), now) ??
+    toIsoDateOnlyLocal(now)
+  );
 }
 
+/**
+ * Dialog occupancy reference: next open term (inactive: last date in the list).
+ * Cutoff / already started counts as past.
+ */
 export function membersDialogReferenceIso(input: {
   status?: CourseStatus;
   dates: string[];
+  time?: string;
+  tenantSettings?: TenantSettings;
   now?: Date;
 }): string {
   const today = toIsoDateOnlyLocal(input.now);
+  const time = input.time ?? "00:00";
   if ((input.status ?? "active") === "inactive") {
-    const last = [...input.dates]
-      .filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry))
-      .sort((a, b) => b.localeCompare(a))[0];
-    return last ?? today;
+    return (
+      lastClosedCourseTermIso({
+        dates: input.dates,
+        time,
+        tenantSettings: input.tenantSettings,
+        now: input.now,
+      }) ??
+      [...input.dates]
+        .filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry))
+        .sort((a, b) => b.localeCompare(a))[0] ??
+      today
+    );
   }
-  return today;
+  return (
+    nextOpenCourseTermIso({
+      dates: input.dates,
+      time,
+      tenantSettings: input.tenantSettings,
+      now: input.now,
+    }) ??
+    lastClosedCourseTermIso({
+      dates: input.dates,
+      time,
+      tenantSettings: input.tenantSettings,
+      now: input.now,
+    }) ??
+    today
+  );
 }
 
 export function termOptionsForSelect(dates: string[], extra?: Array<string | undefined>): string[] {
@@ -92,9 +154,15 @@ export function diffEnrollmentChanges(
     const current = pickRelevantEnrollmentForUser(next, userId, refIso);
     const wasRoster = isRosterMember(prev, refIso);
     const isRoster = isRosterMember(current, refIso);
+    const prevUntil = prev?.validUntil ?? "";
+    const nextUntil = current?.validUntil ?? "";
 
     if (!wasRoster && isRoster && current) {
-      changes.push({ userId: current.userId, action: "add", dateIso: current.validFrom });
+      if (nextUntil) {
+        changes.push({ userId: current.userId, action: "remove", dateIso: nextUntil });
+      } else {
+        changes.push({ userId: current.userId, action: "add", dateIso: current.validFrom });
+      }
       continue;
     }
     if (wasRoster && !isRoster) {
@@ -105,16 +173,14 @@ export function diffEnrollmentChanges(
       });
       continue;
     }
-    if (wasRoster && isRoster && prev && current) {
-      const prevUntil = prev.validUntil ?? "";
-      const nextUntil = current.validUntil ?? "";
+    if (prev && current) {
       if (nextUntil && nextUntil !== prevUntil) {
-        changes.push({ userId: current.userId, action: "remove", dateIso: current.validUntil! });
+        changes.push({ userId: current.userId, action: "remove", dateIso: nextUntil });
       }
       if (prevUntil && !nextUntil) {
         changes.push({ userId: current.userId, action: "add", dateIso: current.validFrom });
       }
-      if (current.validFrom !== prev.validFrom) {
+      if (!nextUntil && current.validFrom !== prev.validFrom) {
         changes.push({ userId: current.userId, action: "add", dateIso: current.validFrom });
       }
     }

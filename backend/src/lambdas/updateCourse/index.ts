@@ -44,6 +44,9 @@ import {
   resolveMigrationValidFrom,
   validateOverbookLimit,
   validateParticipantListSize,
+  findLastClosedCourseTermIso,
+  findNextOpenCourseTermIso,
+  resolveCancellationSwapCutoffMinutes,
   type EnrollmentChange,
 } from "@yogaswap/shared";
 import {
@@ -804,7 +807,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         .map((entry) => entry.S ?? "")
         .filter((entry) => entry.length > 0);
       const todayIso = toIsoDateOnlyLocal(new Date());
+      const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
       const upcomingTermIso = findNextUpcomingOccurrenceIso(nextDates, nextTime);
+      const nextOpenTermIso = findNextOpenCourseTermIso(nextDates, nextTime, cutoffMinutes);
+      const lastClosedTermIso = findLastClosedCourseTermIso(nextDates, nextTime, cutoffMinutes);
       const migrationValidFrom = resolveMigrationValidFrom({
         seriesStartDate: nextSeriesStartDate,
         visibleFrom: nextVisibleFrom,
@@ -812,8 +818,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const addValidFrom =
         effectiveStatus === "draft" && !draftToActive
           ? migrationValidFrom
-          : (upcomingTermIso ?? todayIso);
-      const removeValidUntil = todayIso;
+          : (nextOpenTermIso ?? upcomingTermIso ?? todayIso);
+      const removeValidUntil = lastClosedTermIso ?? todayIso;
       const dateMaps = enrollmentChangesToDateMaps(enrollmentChanges ?? undefined);
       try {
         const existingEnrollments = await queryCourseEnrollments({

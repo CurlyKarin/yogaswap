@@ -1002,6 +1002,7 @@ export default function CourseList({
         courseStatus={membersTargetCourse?.status}
         courseDates={membersTargetCourse?.dates ?? []}
         courseTime={membersTargetCourse?.time}
+        tenantSettings={tenant?.settings}
         enrollments={enrollments}
         maxCapacity={
           membersTargetCourse ? resolveMaxCapacity(membersTargetCourse) : 0

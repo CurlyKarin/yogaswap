@@ -25,7 +25,7 @@ API: `GET /course-enrollments` (optional `?courseId=`).
 ## Regeln
 
 - Add ab T → neues offenes Segment (`validFrom`, kein `validUntil`)
-- Remove bis T → `validUntil` setzen (nicht löschen im Normalpfad)
+- Remove bis T → `validUntil` setzen (nicht löschen im Normalpfad); Korrektur schreibt dasselbe Segment erneut (auch wenn es schon geschlossen ist)
 - Rejoin → neues Segment, altes unverändert
 - `validUntil` ist **inklusiv** (`stemOn` / `isEnrollmentActiveOnDate`)
 
@@ -37,18 +37,21 @@ API: `GET /course-enrollments` (optional `?courseId=`).
 2. **Add:** neues offenes Segment  
    - Active: `validFrom` = nächster Kurstermin (sonst heute)  
    - Draft: `validFrom` = `seriesStartDate` / `visibleFrom` / Sentinel
-3. **Remove:** offenes Segment schließen mit `validUntil` = heute (Dialog-Referenz R; inklusiv)
+3. **Remove:** Segment schließen bzw. `validUntil` korrigieren (offenes oder bereits geschlossenes Segment, inklusiv). Default = letzter geschlossener Kurstermin (Cutoff/laufend/vergangen). Fallback ohne solchen Termin: heute.
 4. `course.participants[]` bleibt Cache der offenen Stamm-Liste (UI unverändert)
 5. Override-/Swap-Cleanup bei Active bleibt (zukünftige Termine)
 
 ## Mitglieder-Dialog (#305)
 
-Referenzdatum **R = heute** (Inactive: letzter Kurstermin). Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas`.
+Referenz **R = nächster offener Kurstermin** (noch nicht im Cutoff-Fenster, noch nicht gestartet).  
+Inactive: letzter Kurstermin. Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas` für den **angezeigten** Termin.
+
+Cutoff/laufender Termin zählt als **vergangen**. `validFrom` / `validUntil` sind Kurstermine, kein Kalender-„heute“.
 
 | Status | UI |
 |--------|----|
 | **Draft** | Flache Liste, keine ab/bis-Daten. Kopfzeile `Zugeordnet n / max`. |
-| **Active** | Dabei / endet / kommt. Add default = nächster Kurstermin; Remove default = heute. Kompakte Termin-Dropdowns. |
+| **Active** | Dabei / endet / kommt am nächsten offenen Termin. Add default = dieser Termin; Remove default = letzter (geschlossener) Termin. |
 | **Inactive** | Kein „kommt“, keine Neuplanung über den Dialog. |
 
 - `n/max` = Dabei an R (`stemOn(R)`), inkl. Personen mit `validUntil` solange `R ≤ validUntil`
@@ -56,7 +59,8 @@ Referenzdatum **R = heute** (Inactive: letzter Kurstermin). Die Kurskarte bleibt
 - Kopfzeile z. B. `Teilnehmer 6/6 · 2 enden · 2 kommen neu dazu` (ohne Daten)
 - Obere Liste immer offen; untere Liste (nicht dabei / ehemals) eingeklappt
 - Speichern sendet `participants[]` (Dabei + Kommt) und `enrollmentChanges[]` (`add`/`remove` + `dateIso`)
-- „endet“ kann im Cache bleiben, während `validUntil` gesetzt wird
+- Remove mit letztem Termin (`validUntil < R`) nimmt die Person aus dem nächsten Termin (Ehemalige)
+- „endet“ = noch Stamm an R, aber `validUntil` gesetzt (letzter Termin = R oder später)
 
 ## Migration / Seed
 

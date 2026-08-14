@@ -213,6 +213,45 @@ describe("courseEnrollment", () => {
     expect(planned.puts[0]).not.toHaveProperty("validUntil");
   });
 
+  it("planStemEnrollmentWrites updates validUntil on an already-closed segment", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-10" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: existing,
+      addValidFrom: "2026-08-24",
+      removeValidUntil: "2026-08-10",
+      removeValidUntilByUser: { luna: "2026-08-17" },
+    });
+    expect(planned.closedUserIds).toEqual(["luna"]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({ userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-17" }),
+    ]);
+  });
+
+  it("planStemEnrollmentWrites extends a closed segment instead of opening a new one", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-10" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: [],
+      nextParticipants: ["luna"],
+      existingEnrollments: existing,
+      addValidFrom: "2026-08-24",
+      removeValidUntil: "2026-08-10",
+      removeValidUntilByUser: { luna: "2026-08-24" },
+    });
+    expect(planned.addedUserIds).toEqual([]);
+    expect(planned.closedUserIds).toEqual(["luna"]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({ userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-24" }),
+    ]);
+  });
+
   it("planStemEnrollmentWrites uses per-user dates and can close while keeping cache", () => {
     const existing: CourseEnrollment[] = [
       { courseId: 1, userId: "luna", validFrom: "2026-01-01" },

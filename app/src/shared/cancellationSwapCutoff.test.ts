@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   canCancelSwap,
   canCreateSwapFromOrigin,
+  findLastClosedCourseTermIso,
+  findNextOpenCourseTermIso,
+  isCourseTermClosedForPlanning,
   isShortNoticeCancelled,
   isSwapTargetInCutoffWindow,
   isWithinCancellationSwapCutoff,
@@ -12,6 +15,26 @@ describe("cancellationSwapCutoff", () => {
   it("resolveCancellationSwapCutoffMinutes defaults to 60", () => {
     expect(resolveCancellationSwapCutoffMinutes(undefined)).toBe(60);
     expect(resolveCancellationSwapCutoffMinutes({ cancellationSwapCutoffMinutesBeforeStart: 30 })).toBe(30);
+  });
+
+  it("treats cutoff and started terms as closed for planning", () => {
+    const isoDate = "2099-06-15";
+    const time = "10:00";
+    const start = new Date(2099, 5, 15, 10, 0);
+    const inCutoff = new Date(start.getTime() - 30 * 60 * 1000);
+    const beforeCutoff = new Date(start.getTime() - 90 * 60 * 1000);
+    expect(isCourseTermClosedForPlanning(isoDate, time, 60, beforeCutoff)).toBe(false);
+    expect(isCourseTermClosedForPlanning(isoDate, time, 60, inCutoff)).toBe(true);
+    expect(isCourseTermClosedForPlanning(isoDate, time, 60, start)).toBe(true);
+    expect(isCourseTermClosedForPlanning(isoDate, time, 0, inCutoff)).toBe(false);
+    expect(isCourseTermClosedForPlanning(isoDate, time, 0, start)).toBe(true);
+  });
+
+  it("finds next open and last closed course terms", () => {
+    const dates = ["2099-06-08", "2099-06-15", "2099-06-22"];
+    const now = new Date(2099, 5, 15, 9, 30);
+    expect(findLastClosedCourseTermIso(dates, "10:00", 60, now)).toBe("2099-06-15");
+    expect(findNextOpenCourseTermIso(dates, "10:00", 60, now)).toBe("2099-06-22");
   });
 
   it("isWithinCancellationSwapCutoff uses course time", () => {

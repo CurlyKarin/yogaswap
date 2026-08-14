@@ -26,6 +26,54 @@ export function isWithinCancellationSwapCutoff(
   return now >= cutoffStart;
 }
 
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function sortedCourseDateIsos(dates: string[]): string[] {
+  return [...dates].filter((entry) => ISO_DATE_ONLY.test(entry)).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Term is closed for stem planning: already started/past, or inside the cutoff window.
+ * Cutoff 0 still treats a started term as closed.
+ */
+export function isCourseTermClosedForPlanning(
+  isoDate: string,
+  courseTime: string,
+  cutoffMinutes: number,
+  now: Date = new Date(),
+): boolean {
+  const start = buildCourseOccurrenceLocal(isoDate, courseTime);
+  if (!start) return true;
+  if (now >= start) return true;
+  return isWithinCancellationSwapCutoff(isoDate, courseTime, cutoffMinutes, now);
+}
+
+/** Next term that is still fully open (before cutoff and before start). */
+export function findNextOpenCourseTermIso(
+  dates: string[],
+  courseTime: string,
+  cutoffMinutes: number,
+  now: Date = new Date(),
+): string | undefined {
+  for (const iso of sortedCourseDateIsos(dates)) {
+    if (!isCourseTermClosedForPlanning(iso, courseTime, cutoffMinutes, now)) return iso;
+  }
+  return undefined;
+}
+
+/** Latest term that is past, running, or in cutoff. */
+export function findLastClosedCourseTermIso(
+  dates: string[],
+  courseTime: string,
+  cutoffMinutes: number,
+  now: Date = new Date(),
+): string | undefined {
+  const closed = sortedCourseDateIsos(dates).filter((iso) =>
+    isCourseTermClosedForPlanning(iso, courseTime, cutoffMinutes, now),
+  );
+  return closed[closed.length - 1];
+}
+
 export function includesUserCaseInsensitive(list: string[] | undefined, user: string): boolean {
   const needle = user.toLowerCase();
   return (list ?? []).some((entry) => entry.toLowerCase() === needle);

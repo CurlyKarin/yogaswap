@@ -9,19 +9,21 @@ import {
   findOpenEnrollmentForUser,
   formatMembersDialogHeadline,
   isEnrollmentOpen,
+  pickRelevantEnrollmentForUser,
   stemOnDate,
   type EnrollmentChange,
 } from "shared/courseEnrollment";
-import type { CourseEnrollment, CourseStatus } from "shared/types";
+import type { CourseEnrollment, CourseStatus, TenantSettings } from "shared/types";
 import { formatIsoDateForDisplay } from "./courseDatesDialogUtils";
 import {
   diffEnrollmentChanges,
+  lastClosedCourseTermIso,
   membersDialogReferenceIso,
   nextCourseTermIso,
+  nextOpenCourseTermIso,
   openRosterUserIds,
   syntheticOpenEnrollments,
   termOptionsForSelect,
-  toIsoDateOnlyLocal,
 } from "../lib/courseMembersDialogModel";
 
 type CourseMembersDialogProps = {
@@ -32,6 +34,7 @@ type CourseMembersDialogProps = {
   courseStatus?: CourseStatus;
   courseDates?: string[];
   courseTime?: string;
+  tenantSettings?: TenantSettings;
   enrollments?: CourseEnrollment[];
   maxCapacity: number;
   initialParticipants: string[];
@@ -57,6 +60,7 @@ export default function CourseMembersDialog({
   courseStatus = "draft",
   courseDates = EMPTY_DATES,
   courseTime = "00:00",
+  tenantSettings,
   enrollments = EMPTY_ENROLLMENTS,
   maxCapacity,
   initialParticipants,
@@ -84,32 +88,44 @@ export default function CourseMembersDialog({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const pointerPrimedSelectionRef = useRef(false);
   const listItemRefs = useRef<Array<HTMLElement | null>>([]);
+  const originalEnrollmentsRef = useRef<CourseEnrollment[]>([]);
 
+  const termContext = useMemo(
+    () => ({ dates: courseDates, time: courseTime, tenantSettings }),
+    [courseDates, courseTime, tenantSettings],
+  );
   const refIso = useMemo(
-    () => membersDialogReferenceIso({ status: courseStatus, dates: courseDates }),
-    [courseStatus, courseDates],
+    () => membersDialogReferenceIso({ status: courseStatus, ...termContext }),
+    [courseStatus, termContext],
   );
   const defaultAddFrom = useMemo(
-    () => nextCourseTermIso(courseDates, courseTime),
-    [courseDates, courseTime],
+    () => nextCourseTermIso(courseDates, courseTime, new Date(), tenantSettings),
+    [courseDates, courseTime, tenantSettings],
   );
-  const defaultRemoveUntil = toIsoDateOnlyLocal();
+  const defaultRemoveUntil = useMemo(
+    () => lastClosedCourseTermIso(termContext) ?? nextOpenCourseTermIso(termContext) ?? defaultAddFrom,
+    [termContext, defaultAddFrom],
+  );
 
   useEffect(() => {
     if (!open) return;
     setSelectedParticipants(Array.from(new Set(initialParticipants)).sort((a, b) => a.localeCompare(b)));
     const forCourse = (enrollments ?? []).filter((entry) => entry.courseId === courseId);
-    if (forCourse.length > 0) {
-      setWorkingEnrollments(forCourse);
-    } else {
-      setWorkingEnrollments(syntheticOpenEnrollments(courseId ?? 0, initialParticipants));
-    }
+    const initial =
+      forCourse.length > 0
+        ? forCourse
+        : syntheticOpenEnrollments(courseId ?? 0, initialParticipants);
+    originalEnrollmentsRef.current = initial;
+    setWorkingEnrollments(initial);
     setSearch("");
     setLocalError(null);
     setParticipantsLoaded(false);
     setLowerListOpen(false);
     setActiveListIndex(0);
-  }, [open, initialParticipants, enrollments, courseId]);
+    // Only snapshot when the dialog opens or the course changes — not when parent
+    // arrays are replaced while the user is editing dates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, courseId]);
 
   useLayoutEffect(() => {
     if (!open || !courseName) return;
@@ -235,6 +251,7 @@ export default function CourseMembersDialog({
         return { ...entry, validUntil };
       }),
     );
+    if (validUntil < refIso) setLowerListOpen(true);
     setLocalError(null);
   };
 
@@ -275,9 +292,16 @@ export default function CourseMembersDialog({
 
   const updateMemberDate = (userId: string, field: "validFrom" | "validUntil", dateIso: string) => {
     if (saving || isInactive) return;
-    setWorkingEnrollments((prev) =>
-      prev.map((entry) => {
-        if (entry.userId.toLowerCase() !== userId.toLowerCase()) return entry;
+    setWorkingEnrollments((prev) => {
+      const relevant = pickRelevantEnrollmentForUser(prev, userId, refIso);
+      if (!relevant) return prev;
+      return prev.map((entry) => {
+        if (
+          entry.userId.toLowerCase() !== userId.toLowerCase() ||
+          entry.validFrom !== relevant.validFrom
+        ) {
+          return entry;
+        }
         if (field === "validFrom" && isEnrollmentOpen(entry)) {
           return { ...entry, validFrom: dateIso };
         }
@@ -285,8 +309,9 @@ export default function CourseMembersDialog({
           return { ...entry, validUntil: dateIso };
         }
         return entry;
-      }),
-    );
+      });
+    });
+    if (field === "validUntil" && dateIso < refIso) setLowerListOpen(true);
   };
 
   const handleSave = async () => {
@@ -304,11 +329,11 @@ export default function CourseMembersDialog({
       setLocalError(`Maximal ${maxCapacity} Teilnehmer können zugeordnet werden.`);
       return;
     }
-    const original =
-      enrollments.filter((entry) => entry.courseId === courseId).length > 0
-        ? enrollments.filter((entry) => entry.courseId === courseId)
-        : syntheticOpenEnrollments(courseId, initialParticipants);
-    const changes = diffEnrollmentChanges(original, workingEnrollments, refIso);
+    const changes = diffEnrollmentChanges(
+      originalEnrollmentsRef.current,
+      workingEnrollments,
+      refIso,
+    );
     await onSaveParticipants(courseId, participantsToSave, changes);
   };
 
@@ -372,7 +397,12 @@ export default function CourseMembersDialog({
 
   if (!open || !courseName) return null;
 
-  const dateOptions = termOptionsForSelect(courseDates, [defaultAddFrom, defaultRemoveUntil, refIso]);
+  const dateOptions = termOptionsForSelect(courseDates, [
+    defaultAddFrom,
+    defaultRemoveUntil,
+    lastClosedCourseTermIso(termContext),
+    nextOpenCourseTermIso(termContext),
+  ]);
 
   const renderUpperRow = (
     row: { userId: string; validFrom: string; validUntil?: string; ending: boolean },
@@ -617,9 +647,23 @@ export default function CourseMembersDialog({
                       />
                       <span className="course-members-row-meta">
                         {row.validUntil ? (
-                          <span className="course-members-date">
-                            ehemals bis {formatIsoDateForDisplay(row.validUntil)}
-                          </span>
+                          <label className="course-members-date">
+                            ehemals bis
+                            <select
+                              value={row.validUntil}
+                              disabled={saving || isInactive}
+                              aria-label={`${row.userId} gültig bis`}
+                              onChange={(event) =>
+                                updateMemberDate(row.userId, "validUntil", event.target.value)
+                              }
+                            >
+                              {termOptionsForSelect(dateOptions, [row.validUntil]).map((iso) => (
+                                <option key={iso} value={iso}>
+                                  {formatIsoDateForDisplay(iso)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                         ) : null}
                         {!isInactive && (
                           <button
