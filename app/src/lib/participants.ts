@@ -18,7 +18,7 @@ export type ParticipantStatusPresentation = {
 };
 
 export function getStatusPresentation(
-  status: ParticipantWithStatus["status"],
+  status: ParticipantWithStatus["status"] | undefined,
 ): ParticipantStatusPresentation {
   if (status === "active") {
     return { color: "#16a34a", label: "registriert" };

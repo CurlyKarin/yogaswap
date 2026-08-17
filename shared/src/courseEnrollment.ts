@@ -12,6 +12,27 @@ export const ENROLLMENT_OPEN_START = "0001-01-01";
 
 const SK_SEPARATOR = "#";
 
+function uniqueCaseInsensitive(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export function buildCourseEnrollmentSortKey(
   courseId: number | string,
   userId: string,
@@ -41,6 +62,32 @@ export function parseCourseEnrollmentSortKey(
   const userId = parts.slice(1, -1).join(SK_SEPARATOR);
   if (!courseId || !userId || !validFrom) return null;
   return { courseId, userId, validFrom };
+}
+
+const ENROLLMENT_OPEN_END = "9999-12-31";
+
+/** Inclusive last day; open segments extend to ENROLLMENT_OPEN_END. */
+export function enrollmentEndIso(
+  enrollment: Pick<CourseEnrollment, "validUntil">,
+): string {
+  if (enrollment.validUntil == null || enrollment.validUntil === "") return ENROLLMENT_OPEN_END;
+  return enrollment.validUntil;
+}
+
+/**
+ * Returns true if two enrollment ranges share at least one day.
+ * Inclusive ranges: adjacent days (until Mon 10, from Mon 17) do NOT overlap.
+ * Open end is treated as ENROLLMENT_OPEN_END ("9999-12-31").
+ *
+ * Invariant: no two segments of the same person in the same course may overlap.
+ * planStemEnrollmentWrites enforces this by skipping adds that would overlap an
+ * existing segment, and by clamping validUntil corrections via clampUntilToAvoidOverlap.
+ */
+export function enrollmentRangesOverlap(
+  a: Pick<CourseEnrollment, "validFrom" | "validUntil">,
+  b: Pick<CourseEnrollment, "validFrom" | "validUntil">,
+): boolean {
+  return a.validFrom <= enrollmentEndIso(b) && b.validFrom <= enrollmentEndIso(a);
 }
 
 /** Inclusive: active when validFrom ≤ date ≤ validUntil (or until open). */
@@ -191,6 +238,15 @@ export function isEnrollmentOpen(
   return enrollment.validUntil == null || enrollment.validUntil === "";
 }
 
+/** Empty or inverted interval (until before from) is not a real membership. */
+export function isEnrollmentRangeValid(
+  enrollment: Pick<CourseEnrollment, "validFrom" | "validUntil">,
+): boolean {
+  if (isEnrollmentOpen(enrollment)) return true;
+  const until = enrollment.validUntil;
+  return until != null && until !== "" && until >= enrollment.validFrom;
+}
+
 /** Latest open segment for a user (by validFrom), or null. */
 export function findOpenEnrollmentForUser(
   enrollments: Array<Pick<CourseEnrollment, "userId" | "validFrom" | "validUntil">>,
@@ -202,6 +258,32 @@ export function findOpenEnrollmentForUser(
     if (enrollment.userId.toLowerCase() !== key) continue;
     if (!isEnrollmentOpen(enrollment)) continue;
     if (!best || enrollment.validFrom > best.validFrom) best = enrollment;
+  }
+  return best;
+}
+
+/** Latest segment for a user (open or closed), by validFrom then validUntil. */
+export function findLatestEnrollmentForUser(
+  enrollments: Array<Pick<CourseEnrollment, "userId" | "validFrom" | "validUntil">>,
+  userId: string,
+): (typeof enrollments)[number] | null {
+  const key = userId.toLowerCase();
+  let best: (typeof enrollments)[number] | null = null;
+  for (const enrollment of enrollments) {
+    if (enrollment.userId.toLowerCase() !== key) continue;
+    if (!best) {
+      best = enrollment;
+      continue;
+    }
+    if (enrollment.validFrom > best.validFrom) {
+      best = enrollment;
+      continue;
+    }
+    if (enrollment.validFrom === best.validFrom) {
+      const enrollmentUntil = enrollment.validUntil ?? "";
+      const bestUntil = best.validUntil ?? "";
+      if (enrollmentUntil > bestUntil) best = enrollment;
+    }
   }
   return best;
 }
@@ -263,6 +345,10 @@ export type PlanStemEnrollmentWritesInput = {
   addValidFrom: string;
   /** Inclusive last day for closed segments (dialog R ≈ today). */
   removeValidUntil: string;
+  /** Optional per-user validFrom (lowercase keys) from the members dialog (#305). */
+  addValidFromByUser?: Record<string, string>;
+  /** Optional per-user validUntil (lowercase keys); updates open or already-closed segments. */
+  removeValidUntilByUser?: Record<string, string>;
   /** When table empty, seed open segments from previousParticipants with this validFrom. */
   bootstrapValidFrom?: string;
   actorUserId?: string;
@@ -272,19 +358,33 @@ export type PlanStemEnrollmentWritesInput = {
 
 export type PlanStemEnrollmentWritesResult = {
   puts: CourseEnrollment[];
+  deletes: CourseEnrollment[];
   bootstrapped: boolean;
   addedUserIds: string[];
   closedUserIds: string[];
+  deletedUserIds: string[];
 };
 
 /**
  * Plan PutItems for CourseEnrollments from a flat participants[] diff (#304).
- * Does not delete closed segments; rejoin opens a new segment.
+ *
+ * Identity: SK = courseId#userId#validFrom. Same SK → update that row. Different validFrom → new row.
+ *
+ * Rules enforced here:
+ * - **Set/correct validUntil**: always updates the existing row (open or closed), never opens a second segment.
+ * - **Rejoin**: new open row only when validFrom is strictly after the last validUntil (real gap, no overlap).
+ *   A rejoin with a future exit still present (planned pause) is NOT supported and must be handled separately.
+ * - **Overlap guard**: a new segment is skipped when it would overlap any existing segment for the same person.
+ * - **Clamp on close**: validUntil is clamped to one day before the next segment's validFrom if necessary.
+ * - **Never started**: if close would set validUntil before validFrom, delete the row
+ *   (planned join cancelled). Do not persist inverted intervals.
+ * - **History preserved**: closed rows with a real interval are never deleted.
  */
 export function planStemEnrollmentWrites(
   input: PlanStemEnrollmentWritesInput,
 ): PlanStemEnrollmentWritesResult {
   const puts: CourseEnrollment[] = [];
+  const deletes: CourseEnrollment[] = [];
   let working = [...input.existingEnrollments];
   let bootstrapped = false;
 
@@ -309,19 +409,74 @@ export function planStemEnrollmentWrites(
     bootstrapped = true;
   }
 
+  const addedUserIds: string[] = [];
+  const closedUserIds: string[] = [];
+  const deletedUserIds: string[] = [];
+
+  const inverted = working.filter((entry) => !isEnrollmentRangeValid(entry));
+  if (inverted.length > 0) {
+    deletes.push(...inverted);
+    deletedUserIds.push(...inverted.map((entry) => entry.userId));
+    const invertedKeys = new Set(
+      inverted.map((entry) => `${entry.userId.toLowerCase()}#${entry.validFrom}`),
+    );
+    working = working.filter(
+      (entry) => !invertedKeys.has(`${entry.userId.toLowerCase()}#${entry.validFrom}`),
+    );
+  }
+
   const { added, removed } = diffParticipantLists(
     input.previousParticipants,
     input.nextParticipants,
   );
-  const addedUserIds: string[] = [];
-  const closedUserIds: string[] = [];
 
-  for (const userId of added) {
+  const addUserIds = uniqueCaseInsensitive([
+    ...added,
+    ...Object.keys(input.addValidFromByUser ?? {}),
+  ]);
+
+  for (const userId of addUserIds) {
+    // Until correction on an existing segment: do not also open a new one.
+    if (input.removeValidUntilByUser?.[userId.toLowerCase()]) continue;
+    const validFrom =
+      input.addValidFromByUser?.[userId.toLowerCase()] ?? input.addValidFrom;
+    const existingOpen = findOpenEnrollmentForUser(working, userId);
+    if (existingOpen && existingOpen.validFrom === validFrom) continue;
+    if (existingOpen && existingOpen.validFrom !== validFrom) {
+      const closeUntil =
+        validFrom > existingOpen.validFrom
+          ? addDaysIso(validFrom, -1)
+          : existingOpen.validFrom;
+      const closed = closeEnrollmentSegment(
+        existingOpen as CourseEnrollment,
+        closeUntil,
+        {
+          closedAt: input.closedAt ?? input.createdAt,
+          actorUserId: input.actorUserId,
+        },
+      );
+      working = working.map((entry) =>
+        entry.courseId === closed.courseId &&
+        entry.userId.toLowerCase() === closed.userId.toLowerCase() &&
+        entry.validFrom === closed.validFrom &&
+        isEnrollmentOpen(entry)
+          ? closed
+          : entry,
+      );
+      puts.push(closed);
+    }
     if (findOpenEnrollmentForUser(working, userId)) continue;
+    const proposed = { validFrom };
+    const overlapsExisting = enrollmentsForUser(working, userId).some(
+      (entry) =>
+        entry.validFrom !== validFrom && enrollmentRangesOverlap(entry, proposed),
+    );
+    // Covered by a closed segment already: correct that row, do not open a second one.
+    if (overlapsExisting) continue;
     const open = buildOpenEnrollment({
       courseId: input.courseId,
       userId,
-      validFrom: input.addValidFrom,
+      validFrom,
       tenantId: input.tenantId,
       source: "manual",
       actorUserId: input.actorUserId,
@@ -332,12 +487,35 @@ export function planStemEnrollmentWrites(
     addedUserIds.push(userId);
   }
 
-  for (const userId of removed) {
-    const open = findOpenEnrollmentForUser(working, userId);
-    if (!open) continue;
+  const closeUserIds = uniqueCaseInsensitive([
+    ...removed,
+    ...Object.keys(input.removeValidUntilByUser ?? {}),
+  ]);
+
+  for (const userId of closeUserIds) {
+    const requestedUntil =
+      input.removeValidUntilByUser?.[userId.toLowerCase()] ?? input.removeValidUntil;
+    const target =
+      findOpenEnrollmentForUser(working, userId) ??
+      findLatestEnrollmentForUser(working, userId);
+    if (!target) continue;
+    const validUntil = clampUntilToAvoidOverlap(working, userId, target, requestedUntil);
+    if (validUntil < target.validFrom) {
+      working = working.filter(
+        (entry) =>
+          !(
+            entry.userId.toLowerCase() === target.userId.toLowerCase() &&
+            entry.validFrom === target.validFrom
+          ),
+      );
+      deletes.push(target as CourseEnrollment);
+      deletedUserIds.push(userId);
+      continue;
+    }
+    if (!isEnrollmentOpen(target) && target.validUntil === validUntil) continue;
     const closed = closeEnrollmentSegment(
-      open as CourseEnrollment,
-      input.removeValidUntil,
+      target as CourseEnrollment,
+      validUntil,
       {
         closedAt: input.closedAt ?? input.createdAt,
         actorUserId: input.actorUserId,
@@ -346,8 +524,7 @@ export function planStemEnrollmentWrites(
     working = working.map((entry) =>
       entry.courseId === closed.courseId &&
       entry.userId.toLowerCase() === closed.userId.toLowerCase() &&
-      entry.validFrom === closed.validFrom &&
-      isEnrollmentOpen(entry)
+      entry.validFrom === closed.validFrom
         ? closed
         : entry,
     );
@@ -355,7 +532,7 @@ export function planStemEnrollmentWrites(
     closedUserIds.push(userId);
   }
 
-  return { puts, bootstrapped, addedUserIds, closedUserIds };
+  return { puts, deletes, bootstrapped, addedUserIds, closedUserIds, deletedUserIds };
 }
 
 /**
@@ -391,4 +568,146 @@ export function planMissingOpenEnrollments(input: {
     puts.push(open);
   }
   return puts;
+}
+
+export type DialogMemberRow = {
+  userId: string;
+  validFrom: string;
+  validUntil?: string;
+  ending: boolean;
+};
+
+export type DialogMemberGroups = {
+  dabei: DialogMemberRow[];
+  kommt: DialogMemberRow[];
+  ehemalig: DialogMemberRow[];
+};
+
+function enrollmentsForUser<T extends Pick<CourseEnrollment, "userId">>(
+  enrollments: T[],
+  userId: string,
+): T[] {
+  const key = userId.toLowerCase();
+  return enrollments.filter((entry) => entry.userId.toLowerCase() === key);
+}
+
+/**
+ * Clamp requestedUntil so it does not reach into a later segment of the same person.
+ * Example: person has segments [Jan–Aug] and [Sep–…]; closing the first segment at Oct
+ * would be clamped to Aug (one day before Sep).
+ */
+function clampUntilToAvoidOverlap(
+  enrollments: Array<Pick<CourseEnrollment, "userId" | "validFrom" | "validUntil">>,
+  userId: string,
+  target: Pick<CourseEnrollment, "validFrom">,
+  requestedUntil: string,
+): string {
+  let until = requestedUntil;
+  for (const other of enrollmentsForUser(enrollments, userId)) {
+    if (other.validFrom === target.validFrom) continue;
+    if (other.validFrom > target.validFrom && other.validFrom <= until) {
+      const clamped = addDaysIso(other.validFrom, -1);
+      if (clamped < until) until = clamped;
+    }
+  }
+  return until;
+}
+
+/** Prefer the segment active on refIso; else the next upcoming; else the latest closed. */
+export function pickRelevantEnrollmentForUser(
+  enrollments: CourseEnrollment[],
+  userId: string,
+  refIso: string,
+): CourseEnrollment | null {
+  const forUser = enrollmentsForUser(enrollments, userId).filter(isEnrollmentRangeValid);
+  if (forUser.length === 0) return null;
+  const active = forUser.find((entry) => isEnrollmentActiveOnDate(entry, refIso));
+  if (active) return active;
+  const upcoming = [...forUser]
+    .filter((entry) => entry.validFrom > refIso)
+    .sort((a, b) => a.validFrom.localeCompare(b.validFrom));
+  if (upcoming[0]) return upcoming[0];
+  const latest = [...forUser].sort((a, b) => {
+    const aEnd = a.validUntil ?? a.validFrom;
+    const bEnd = b.validUntil ?? b.validFrom;
+    return bEnd.localeCompare(aEnd);
+  });
+  return latest[0] ?? null;
+}
+
+export function classifyMembersForDialog(
+  enrollments: CourseEnrollment[],
+  refIso: string,
+): DialogMemberGroups {
+  const userIds = uniqueCaseInsensitive(enrollments.map((entry) => entry.userId));
+  const dabei: DialogMemberRow[] = [];
+  const kommt: DialogMemberRow[] = [];
+  const ehemalig: DialogMemberRow[] = [];
+
+  for (const userId of userIds) {
+    const enrollment = pickRelevantEnrollmentForUser(enrollments, userId, refIso);
+    if (!enrollment) continue;
+    const row: DialogMemberRow = {
+      userId: enrollment.userId,
+      validFrom: enrollment.validFrom,
+      ...(enrollment.validUntil ? { validUntil: enrollment.validUntil } : {}),
+      ending: false,
+    };
+    if (isEnrollmentActiveOnDate(enrollment, refIso)) {
+      row.ending = Boolean(enrollment.validUntil);
+      dabei.push(row);
+    } else if (enrollment.validFrom > refIso) {
+      kommt.push(row);
+    } else {
+      ehemalig.push(row);
+    }
+  }
+
+  const byName = (a: DialogMemberRow, b: DialogMemberRow) => a.userId.localeCompare(b.userId);
+  dabei.sort(byName);
+  kommt.sort(byName);
+  ehemalig.sort(byName);
+  return { dabei, kommt, ehemalig };
+}
+
+export function formatMembersDialogHeadline(input: {
+  dabeiCount: number;
+  capacity: number;
+  endingCount: number;
+  incomingCount: number;
+  showIncoming?: boolean;
+}): string {
+  const parts = [`Teilnehmer ${input.dabeiCount}/${input.capacity}`];
+  if (input.endingCount > 0) {
+    parts.push(input.endingCount === 1 ? "1 endet" : `${input.endingCount} enden`);
+  }
+  if (input.showIncoming !== false && input.incomingCount > 0) {
+    parts.push(
+      input.incomingCount === 1 ? "1 kommt neu dazu" : `${input.incomingCount} kommen neu dazu`,
+    );
+  }
+  return parts.join(" · ");
+}
+
+export type EnrollmentChange = {
+  userId: string;
+  action: "add" | "remove";
+  dateIso: string;
+};
+
+export function enrollmentChangesToDateMaps(
+  changes: EnrollmentChange[] | undefined,
+): {
+  addValidFromByUser: Record<string, string>;
+  removeValidUntilByUser: Record<string, string>;
+} {
+  const addValidFromByUser: Record<string, string> = {};
+  const removeValidUntilByUser: Record<string, string> = {};
+  for (const change of changes ?? []) {
+    const key = change.userId.trim().toLowerCase();
+    if (!key || !change.dateIso) continue;
+    if (change.action === "add") addValidFromByUser[key] = change.dateIso;
+    if (change.action === "remove") removeValidUntilByUser[key] = change.dateIso;
+  }
+  return { addValidFromByUser, removeValidUntilByUser };
 }

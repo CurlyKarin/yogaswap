@@ -20,6 +20,7 @@ export async function notifyCourseMembershipAdded(
     weekday?: string;
     time?: string;
     termDateIso?: string;
+    termDateByUser?: Record<string, string>;
     participantsTable?: string;
     sesSourceEmail?: string;
     baseUrl?: string;
@@ -37,7 +38,8 @@ export async function notifyCourseMembershipAdded(
         courseName: params.courseName,
         weekday: params.weekday,
         time: params.time,
-        termDateIso: params.termDateIso,
+        termDateIso:
+          params.termDateByUser?.[nickname.toLowerCase()] ?? params.termDateIso,
         loginUrl,
       }),
   });
@@ -83,6 +85,8 @@ export async function notifyInstructorParticipantListChanged(
     courseName: string;
     addedParticipants: string[];
     removedParticipants: string[];
+    addedFromByUser?: Record<string, string>;
+    removedUntilByUser?: Record<string, string>;
     participantsTable?: string;
     sesSourceEmail?: string;
     baseUrl?: string;
@@ -107,6 +111,8 @@ export async function notifyInstructorParticipantListChanged(
         courseName: params.courseName,
         addedParticipants: params.addedParticipants,
         removedParticipants: params.removedParticipants,
+        addedFromByUser: params.addedFromByUser,
+        removedUntilByUser: params.removedUntilByUser,
         loginUrl,
       }),
   });

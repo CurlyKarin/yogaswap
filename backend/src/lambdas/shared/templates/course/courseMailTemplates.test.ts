@@ -54,20 +54,31 @@ describe("courseMailTemplates", () => {
     expect(mail.html).toMatch(/20\.06\.2026/);
   });
 
-  test("buildCourseMembershipMail welcomes new participant", () => {
+  test("buildCourseMembershipMail uses the personal start term", () => {
     const mail = buildCourseMembershipMail({
       nickname: "Luna",
       courseName: "Morgenyoga",
       weekday: "Mon",
       time: "18:00",
-      termDateIso: "2026-06-20",
+      termDateIso: "2026-09-02",
     });
     expect(mail.subject).toMatch(/Kursbeitritt/);
+    expect(mail.html).toMatch(/nimmst ab dem Termin/);
+    expect(mail.html).toMatch(/02\.09\.2026/);
+    expect(mail.html).toMatch(/18:00/);
+    expect(mail.html).not.toMatch(/nächster Termin/);
+    expect(mail.html).not.toMatch(/hinzugefügt/);
+  });
+
+  test("buildCourseMembershipMail falls back without a start term", () => {
+    const mail = buildCourseMembershipMail({
+      nickname: "Luna",
+      courseName: "Morgenyoga",
+      weekday: "Mon",
+      time: "18:00",
+    });
     expect(mail.html).toMatch(/hinzugefügt/);
     expect(mail.html).toMatch(/Montag/);
-    expect(mail.html).toMatch(/nächster Termin/);
-    expect(mail.html).toMatch(/Samstag/);
-    expect(mail.html).toMatch(/20\.06\.2026/);
   });
 
   test("buildCourseActivatedMail announces active course", () => {
@@ -83,14 +94,16 @@ describe("courseMailTemplates", () => {
     expect(mail.html).toMatch(/20\.06\.2026/);
   });
 
-  test("buildInstructorParticipantListChangedMail lists adds and removes", () => {
+  test("buildInstructorParticipantListChangedMail lists adds and removes with dates", () => {
     const mail = buildInstructorParticipantListChangedMail({
       nickname: "Instructor",
       courseName: "Morgenyoga",
       addedParticipants: ["Luna"],
       removedParticipants: ["Bob"],
+      addedFromByUser: { luna: "2026-09-02" },
+      removedUntilByUser: { bob: "2026-08-17" },
     });
-    expect(mail.html).toMatch(/Luna/);
-    expect(mail.html).toMatch(/Bob/);
+    expect(mail.html).toMatch(/Luna \(ab 02\.09\.2026\)/);
+    expect(mail.html).toMatch(/Bob \(letzter Termin 17\.08\.2026\)/);
   });
 });

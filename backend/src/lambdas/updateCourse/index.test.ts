@@ -358,6 +358,26 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Planungssperre/);
   });
 
+  test("rejects participant and enrollment patches for inactive courses", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
+    const participantsResult = await handler(makeEvent({ participants: ["luna", "maja"] }));
+    expect(participantsResult.statusCode).toBe(400);
+    expect(JSON.parse(participantsResult.body).error).toMatch(/inaktiven Kurses/);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+
+    mockSend.mockReset();
+    (PutItemCommand as unknown as jest.Mock).mockClear();
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
+    const enrollmentResult = await handler(
+      makeEvent({
+        enrollmentChanges: [{ userId: "luna", action: "add", dateIso: "2026-08-14" }],
+      }),
+    );
+    expect(enrollmentResult.statusCode).toBe(400);
+    expect(JSON.parse(enrollmentResult.body).error).toMatch(/inaktiven Kurses/);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+  });
+
   test("rejects invalid status transition inactive -> active", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
@@ -602,6 +622,160 @@ describe("updateCourse Lambda", () => {
     );
     expect(result.statusCode).toBe(400);
     expect(JSON.parse(result.body).error).toMatch(/visibleFrom and visibleUntil/);
+  });
+
+  test("rejects invalid enrollmentChanges payload", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("active") });
+
+    const result = await handler(
+      makeEvent({
+        enrollmentChanges: [{ userId: "luna", action: "drop", dateIso: "2026-08-14" }],
+      }),
+    );
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/enrollmentChanges/);
+  });
+
+  test("closes an enrollment while keeping the participant cache via enrollmentChanges", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            userId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+          },
+        ],
+      }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment put (close)
+      .mockResolvedValueOnce({ Items: [] }) // overrides
+      .mockResolvedValueOnce({ Items: [] }); // swaps for luna
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+        enrollmentChanges: [{ userId: "luna", action: "remove", dateIso: "2026-08-14" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).participants).toEqual(["luna"]);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Item: expect.objectContaining({
+          userId: { S: "luna" },
+          validFrom: { S: "2026-01-01" },
+          validUntil: { S: "2026-08-14" },
+        }),
+      }),
+    );
+  });
+
+  test("deletes a never-started enrollment instead of closing before validFrom", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [] },
+          seriesStartDate: { S: "2026-09-02" },
+          seriesEndDate: { S: "2026-12-31" },
+          visibleFrom: { S: "2026-09-02" },
+          visibleUntil: { S: "2026-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#maja#2026-09-02" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            userId: { S: "maja" },
+            validFrom: { S: "2026-09-02" },
+          },
+        ],
+      }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment delete
+      .mockResolvedValueOnce({ Items: [] }) // overrides
+      .mockResolvedValueOnce({ Items: [] }); // swaps for maja
+
+    const result = await handler(
+      makeEvent({
+        participants: [],
+        enrollmentChanges: [{ userId: "maja", action: "remove", dateIso: "2026-08-17" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(DeleteItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Key: expect.objectContaining({
+          courseId_userId_validFrom: { S: "1#maja#2026-09-02" },
+        }),
+      }),
+    );
+  });
+
+  test("updates validUntil on an already-closed enrollment", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            userId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2026-08-14" },
+          },
+        ],
+      }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment put (correct until)
+      .mockResolvedValueOnce({ Items: [] }) // overrides
+      .mockResolvedValueOnce({ Items: [] }); // swaps for luna
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+        enrollmentChanges: [{ userId: "luna", action: "remove", dateIso: "2026-08-21" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Item: expect.objectContaining({
+          userId: { S: "luna" },
+          validFrom: { S: "2026-01-01" },
+          validUntil: { S: "2026-08-21" },
+        }),
+      }),
+    );
   });
 
   test("updates course participants list", async () => {

@@ -42,6 +42,7 @@ import {
   updateCourse,
 } from "../api/courses";
 import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
+import type { EnrollmentChange } from "shared/courseEnrollment";
 import {
   looksLikeAutomaticallyInactive,
   wouldAutoDeactivateOnReconcile,
@@ -757,7 +758,11 @@ export default function CourseList({
     }
   };
 
-  const saveCourseMembers = async (courseId: number, participants: string[]) => {
+  const saveCourseMembers = async (
+    courseId: number,
+    participants: string[],
+    enrollmentChanges?: EnrollmentChange[],
+  ) => {
     if (!canManageCourses) return;
     const targetCourse = visibleCourses.find((c) => c.id === courseId);
     if (!targetCourse) {
@@ -767,7 +772,10 @@ export default function CourseList({
     setSaving(true);
     setFormError(null);
     try {
-      await updateCourse(courseApiPathKey(targetCourse), { participants });
+      await updateCourse(courseApiPathKey(targetCourse), {
+        participants,
+        ...(enrollmentChanges && enrollmentChanges.length > 0 ? { enrollmentChanges } : {}),
+      });
       closeMembersModal();
       await refreshAfterMutation();
     } catch (err) {
@@ -991,6 +999,11 @@ export default function CourseList({
         saving={saving}
         courseId={membersTargetCourse?.id}
         courseName={membersTargetCourse?.name}
+        courseStatus={membersTargetCourse?.status}
+        courseDates={membersTargetCourse?.dates ?? []}
+        courseTime={membersTargetCourse?.time}
+        tenantSettings={tenant?.settings}
+        enrollments={enrollments}
         maxCapacity={
           membersTargetCourse ? resolveMaxCapacity(membersTargetCourse) : 0
         }
