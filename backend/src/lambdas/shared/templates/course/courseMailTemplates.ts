@@ -155,14 +155,16 @@ export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTempl
   const loginHint = input.loginUrl
     ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
     : "";
-  const nextTermHint = formatTermHint(input.termDateIso, input.time, "Dein nächster Termin ist am");
+  const joinSentence =
+    input.termDateIso && input.time
+      ? `<p>du nimmst ab dem Termin am ${formatTermDateTimeDe(input.termDateIso, input.time)} am Kurs <strong>${input.courseName}</strong> teil.</p>`
+      : `<p>du wurdest zum Kurs <strong>${input.courseName}</strong>${weekdayTime} hinzugefügt.</p>`;
 
   return {
     subject: `Kursbeitritt: ${input.courseName}`,
     html: `
       <p>Hallo ${input.nickname},</p>
-      <p>du wurdest zum Kurs <strong>${input.courseName}</strong>${weekdayTime} hinzugefügt.</p>
-      ${nextTermHint}
+      ${joinSentence}
       <p>Im YogaSwap-Portal kannst du Termine einsehen und Tauschvorgänge verwalten.</p>
       ${loginHint}
     `,
@@ -193,22 +195,37 @@ type InstructorParticipantListMailInput = {
   courseName: string;
   addedParticipants: string[];
   removedParticipants: string[];
+  addedFromByUser?: Record<string, string>;
+  removedUntilByUser?: Record<string, string>;
   loginUrl?: string;
 };
+
+function formatParticipantWithDate(
+  userId: string,
+  isoDate: string | undefined,
+  prefix: string,
+): string {
+  if (!isoDate) return userId;
+  return `${userId} (${prefix} ${formatIsoDateDe(isoDate)})`;
+}
 
 export function buildInstructorParticipantListChangedMail(
   input: InstructorParticipantListMailInput,
 ): MailTemplate {
+  const addedFrom = input.addedFromByUser ?? {};
+  const removedUntil = input.removedUntilByUser ?? {};
   const parts: string[] = [];
   if (input.addedParticipants.length > 0) {
-    parts.push(
-      `<p>Hinzugefügt: <strong>${input.addedParticipants.join(", ")}</strong></p>`,
+    const names = input.addedParticipants.map((userId) =>
+      formatParticipantWithDate(userId, addedFrom[userId.toLowerCase()], "ab"),
     );
+    parts.push(`<p>Hinzugefügt: <strong>${names.join(", ")}</strong></p>`);
   }
   if (input.removedParticipants.length > 0) {
-    parts.push(
-      `<p>Entfernt: <strong>${input.removedParticipants.join(", ")}</strong></p>`,
+    const names = input.removedParticipants.map((userId) =>
+      formatParticipantWithDate(userId, removedUntil[userId.toLowerCase()], "letzter Termin"),
     );
+    parts.push(`<p>Entfernt: <strong>${names.join(", ")}</strong></p>`);
   }
   const loginHint = input.loginUrl
     ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`

@@ -36,7 +36,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 | **Nachrücken Warteliste** | `processPromotions` | Nachgerückte Person | `buildWaitlistPromotionMail` + `.ics` | wie Tausch erfolgreich |
 | **Termin freigegeben (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantTermReleasedMail` | rechtzeitige Absage vor Cutoff; Hinweis Ersatztermin; **keine** Mail bei kurzfristiger Absage |
 | **Tausch erfolgreich** | `createSwap` (→ `active`), `updateSwap` (→ `active`), `processRingSwaps` | Tauschende Person | `buildSwapSuccessMail` + `.ics`-Anhang | `SendRawEmail`; ICS `METHOD:PUBLISH` |
-| **Kursbeitritt** | `updateCourse` | Neu hinzugefügte Stamm-TN | `buildCourseMembershipMail` | Nur bei `active`; nicht bei `draft`→`active` (dort Kurs-aktiv-Mail) |
+| **Kursbeitritt** | `updateCourse` | Neu hinzugefügte Stamm-TN | `buildCourseMembershipMail` mit **persönlichem ersten Termin** (`validFrom` / `enrollmentChanges.add`) | Nur bei `active`; nicht bei `draft`→`active` (dort Kurs-aktiv-Mail) |
 | **Kurs aktiv (draft→active)** | `updateCourse` | Alle Stamm-TN | `buildCourseActivatedMail` | Einmalig bei Statuswechsel |
 | **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Code vorhanden; **versendet erst**, wenn `instructors` am Kurs gesetzt — Bedarf/Leitung-Zuordnung noch klären |
 
@@ -89,7 +89,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 |------|----------|--------|------------------|--------|
 | **1** | **Nachrücken von Warteliste** | Bestätigung mit Termin (HTML) + **ICS** | `processPromotions` | ✓ |
 | **2** | **Tausch erfolgreich** | Bestätigung mit Zieltermin (HTML) + **ICS** | `createSwap` / `updateSwap` / `processRingSwaps` | ✓ |
-| **3** | **Kursbeitritt** | Willkommen + Kursinfo + nächster/erster Termin (HTML) | `updateCourse` | ✓ |
+| **3** | **Kursbeitritt** | Willkommen + erster eigener Termin (HTML, `validFrom`) | `updateCourse` | ✓ |
 
 **Nicht in MVP:** Tausch**anfragen** (eingehend/ausgehend) — potenziell zu viel Lärm; erst nach Erfahrung im Betrieb entscheiden.
 
@@ -97,7 +97,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 
 | Situation | Empfänger | Anmerkung |
 |-----------|-----------|-----------|
-| Person wird zu **`active`** Kurs in `course.participants` hinzugefügt | die hinzugefügte Person | Abgrenzung: Studio-**Einladung** (`createParticipants`) bleibt separat |
+| Person wird zu **`active`** Kurs hinzugefügt (inkl. späteres **ab**-Datum) | die hinzugefügte Person; Text mit ihrem ersten Termin | Abgrenzung: Studio-**Einladung** (`createParticipants`) bleibt separat |
 | Kurs wechselt **`draft` → `active`** | alle aktuell in `course.participants` | einmalige „Kurs ist live“-Mail; nicht bei jedem späteren Edit |
 
 Keine Mail bei reinem Entfernen aus der Liste (dafür ggf. später separat).

@@ -1284,6 +1284,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const previousParticipantsMailSet = new Set(
         previousParticipantsForMail.map((entry) => entry.toLowerCase()),
       );
+      const mailDateMaps = enrollmentChangesToDateMaps(enrollmentChanges ?? undefined);
       const addedParticipantsForMail = participants.filter(
         (entry) => !previousParticipantsMailSet.has(entry.toLowerCase()),
       );
@@ -1301,6 +1302,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             weekday: mailWeekday,
             time: mailTime,
             termDateIso: upcomingTermIso,
+            termDateByUser: mailDateMaps.addValidFromByUser,
             participantsTable,
             sesSourceEmail,
             baseUrl: baseUrlEnv,
@@ -1331,6 +1333,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             courseName: mailCourseName,
             addedParticipants: addedParticipantsForMail,
             removedParticipants: removedParticipantsForMail,
+            addedFromByUser: mailDateMaps.addValidFromByUser,
+            removedUntilByUser: mailDateMaps.removeValidUntilByUser,
             participantsTable,
             sesSourceEmail,
             baseUrl: baseUrlEnv,
