@@ -63,10 +63,11 @@ Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehend
 
 ## Mitglieder-Dialog (#305)
 
-Referenz **R = nächster offener Kurstermin** (noch nicht im Cutoff-Fenster, noch nicht gestartet).  
-Inactive: letzter Kurstermin. Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas` für den **angezeigten** Termin.
+Der Dialog betrachtet den **aktuellen Zeitpunkt**. Die aktuellste Stamm-Information ist der **nächste noch offene Kurstermin R** (`stemOn(R)`), nicht das Kalenderdatum.
 
-Cutoff/laufender Termin zählt als **vergangen**. `validFrom` / `validUntil` sind Kurstermine, kein Kalender-„heute“.
+Ein Termin ist **geschlossen** (zählt nicht als R), sobald die Startzeit erreicht/vorbei ist **oder** das Cutoff-Fenster läuft (Studio-Einstellung, Default 60 Min. vor Beginn; Cutoff 0: nur gestartet/vergangen). R = frühester noch offener Termin; sonst letzter geschlossener. Inactive: letzter Kurstermin der Serie.
+
+Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas` für den **angezeigten** Termin, unabhängig von R. `validFrom` / `validUntil` sind Kurstermine.
 
 | Status | UI |
 |--------|----|
