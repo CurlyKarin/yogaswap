@@ -317,7 +317,7 @@ export default function CourseMembersDialog({
   };
 
   const handleSave = async () => {
-    if (!courseId) return;
+    if (!courseId || isInactive) return;
     if (isDraft) {
       if (selectedParticipants.length > maxCapacity) {
         setLocalError(`Maximal ${maxCapacity} Teilnehmer können zugeordnet werden.`);
@@ -501,6 +501,11 @@ export default function CourseMembersDialog({
         <p className="course-editor-note" style={{ marginTop: 0 }}>
           {headline}
         </p>
+        {isInactive && (
+          <p className="course-editor-note">
+            Nur Historie. Mitglieder eines inaktiven Kurses können nicht geändert werden.
+          </p>
+        )}
 
         {isIntervalUi && (
           <div className="course-members-upper">
@@ -526,7 +531,7 @@ export default function CourseMembersDialog({
           </button>
         )}
 
-        {(!isIntervalUi || lowerListOpen) && (
+        {(!isIntervalUi || lowerListOpen) && !isInactive && (
           <div className="dialog-search-block">
             <input
               ref={searchInputRef}
@@ -626,7 +631,7 @@ export default function CourseMembersDialog({
           <>
             {loadingParticipants ? (
               <p className="course-editor-note">Mitglieder laden...</p>
-            ) : filteredParticipants.length === 0 && groups.ehemalig.length === 0 ? (
+            ) : (isInactive ? groups.ehemalig.length === 0 : filteredParticipants.length === 0 && groups.ehemalig.length === 0) ? (
               <p className="course-editor-note">Keine weiteren Mitglieder.</p>
             ) : (
               <div
@@ -680,12 +685,12 @@ export default function CourseMembersDialog({
                     </div>
                   );
                 })}
-                {filteredParticipants.map((entry) => {
-                  const status = getStatusPresentation(entry.status);
-                  return (
-                    <div key={entry.userId} className="course-members-row">
-                      <MemberIdentity userId={entry.userId} email={entry.email} status={status} />
-                      {!isInactive && (
+                {!isInactive &&
+                  filteredParticipants.map((entry) => {
+                    const status = getStatusPresentation(entry.status);
+                    return (
+                      <div key={entry.userId} className="course-members-row">
+                        <MemberIdentity userId={entry.userId} email={entry.email} status={status} />
                         <label className="course-members-date">
                           ab
                           <select
@@ -705,10 +710,9 @@ export default function CourseMembersDialog({
                             ))}
                           </select>
                         </label>
-                      )}
-                    </div>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </>
@@ -730,22 +734,24 @@ export default function CourseMembersDialog({
       </div>
       <div className="modal-actions">
         <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>
-          Abbrechen
+          {isInactive ? "Schließen" : "Abbrechen"}
         </button>
-        <button
-          type="button"
-          className="btn-primary modal-action-btn"
-          onClick={handleSave}
-          disabled={
-            saving ||
-            loadingParticipants ||
-            !courseId ||
-            (isDraft && selectedParticipants.length > maxCapacity) ||
-            (!isDraft && groups.dabei.length > maxCapacity)
-          }
-        >
-          {saving ? "Speichere..." : "Mitglieder speichern"}
-        </button>
+        {!isInactive && (
+          <button
+            type="button"
+            className="btn-primary modal-action-btn"
+            onClick={handleSave}
+            disabled={
+              saving ||
+              loadingParticipants ||
+              !courseId ||
+              (isDraft && selectedParticipants.length > maxCapacity) ||
+              (!isDraft && groups.dabei.length > maxCapacity)
+            }
+          >
+            {saving ? "Speichere..." : "Mitglieder speichern"}
+          </button>
+        )}
       </div>
     </CourseModalFrame>
   );

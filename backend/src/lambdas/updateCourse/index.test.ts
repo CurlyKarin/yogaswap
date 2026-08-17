@@ -358,6 +358,26 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Planungssperre/);
   });
 
+  test("rejects participant and enrollment patches for inactive courses", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
+    const participantsResult = await handler(makeEvent({ participants: ["luna", "maja"] }));
+    expect(participantsResult.statusCode).toBe(400);
+    expect(JSON.parse(participantsResult.body).error).toMatch(/inaktiven Kurses/);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+
+    mockSend.mockReset();
+    (PutItemCommand as unknown as jest.Mock).mockClear();
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
+    const enrollmentResult = await handler(
+      makeEvent({
+        enrollmentChanges: [{ userId: "luna", action: "add", dateIso: "2026-08-14" }],
+      }),
+    );
+    expect(enrollmentResult.statusCode).toBe(400);
+    expect(JSON.parse(enrollmentResult.body).error).toMatch(/inaktiven Kurses/);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+  });
+
   test("rejects invalid status transition inactive -> active", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") });

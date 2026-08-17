@@ -72,13 +72,13 @@ Cutoff/laufender Termin zählt als **vergangen**. `validFrom` / `validUntil` sin
 |--------|----|
 | **Draft** | Flache Liste, **Klick** ordnet zu/ab. Keine ab/bis-Daten. Kopfzeile `Zugeordnet n / max`. |
 | **Active** | Dabei / endet / kommt. **Kein** Verschieben per Klick. Aufnehmen nur über **ab**-Datum (nächster offener Termin und später). Beenden nur über **bis**-Datum (letzter geschlossener Termin oder R/später). |
-| **Inactive** | Kein „kommt“, keine Neuplanung über den Dialog. |
+| **Inactive** | Nur Anzeige (Historie). Kein „kommt“, keine ab/bis-Auswahl, kein Speichern. Änderungen nur nach Reaktivierung über Draft. |
 
 - `n/max` = Dabei an R (`stemOn(R)`), inkl. Personen mit `validUntil` solange `R ≤ validUntil`
 - Kommt zählen nicht in `n`
 - Kopfzeile z. B. `Teilnehmer 6/6 · 2 enden · 2 kommen neu dazu` (ohne Daten)
 - Obere Liste immer offen; untere Liste (nicht dabei / ehemals) eingeklappt
-- Speichern sendet `participants[]` (Dabei + Kommt) und `enrollmentChanges[]` (`add`/`remove` + `dateIso`)
+- Speichern (nur Draft/Active) sendet `participants[]` (Dabei + Kommt) und `enrollmentChanges[]` (`add`/`remove` + `dateIso`). Inactive: kein Speichern; `updateCourse` lehnt Mitglieder-Patches ab.
 - Remove mit letztem Termin (`validUntil < R`) nimmt die Person aus dem nächsten Termin (Ehemalige)
 - „endet“ = noch Stamm an R, aber `validUntil` gesetzt (letzter Termin = R oder später)
 - **Vergangenes Ende** (`validUntil < R`) ist in der unteren Liste nur Anzeige, nicht editierbar. Wiederaufnahme: neues **ab** nach dem letzten `validUntil` (neues Segment).

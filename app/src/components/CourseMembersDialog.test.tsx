@@ -245,6 +245,7 @@ describe("CourseMembersDialog", () => {
   });
 
   it("hides incoming members and add actions for inactive courses", async () => {
+    const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
       { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
       { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
@@ -258,15 +259,26 @@ describe("CourseMembersDialog", () => {
         enrollments={[
           { courseId: 7, userId: "alice", validFrom: "2026-01-01" },
           { courseId: 7, userId: "bob", validFrom: "2026-09-01" },
+          { courseId: 7, userId: "dana", validFrom: "2025-01-01", validUntil: "2025-12-01" },
         ]}
         initialParticipants={["alice"]}
+        onSaveParticipants={onSaveParticipants}
       />,
     );
 
     expect(await screen.findByText("Teilnehmer 1/10")).toBeInTheDocument();
+    expect(
+      screen.getByText("Nur Historie. Mitglieder eines inaktiven Kurses können nicht geändert werden."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /entfernen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /mitglieder speichern/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /schließen/i })).toBeInTheDocument();
+
     await userEvent.click(screen.getByRole("button", { name: /weitere mitglieder/i }));
+    expect(await screen.findByLabelText("dana ehemals bis")).toBeInTheDocument();
+    expect(screen.queryByText("cara")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/gültig ab/i)).not.toBeInTheDocument();
+    expect(onSaveParticipants).not.toHaveBeenCalled();
   });
 
   it("saves a corrected validUntil on an already closed enrollment", async () => {

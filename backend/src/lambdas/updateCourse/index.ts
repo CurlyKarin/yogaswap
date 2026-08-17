@@ -507,6 +507,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const nextStatus = status ?? currentStatus;
+    if (
+      currentStatus === "inactive" &&
+      nextStatus === "inactive" &&
+      (participants != null || Boolean(enrollmentChanges?.length))
+    ) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: "Mitglieder eines inaktiven Kurses können nicht geändert werden.",
+        }),
+      };
+    }
     if (status && nextStatus !== currentStatus) {
       const hasParticipants = courseHasParticipants(courseParticipants);
       const transitionAllowed =
