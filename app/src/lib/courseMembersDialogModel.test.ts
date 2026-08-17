@@ -3,11 +3,14 @@ import type { CourseEnrollment } from "shared/types";
 import { ENROLLMENT_OPEN_START } from "shared/courseEnrollment";
 import {
   diffEnrollmentChanges,
+  endTermOptions,
+  isPastEnrollmentEnd,
   lastClosedCourseTermIso,
   membersDialogReferenceIso,
   nextCourseTermIso,
   nextOpenCourseTermIso,
   openRosterUserIds,
+  startTermOptions,
   syntheticOpenEnrollments,
 } from "./courseMembersDialogModel";
 
@@ -107,6 +110,39 @@ describe("courseMembersDialogModel", () => {
     expect(diffEnrollmentChanges(previous, next, "2026-08-17")).toEqual([
       { userId: "alice", action: "remove", dateIso: "2026-08-31" },
     ]);
+  });
+
+  it("locks an enrollment end that is already before the reference term", () => {
+    expect(isPastEnrollmentEnd("2026-08-10", "2026-08-17")).toBe(true);
+    expect(isPastEnrollmentEnd("2026-08-17", "2026-08-17")).toBe(false);
+    expect(isPastEnrollmentEnd(undefined, "2026-08-17")).toBe(false);
+  });
+
+  it("offers start terms on or after the reference and after a previous until", () => {
+    expect(
+      startTermOptions({
+        dates: ["2026-08-10", "2026-08-17", "2026-08-24", "2026-08-31"],
+        refIso: "2026-08-24",
+        afterUntil: "2026-08-17",
+      }),
+    ).toEqual(["2026-08-24", "2026-08-31"]);
+    expect(
+      startTermOptions({
+        dates: ["2026-08-10", "2026-08-17", "2026-08-24"],
+        refIso: "2026-08-17",
+        afterUntil: "2026-08-17",
+      }),
+    ).toEqual(["2026-08-24"]);
+  });
+
+  it("offers end terms as last closed plus the reference and later", () => {
+    expect(
+      endTermOptions({
+        dates: ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24"],
+        refIso: "2026-08-17",
+        lastClosed: "2026-08-10",
+      }),
+    ).toEqual(["2026-08-10", "2026-08-17", "2026-08-24"]);
   });
 
   it("synthesizes open enrollments from the cache", () => {

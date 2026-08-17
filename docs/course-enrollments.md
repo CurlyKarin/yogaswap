@@ -69,8 +69,8 @@ Cutoff/laufender Termin zählt als **vergangen**. `validFrom` / `validUntil` sin
 
 | Status | UI |
 |--------|----|
-| **Draft** | Flache Liste, keine ab/bis-Daten. Kopfzeile `Zugeordnet n / max`. |
-| **Active** | Dabei / endet / kommt am nächsten offenen Termin. Add default = dieser Termin; Remove default = letzter (geschlossener) Termin. |
+| **Draft** | Flache Liste, **Klick** ordnet zu/ab. Keine ab/bis-Daten. Kopfzeile `Zugeordnet n / max`. |
+| **Active** | Dabei / endet / kommt. **Kein** Verschieben per Klick. Aufnehmen nur über **ab**-Datum (nächster offener Termin und später). Beenden nur über **bis**-Datum (letzter geschlossener Termin oder R/später). |
 | **Inactive** | Kein „kommt“, keine Neuplanung über den Dialog. |
 
 - `n/max` = Dabei an R (`stemOn(R)`), inkl. Personen mit `validUntil` solange `R ≤ validUntil`
@@ -80,6 +80,7 @@ Cutoff/laufender Termin zählt als **vergangen**. `validFrom` / `validUntil` sin
 - Speichern sendet `participants[]` (Dabei + Kommt) und `enrollmentChanges[]` (`add`/`remove` + `dateIso`)
 - Remove mit letztem Termin (`validUntil < R`) nimmt die Person aus dem nächsten Termin (Ehemalige)
 - „endet“ = noch Stamm an R, aber `validUntil` gesetzt (letzter Termin = R oder später)
+- **Vergangenes Ende** (`validUntil < R`) ist in der unteren Liste nur Anzeige, nicht editierbar. Wiederaufnahme: neues **ab** nach dem letzten `validUntil` (neues Segment).
 
 ## Migration / Seed
 

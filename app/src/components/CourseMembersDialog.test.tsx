@@ -158,11 +158,11 @@ describe("CourseMembersDialog", () => {
     );
 
     expect(await screen.findByText("Teilnehmer 1/10 · 1 kommt neu dazu")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /alice bis .* beenden/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /bob wieder entfernen/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("alice gültig bis")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entfernen" })).toBeInTheDocument();
     expect(screen.queryByRole("listbox", { name: /weitere mitglieder/i })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /alice bis .* beenden/i }));
+    await userEvent.selectOptions(screen.getByLabelText("alice gültig bis"), "2020-01-06");
     expect(screen.getByText("Teilnehmer 0/10 · 1 kommt neu dazu")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
@@ -196,17 +196,12 @@ describe("CourseMembersDialog", () => {
 
     expect(await screen.findByRole("button", { name: "Weitere Mitglieder" })).toBeInTheDocument();
     expect(screen.getByText("alice@studio.test")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /alice bis .* beenden/i })).not.toHaveAttribute(
-      "title",
-      "alice@studio.test",
-    );
+    expect(screen.queryByRole("button", { name: /alice bis .* beenden/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Weitere Mitglieder" }));
     expect(screen.getByText("cara@studio.test")).toBeInTheDocument();
-    const listbox = await screen.findByRole("listbox", { name: /weitere mitglieder/i });
-    listbox.focus();
-    fireEvent.keyDown(listbox, { key: " " });
-    expect(screen.getByRole("button", { name: /cara bis .* beenden/i })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("cara gültig ab"), "2099-06-16");
+    expect(screen.getByLabelText("cara gültig bis")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
     expect(onSaveParticipants).toHaveBeenCalledWith(
@@ -238,9 +233,9 @@ describe("CourseMembersDialog", () => {
     );
 
     expect(await screen.findByText("Teilnehmer 1/10")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /bob wieder entfernen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /entfernen/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /weitere mitglieder/i }));
-    expect(screen.queryByRole("button", { name: /wieder aufnehmen/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/gültig ab/i)).not.toBeInTheDocument();
   });
 
   it("saves a corrected validUntil on an already closed enrollment", async () => {
@@ -314,7 +309,29 @@ describe("CourseMembersDialog", () => {
     ]);
   });
 
-  it("saves a corrected validUntil for a former member", async () => {
+  it("does not move an active member by clicking the name", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        courseDates={["2020-01-06", "2099-06-16"]}
+        courseTime="10:00"
+        enrollments={[{ courseId: 7, userId: "alice", validFrom: "2026-01-01" }]}
+        initialParticipants={["alice"]}
+      />,
+    );
+
+    expect(await screen.findByText("Teilnehmer 1/10")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("alice"));
+    expect(screen.getByLabelText("alice gültig bis")).toHaveValue("");
+    expect(screen.getByText("Teilnehmer 1/10")).toBeInTheDocument();
+  });
+
+  it("shows a former end date as read-only and rejoins via a start date", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
       { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
@@ -335,12 +352,16 @@ describe("CourseMembersDialog", () => {
     );
 
     await userEvent.click(await screen.findByRole("button", { name: "Weitere Mitglieder" }));
-    const untilSelect = await screen.findByLabelText("alice gültig bis");
-    expect(untilSelect).toHaveValue("2020-01-06");
-    await userEvent.selectOptions(untilSelect, "2020-01-13");
+    expect(screen.getByLabelText("alice ehemals bis")).toHaveTextContent("ehemals bis");
+    expect(screen.queryByLabelText("alice gültig bis")).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("alice gültig ab"), "2099-06-16");
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
-    expect(onSaveParticipants).toHaveBeenCalledWith(7, [], [
-      { userId: "alice", action: "remove", dateIso: "2020-01-13" },
-    ]);
+    expect(onSaveParticipants).toHaveBeenCalledWith(
+      7,
+      ["alice"],
+      expect.arrayContaining([
+        expect.objectContaining({ userId: "alice", action: "add", dateIso: "2099-06-16" }),
+      ]),
+    );
   });
 });

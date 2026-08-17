@@ -17,13 +17,15 @@ import type { CourseEnrollment, CourseStatus, TenantSettings } from "shared/type
 import { formatIsoDateForDisplay } from "./courseDatesDialogUtils";
 import {
   diffEnrollmentChanges,
+  endTermOptions,
+  isPastEnrollmentEnd,
   lastClosedCourseTermIso,
   membersDialogReferenceIso,
   nextCourseTermIso,
   nextOpenCourseTermIso,
   openRosterUserIds,
+  startTermOptions,
   syntheticOpenEnrollments,
-  termOptionsForSelect,
 } from "../lib/courseMembersDialogModel";
 
 type CourseMembersDialogProps = {
@@ -187,11 +189,18 @@ export default function CourseMembersDialog({
     [workingEnrollments, refIso],
   );
 
+  const formerIds = useMemo(
+    () => new Set(groups.ehemalig.map((row) => row.userId.toLowerCase())),
+    [groups.ehemalig],
+  );
   const filteredParticipants = useMemo(() => {
     const searched = filterParticipantsBySearch(availableParticipants, search);
     if (!isIntervalUi) return searched;
-    return searched.filter((entry) => !rosterIds.has(entry.userId.toLowerCase()));
-  }, [availableParticipants, search, isIntervalUi, rosterIds]);
+    return searched.filter((entry) => {
+      const key = entry.userId.toLowerCase();
+      return !rosterIds.has(key) && !formerIds.has(key);
+    });
+  }, [availableParticipants, search, isIntervalUi, rosterIds, formerIds]);
 
   const profileById = useMemo(
     () => new Map(availableParticipants.map((entry) => [entry.userId.toLowerCase(), entry])),
@@ -305,8 +314,11 @@ export default function CourseMembersDialog({
         if (field === "validFrom" && isEnrollmentOpen(entry)) {
           return { ...entry, validFrom: dateIso };
         }
-        if (field === "validUntil" && (isEnrollmentOpen(entry) || entry.validUntil)) {
-          return { ...entry, validUntil: dateIso };
+        if (field === "validUntil") {
+          if (isPastEnrollmentEnd(entry.validUntil, refIso)) return entry;
+          if (isEnrollmentOpen(entry) || entry.validUntil) {
+            return { ...entry, validUntil: dateIso };
+          }
         }
         return entry;
       });
@@ -368,9 +380,8 @@ export default function CourseMembersDialog({
     if (event.key === " " || event.key === "Enter") {
       event.preventDefault();
       const active = filteredParticipants[activeListIndex];
-      if (!active) return;
-      if (isDraft) toggleDraftParticipant(active.userId);
-      else addIntervalMember(active.userId);
+      if (!active || !isDraft) return;
+      toggleDraftParticipant(active.userId);
     }
   };
 
@@ -392,17 +403,16 @@ export default function CourseMembersDialog({
       return;
     }
     if (isDraft) toggleDraftParticipant(userId);
-    else addIntervalMember(userId);
   };
 
   if (!open || !courseName) return null;
 
-  const dateOptions = termOptionsForSelect(courseDates, [
-    defaultAddFrom,
-    defaultRemoveUntil,
-    lastClosedCourseTermIso(termContext),
-    nextOpenCourseTermIso(termContext),
-  ]);
+  const lastClosedIso = lastClosedCourseTermIso(termContext);
+  const addDateOptions = startTermOptions({
+    dates: courseDates,
+    refIso,
+    extra: [defaultAddFrom, nextOpenCourseTermIso(termContext)],
+  });
 
   const renderUpperRow = (
     row: { userId: string; validFrom: string; validUntil?: string; ending: boolean },
@@ -410,52 +420,56 @@ export default function CourseMembersDialog({
   ) => {
     const profile = profileById.get(row.userId.toLowerCase());
     const status = getStatusPresentation(profile?.status);
+    const fromOptions = startTermOptions({
+      dates: courseDates,
+      refIso,
+      extra: [row.validFrom, defaultAddFrom],
+    });
+    const untilOptions = endTermOptions({
+      dates: courseDates,
+      refIso,
+      lastClosed: lastClosedIso,
+      extra: [row.validUntil, defaultRemoveUntil],
+    });
     return (
       <div
         key={`${kind}-${row.userId}`}
         className={`course-members-row${kind === "kommt" ? " is-incoming" : ""}${row.ending ? " is-ending" : ""}`}
       >
-        <button
-          type="button"
-          className="course-members-row-main"
-          disabled={saving || isInactive}
-          onClick={() => {
-            if (isInactive) return;
-            if (kind === "kommt") dropUpcomingMember(row.userId);
-            else if (row.ending) undoIntervalRemove(row.userId);
-            else removeIntervalMember(row.userId);
-          }}
-          aria-label={
-            kind === "kommt"
-              ? `${row.userId} wieder entfernen`
-              : row.ending
-                ? `${row.userId}: Ende zurücknehmen`
-                : `${row.userId} bis ${defaultRemoveUntil} beenden`
-          }
-        >
-          <MemberIdentity
-            userId={row.userId}
-            email={profile?.email}
-            status={status}
-            missing={!profile}
-          />
-        </button>
+        <MemberIdentity
+          userId={row.userId}
+          email={profile?.email}
+          status={status}
+          missing={!profile}
+        />
         {kind === "kommt" ? (
-          <label className="course-members-date">
-            ab
-            <select
-              value={row.validFrom}
-              disabled={saving || isInactive}
-              aria-label={`${row.userId} gültig ab`}
-              onChange={(event) => updateMemberDate(row.userId, "validFrom", event.target.value)}
-            >
-              {termOptionsForSelect(dateOptions, [row.validFrom]).map((iso) => (
-                <option key={iso} value={iso}>
-                  {formatIsoDateForDisplay(iso)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <span className="course-members-row-meta">
+            <label className="course-members-date">
+              ab
+              <select
+                value={row.validFrom}
+                disabled={saving || isInactive}
+                aria-label={`${row.userId} gültig ab`}
+                onChange={(event) => updateMemberDate(row.userId, "validFrom", event.target.value)}
+              >
+                {fromOptions.map((iso) => (
+                  <option key={iso} value={iso}>
+                    {formatIsoDateForDisplay(iso)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {!isInactive && (
+              <button
+                type="button"
+                className="modal-action-btn"
+                disabled={saving}
+                onClick={() => dropUpcomingMember(row.userId)}
+              >
+                Entfernen
+              </button>
+            )}
+          </span>
         ) : (
           <label className="course-members-date">
             bis
@@ -471,7 +485,7 @@ export default function CourseMembersDialog({
               }}
             >
               <option value="">offen</option>
-              {termOptionsForSelect(dateOptions, [row.validUntil]).map((iso) => (
+              {untilOptions.map((iso) => (
                 <option key={iso} value={iso}>
                   {formatIsoDateForDisplay(iso)}
                 </option>
@@ -535,7 +549,9 @@ export default function CourseMembersDialog({
               className="dialog-field dialog-search-field"
             />
             <p id="course-members-list-hint" className="course-editor-note dialog-search-hint dialog-search-hint-mobile-a11y">
-              Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Zuordnen.
+              {isDraft
+                ? "Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Zuordnen."
+                : "Aufnehmen über das Startdatum, Beenden über das Endedatum."}
             </p>
           </div>
         )}
@@ -624,19 +640,17 @@ export default function CourseMembersDialog({
               <p className="course-editor-note">Keine weiteren Mitglieder.</p>
             ) : (
               <div
-                ref={listBoxRef}
                 style={{ maxHeight: 240, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8 }}
-                role="listbox"
                 aria-label="Weitere Mitglieder"
-                aria-describedby="course-members-list-hint"
-                tabIndex={0}
-                onKeyDown={handleParticipantListKeyDown}
-                onFocus={() => setListHasFocus(true)}
-                onBlur={() => setListHasFocus(false)}
-                className={listHasFocus ? "course-members-listbox is-focused" : "course-members-listbox"}
               >
                 {groups.ehemalig.map((row) => {
                   const profile = profileById.get(row.userId.toLowerCase());
+                  const rejoinOptions = startTermOptions({
+                    dates: courseDates,
+                    refIso,
+                    afterUntil: row.validUntil,
+                    extra: [defaultAddFrom],
+                  });
                   return (
                     <div key={`ex-${row.userId}`} className="course-members-row course-members-row-former">
                       <MemberIdentity
@@ -647,62 +661,61 @@ export default function CourseMembersDialog({
                       />
                       <span className="course-members-row-meta">
                         {row.validUntil ? (
+                          <span className="course-members-date" aria-label={`${row.userId} ehemals bis`}>
+                            ehemals bis {formatIsoDateForDisplay(row.validUntil)}
+                          </span>
+                        ) : null}
+                        {!isInactive && rejoinOptions.length > 0 && (
                           <label className="course-members-date">
-                            ehemals bis
+                            ab
                             <select
-                              value={row.validUntil}
-                              disabled={saving || isInactive}
-                              aria-label={`${row.userId} gültig bis`}
-                              onChange={(event) =>
-                                updateMemberDate(row.userId, "validUntil", event.target.value)
-                              }
+                              value=""
+                              disabled={saving}
+                              aria-label={`${row.userId} gültig ab`}
+                              onChange={(event) => {
+                                const next = event.target.value;
+                                if (next) addIntervalMember(row.userId, next);
+                              }}
                             >
-                              {termOptionsForSelect(dateOptions, [row.validUntil]).map((iso) => (
+                              <option value="">wählen</option>
+                              {rejoinOptions.map((iso) => (
                                 <option key={iso} value={iso}>
                                   {formatIsoDateForDisplay(iso)}
                                 </option>
                               ))}
                             </select>
                           </label>
-                        ) : null}
-                        {!isInactive && (
-                          <button
-                            type="button"
-                            className="modal-action-btn"
-                            disabled={saving}
-                            onClick={() => addIntervalMember(row.userId)}
-                          >
-                            Wieder aufnehmen
-                          </button>
                         )}
                       </span>
                     </div>
                   );
                 })}
-                {filteredParticipants.map((entry, index) => {
+                {filteredParticipants.map((entry) => {
                   const status = getStatusPresentation(entry.status);
-                  const isActive = index === activeListIndex;
                   return (
-                    <div
-                      key={entry.userId}
-                      id={`participant-option-${entry.userId.toLowerCase()}`}
-                      role="option"
-                      aria-selected={isActive}
-                      className="course-members-row"
-                      style={{
-                        cursor: isInactive ? "default" : "pointer",
-                        background: isActive ? "#eff6ff" : "transparent",
-                      }}
-                      onMouseEnter={() => setActiveListIndex(index)}
-                      onMouseDownCapture={() => {
-                        pointerPrimedSelectionRef.current = document.activeElement !== listBoxRef.current;
-                      }}
-                      onClick={() => {
-                        if (isInactive) return;
-                        handleParticipantOptionClick(index, entry.userId);
-                      }}
-                    >
+                    <div key={entry.userId} className="course-members-row">
                       <MemberIdentity userId={entry.userId} email={entry.email} status={status} />
+                      {!isInactive && (
+                        <label className="course-members-date">
+                          ab
+                          <select
+                            value=""
+                            disabled={saving}
+                            aria-label={`${entry.userId} gültig ab`}
+                            onChange={(event) => {
+                              const next = event.target.value;
+                              if (next) addIntervalMember(entry.userId, next);
+                            }}
+                          >
+                            <option value="">wählen</option>
+                            {addDateOptions.map((iso) => (
+                              <option key={iso} value={iso}>
+                                {formatIsoDateForDisplay(iso)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                     </div>
                   );
                 })}

@@ -114,6 +114,39 @@ export function termOptionsForSelect(dates: string[], extra?: Array<string | und
   return [...set].sort();
 }
 
+/** Former members: validUntil is already before the dialog reference term. */
+export function isPastEnrollmentEnd(validUntil: string | undefined, refIso: string): boolean {
+  return Boolean(validUntil && validUntil < refIso);
+}
+
+/**
+ * Start dates for add / rejoin: next open term and later.
+ * After a closed segment, only terms strictly after that inclusive until.
+ */
+export function startTermOptions(input: {
+  dates: string[];
+  refIso: string;
+  afterUntil?: string;
+  extra?: Array<string | undefined>;
+}): string[] {
+  const after = input.afterUntil ?? "";
+  return termOptionsForSelect(input.dates, input.extra).filter(
+    (iso) => iso >= input.refIso && iso > after,
+  );
+}
+
+/** End dates while still on the roster: last closed term (leave now) plus R and later. */
+export function endTermOptions(input: {
+  dates: string[];
+  refIso: string;
+  lastClosed?: string;
+  extra?: Array<string | undefined>;
+}): string[] {
+  return termOptionsForSelect(input.dates, [input.lastClosed, ...(input.extra ?? [])]).filter(
+    (iso) => iso >= input.refIso || iso === input.lastClosed,
+  );
+}
+
 function isRosterMember(
   enrollment: Pick<CourseEnrollment, "validFrom" | "validUntil"> | null,
   refIso: string,

@@ -773,7 +773,7 @@ describe("CourseList", () => {
 
     await screen.findByLabelText("Kursmitglieder bearbeiten");
     await user.click(screen.getByRole("button", { name: /weitere mitglieder/i }));
-    await user.click(await screen.findByRole("option", { name: /luna/i }));
+    await user.selectOptions(await screen.findByLabelText("luna gültig ab"), "2099-06-16");
     await user.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
 
     await waitFor(() => {
