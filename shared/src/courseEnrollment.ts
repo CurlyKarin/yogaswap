@@ -238,6 +238,15 @@ export function isEnrollmentOpen(
   return enrollment.validUntil == null || enrollment.validUntil === "";
 }
 
+/** Empty or inverted interval (until before from) is not a real membership. */
+export function isEnrollmentRangeValid(
+  enrollment: Pick<CourseEnrollment, "validFrom" | "validUntil">,
+): boolean {
+  if (isEnrollmentOpen(enrollment)) return true;
+  const until = enrollment.validUntil;
+  return until != null && until !== "" && until >= enrollment.validFrom;
+}
+
 /** Latest open segment for a user (by validFrom), or null. */
 export function findOpenEnrollmentForUser(
   enrollments: Array<Pick<CourseEnrollment, "userId" | "validFrom" | "validUntil">>,
@@ -349,9 +358,11 @@ export type PlanStemEnrollmentWritesInput = {
 
 export type PlanStemEnrollmentWritesResult = {
   puts: CourseEnrollment[];
+  deletes: CourseEnrollment[];
   bootstrapped: boolean;
   addedUserIds: string[];
   closedUserIds: string[];
+  deletedUserIds: string[];
 };
 
 /**
@@ -365,14 +376,15 @@ export type PlanStemEnrollmentWritesResult = {
  *   A rejoin with a future exit still present (planned pause) is NOT supported and must be handled separately.
  * - **Overlap guard**: a new segment is skipped when it would overlap any existing segment for the same person.
  * - **Clamp on close**: validUntil is clamped to one day before the next segment's validFrom if necessary.
- * - **Close before start**: validUntil may be before validFrom (future course, removed before first term);
- *   the row stays, but isEnrollmentActiveOnDate is never true.
- * - **History preserved**: closed rows are never deleted.
+ * - **Never started**: if close would set validUntil before validFrom, delete the row
+ *   (planned join cancelled). Do not persist inverted intervals.
+ * - **History preserved**: closed rows with a real interval are never deleted.
  */
 export function planStemEnrollmentWrites(
   input: PlanStemEnrollmentWritesInput,
 ): PlanStemEnrollmentWritesResult {
   const puts: CourseEnrollment[] = [];
+  const deletes: CourseEnrollment[] = [];
   let working = [...input.existingEnrollments];
   let bootstrapped = false;
 
@@ -397,12 +409,26 @@ export function planStemEnrollmentWrites(
     bootstrapped = true;
   }
 
+  const addedUserIds: string[] = [];
+  const closedUserIds: string[] = [];
+  const deletedUserIds: string[] = [];
+
+  const inverted = working.filter((entry) => !isEnrollmentRangeValid(entry));
+  if (inverted.length > 0) {
+    deletes.push(...inverted);
+    deletedUserIds.push(...inverted.map((entry) => entry.userId));
+    const invertedKeys = new Set(
+      inverted.map((entry) => `${entry.userId.toLowerCase()}#${entry.validFrom}`),
+    );
+    working = working.filter(
+      (entry) => !invertedKeys.has(`${entry.userId.toLowerCase()}#${entry.validFrom}`),
+    );
+  }
+
   const { added, removed } = diffParticipantLists(
     input.previousParticipants,
     input.nextParticipants,
   );
-  const addedUserIds: string[] = [];
-  const closedUserIds: string[] = [];
 
   const addUserIds = uniqueCaseInsensitive([
     ...added,
@@ -474,8 +500,18 @@ export function planStemEnrollmentWrites(
       findLatestEnrollmentForUser(working, userId);
     if (!target) continue;
     const validUntil = clampUntilToAvoidOverlap(working, userId, target, requestedUntil);
-    // until < from is allowed: future course, person removed before the first term.
-    // isEnrollmentActiveOnDate is then never true, without deleting the row.
+    if (validUntil < target.validFrom) {
+      working = working.filter(
+        (entry) =>
+          !(
+            entry.userId.toLowerCase() === target.userId.toLowerCase() &&
+            entry.validFrom === target.validFrom
+          ),
+      );
+      deletes.push(target as CourseEnrollment);
+      deletedUserIds.push(userId);
+      continue;
+    }
     if (!isEnrollmentOpen(target) && target.validUntil === validUntil) continue;
     const closed = closeEnrollmentSegment(
       target as CourseEnrollment,
@@ -496,7 +532,7 @@ export function planStemEnrollmentWrites(
     closedUserIds.push(userId);
   }
 
-  return { puts, bootstrapped, addedUserIds, closedUserIds };
+  return { puts, deletes, bootstrapped, addedUserIds, closedUserIds, deletedUserIds };
 }
 
 /**
@@ -583,7 +619,7 @@ export function pickRelevantEnrollmentForUser(
   userId: string,
   refIso: string,
 ): CourseEnrollment | null {
-  const forUser = enrollmentsForUser(enrollments, userId);
+  const forUser = enrollmentsForUser(enrollments, userId).filter(isEnrollmentRangeValid);
   if (forUser.length === 0) return null;
   const active = forUser.find((entry) => isEnrollmentActiveOnDate(entry, refIso));
   if (active) return active;

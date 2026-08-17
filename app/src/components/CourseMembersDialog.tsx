@@ -279,24 +279,14 @@ export default function CourseMembersDialog({
 
   const dropUpcomingMember = (userId: string) => {
     if (saving) return;
-    setWorkingEnrollments((prev) => {
-      const open = findOpenEnrollmentForUser(prev, userId);
-      if (open && open.validFrom > refIso) {
-        return prev.filter(
-          (entry) =>
-            !(
-              entry.userId.toLowerCase() === userId.toLowerCase() &&
-              entry.validFrom === open.validFrom &&
-              isEnrollmentOpen(entry)
-            ),
-        );
-      }
-      return prev.map((entry) =>
-        entry.userId.toLowerCase() === userId.toLowerCase() && isEnrollmentOpen(entry)
-          ? { ...entry, validUntil: defaultRemoveUntil }
-          : entry,
-      );
-    });
+    setWorkingEnrollments((prev) =>
+      prev.filter((entry) => {
+        if (entry.userId.toLowerCase() !== userId.toLowerCase()) return true;
+        if (entry.validFrom > refIso) return false;
+        return true;
+      }),
+    );
+    setLocalError(null);
   };
 
   const updateMemberDate = (userId: string, field: "validFrom" | "validUntil", dateIso: string) => {
@@ -430,7 +420,7 @@ export default function CourseMembersDialog({
       refIso,
       lastClosed: lastClosedIso,
       extra: [row.validUntil, defaultRemoveUntil],
-    });
+    }).filter((iso) => iso >= row.validFrom);
     return (
       <div
         key={`${kind}-${row.userId}`}

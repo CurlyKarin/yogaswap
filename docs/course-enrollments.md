@@ -35,6 +35,7 @@ Eine Zeile ist identisch über den Sort Key `courseId#userId#validFrom`. **Ände
 | Bis korrigieren (früher/später) | Dieselbe Mitgliedschaft, nur anderes Ende | **Bestehende** Zeile überschreiben, **keine** zweite Zeile |
 | Ende zurücknehmen | Offenes `validUntil` an derselben Zeile entfernen | **Bestehende** Zeile ohne `validUntil` |
 | Wieder aufnehmen | Nach echter Lücke: `validFrom` **nach** dem letzten `validUntil` (in der Vergangenheit) | **Neue** offene Zeile; alte Zeile bleibt als Historie |
+| Kommt entfernen | Offenes Segment mit Start in der Zukunft, noch kein Termin besucht | **Zeile löschen**, kein `validUntil` vor `validFrom` |
 | Ab-Datum einer kommenden Mitgliedschaft | Offenes Segment, anderer Start | Alte Zeile schließen (Tag vor neuem Start), **dann** neue offene Zeile |
 
 Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehenden Zeile liegt — dann nur diese Zeile anpassen (typisch: Bis-Korrektur, nicht Wiederaufnahme).
@@ -46,7 +47,7 @@ Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehend
 3. **Wieder aufnehmen nur nach realem Austritt** – Der Dialog erlaubt „Wieder aufnehmen" nur für Personen in der **Ehemalig-Liste** (letztes `validUntil` liegt in der Vergangenheit). Geplante Pausen (Austritt in Zukunft + geplanter Wiedereintritt) sind ein separates Feature.
 4. **`validUntil` wird am selben Segment korrigiert** – `findLatestEnrollmentForUser` stellt sicher, dass die Korrektur immer die zuletzt angelegte Zeile trifft, egal ob offen oder schon geschlossen.
 5. **Historie bleibt erhalten** – Geschlossene Segmente werden nie gelöscht; `stemOn(T)` für vergangene Termine bleibt damit korrekt.
-6. **Austritt vor Kursstart** – `validUntil` darf vor `validFrom` liegen (Kurs liegt in der Zukunft). Die Zeile bleibt, ist aber an keinem Termin aktiv.
+6. **Austritt vor Kursstart** – Ein Segment, das noch nicht begonnen hat (`validUntil` würde vor `validFrom` liegen), wird **gelöscht**, nicht mit einem umgedrehten Intervall geschlossen.
 
 ## Schreibpfade (#304)
 

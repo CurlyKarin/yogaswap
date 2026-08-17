@@ -37,6 +37,7 @@ import {
   notifyInstructorParticipantListChanged,
 } from "../shared/notifications/courseMembershipNotifications";
 import {
+  buildCourseEnrollmentSortKey,
   enrollmentChangesToDateMaps,
   migrateLegacyOverrideToDeltas,
   planStemEnrollmentWrites,
@@ -851,7 +852,24 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             }),
           );
         }
-        if (planned.puts.length > 0) {
+        for (const enrollment of planned.deletes) {
+          await client.send(
+            new DeleteItemCommand({
+              TableName: enrollmentsTable,
+              Key: {
+                tenantId: { S: tenantId },
+                courseId_userId_validFrom: {
+                  S: buildCourseEnrollmentSortKey(
+                    enrollment.courseId,
+                    enrollment.userId,
+                    enrollment.validFrom,
+                  ),
+                },
+              },
+            }),
+          );
+        }
+        if (planned.puts.length > 0 || planned.deletes.length > 0) {
           console.info(
             JSON.stringify({
               actor: actorUserId,
@@ -861,7 +879,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               bootstrapped: planned.bootstrapped,
               added: planned.addedUserIds,
               closed: planned.closedUserIds,
+              deleted: planned.deletedUserIds,
               putCount: planned.puts.length,
+              deleteCount: planned.deletes.length,
             }),
           );
         }

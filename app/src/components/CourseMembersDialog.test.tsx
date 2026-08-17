@@ -141,7 +141,7 @@ describe("CourseMembersDialog", () => {
       { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     const enrollments: CourseEnrollment[] = [
-      { courseId: 7, userId: "alice", validFrom: "2026-01-01" },
+      { courseId: 7, userId: "alice", validFrom: "2020-01-01" },
       { courseId: 7, userId: "bob", validFrom: "2099-06-23" },
     ];
     render(
@@ -171,6 +171,37 @@ describe("CourseMembersDialog", () => {
       ["bob"],
       expect.arrayContaining([
         expect.objectContaining({ userId: "alice", action: "remove", dateIso: "2020-01-06" }),
+      ]),
+    );
+  });
+
+  it("drops an upcoming member without writing an until before validFrom", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "bob", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        courseDates={["2020-01-06", "2099-06-16", "2099-06-23"]}
+        courseTime="10:00"
+        enrollments={[{ courseId: 7, userId: "bob", validFrom: "2099-06-23" }]}
+        initialParticipants={[]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    expect(await screen.findByText("Teilnehmer 0/10 · 1 kommt neu dazu")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Entfernen" }));
+    expect(screen.queryByLabelText("bob gültig ab")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(
+      7,
+      [],
+      expect.arrayContaining([
+        expect.objectContaining({ userId: "bob", action: "remove" }),
       ]),
     );
   });
@@ -344,7 +375,7 @@ describe("CourseMembersDialog", () => {
         courseDates={["2020-01-06", "2020-01-13", "2099-06-16"]}
         courseTime="10:00"
         enrollments={[
-          { courseId: 7, userId: "alice", validFrom: "2026-01-01", validUntil: "2020-01-06" },
+          { courseId: 7, userId: "alice", validFrom: "2020-01-01", validUntil: "2020-01-06" },
         ]}
         initialParticipants={[]}
         onSaveParticipants={onSaveParticipants}

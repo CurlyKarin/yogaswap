@@ -248,7 +248,7 @@ describe("courseEnrollment", () => {
     ]);
   });
 
-  it("planStemEnrollmentWrites closes a future-start segment when until is before validFrom", () => {
+  it("planStemEnrollmentWrites deletes a never-started segment instead of closing before validFrom", () => {
     const existing: CourseEnrollment[] = [
       { courseId: 1, userId: "luna", validFrom: "2099-01-01" },
     ];
@@ -260,14 +260,29 @@ describe("courseEnrollment", () => {
       addValidFrom: "2099-01-06",
       removeValidUntil: "2026-08-17",
     });
-    expect(planned.closedUserIds).toEqual(["luna"]);
-    expect(planned.puts).toEqual([
-      expect.objectContaining({
-        userId: "luna",
-        validFrom: "2099-01-01",
-        validUntil: "2026-08-17",
-      }),
+    expect(planned.puts).toEqual([]);
+    expect(planned.deletedUserIds).toEqual(["luna"]);
+    expect(planned.deletes).toEqual([
+      expect.objectContaining({ userId: "luna", validFrom: "2099-01-01" }),
     ]);
+  });
+
+  it("planStemEnrollmentWrites deletes an inverted until-before-from leftover", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "maja", validFrom: "2026-09-02", validUntil: "2026-08-17" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: existing,
+      addValidFrom: "2026-08-24",
+      removeValidUntil: "2026-08-17",
+    });
+    expect(planned.deletes).toEqual([
+      expect.objectContaining({ userId: "maja", validFrom: "2026-09-02" }),
+    ]);
+    expect(planned.puts).toEqual([]);
   });
 
   it("planStemEnrollmentWrites extends a closed segment instead of opening a new one", () => {
@@ -379,6 +394,16 @@ describe("courseEnrollment", () => {
     expect(groups.dabei.find((row) => row.userId === "endet")?.ending).toBe(true);
     expect(groups.kommt.map((row) => row.userId)).toEqual(["kommt"]);
     expect(groups.ehemalig.map((row) => row.userId)).toEqual(["weg"]);
+  });
+
+  it("classifyMembersForDialog ignores inverted until-before-from segments", () => {
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 1, userId: "maja", validFrom: "2026-09-02", validUntil: "2026-08-17" },
+    ];
+    const groups = classifyMembersForDialog(enrollments, "2026-08-24");
+    expect(groups.dabei).toEqual([]);
+    expect(groups.kommt).toEqual([]);
+    expect(groups.ehemalig).toEqual([]);
   });
 
   it("formatMembersDialogHeadline uses singular and plural", () => {
