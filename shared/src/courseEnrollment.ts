@@ -64,6 +64,32 @@ export function parseCourseEnrollmentSortKey(
   return { courseId, userId, validFrom };
 }
 
+const ENROLLMENT_OPEN_END = "9999-12-31";
+
+/** Inclusive last day; open segments extend to ENROLLMENT_OPEN_END. */
+export function enrollmentEndIso(
+  enrollment: Pick<CourseEnrollment, "validUntil">,
+): string {
+  if (enrollment.validUntil == null || enrollment.validUntil === "") return ENROLLMENT_OPEN_END;
+  return enrollment.validUntil;
+}
+
+/**
+ * Returns true if two enrollment ranges share at least one day.
+ * Inclusive ranges: adjacent days (until Mon 10, from Mon 17) do NOT overlap.
+ * Open end is treated as ENROLLMENT_OPEN_END ("9999-12-31").
+ *
+ * Invariant: no two segments of the same person in the same course may overlap.
+ * planStemEnrollmentWrites enforces this by skipping adds that would overlap an
+ * existing segment, and by clamping validUntil corrections via clampUntilToAvoidOverlap.
+ */
+export function enrollmentRangesOverlap(
+  a: Pick<CourseEnrollment, "validFrom" | "validUntil">,
+  b: Pick<CourseEnrollment, "validFrom" | "validUntil">,
+): boolean {
+  return a.validFrom <= enrollmentEndIso(b) && b.validFrom <= enrollmentEndIso(a);
+}
+
 /** Inclusive: active when validFrom ≤ date ≤ validUntil (or until open). */
 export function isEnrollmentActiveOnDate(
   enrollment: Pick<CourseEnrollment, "validFrom" | "validUntil">,
@@ -330,7 +356,18 @@ export type PlanStemEnrollmentWritesResult = {
 
 /**
  * Plan PutItems for CourseEnrollments from a flat participants[] diff (#304).
- * Does not delete closed segments; rejoin opens a new segment.
+ *
+ * Identity: SK = courseId#userId#validFrom. Same SK → update that row. Different validFrom → new row.
+ *
+ * Rules enforced here:
+ * - **Set/correct validUntil**: always updates the existing row (open or closed), never opens a second segment.
+ * - **Rejoin**: new open row only when validFrom is strictly after the last validUntil (real gap, no overlap).
+ *   A rejoin with a future exit still present (planned pause) is NOT supported and must be handled separately.
+ * - **Overlap guard**: a new segment is skipped when it would overlap any existing segment for the same person.
+ * - **Clamp on close**: validUntil is clamped to one day before the next segment's validFrom if necessary.
+ * - **Close before start**: validUntil may be before validFrom (future course, removed before first term);
+ *   the row stays, but isEnrollmentActiveOnDate is never true.
+ * - **History preserved**: closed rows are never deleted.
  */
 export function planStemEnrollmentWrites(
   input: PlanStemEnrollmentWritesInput,
@@ -403,6 +440,13 @@ export function planStemEnrollmentWrites(
       puts.push(closed);
     }
     if (findOpenEnrollmentForUser(working, userId)) continue;
+    const proposed = { validFrom };
+    const overlapsExisting = enrollmentsForUser(working, userId).some(
+      (entry) =>
+        entry.validFrom !== validFrom && enrollmentRangesOverlap(entry, proposed),
+    );
+    // Covered by a closed segment already: correct that row, do not open a second one.
+    if (overlapsExisting) continue;
     const open = buildOpenEnrollment({
       courseId: input.courseId,
       userId,
@@ -423,12 +467,15 @@ export function planStemEnrollmentWrites(
   ]);
 
   for (const userId of closeUserIds) {
-    const validUntil =
+    const requestedUntil =
       input.removeValidUntilByUser?.[userId.toLowerCase()] ?? input.removeValidUntil;
     const target =
       findOpenEnrollmentForUser(working, userId) ??
       findLatestEnrollmentForUser(working, userId);
     if (!target) continue;
+    const validUntil = clampUntilToAvoidOverlap(working, userId, target, requestedUntil);
+    // until < from is allowed: future course, person removed before the first term.
+    // isEnrollmentActiveOnDate is then never true, without deleting the row.
     if (!isEnrollmentOpen(target) && target.validUntil === validUntil) continue;
     const closed = closeEnrollmentSegment(
       target as CourseEnrollment,
@@ -506,6 +553,28 @@ function enrollmentsForUser<T extends Pick<CourseEnrollment, "userId">>(
 ): T[] {
   const key = userId.toLowerCase();
   return enrollments.filter((entry) => entry.userId.toLowerCase() === key);
+}
+
+/**
+ * Clamp requestedUntil so it does not reach into a later segment of the same person.
+ * Example: person has segments [Jan–Aug] and [Sep–…]; closing the first segment at Oct
+ * would be clamped to Aug (one day before Sep).
+ */
+function clampUntilToAvoidOverlap(
+  enrollments: Array<Pick<CourseEnrollment, "userId" | "validFrom" | "validUntil">>,
+  userId: string,
+  target: Pick<CourseEnrollment, "validFrom">,
+  requestedUntil: string,
+): string {
+  let until = requestedUntil;
+  for (const other of enrollmentsForUser(enrollments, userId)) {
+    if (other.validFrom === target.validFrom) continue;
+    if (other.validFrom > target.validFrom && other.validFrom <= until) {
+      const clamped = addDaysIso(other.validFrom, -1);
+      if (clamped < until) until = clamped;
+    }
+  }
+  return until;
 }
 
 /** Prefer the segment active on refIso; else the next upcoming; else the latest closed. */

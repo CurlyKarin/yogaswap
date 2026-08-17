@@ -6,6 +6,7 @@ import {
   buildCourseEnrollmentUserPrefix,
   classifyMembersForDialog,
   formatMembersDialogHeadline,
+  enrollmentRangesOverlap,
   isEnrollmentActiveOnDate,
   migrateParticipantsToEnrollments,
   openEnrollmentUserIds,
@@ -37,6 +38,21 @@ describe("courseEnrollment", () => {
     expect(isEnrollmentActiveOnDate(enrollment, "2026-01-01")).toBe(true);
     expect(isEnrollmentActiveOnDate(enrollment, "2026-01-31")).toBe(true);
     expect(isEnrollmentActiveOnDate(enrollment, "2026-02-01")).toBe(false);
+  });
+
+  it("treats adjacent segments as non-overlapping and same-day coverage as overlapping", () => {
+    expect(
+      enrollmentRangesOverlap(
+        { validFrom: "2026-01-01", validUntil: "2026-08-10" },
+        { validFrom: "2026-08-17" },
+      ),
+    ).toBe(false);
+    expect(
+      enrollmentRangesOverlap(
+        { validFrom: "2026-01-01", validUntil: "2026-08-31" },
+        { validFrom: "2026-08-17", validUntil: "2026-08-24" },
+      ),
+    ).toBe(true);
   });
 
   it("stemOnDate returns unique active members", () => {
@@ -232,6 +248,28 @@ describe("courseEnrollment", () => {
     ]);
   });
 
+  it("planStemEnrollmentWrites closes a future-start segment when until is before validFrom", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2099-01-01" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: ["luna"],
+      nextParticipants: [],
+      existingEnrollments: existing,
+      addValidFrom: "2099-01-06",
+      removeValidUntil: "2026-08-17",
+    });
+    expect(planned.closedUserIds).toEqual(["luna"]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        userId: "luna",
+        validFrom: "2099-01-01",
+        validUntil: "2026-08-17",
+      }),
+    ]);
+  });
+
   it("planStemEnrollmentWrites extends a closed segment instead of opening a new one", () => {
     const existing: CourseEnrollment[] = [
       { courseId: 1, userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-10" },
@@ -249,6 +287,59 @@ describe("courseEnrollment", () => {
     expect(planned.closedUserIds).toEqual(["luna"]);
     expect(planned.puts).toEqual([
       expect.objectContaining({ userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-24" }),
+    ]);
+  });
+
+  it("planStemEnrollmentWrites does not add a segment that would overlap an open one (planned pause not supported)", () => {
+    // Person is still active (open segment, validUntil in the future via a separate close later).
+    // Attempting a rejoin while the current segment has not yet ended must be blocked.
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-01-01", validUntil: "2026-12-31" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: [],
+      nextParticipants: ["luna"],
+      existingEnrollments: existing,
+      addValidFrom: "2026-09-01",
+      removeValidUntil: "2026-08-31",
+    });
+    expect(planned.addedUserIds).toEqual([]);
+    expect(planned.puts).toEqual([]);
+  });
+
+  it("planStemEnrollmentWrites does not add a segment that would overlap a closed one", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-31" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: [],
+      nextParticipants: ["luna"],
+      existingEnrollments: existing,
+      addValidFrom: "2026-08-17",
+      removeValidUntil: "2026-08-10",
+    });
+    expect(planned.addedUserIds).toEqual([]);
+    expect(planned.puts).toEqual([]);
+  });
+
+  it("planStemEnrollmentWrites clamps a close so it does not overlap a later segment", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, userId: "luna", validFrom: "2026-01-01" },
+      { courseId: 1, userId: "luna", validFrom: "2026-08-24", validUntil: "2026-09-01" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: ["luna"],
+      nextParticipants: [],
+      existingEnrollments: existing,
+      addValidFrom: "2026-08-24",
+      removeValidUntil: "2026-08-10",
+      removeValidUntilByUser: { luna: "2026-08-31" },
+    });
+    expect(planned.puts).toEqual([
+      expect.objectContaining({ userId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-23" }),
     ]);
   });
 

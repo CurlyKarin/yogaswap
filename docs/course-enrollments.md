@@ -24,10 +24,29 @@ API: `GET /course-enrollments` (optional `?courseId=`).
 
 ## Regeln
 
-- Add ab T → neues offenes Segment (`validFrom`, kein `validUntil`)
-- Remove bis T → `validUntil` setzen (nicht löschen im Normalpfad); Korrektur schreibt dasselbe Segment erneut (auch wenn es schon geschlossen ist)
-- Rejoin → neues Segment, altes unverändert
-- `validUntil` ist **inklusiv** (`stemOn` / `isEnrollmentActiveOnDate`)
+`validUntil` ist **inklusiv**. Segmente derselben Person im selben Kurs dürfen sich **nicht überschneiden**. Benachbart (`bis 10.`, `ab 17.`) ist erlaubt.
+
+Eine Zeile ist identisch über den Sort Key `courseId#userId#validFrom`. **Ändern** = Put auf denselben Key. **Neu** = anderer `validFrom` → neue Zeile; die alte bleibt stehen.
+
+| Aktion im Dialog | Wann | Schreibweise |
+|------------------|------|----------------|
+| Neu zuordnen / kommt | Kein Segment vorhanden, oder letztes Segment **beendet vor** neuem Start (`validUntil < validFrom`) | **Neue** offene Zeile |
+| Austritt / Bis setzen | Offenes Segment, oder Korrektur einer schon geschlossenen Zeile | **Bestehende** Zeile: `validUntil` setzen |
+| Bis korrigieren (früher/später) | Dieselbe Mitgliedschaft, nur anderes Ende | **Bestehende** Zeile überschreiben, **keine** zweite Zeile |
+| Ende zurücknehmen | Offenes `validUntil` an derselben Zeile entfernen | **Bestehende** Zeile ohne `validUntil` |
+| Wieder aufnehmen | Nach echter Lücke: `validFrom` **nach** dem letzten `validUntil` (in der Vergangenheit) | **Neue** offene Zeile; alte Zeile bleibt als Historie |
+| Ab-Datum einer kommenden Mitgliedschaft | Offenes Segment, anderer Start | Alte Zeile schließen (Tag vor neuem Start), **dann** neue offene Zeile |
+
+Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehenden Zeile liegt — dann nur diese Zeile anpassen (typisch: Bis-Korrektur, nicht Wiederaufnahme).
+
+### Invarianten (vom Code durchgesetzt)
+
+1. **Kein Overlap** – `enrollmentRangesOverlap(a, b)` verhindert das Anlegen einer neuen Zeile, wenn sie eine bestehende Zeile derselben Person überlappt.
+2. **Clamp bei Korrektur** – `clampUntilToAvoidOverlap` begrenzt ein neues `validUntil` so, dass es nicht in eine spätere Zeile derselben Person hineinragt.
+3. **Wieder aufnehmen nur nach realem Austritt** – Der Dialog erlaubt „Wieder aufnehmen" nur für Personen in der **Ehemalig-Liste** (letztes `validUntil` liegt in der Vergangenheit). Geplante Pausen (Austritt in Zukunft + geplanter Wiedereintritt) sind ein separates Feature.
+4. **`validUntil` wird am selben Segment korrigiert** – `findLatestEnrollmentForUser` stellt sicher, dass die Korrektur immer die zuletzt angelegte Zeile trifft, egal ob offen oder schon geschlossen.
+5. **Historie bleibt erhalten** – Geschlossene Segmente werden nie gelöscht; `stemOn(T)` für vergangene Termine bleibt damit korrekt.
+6. **Austritt vor Kursstart** – `validUntil` darf vor `validFrom` liegen (Kurs liegt in der Zukunft). Die Zeile bleibt, ist aber an keinem Termin aktiv.
 
 ## Schreibpfade (#304)
 
@@ -86,7 +105,7 @@ Ohne Segmente für den Kurs → Fallback `course.participants`.
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
 - `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy`
 - `migrateParticipantsToEnrollments` / `openEnrollmentUserIds`
-- `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForUser`
+- `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForUser` / `enrollmentRangesOverlap`
 - `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`
 
 Backend: `courseEnrollmentDynamo.ts` (Put/Get/Query-Mapping).
