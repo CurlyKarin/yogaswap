@@ -79,9 +79,16 @@ export function supportsAutoInactiveTransition(
   return courseBlockEndIso(course) != null;
 }
 
+export function isBoundedSeriesPlanningMode(
+  planningMode?: Course["planningMode"] | string,
+): boolean {
+  return (planningMode ?? "bounded_series") === "bounded_series";
+}
+
 /**
- * Letzter Kalendertag (UTC), an dem der Kurs noch aktiv bleiben darf:
- * max(blockEnd, letzterTermin + Nachlauf).
+ * Letzter inklusiver Kalendertag (UTC) für Rechte/Sichtbarkeit/Auto-Inaktiv.
+ * Kursblock: `seriesEndDate` (Saisonende), ohne Studio-Nachlauf (#296).
+ * Rollkurs mit Ende: max(plannedEnd, letzterTermin + Nachlauf).
  */
 export function effectiveAutoInactiveDeadlineIso(
   course: Pick<
@@ -92,6 +99,7 @@ export function effectiveAutoInactiveDeadlineIso(
 ): string | undefined {
   const blockEnd = courseBlockEndIso(course);
   if (!blockEnd) return undefined;
+  if (isBoundedSeriesPlanningMode(course.planningMode)) return blockEnd;
   const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
   const lastTerm = lastScheduledOccurrenceIso(course);
   if (!lastTerm) return blockEnd;
@@ -131,8 +139,31 @@ export function participantCourseAccessDeadlineIso(
   if (aligned) return aligned;
   const endIso = courseEndDateIso(course);
   if (!endIso) return undefined;
+  if (isBoundedSeriesPlanningMode(course.planningMode)) return endIso;
   const graceDays = settings?.inactiveGraceDaysAfterCourseEnd ?? DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
   return addCalendarDaysIsoUtc(endIso, graceDays);
+}
+
+/** Heutiger UTC-Tag liegt noch auf oder vor dem inklusiven Rechte-Ende. */
+export function isOnOrBeforeCourseRightsEnd(
+  course: Pick<Course, "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "dates">,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): boolean {
+  const deadline = participantCourseAccessDeadlineIso(course, settings);
+  if (!deadline) return true;
+  return toIsoDateUtc(now) <= deadline;
+}
+
+/** Termin liegt im Kursblock auf/vor dem Saisonende. Rollkurse: immer true (Fenster separat). */
+export function isIsoWithinBoundedSeriesRights(
+  isoDate: string,
+  course: Pick<Course, "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate">,
+): boolean {
+  if (!isBoundedSeriesPlanningMode(course.planningMode)) return true;
+  const end = courseBlockEndIso(course);
+  if (!end) return true;
+  return isoDate <= end;
 }
 
 /**
@@ -158,16 +189,103 @@ export function courseEndDateIso(
   return trimmed[0];
 }
 
+function scheduledOccurrenceIsos(course: Pick<Course, "dates">): string[] {
+  const raw = course.dates ?? [];
+  return raw
+    .filter((d): d is string => typeof d === "string" && ISO_DATE_ONLY.test(d.trim()))
+    .map((d) => d.trim())
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/** Erster geplanter Termin nur aus `dates`. */
+export function firstScheduledOccurrenceIso(
+  course: Pick<Course, "dates">,
+): string | undefined {
+  return scheduledOccurrenceIsos(course)[0];
+}
+
 /** Letzter geplanter Termin nur aus `dates` (ohne seriesEndDate-Fallback). */
 export function lastScheduledOccurrenceIso(
   course: Pick<Course, "dates">,
 ): string | undefined {
-  const raw = course.dates ?? [];
-  const valid = raw.filter((d) => typeof d === "string" && ISO_DATE_ONLY.test(d.trim()));
-  if (valid.length === 0) return undefined;
-  const trimmed = valid.map((d) => d.trim());
-  trimmed.sort((a, b) => b.localeCompare(a));
-  return trimmed[0];
+  const isos = scheduledOccurrenceIsos(course);
+  return isos.length > 0 ? isos[isos.length - 1] : undefined;
+}
+
+export type BoundedSeriesRangeEditError =
+  | "start_locked"
+  | "start_before_today"
+  | "start_after_first_term"
+  | "end_before_last_term"
+  | "start_after_end";
+
+export type BoundedSeriesRangeEditBounds = {
+  todayIso: string;
+  firstTermIso?: string;
+  lastTermIso?: string;
+  canEditStart: boolean;
+  minStartIso: string;
+  maxStartIso?: string;
+  minEndIso: string;
+};
+
+/** Grenzen für Zeitraum-Korrektur am aktiven Kursblock. */
+export function getBoundedSeriesRangeEditBounds(
+  course: Pick<Course, "dates">,
+  now: Date = new Date(),
+): BoundedSeriesRangeEditBounds {
+  const todayIso = toIsoDateUtc(now);
+  const firstTermIso = firstScheduledOccurrenceIso(course);
+  const lastTermIso = lastScheduledOccurrenceIso(course);
+  const canEditStart = firstTermIso == null || firstTermIso > todayIso;
+  return {
+    todayIso,
+    firstTermIso,
+    lastTermIso,
+    canEditStart,
+    minStartIso: todayIso,
+    maxStartIso: canEditStart ? firstTermIso : undefined,
+    minEndIso: lastTermIso ?? todayIso,
+  };
+}
+
+export function validateBoundedSeriesRangeEdit(input: {
+  currentDates: string[];
+  currentStart?: string;
+  nextStart: string;
+  nextEnd: string;
+  now?: Date;
+}): BoundedSeriesRangeEditError | null {
+  const nextStart = input.nextStart.trim();
+  const nextEnd = input.nextEnd.trim();
+  if (!ISO_DATE_ONLY.test(nextStart) || !ISO_DATE_ONLY.test(nextEnd) || nextStart > nextEnd) {
+    return "start_after_end";
+  }
+  const bounds = getBoundedSeriesRangeEditBounds({ dates: input.currentDates }, input.now);
+  const currentStart = input.currentStart?.trim();
+  const startChanged = currentStart == null || currentStart !== nextStart;
+  if (startChanged) {
+    if (!bounds.canEditStart) return "start_locked";
+    if (nextStart < bounds.minStartIso) return "start_before_today";
+    if (bounds.maxStartIso && nextStart > bounds.maxStartIso) return "start_after_first_term";
+  }
+  if (nextEnd < bounds.minEndIso) return "end_before_last_term";
+  return null;
+}
+
+export function boundedSeriesRangeEditErrorMessage(error: BoundedSeriesRangeEditError): string {
+  switch (error) {
+    case "start_locked":
+      return "seriesStartDate cannot be changed after the first term";
+    case "start_before_today":
+      return "seriesStartDate must be today or later";
+    case "start_after_first_term":
+      return "seriesStartDate cannot be after the first term";
+    case "end_before_last_term":
+      return "seriesEndDate cannot be before the last scheduled term";
+    case "start_after_end":
+      return "seriesStartDate and seriesEndDate are required as ISO dates with start <= end";
+  }
 }
 
 export function getInactiveGraceLastDayIso(

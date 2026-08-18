@@ -14,7 +14,7 @@ import {
   findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
-import { shouldAutoDeactivateCourse, type Course } from "@yogaswap/shared";
+import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeriesRangeEditErrorMessage, type Course } from "@yogaswap/shared";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
@@ -613,6 +613,25 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextVisibilityMode = visibilityMode ?? item.visibilityMode?.S;
     const nextSeriesStartDate = seriesStartDate ?? item.seriesStartDate?.S;
     const nextSeriesEndDate = seriesEndDate ?? item.seriesEndDate?.S;
+    if (
+      (nextPlanningMode ?? "bounded_series") === "bounded_series" &&
+      currentStatus === "active" &&
+      (Object.prototype.hasOwnProperty.call(body, "seriesStartDate") ||
+        Object.prototype.hasOwnProperty.call(body, "seriesEndDate"))
+    ) {
+      const rangeError = validateBoundedSeriesRangeEdit({
+        currentDates: item.dates?.L?.map((entry) => entry.S ?? "").filter(Boolean) ?? [],
+        currentStart: item.seriesStartDate?.S,
+        nextStart: nextSeriesStartDate ?? "",
+        nextEnd: nextSeriesEndDate ?? "",
+      });
+      if (rangeError) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: boundedSeriesRangeEditErrorMessage(rangeError) }),
+        };
+      }
+    }
     let nextPlannedEndDate: string | undefined = item.plannedEndDate?.S;
     if (hasPlannedEndDatePatch) {
       const rawPlannedEnd = body.plannedEndDate;

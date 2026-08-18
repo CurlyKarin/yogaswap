@@ -5,6 +5,7 @@ import {
   isShortNoticeCancelled,
   isWithinCancellationSwapCutoff,
 } from "shared/cancellationSwapCutoff";
+import { isBoundedSeriesPlanningMode } from "shared/courseStatus";
 import { formatSwapStatusLine, swapTermIsoForCourse } from "../lib/courseTermActionLabels";
 import CourseSwapModal from "./CourseSwapModal";
 import CourseTermActionButton from "./CourseTermActionButton";
@@ -315,6 +316,7 @@ export default function CourseTermActions({
           originTermIso={selectedDateKey}
           originTermDisplay={new Date(selectedDate).toLocaleDateString()}
           swapWindow={swapWindow}
+          originIsBoundedSeries={isBoundedSeriesPlanningMode(course.planningMode)}
           availableSwapDates={availableSwapDates}
           waitlistDates={waitlistDates}
           onClose={onCloseSwapModal}

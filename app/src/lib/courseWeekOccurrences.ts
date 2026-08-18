@@ -92,7 +92,7 @@ function isSelectableWeekViewDate(
 ): boolean {
   if (isExcludedCourseDate(course, dateIso)) return true;
   if (!isOccurrenceInPast(dateIso, course.time, now)) return true;
-  return isTermInParticipantSwapGrace(dateIso, course.time, settings, now);
+  return isTermInParticipantSwapGrace(dateIso, course, settings, now);
 }
 
 /** Termine für Kachel-Dropdown: künftige plus Nachlauf-Termine (symmetrisch pro Termin). */
@@ -107,7 +107,7 @@ export function getWeekViewCardDates(
     isSelectableWeekViewDate(course, toLocalDateIso(d), settings, now),
   );
   const pastGrace = (course.dates ?? [])
-    .filter((iso) => isTermInParticipantSwapGrace(iso, course.time, settings, now))
+    .filter((iso) => isTermInParticipantSwapGrace(iso, course, settings, now))
     .map((iso) => buildCourseOccurrenceLocal(iso, course.time))
     .filter((d): d is Date => d !== null);
   const merged = new Map<string, Date>();

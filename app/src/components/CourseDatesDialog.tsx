@@ -18,11 +18,18 @@ import {
   getRollingWindowRangeIso,
   ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS,
   isValidIsoDateOnly,
+  monthKeyFromIsoDate,
   parseIsoDateOnlyUtc,
   planningModeLabel,
   shiftMonthKey,
+  type CalendarCell,
   type CourseDatesEditorState,
 } from "./courseDatesDialogUtils";
+import {
+  getBoundedSeriesRangeEditBounds,
+  validateBoundedSeriesRangeEdit,
+  type BoundedSeriesRangeEditError,
+} from "shared/courseStatus";
 import { resolveWarningMessages } from "../i18n";
 import { courseApiPathKey } from "../lib/courseUid";
 
@@ -40,6 +47,117 @@ type CourseDatesDialogProps = {
 type ActiveCalendarAction =
   | { type: "cancel"; isoDate: string }
   | { type: "exclude"; isoDate: string };
+
+const RANGE_EDIT_ERROR_DE: Record<BoundedSeriesRangeEditError, string> = {
+  start_locked: "Das Startdatum kann nicht mehr geändert werden, weil der erste Termin nicht mehr in der Zukunft liegt.",
+  start_before_today: "Das Startdatum darf nicht vor heute liegen.",
+  start_after_first_term: "Das Startdatum darf nicht nach dem ersten Termin liegen.",
+  end_before_last_term: "Das Endedatum darf nicht vor dem letzten Termin liegen.",
+  start_after_end: "Bitte einen gültigen Zeitraum mit Start- und Enddatum wählen.",
+};
+
+function CourseEditorMonthCalendar({
+  ariaLabel,
+  monthLabel,
+  cells,
+  saving,
+  onPrevMonth,
+  onNextMonth,
+  onClose,
+  onSelect,
+  isCellDisabled,
+  isSelected,
+  cellAriaPrefix,
+  legend,
+}: {
+  ariaLabel: string;
+  monthLabel: string;
+  cells: CalendarCell[];
+  saving: boolean;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  onClose: () => void;
+  onSelect: (isoDate: string) => void;
+  isCellDisabled: (isoDate: string) => boolean;
+  isSelected: (isoDate: string) => boolean;
+  cellAriaPrefix: string;
+  legend: string;
+}) {
+  return (
+    <div className="course-editor-calendar-block" role="group" aria-label={ariaLabel}>
+      <div className="course-editor-calendar-nav">
+        <button
+          type="button"
+          className="modal-action-btn course-editor-inline-action"
+          onClick={onPrevMonth}
+          disabled={saving}
+        >
+          Vorheriger Monat
+        </button>
+        <strong>{monthLabel}</strong>
+        <button
+          type="button"
+          className="modal-action-btn course-editor-inline-action"
+          onClick={onNextMonth}
+          disabled={saving}
+        >
+          Nächster Monat
+        </button>
+      </div>
+      <div className="course-editor-calendar-weekdays" aria-hidden="true">
+        {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+      <div className="course-editor-calendar-grid">
+        {cells.map((cell) => {
+          const disabled = saving || isCellDisabled(cell.isoDate);
+          const selected = isSelected(cell.isoDate);
+          const cellClassName = [
+            "course-editor-calendar-cell",
+            cell.inCurrentMonth ? "" : "is-outside-month",
+            cell.inSeriesRange ? "is-in-range" : "",
+            selected ? "is-range-start" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          return (
+            <button
+              key={`${cellAriaPrefix}-${cell.isoDate}`}
+              type="button"
+              className={cellClassName}
+              aria-label={`${cellAriaPrefix} ${cell.isoDate}`}
+              onClick={() => onSelect(cell.isoDate)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  onSelect(cell.isoDate);
+                }
+              }}
+              disabled={disabled}
+            >
+              {cell.dayOfMonth}
+            </button>
+          );
+        })}
+      </div>
+      <div className="course-editor-calendar-legend">
+        <span><em className="legend-dot range" /> {legend}</span>
+        <span><em className="legend-dot boundary" /> ausgewählt</span>
+      </div>
+      <div className="course-editor-calendar-actions">
+        <button
+          type="button"
+          className="modal-action-btn course-editor-inline-action"
+          onClick={onClose}
+          disabled={saving}
+        >
+          Kalender schließen
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -107,9 +225,6 @@ export default function CourseDatesDialog({
     }
     const nextState = createDatesState(course);
     initialExcludedDatesRef.current = [...nextState.excludedDates];
-    if (course.status === "active" && nextState.planningMode === "bounded_series") {
-      nextState.rangeDatePickerOpen = true;
-    }
     setDatesState(nextState);
     setFormError(null);
     setFormNotices([]);
@@ -170,23 +285,32 @@ export default function CourseDatesDialog({
     compareIsoDate(datesState.seriesStartDate, datesState.seriesEndDate) <= 0;
   const isActiveCancellationMode = course?.status === "active";
   const isRollingActiveMode = isActiveCancellationMode && datesState?.planningMode === "rolling_continuous";
-  const isActiveReadOnly =
-    isActiveCancellationMode && datesState?.planningMode === "bounded_series";
+  const isActiveBounded = isActiveCancellationMode && datesState?.planningMode === "bounded_series";
   const isRollingDraftPlanning =
     course?.status === "draft" && datesState?.planningMode === "rolling_continuous";
   const showExcludedDatesEditor =
     !isActiveCancellationMode &&
     (datesState?.planningMode !== "rolling_continuous" || isRollingDraftPlanning);
+  const rangeEditBounds = useMemo(
+    () => (course ? getBoundedSeriesRangeEditBounds(course) : null),
+    [course],
+  );
+  const rangeDirty =
+    !!course &&
+    !!datesState &&
+    (datesState.seriesStartDate !== (course.seriesStartDate ?? course.visibleFrom) ||
+      datesState.seriesEndDate !== (course.seriesEndDate ?? course.visibleUntil));
 
   const canSaveDatesConfig =
     canManageCourses &&
-    !isActiveReadOnly &&
     !saving &&
     !!datesState &&
     (
-      (datesState.planningMode === "bounded_series" && datesSeriesRangeValid) ||
-      datesState.planningMode === "rolling_continuous"
+      (datesState.planningMode === "bounded_series" && datesSeriesRangeValid && (!isActiveCancellationMode || isActiveBounded)) ||
+      (datesState.planningMode === "rolling_continuous" && !isActiveCancellationMode)
     );
+  const canSaveActiveRange =
+    !!isActiveBounded && canSaveDatesConfig && rangeDirty && datesSeriesRangeValid;
 
   const datesPreview = useMemo(() => {
     if (!datesState) return [];
@@ -262,6 +386,33 @@ export default function CourseDatesDialog({
     if (!datesState) return "";
     return formatMonthLabel(datesState.rangeCalendarMonth, displayLocale);
   }, [datesState, displayLocale]);
+
+  const startPickerCells = useMemo(() => {
+    if (!datesState || !rangeEditBounds?.canEditStart) return [];
+    const maxStart = rangeEditBounds.maxStartIso ?? datesState.seriesEndDate;
+    if (compareIsoDate(rangeEditBounds.minStartIso, maxStart) > 0) return [];
+    return buildSeriesCalendarCells(
+      datesState.rangeCalendarMonth,
+      datesState.weekday,
+      rangeEditBounds.minStartIso,
+      maxStart,
+      [],
+    );
+  }, [datesState, rangeEditBounds]);
+
+  const endPickerCells = useMemo(() => {
+    if (!datesState || !rangeEditBounds) return [];
+    const minEnd = rangeEditBounds.minEndIso;
+    const maxEnd = "2099-12-31";
+    if (compareIsoDate(minEnd, maxEnd) > 0) return [];
+    return buildSeriesCalendarCells(
+      datesState.rangeCalendarMonth,
+      datesState.weekday,
+      minEnd,
+      maxEnd,
+      [],
+    );
+  }, [datesState, rangeEditBounds]);
 
   const excludedCalendarCells = useMemo(() => {
     if (!datesState) return [];
@@ -355,6 +506,8 @@ export default function CourseDatesDialog({
             ...prev,
             rangeDatePickerOpen: !prev.rangeDatePickerOpen,
             excludedDatePickerOpen: false,
+            startDatePickerOpen: false,
+            endDatePickerOpen: false,
           }
         : prev,
     );
@@ -370,6 +523,82 @@ export default function CourseDatesDialog({
           }
         : prev,
     );
+  };
+
+  const closeBoundaryDatePickers = () => {
+    if (saving) return;
+    setDatesState((prev) =>
+      prev
+        ? {
+            ...prev,
+            startDatePickerOpen: false,
+            endDatePickerOpen: false,
+          }
+        : prev,
+    );
+  };
+
+  const toggleStartDatePicker = () => {
+    if (saving || !rangeEditBounds?.canEditStart) return;
+    setDatesState((prev) => {
+      if (!prev) return prev;
+      const nextOpen = !prev.startDatePickerOpen;
+      return {
+        ...prev,
+        startDatePickerOpen: nextOpen,
+        endDatePickerOpen: false,
+        rangeDatePickerOpen: false,
+        excludedDatePickerOpen: false,
+        rangeCalendarMonth: nextOpen
+          ? (monthKeyFromIsoDate(prev.seriesStartDate) ?? prev.rangeCalendarMonth)
+          : prev.rangeCalendarMonth,
+      };
+    });
+  };
+
+  const toggleEndDatePicker = () => {
+    if (saving) return;
+    setDatesState((prev) => {
+      if (!prev) return prev;
+      const nextOpen = !prev.endDatePickerOpen;
+      return {
+        ...prev,
+        endDatePickerOpen: nextOpen,
+        startDatePickerOpen: false,
+        rangeDatePickerOpen: false,
+        excludedDatePickerOpen: false,
+        rangeCalendarMonth: nextOpen
+          ? (monthKeyFromIsoDate(prev.seriesEndDate) ?? prev.rangeCalendarMonth)
+          : prev.rangeCalendarMonth,
+      };
+    });
+  };
+
+  const setSeriesStartDate = (isoDate: string) => {
+    if (saving || !rangeEditBounds?.canEditStart) return;
+    if (!isValidIsoDateOnly(isoDate)) return;
+    if (isoDate < rangeEditBounds.minStartIso) return;
+    if (rangeEditBounds.maxStartIso && isoDate > rangeEditBounds.maxStartIso) return;
+    setDatesState((prev) => {
+      if (!prev) return prev;
+      const nextEnd = compareIsoDate(isoDate, prev.seriesEndDate) > 0 ? isoDate : prev.seriesEndDate;
+      return { ...prev, seriesStartDate: isoDate, seriesEndDate: nextEnd };
+    });
+    setFormError(null);
+    setFormNotices([]);
+  };
+
+  const setSeriesEndDate = (isoDate: string) => {
+    if (saving || !rangeEditBounds) return;
+    if (!isValidIsoDateOnly(isoDate)) return;
+    if (isoDate < rangeEditBounds.minEndIso) return;
+    setDatesState((prev) => {
+      if (!prev) return prev;
+      const nextStart = compareIsoDate(isoDate, prev.seriesStartDate) < 0 ? isoDate : prev.seriesStartDate;
+      return { ...prev, seriesStartDate: nextStart, seriesEndDate: isoDate };
+    });
+    setFormError(null);
+    setFormNotices([]);
   };
 
   const toggleExcludedDatePicker = () => {
@@ -398,7 +627,7 @@ export default function CourseDatesDialog({
   };
 
   const setSeriesRangeDate = (isoDate: string) => {
-    if (saving || isActiveReadOnly) return;
+    if (saving) return;
     if (!isValidIsoDateOnly(isoDate)) return;
     setDatesState((prev) => {
       if (!prev) return prev;
@@ -452,7 +681,7 @@ export default function CourseDatesDialog({
   };
 
   const toggleExcludedDateFromCalendar = (isoDate: string) => {
-    if (saving || isActiveReadOnly) return;
+    if (saving) return;
     setDatesState((prev) => {
       if (!prev) return prev;
       const currentRange =
@@ -572,11 +801,24 @@ export default function CourseDatesDialog({
   };
 
   const saveDatesConfig = async () => {
-    if (!course || !datesState || !canManageCourses || isActiveReadOnly) return;
+    if (!course || !datesState || !canManageCourses) return;
+    if (isActiveCancellationMode && !isActiveBounded) return;
     if (datesState.planningMode === "bounded_series") {
       if (!datesSeriesRangeValid) {
         setFormError("Bitte einen gültigen Zeitraum mit Start- und Enddatum wählen.");
         return;
+      }
+      if (isActiveBounded) {
+        const rangeError = validateBoundedSeriesRangeEdit({
+          currentDates: course.dates ?? [],
+          currentStart: course.seriesStartDate ?? course.visibleFrom,
+          nextStart: datesState.seriesStartDate,
+          nextEnd: datesState.seriesEndDate,
+        });
+        if (rangeError) {
+          setFormError(RANGE_EDIT_ERROR_DE[rangeError]);
+          return;
+        }
       }
     } else if (datesState.planningMode !== "rolling_continuous") {
       setFormError("Unbekannter Planungsmodus.");
@@ -662,9 +904,11 @@ export default function CourseDatesDialog({
         <p className="course-editor-note">
           Planungsmodus: <strong>{planningModeLabel(course.planningMode)}</strong>
         </p>
-        {isActiveReadOnly && (
+        {isActiveCancellationMode && (
           <p className="course-editor-note">
-            Kurs ist aktiv. Terminplanung ist gesperrt.
+            {isActiveBounded
+              ? "Kurs ist aktiv. Zeitraum (Saisonstart und -ende) kann noch angepasst werden. Einzelne Termine nur per Absage."
+              : "Kurs ist aktiv. Terminplanung innerhalb des Sichtfensters nur per Absage bzw. Ausschluss."}
           </p>
         )}
         <div className="dialog-stack">
@@ -699,6 +943,186 @@ export default function CourseDatesDialog({
                   {formatIsoDateForDisplay(effectiveRange.end, displayLocale)}. Innerhalb der{" "}
                   {rollingPlanningHorizonWeeks} Wochen nur Absage; danach Termine ausschließen möglich.
                 </p>
+              )}
+            </div>
+          )}
+
+          {datesState.planningMode === "bounded_series" && (
+            <div className="course-editor-subsection">
+              <strong className="course-editor-list-title">Zeitraum</strong>
+              <p className="course-editor-note">
+                Start: <strong aria-label="Startdatum Wert">{formattedSeriesStart}</strong> | Ende:{" "}
+                <strong aria-label="Enddatum Wert">{formattedSeriesEnd}</strong>
+              </p>
+              <p className="course-editor-note">
+                Das Endedatum ist der letzte Tag für Teilnahme und Tausch (Saisonende) und darf nach dem
+                letzten Unterrichtstag liegen.
+              </p>
+              {isActiveBounded ? (
+                <>
+                  <p className="course-editor-note">
+                    {rangeEditBounds?.canEditStart
+                      ? "Startdatum nur ändern, solange der erste Termin in der Zukunft liegt; frühestens heute."
+                      : "Startdatum ist fest, weil der erste Termin nicht mehr in der Zukunft liegt."}
+                  </p>
+                  <p className="course-editor-note">
+                    Endedatum nicht vor dem letzten Termin
+                    {rangeEditBounds?.lastTermIso
+                      ? ` (${formatIsoDateForDisplay(rangeEditBounds.lastTermIso, displayLocale)})`
+                      : ""}
+                    .
+                  </p>
+                  <div className="course-editor-inline-row">
+                    <button
+                      type="button"
+                      className="modal-action-btn course-editor-icon-btn"
+                      onClick={toggleStartDatePicker}
+                      disabled={saving || !rangeEditBounds?.canEditStart}
+                      title={datesState.startDatePickerOpen ? "Startkalender ausblenden" : "Startkalender öffnen"}
+                      aria-label="Kalender für Startdatum öffnen"
+                    >
+                      <Calendar size={16} aria-hidden="true" />
+                    </button>
+                    <span className="course-editor-note">Start</span>
+                    <button
+                      type="button"
+                      className="modal-action-btn course-editor-icon-btn"
+                      onClick={toggleEndDatePicker}
+                      disabled={saving}
+                      title={datesState.endDatePickerOpen ? "Endkalender ausblenden" : "Endkalender öffnen"}
+                      aria-label="Kalender für Endedatum öffnen"
+                    >
+                      <Calendar size={16} aria-hidden="true" />
+                    </button>
+                    <span className="course-editor-note">Ende</span>
+                  </div>
+                  {datesState.startDatePickerOpen && (
+                    <CourseEditorMonthCalendar
+                      ariaLabel="Kalender Startdatum"
+                      monthLabel={rangeCalendarMonthLabel}
+                      cells={startPickerCells}
+                      saving={saving}
+                      onPrevMonth={() => shiftRangeCalendarMonth(-1)}
+                      onNextMonth={() => shiftRangeCalendarMonth(1)}
+                      onClose={closeBoundaryDatePickers}
+                      onSelect={setSeriesStartDate}
+                      isCellDisabled={(isoDate) =>
+                        !rangeEditBounds?.canEditStart ||
+                        isoDate < (rangeEditBounds?.minStartIso ?? isoDate) ||
+                        (!!rangeEditBounds?.maxStartIso && isoDate > rangeEditBounds.maxStartIso)
+                      }
+                      isSelected={(isoDate) => isoDate === datesState.seriesStartDate}
+                      cellAriaPrefix="Startdatum"
+                      legend="erlaubter Start"
+                    />
+                  )}
+                  {datesState.endDatePickerOpen && (
+                    <CourseEditorMonthCalendar
+                      ariaLabel="Kalender Endedatum"
+                      monthLabel={rangeCalendarMonthLabel}
+                      cells={endPickerCells}
+                      saving={saving}
+                      onPrevMonth={() => shiftRangeCalendarMonth(-1)}
+                      onNextMonth={() => shiftRangeCalendarMonth(1)}
+                      onClose={closeBoundaryDatePickers}
+                      onSelect={setSeriesEndDate}
+                      isCellDisabled={(isoDate) => isoDate < (rangeEditBounds?.minEndIso ?? isoDate)}
+                      isSelected={(isoDate) => isoDate === datesState.seriesEndDate}
+                      cellAriaPrefix="Endedatum"
+                      legend="erlaubtes Ende"
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="course-editor-inline-row">
+                    <button
+                      type="button"
+                      className="modal-action-btn course-editor-icon-btn"
+                      onClick={toggleRangeDatePicker}
+                      disabled={saving}
+                      title={datesState.rangeDatePickerOpen ? "Kalender ausblenden" : "Kalender öffnen"}
+                      aria-label="Kalender für Zeitraum öffnen"
+                    >
+                      <Calendar size={16} aria-hidden="true" />
+                    </button>
+                    <span className="course-editor-note">Wähle einen Zeitraum.</span>
+                  </div>
+                  {datesState.rangeDatePickerOpen && (
+                    <div className="course-editor-calendar-block" role="group" aria-label="Kalender Zeitraum">
+                      <div className="course-editor-calendar-nav">
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={() => shiftRangeCalendarMonth(-1)}
+                          disabled={saving}
+                        >
+                          Vorheriger Monat
+                        </button>
+                        <strong>{rangeCalendarMonthLabel}</strong>
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={() => shiftRangeCalendarMonth(1)}
+                          disabled={saving}
+                        >
+                          Nächster Monat
+                        </button>
+                      </div>
+                      <div className="course-editor-calendar-weekdays" aria-hidden="true">
+                        {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((label) => (
+                          <span key={label}>{label}</span>
+                        ))}
+                      </div>
+                      <div className="course-editor-calendar-grid">
+                        {rangeCalendarCells.map((cell) => {
+                          const cellClassName = [
+                            "course-editor-calendar-cell",
+                            cell.inCurrentMonth ? "" : "is-outside-month",
+                            cell.inSeriesRange ? "is-in-range" : "",
+                            cell.isRangeStart ? "is-range-start" : "",
+                            cell.isRangeEnd ? "is-range-end" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ");
+                          return (
+                            <button
+                              key={cell.isoDate}
+                              type="button"
+                              className={cellClassName}
+                              aria-label={`Datum ${cell.isoDate}`}
+                              onClick={() => setSeriesRangeDate(cell.isoDate)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  setSeriesRangeDate(cell.isoDate);
+                                }
+                              }}
+                              disabled={saving}
+                              title="Klick: Start/Ende setzen"
+                            >
+                              {cell.dayOfMonth}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="course-editor-calendar-legend">
+                        <span><em className="legend-dot range" /> Zeitraum</span>
+                        <span><em className="legend-dot boundary" /> Start/Ende</span>
+                      </div>
+                      <div className="course-editor-calendar-actions">
+                        <button
+                          type="button"
+                          className="modal-action-btn course-editor-inline-action"
+                          onClick={closeRangeDatePicker}
+                          disabled={saving}
+                        >
+                          Kalender schließen
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -832,103 +1256,6 @@ export default function CourseDatesDialog({
                 </strong>
               </p>
             </div>
-          ) : datesState.planningMode === "bounded_series" ? (
-            <div className="course-editor-subsection">
-              <strong className="course-editor-list-title">Zeitraum</strong>
-              <p className="course-editor-note">
-                Start: <strong aria-label="Startdatum Wert">{formattedSeriesStart}</strong> | Ende:{" "}
-                <strong aria-label="Enddatum Wert">{formattedSeriesEnd}</strong>
-              </p>
-              <div className="course-editor-inline-row">
-                <button
-                  type="button"
-                  className="modal-action-btn course-editor-icon-btn"
-                  onClick={toggleRangeDatePicker}
-                  disabled={saving}
-                  title={datesState.rangeDatePickerOpen ? "Kalender ausblenden" : "Kalender öffnen"}
-                  aria-label="Kalender für Zeitraum öffnen"
-                >
-                  <Calendar size={16} aria-hidden="true" />
-                </button>
-                <span className="course-editor-note">
-                  {isActiveReadOnly ? "Kalenderansicht (nur lesen)." : "Wähle einen Zeitraum."}
-                </span>
-              </div>
-              {datesState.rangeDatePickerOpen && (
-                <div className="course-editor-calendar-block" role="group" aria-label="Kalender Zeitraum">
-                  <div className="course-editor-calendar-nav">
-                    <button
-                      type="button"
-                      className="modal-action-btn course-editor-inline-action"
-                      onClick={() => shiftRangeCalendarMonth(-1)}
-                      disabled={saving}
-                    >
-                      Vorheriger Monat
-                    </button>
-                    <strong>{rangeCalendarMonthLabel}</strong>
-                    <button
-                      type="button"
-                      className="modal-action-btn course-editor-inline-action"
-                      onClick={() => shiftRangeCalendarMonth(1)}
-                      disabled={saving}
-                    >
-                      Nächster Monat
-                    </button>
-                  </div>
-                  <div className="course-editor-calendar-weekdays" aria-hidden="true">
-                    {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((label) => (
-                      <span key={label}>{label}</span>
-                    ))}
-                  </div>
-                  <div className="course-editor-calendar-grid">
-                    {rangeCalendarCells.map((cell) => {
-                      const cellClassName = [
-                        "course-editor-calendar-cell",
-                        cell.inCurrentMonth ? "" : "is-outside-month",
-                        cell.inSeriesRange ? "is-in-range" : "",
-                        cell.isRangeStart ? "is-range-start" : "",
-                        cell.isRangeEnd ? "is-range-end" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ");
-                      return (
-                        <button
-                          key={cell.isoDate}
-                          type="button"
-                          className={cellClassName}
-                          aria-label={`Datum ${cell.isoDate}`}
-                          onClick={() => setSeriesRangeDate(cell.isoDate)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              setSeriesRangeDate(cell.isoDate);
-                            }
-                          }}
-                          disabled={saving || isActiveReadOnly}
-                          title={isActiveReadOnly ? "Nur Ansicht im aktiven Kurs" : "Klick: Start/Ende setzen"}
-                        >
-                          {cell.dayOfMonth}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="course-editor-calendar-legend">
-                    <span><em className="legend-dot range" /> Zeitraum</span>
-                    <span><em className="legend-dot boundary" /> Start/Ende</span>
-                  </div>
-                  <div className="course-editor-calendar-actions">
-                    <button
-                      type="button"
-                      className="modal-action-btn course-editor-inline-action"
-                      onClick={closeRangeDatePicker}
-                      disabled={saving}
-                    >
-                      Kalender schließen
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           ) : null}
 
           {showExcludedDatesEditor && (
@@ -1009,13 +1336,11 @@ export default function CourseDatesDialog({
                               toggleExcludedDateFromCalendar(cell.isoDate);
                             }
                           }}
-                          disabled={!cell.isSeriesDate || saving || isActiveReadOnly || rollingLocked}
+                          disabled={!cell.isSeriesDate || saving || rollingLocked}
                           title={
-                            isActiveReadOnly
-                              ? "Nur Ansicht im aktiven Kurs"
-                              : rollingLocked
-                                ? `Im Planungsfenster (${rollingPlanningHorizonWeeks} Wochen) nur Absage möglich`
-                                : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
+                            rollingLocked
+                              ? `Im Planungsfenster (${rollingPlanningHorizonWeeks} Wochen) nur Absage möglich`
+                              : (cell.isSeriesDate ? "Als Ausnahme setzen/entfernen" : "Nur Serientermine auswählbar")
                           }
                         >
                           {cell.dayOfMonth}
@@ -1121,6 +1446,16 @@ export default function CourseDatesDialog({
               <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>
                 Abbrechen
               </button>
+              {isActiveBounded && (
+                <button
+                  type="button"
+                  className="btn-primary modal-action-btn"
+                  onClick={saveDatesConfig}
+                  disabled={!canSaveActiveRange || impactDialogOpen}
+                >
+                  {saving ? "Speichere..." : "Zeitraum übernehmen"}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-primary modal-action-btn"

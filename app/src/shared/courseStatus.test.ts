@@ -13,6 +13,9 @@ import {
   shouldAutoDeactivateCourse,
   supportsAutoInactiveTransition,
   wouldAutoDeactivateOnReconcile,
+  isOnOrBeforeCourseRightsEnd,
+  isIsoWithinBoundedSeriesRights,
+  validateBoundedSeriesRangeEdit,
 } from "shared/courseStatus";
 import type { Course } from "shared/types";
 
@@ -48,23 +51,23 @@ describe("courseStatus", () => {
       seriesEndDate: "2026-05-10",
       dates: ["2026-05-10"],
     };
-    const within = new Date(Date.UTC(2026, 4, 15, 12, 0, 0));
-    const after = new Date(Date.UTC(2026, 4, 20, 12, 0, 0));
-    expect(isCourseInInactiveGracePeriod(inactive, undefined, within)).toBe(true);
+    const onEnd = new Date(Date.UTC(2026, 4, 10, 12, 0, 0));
+    const after = new Date(Date.UTC(2026, 4, 11, 12, 0, 0));
+    expect(isCourseInInactiveGracePeriod(inactive, undefined, onEnd)).toBe(true);
     expect(isCourseInInactiveGracePeriod(inactive, undefined, after)).toBe(false);
-    expect(getInactiveGraceLastDayIso(inactive)).toBe("2026-05-17");
+    expect(getInactiveGraceLastDayIso(inactive)).toBe("2026-05-10");
   });
 
-  it("verlängert Teilnehmer-Zugriffsfrist bei letztem Termin nach Blockende", () => {
+  it("verlängert Teilnehmer-Zugriffsfrist bei letztem Termin nach Blockende nicht (Kursblock)", () => {
     const course = {
       ...baseCourse,
       status: "inactive" as const,
       seriesEndDate: "2026-06-30",
       dates: ["2026-07-05"],
     };
-    expect(participantCourseAccessDeadlineIso(course)).toBe("2026-07-12");
-    const within = new Date(Date.UTC(2026, 6, 10, 12, 0, 0));
-    const after = new Date(Date.UTC(2026, 6, 15, 12, 0, 0));
+    expect(participantCourseAccessDeadlineIso(course)).toBe("2026-06-30");
+    const within = new Date(Date.UTC(2026, 5, 30, 12, 0, 0));
+    const after = new Date(Date.UTC(2026, 6, 1, 12, 0, 0));
     expect(isWithinPostCourseEndGrace(course, undefined, within)).toBe(true);
     expect(isWithinPostCourseEndGrace(course, undefined, after)).toBe(false);
   });
@@ -107,7 +110,7 @@ describe("courseStatus", () => {
     );
   });
 
-  it("berechnet effektive Auto-Inaktiv-Frist aus Blockende und letztem Termin", () => {
+  it("berechnet effektive Auto-Inaktiv-Frist für Kursblöcke nur aus dem Endedatum", () => {
     const course = {
       ...baseCourse,
       seriesEndDate: "2026-06-30",
@@ -119,11 +122,21 @@ describe("courseStatus", () => {
       seriesEndDate: "2026-06-30",
       dates: ["2026-07-05"],
     };
-    expect(participantCourseAccessDeadlineIso(lateLastTerm)).toBe("2026-07-12");
-    expect(effectiveAutoInactiveDeadlineIso(lateLastTerm)).toBe("2026-07-12");
+    expect(participantCourseAccessDeadlineIso(lateLastTerm)).toBe("2026-06-30");
+    expect(effectiveAutoInactiveDeadlineIso(lateLastTerm)).toBe("2026-06-30");
   });
 
-  it("prüft shouldAutoDeactivateCourse nach Blockende + Nachlauf", () => {
+  it("behält Nachlauf für Rollkurse mit plannedEndDate", () => {
+    const rolling = {
+      ...baseCourse,
+      planningMode: "rolling_continuous" as const,
+      plannedEndDate: "2026-06-30",
+      dates: ["2026-07-05"],
+    };
+    expect(effectiveAutoInactiveDeadlineIso(rolling)).toBe("2026-07-12");
+  });
+
+  it("prüft shouldAutoDeactivateCourse erst nach dem inklusiven Blockende", () => {
     const activeInBlock = {
       ...baseCourse,
       status: "active" as const,
@@ -131,8 +144,10 @@ describe("courseStatus", () => {
       dates: ["2026-03-15"],
     };
     const beforeEnd = new Date(Date.UTC(2026, 3, 1, 12, 0, 0));
-    const afterEnd = new Date(Date.UTC(2026, 6, 15, 12, 0, 0));
+    const onEnd = new Date(Date.UTC(2026, 5, 30, 12, 0, 0));
+    const afterEnd = new Date(Date.UTC(2026, 6, 1, 12, 0, 0));
     expect(shouldAutoDeactivateCourse(activeInBlock, undefined, beforeEnd)).toBe(false);
+    expect(shouldAutoDeactivateCourse(activeInBlock, undefined, onEnd)).toBe(false);
     expect(shouldAutoDeactivateCourse(activeInBlock, undefined, afterEnd)).toBe(true);
     expect(wouldAutoDeactivateOnReconcile(activeInBlock, true, undefined, beforeEnd)).toBe(
       false,
@@ -183,5 +198,62 @@ describe("courseStatus", () => {
     expect(wouldAutoDeactivateOnReconcile(activeInBlock, false, undefined, afterBlock)).toBe(
       false,
     );
+  });
+
+  it("hält Kursblock-Rechte inklusiv am Endedatum", () => {
+    const block = { ...baseCourse, seriesEndDate: "2026-06-30" };
+    const onEnd = new Date(Date.UTC(2026, 5, 30, 12, 0, 0));
+    const afterEnd = new Date(Date.UTC(2026, 6, 1, 12, 0, 0));
+    expect(isOnOrBeforeCourseRightsEnd(block, undefined, onEnd)).toBe(true);
+    expect(isOnOrBeforeCourseRightsEnd(block, undefined, afterEnd)).toBe(false);
+    expect(isIsoWithinBoundedSeriesRights("2026-06-30", block)).toBe(true);
+    expect(isIsoWithinBoundedSeriesRights("2026-07-01", block)).toBe(false);
+    expect(
+      isIsoWithinBoundedSeriesRights("2026-07-01", {
+        ...block,
+        planningMode: "rolling_continuous",
+      }),
+    ).toBe(true);
+  });
+
+  it("erlaubt Startkorrektur am Block nur vor dem ersten Termin und Ende nicht davor", () => {
+    const now = new Date(Date.UTC(2026, 0, 2, 12, 0, 0));
+    const dates = ["2026-01-06", "2026-01-13", "2026-01-20"];
+    expect(
+      validateBoundedSeriesRangeEdit({
+        currentDates: dates,
+        currentStart: "2026-01-06",
+        nextStart: "2026-01-02",
+        nextEnd: "2026-03-31",
+        now,
+      }),
+    ).toBeNull();
+    expect(
+      validateBoundedSeriesRangeEdit({
+        currentDates: dates,
+        currentStart: "2026-01-06",
+        nextStart: "2026-01-07",
+        nextEnd: "2026-03-31",
+        now,
+      }),
+    ).toBe("start_after_first_term");
+    expect(
+      validateBoundedSeriesRangeEdit({
+        currentDates: dates,
+        currentStart: "2026-01-01",
+        nextStart: "2026-01-01",
+        nextEnd: "2026-01-10",
+        now,
+      }),
+    ).toBe("end_before_last_term");
+    expect(
+      validateBoundedSeriesRangeEdit({
+        currentDates: dates,
+        currentStart: "2026-01-01",
+        nextStart: "2025-12-01",
+        nextEnd: "2026-03-31",
+        now: new Date(Date.UTC(2026, 0, 10, 12, 0, 0)),
+      }),
+    ).toBe("start_locked");
   });
 });

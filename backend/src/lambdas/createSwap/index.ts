@@ -3,6 +3,9 @@ import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import {
   canCreateSwapFromOrigin,
   hasRegularBookingCapacity,
+  isBoundedSeriesPlanningMode,
+  isIsoWithinBoundedSeriesRights,
+  isOnOrBeforeCourseRightsEnd,
   isSwapTargetInCutoffWindow,
   resolveEffectiveTermOccupancy,
   resolveGuestCount,
@@ -20,6 +23,39 @@ import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
 import { notifySwapSuccess } from '../shared/notifications/swapSuccessNotification';
 
 const client = dynamoClient;
+
+function scheduleFromCourseItem(item: {
+  planningMode?: { S?: string };
+  seriesEndDate?: { S?: string };
+  visibleUntil?: { S?: string };
+  plannedEndDate?: { S?: string };
+}) {
+  return {
+    planningMode: (item.planningMode?.S ?? "bounded_series") as
+      | "bounded_series"
+      | "rolling_continuous",
+    seriesEndDate: item.seriesEndDate?.S,
+    visibleUntil: item.visibleUntil?.S,
+    plannedEndDate: item.plannedEndDate?.S,
+    dates: [] as string[],
+  };
+}
+
+function rejectBoundedSeriesSwap(
+  schedule: ReturnType<typeof scheduleFromCourseItem>,
+  dateIso: string,
+): APIGatewayProxyResult | null {
+  if (!isBoundedSeriesPlanningMode(schedule.planningMode)) return null;
+  if (isOnOrBeforeCourseRightsEnd(schedule) && isIsoWithinBoundedSeriesRights(dateIso, schedule)) {
+    return null;
+  }
+  return {
+    statusCode: 400,
+    body: JSON.stringify({
+      error: "Für diesen Kursblock ist kein Tausch mehr möglich (Endedatum erreicht).",
+    }),
+  };
+}
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const { tenantId, userId, actingForUserId } = getTenantContext(event);
@@ -61,6 +97,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 404, body: JSON.stringify({ error: 'Origin course not found' }) };
     }
     const courseTime = courseResp.Item.time?.S ?? '';
+    const originRightsError = rejectBoundedSeriesSwap(
+      scheduleFromCourseItem(courseResp.Item),
+      swap.fromDate,
+    );
+    if (originRightsError) return originRightsError;
     const baseParticipants = mapStringList(courseResp.Item.participants);
     const fromCourse = { id: Number(fromLegacyId), participants: baseParticipants };
     const tenantSettings = tenantsTable
@@ -131,6 +172,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!toCourseResp.Item) {
       return { statusCode: 404, body: JSON.stringify({ error: 'Target course not found' }) };
     }
+    const targetRightsError = rejectBoundedSeriesSwap(
+      scheduleFromCourseItem(toCourseResp.Item),
+      swap.toDate,
+    );
+    if (targetRightsError) return targetRightsError;
     const targetCourseTime = toCourseResp.Item.time?.S ?? '';
     if (isSwapTargetInCutoffWindow(swap.toDate, targetCourseTime, tenantSettings)) {
       return {

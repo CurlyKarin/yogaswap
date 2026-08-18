@@ -113,7 +113,7 @@ function planningModeHint(mode: CoursePlanningMode): string {
   if (mode === "rolling_continuous") {
     return "Durchlaufend: Termine sind rollend sichtbar (z. B. 8 Wochen in die Zukunft).";
   }
-  return "Kursblock: z. B. Quartal oder Kursreihe mit Start- und Enddatum.";
+  return "Kursblock: z. B. Quartal oder Kursreihe. Das Endedatum ist der letzte Tag für Teilnahme und Tausch.";
 }
 
 function toIsoDateOnly(date: Date): string {

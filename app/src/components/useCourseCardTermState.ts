@@ -189,10 +189,11 @@ export function useCourseCardTermState({
         undefined,
         tenantSettings,
         enrollments,
+        course,
       )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, enrollments, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings],
+    [allCourses, overrides, enrollments, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings, course],
   );
 
   const waitlistDates = useMemo(
@@ -206,10 +207,11 @@ export function useCourseCardTermState({
         undefined,
         tenantSettings,
         enrollments,
+        course,
       )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, enrollments, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings],
+    [allCourses, overrides, enrollments, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings, course],
   );
 
   const swapForThisTerm = useMemo(
@@ -267,7 +269,7 @@ export function useCourseCardTermState({
     lastActualOccurrenceIso != null &&
     (showLastTermInSelect ||
       (includePastTermsInSelect &&
-        isTermInParticipantSwapGrace(lastActualOccurrenceIso, course.time, tenantSettings)));
+        isTermInParticipantSwapGrace(lastActualOccurrenceIso, course, tenantSettings)));
   const showAutoInactiveBadge =
     participantActionsLocked && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
   const userSwapsOnCourse = useMemo(
@@ -285,11 +287,7 @@ export function useCourseCardTermState({
   );
   const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
   const isSelectedTermExcluded = isExcludedCourseDate(course, selectedDateKey);
-  const termInSwapGrace = isTermInParticipantSwapGrace(
-    selectedDateKey,
-    course.time,
-    tenantSettings,
-  );
+  const termInSwapGrace = isTermInParticipantSwapGrace(selectedDateKey, course, tenantSettings);
   const showPastGraceMarker =
     (includePastTermsInSelect || participantActionsLocked) &&
     isPastOccurrence &&
@@ -310,6 +308,7 @@ export function useCourseCardTermState({
   const canRequestPastRcSwap = canRequestSwapFromPastCancelledOrigin({
     isoDate: selectedDateKey,
     courseTime: course.time,
+    course,
     tenantSettings,
     override,
     userName,

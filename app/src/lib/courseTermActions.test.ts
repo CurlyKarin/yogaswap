@@ -7,6 +7,7 @@ import {
   isCourseInParticipantGrace,
   isParticipantCourseWindDown,
   isOccurrenceInPast,
+  isTermInParticipantSwapGrace,
 } from "./courseTermActions";
 import { startOfWeekMonday } from "./courseWeek";
 
@@ -18,7 +19,8 @@ const endedCourse: Course = {
   capacity: 8,
   participants: ["maya"],
   dates: ["2026-05-18"],
-  seriesEndDate: "2026-05-18",
+  planningMode: "rolling_continuous",
+  plannedEndDate: "2026-05-18",
   status: "active",
 };
 
@@ -67,6 +69,8 @@ describe("isParticipantCourseWindDown", () => {
     const now = new Date(Date.UTC(2026, 5, 17, 12, 0, 0));
     const activePostEnd: Course = {
       ...endedCourse,
+      planningMode: "bounded_series",
+      plannedEndDate: undefined,
       status: "active",
       seriesEndDate: "2026-08-31",
       dates: ["2026-06-10", "2026-06-17"],
@@ -138,18 +142,20 @@ describe("canShowCourseInPastWeek", () => {
     ).toBe(true);
   });
 
-  it("hides past week when the occurrence is older than grace for ongoing course", () => {
+  it("shows a past week of a running course block until the season end date", () => {
     const pastWeek = startOfWeekMonday(new Date(2026, 4, 11));
     const now = new Date(2026, 4, 22, 12, 0, 0);
     const notEndedYet: Course = {
       ...endedCourse,
+      planningMode: "bounded_series",
+      plannedEndDate: undefined,
       dates: ["2026-05-12", "2026-06-15"],
       seriesEndDate: "2026-06-30",
       status: "active",
     };
     expect(
       canShowCourseInPastWeek(notEndedYet, pastWeek, { inactiveGraceDaysAfterCourseEnd: 7 }, now),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("hides week occurrence that is older than grace window", () => {
@@ -282,6 +288,58 @@ describe("canRequestSwapFromPastCancelledOrigin", () => {
         isoDate: "2026-05-18",
         courseTime: "10:00",
         tenantSettings: { inactiveGraceDaysAfterCourseEnd: 5 },
+        override,
+        userName: "maya",
+        participants: [],
+        originallyParticipant: true,
+        now,
+      }),
+    ).toBe(false);
+  });
+
+  it("allows swap from older bounded-series term until seriesEndDate", () => {
+    const block: Course = {
+      ...endedCourse,
+      planningMode: "bounded_series",
+      plannedEndDate: undefined,
+      seriesEndDate: "2026-08-31",
+    };
+    const now = new Date(2026, 5, 20, 12, 0, 0);
+    expect(
+      isTermInParticipantSwapGrace(block.dates[0], block, { inactiveGraceDaysAfterCourseEnd: 7 }, now),
+    ).toBe(true);
+    expect(
+      canRequestSwapFromPastCancelledOrigin({
+        isoDate: "2026-05-18",
+        courseTime: "10:00",
+        course: block,
+        tenantSettings: { inactiveGraceDaysAfterCourseEnd: 7 },
+        override,
+        userName: "maya",
+        participants: [],
+        originallyParticipant: true,
+        now,
+      }),
+    ).toBe(true);
+  });
+
+  it("denies swap from bounded-series term after seriesEndDate", () => {
+    const block: Course = {
+      ...endedCourse,
+      planningMode: "bounded_series",
+      plannedEndDate: undefined,
+      seriesEndDate: "2026-08-31",
+    };
+    const now = new Date(2026, 8, 1, 12, 0, 0);
+    expect(
+      isTermInParticipantSwapGrace(block.dates[0], block, { inactiveGraceDaysAfterCourseEnd: 7 }, now),
+    ).toBe(false);
+    expect(
+      canRequestSwapFromPastCancelledOrigin({
+        isoDate: "2026-05-18",
+        courseTime: "10:00",
+        course: block,
+        tenantSettings: { inactiveGraceDaysAfterCourseEnd: 7 },
         override,
         userName: "maya",
         participants: [],

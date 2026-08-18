@@ -1,6 +1,6 @@
 # Kursstatus, Sichtbarkeit und Auto-Transition (#149, #204)
 
-Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogaswap/issues/149) und [#204](https://github.com/CurlyKarin/yogaswap/issues/204): welche Kurse Teilnehmer:innen sehen, wann ein Kursblock automatisch `inactive` wird, und wie der Nachlauf mit dem Tauschfenster zusammenhängt.
+Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogaswap/issues/149), [#204](https://github.com/CurlyKarin/yogaswap/issues/204) und [#296](https://github.com/CurlyKarin/yogaswap/issues/296): welche Kurse Teilnehmende sehen, wann ein Kurs automatisch `inactive` wird, und wie Nachlauf vs. Block-Endedatum zusammenhängen.
 
 ## Kurzfassung
 
@@ -9,7 +9,7 @@ Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogasw
 | **`draft`** | Teilnehmer:innen sehen den Kurs nicht. |
 | **`active`** | Normale Sichtbarkeit; Termine über `getCourseDates` (Datum + Uhrzeit ≥ jetzt). |
 | **`active` → `inactive`** | Automatisch, wenn ein **Blockende** definiert ist und der UTC-Kalendertag **nach** der Zugriffsfrist liegt (siehe unten). Nicht mehr allein bei „kein Zukunftstermin“. |
-| **Nachlauf** | Teilnehmer:innen sehen den Kurs nach dem letzten Termin noch bis zum **gleichen Fristtag** wie die Auto-Inaktiv-Schwelle (Default-Nachlauf **7** Kalendertage nach letztem Termin, UTC). |
+| **Nachlauf** | Nur **durchlaufende Kurse**: Teilnehmende sehen den Kurs nach dem letzten Termin noch bis zur Auto-Inaktiv-Schwelle (Default **7** Kalendertage nach letztem Termin bzw. `plannedEndDate`, UTC). **Kursblöcke:** kein Studio-Nachlauf — Frist = inklusives `seriesEndDate` (#296). |
 | **Lazy Reconcile** | Beim **`GET /courses`** werden Status und abgeleitete `dates` bei Bedarf in DynamoDB nachgezogen. |
 
 Studio-Konfiguration: **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44)) — `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays`, `maxOffsetDays`, `rollingPlanningHorizonWeeks`. Rollkurse: [rolling-courses-planning.md](./rolling-courses-planning.md).
@@ -51,31 +51,43 @@ Teilnehmer-Kachel auch **ohne Zukunftstermine**, wenn:
 
 Gemeinsame Schwelle für **Auto-Inaktiv** und **Teilnehmer-Sichtbarkeit/Wind-down**:
 
+**Kursblock** (`bounded_series`, #296):
+
 ```
-ZugriffsfristEnde = max( blockEndIso, letzterTerminIso + inactiveGraceDaysAfterCourseEnd )
+ZugriffsfristEnde = seriesEndDate   (inklusiv; Fallback visibleUntil)
+```
+
+Letzter Unterrichtstag darf **davor** liegen. Studio-Nachlauf und Tauschfenster (`minOffsetDays` / `maxOffsetDays`) gelten nicht. Tausch über die Blocklaufzeit bis zum Endedatum; danach keine neuen Täusche. Offene Swaps werden nicht extra gelöscht (wie beim Setzen von `plannedEndDate` am Rollkurs).
+
+Am **aktiven** Kursblock kann das Studio Start- und Endedatum noch korrigieren: Ende nicht vor dem letzten Termin; Start nur, wenn der erste Termin noch in der Zukunft liegt (frühestens heute).
+
+**Rollkurs** mit `plannedEndDate`:
+
+```
+ZugriffsfristEnde = max( plannedEndDate, letzterTerminIso + inactiveGraceDaysAfterCourseEnd )
 ```
 
 | Symbol | Bedeutung |
 |--------|-----------|
 | `blockEndIso` | `courseBlockEndIso()` — `seriesEndDate` / `visibleUntil` (Kursblock) oder `plannedEndDate` (Rollkurs mit Ende) |
 | `letzterTerminIso` | `lastScheduledOccurrenceIso()` — nur aus `dates`, kein seriesEndDate-Fallback |
-| `inactiveGraceDaysAfterCourseEnd` | Studio-Einstellung (Default **7**, UTC-Kalendertage) |
+| `inactiveGraceDaysAfterCourseEnd` | Studio-Einstellung (Default **7**, UTC-Kalendertage), **nur Rollkurse** |
 
-**Im Code:** `effectiveAutoInactiveDeadlineIso` und `participantCourseAccessDeadlineIso` in `shared/src/courseStatus.ts` (identische Frist; Fallback ohne Blockende über `courseEndDateIso` + Nachlauf).
+**Im Code:** `effectiveAutoInactiveDeadlineIso` und `participantCourseAccessDeadlineIso` in `shared/src/courseStatus.ts`.
 
 ### Nach Planungsmodus
 
 | Modus | Blockende | Auto-inaktiv |
 |-------|-----------|--------------|
-| `bounded_series` | `seriesEndDate` (ggf. `visibleUntil`) | Ja, nach obiger Formel |
-| `rolling_continuous` **mit** `plannedEndDate` | `plannedEndDate` | Gleiche Regel |
+| **bounded_series** | `seriesEndDate` (ggf. `visibleUntil`) | Ja, am Tag **nach** dem inklusiven Endedatum — ohne Nachlauf |
+| `rolling_continuous` **mit** `plannedEndDate` | `plannedEndDate` | Ja, nach `plannedEnd` bzw. letzter Termin + Nachlauf |
 | `rolling_continuous` **ohne** `plannedEndDate` | — | **Kein** Auto-inaktiv |
 
 **Bedeutung:**
 
-- Block läuft noch → Kurs bleibt `active`, auch ohne zukünftige Termine (Admin kann nachplanen).
-- Letzter Termin **nach** dem Blockende → Frist und Sichtbarkeit enden erst nach **Termin + Nachlauf**.
-- Liegt kein Termin in `dates`, gilt nur `blockEndIso` als Frist (ohne zusätzliche +7 Tage nur auf das Blockende).
+- Block läuft noch (`heute ≤ seriesEndDate`) → Kurs bleibt `active`, auch ohne zukünftige Termine (Lücke bis Saisonende: Tausch von vergangenen Terminen).
+- Termine nach dem Endedatum zählen nicht; die Frist verlängert sich nicht.
+- Liegt kein Termin in `dates`, gilt nur `blockEndIso` als Frist.
 
 ---
 
@@ -142,13 +154,20 @@ Teilnehmer-Kachel im **Wind-down** (CSS `course-card--inactive-participant`, `pa
 
 ### Termin-Nachlauf (pro Vergangenheitstermin)
 
-Unabhängig vom Kurs-Wind-down: **7 Tage** (Studio-Einstellung) nach einem vergangenen Termin für RC-Tausch (`isTermInParticipantSwapGrace`). Details: [course-views.md](./course-views.md).
+Unabhängig vom Kurs-Wind-down, RC-Tausch vom vergangenen Termin (`isTermInParticipantSwapGrace`):
 
-| Einstellung | Default |
-|-------------|---------|
-| `inactiveGraceDaysAfterCourseEnd` | **7** |
-| `minOffsetDays` / `maxOffsetDays` (Tauschfenster) | **-7 / +7** |
-| `rollingPlanningHorizonWeeks` | **5** |
+| Modus | Fenster |
+|-------|---------|
+| **Durchlaufend** | **7 Tage** (Studio-Einstellung `inactiveGraceDaysAfterCourseEnd`) nach dem jeweiligen Termin |
+| **Kursblock** | alle vergangenen Termine, solange `heute ≤ seriesEndDate` — kein Studio-Nachlauf |
+
+Tauschziele: Rollkurse im Studio-Offset (`minOffsetDays` / `maxOffsetDays`); Kursblöcke beliebige Zukunftstermine bis zum inklusiven Endedatum des **Zielkurses**. Nach dem Endedatum des **Ursprungsblocks** keine neuen Täusche. Offene pending/active Swaps werden nicht gelöscht (vgl. Rollkurs-`plannedEndDate`, später [#174](https://github.com/CurlyKarin/yogaswap/issues/174)). Details: [course-views.md](./course-views.md).
+
+| Einstellung | Default | Gilt für |
+|-------------|---------|----------|
+| `inactiveGraceDaysAfterCourseEnd` | **7** | nur durchlaufende Kurse |
+| `minOffsetDays` / `maxOffsetDays` (Tauschfenster) | **-7 / +7** | nur durchlaufende Kurse |
+| `rollingPlanningHorizonWeeks` | **5** | nur durchlaufende Kurse |
 
 **Quellen:** `shared/src/courseStatus.ts`, `app/src/lib/courseTermActions.ts`, `app/src/lib/courseCardLabels.ts`, `app/src/components/CourseCard.tsx`.
 
@@ -182,4 +201,5 @@ Unabhängig vom Kurs-Wind-down: **7 Tage** (Studio-Einstellung) nach einem verga
 - [#44](https://github.com/CurlyKarin/yogaswap/issues/44) — Studio-Settings (Nachlauf, Tauschfenster, Planungssperre)
 - [#129](https://github.com/CurlyKarin/yogaswap/issues/129) — Lifecycle-Guardrails (`updateCourse` / Prune)
 - [#165](https://github.com/CurlyKarin/yogaswap/issues/165) — Rollende Kurse mit optionalem Ende
-- [#204](https://github.com/CurlyKarin/yogaswap/issues/204) — Auto-Inaktiv vs. Teilnehmer-Nachlauf
+- [#296](https://github.com/CurlyKarin/yogaswap/issues/296) — Kursblock: Tausch und Rechte bis Endedatum
+- [#312](https://github.com/CurlyKarin/yogaswap/issues/312) — Studio-Einstellungen nur für durchlaufende Kurse

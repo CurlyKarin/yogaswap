@@ -2,7 +2,13 @@
 import { CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
 import { isSwapTargetInCutoffWindow } from "shared/cancellationSwapCutoff";
-import { buildCourseOccurrenceLocal } from "shared/courseStatus";
+import {
+  buildCourseOccurrenceLocal,
+  courseBlockEndIso,
+  isBoundedSeriesPlanningMode,
+  isIsoWithinBoundedSeriesRights,
+  toIsoDateUtc,
+} from "shared/courseStatus";
 import { resolveEffectiveTermOccupancy, resolveStemForDate } from "shared/courseEnrollment";
 import type { SwapSettings } from "../types";
 
@@ -85,8 +91,15 @@ function collectCourseDates(
   now: Date = new Date(),
   tenantSettings?: TenantSettings,
   enrollments: CourseEnrollment[] = [],
+  originCourse?: Course,
 ) {
   if (isNaN(referenceDate.getTime())) return []; // ungültiges Datum → keine Termine
+
+  const originBounded = originCourse != null && isBoundedSeriesPlanningMode(originCourse.planningMode);
+  if (originBounded) {
+    const originEnd = courseBlockEndIso(originCourse);
+    if (originEnd && toIsoDateUtc(now) > originEnd) return [];
+  }
 
   const windowStart = new Date(referenceDate);
   windowStart.setDate(windowStart.getDate() + settings.minOffsetDays);
@@ -109,12 +122,13 @@ function collectCourseDates(
         return courseTime;
       })
       .filter((courseTime): courseTime is Date => courseTime !== null) // Type-Guard
-      .filter(
-        (courseTime) =>
-          courseTime >= windowStart &&
-          courseTime <= windowEnd &&
-          courseTime >= now
-      )
+      .filter((courseTime) => {
+        if (courseTime < now) return false;
+        const dateKey = toDateKey(courseTime);
+        if (!isIsoWithinBoundedSeriesRights(dateKey, course)) return false;
+        if (originBounded) return true;
+        return courseTime >= windowStart && courseTime <= windowEnd;
+      })
       .map((courseTime) => {
         const override = overrides.find(
           (o) => o.courseId === course.id && sameInstant(o.date, courseTime)
@@ -182,6 +196,7 @@ export function getAvailableDates(
   now: Date = new Date(),
   tenantSettings?: TenantSettings,
   enrollments: CourseEnrollment[] = [],
+  originCourse?: Course,
 ) {
   return collectCourseDates(
     allCourses,
@@ -192,6 +207,7 @@ export function getAvailableDates(
     now,
     tenantSettings,
     enrollments,
+    originCourse,
   )
     .filter((x) => !x.regularFull && !x.userAlreadyInThisCourse && !x.targetInCutoff)
     .map(({ course, date, time }) => ({ course, date, time }));
@@ -207,6 +223,7 @@ export function getWaitlistDates(
   now: Date = new Date(),
   tenantSettings?: TenantSettings,
   enrollments: CourseEnrollment[] = [],
+  originCourse?: Course,
 ) {
   return collectCourseDates(
     allCourses,
@@ -217,6 +234,7 @@ export function getWaitlistDates(
     now,
     tenantSettings,
     enrollments,
+    originCourse,
   )
     .filter((entry) => isWaitlistSwapTarget(entry))
     .map(({ course, date, time }) => ({ course, date, time }));

@@ -4,8 +4,10 @@ import {
 } from "shared/cancellationSwapCutoff";
 import {
   addCalendarDaysIsoUtc,
+  courseBlockEndIso,
   courseEndDateIso,
   DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END,
+  isBoundedSeriesPlanningMode,
   isOccurrenceInPast,
   isWithinPostCourseEndGrace,
   participantCourseAccessDeadlineIso,
@@ -33,22 +35,41 @@ export function isWithinParticipantGraceCalendar(
   return toIsoDateUtc(now) <= deadline;
 }
 
-function isIsoWithinGraceWindow(isoDate: string, settings: TenantSettings | undefined, now: Date): boolean {
+function isIsoWithinStudioTermGraceWindow(
+  isoDate: string,
+  settings: TenantSettings | undefined,
+  now: Date,
+): boolean {
   const todayIso = toIsoDateUtc(now);
   if (isoDate > todayIso) return false;
   const lastGraceInclusiveIso = addCalendarDaysIsoUtc(isoDate, resolveGraceDays(settings));
   return todayIso <= lastGraceInclusiveIso;
 }
 
-/** Termin liegt in der Vergangenheit und noch im Tausch-Nachlauf (gleiche Regel wie RC-Tausch). */
+function isIsoWithinSwapLookback(
+  isoDate: string,
+  course: Pick<Course, "time" | "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate">,
+  settings: TenantSettings | undefined,
+  now: Date,
+): boolean {
+  if (isBoundedSeriesPlanningMode(course.planningMode)) {
+    const end = courseBlockEndIso(course);
+    if (!end) return isIsoWithinStudioTermGraceWindow(isoDate, settings, now);
+    const todayIso = toIsoDateUtc(now);
+    return isoDate <= todayIso && todayIso <= end;
+  }
+  return isIsoWithinStudioTermGraceWindow(isoDate, settings, now);
+}
+
+/** Termin liegt in der Vergangenheit und ist noch tauschbar (Roll: Nachlauf; Block: bis Saisonende). */
 export function isTermInParticipantSwapGrace(
   isoDate: string,
-  courseTime: string,
+  course: Pick<Course, "time" | "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate">,
   settings?: TenantSettings,
   now: Date = new Date(),
 ): boolean {
-  if (!isOccurrenceInPast(isoDate, courseTime, now)) return false;
-  return isIsoWithinGraceWindow(isoDate, settings, now);
+  if (!isOccurrenceInPast(isoDate, course.time, now)) return false;
+  return isIsoWithinSwapLookback(isoDate, course, settings, now);
 }
 
 /**
@@ -86,7 +107,7 @@ export function isCourseInNavigationGrace(
 ): boolean {
   const todayIso = toIsoDateUtc(now);
   const validPastDates = (course.dates ?? []).filter((iso) => iso <= todayIso);
-  if (validPastDates.some((iso) => isIsoWithinGraceWindow(iso, settings, now))) return true;
+  if (validPastDates.some((iso) => isIsoWithinSwapLookback(iso, course, settings, now))) return true;
   return isWithinParticipantGraceCalendar(course, settings, now);
 }
 
@@ -101,7 +122,7 @@ export function canShowCourseInPastWeek(
   const { start, end } = weekRangeKeys(weekStart);
   const weekDates = (course.dates ?? []).filter((iso) => iso >= start && iso <= end);
   if (weekDates.length === 0) return false;
-  return weekDates.some((iso) => isIsoWithinGraceWindow(iso, settings, now));
+  return weekDates.some((iso) => isIsoWithinSwapLookback(iso, course, settings, now));
 }
 
 /**
@@ -129,7 +150,9 @@ export function computeEarliestWeekAnchor(
   for (const course of courses) {
     if (!isCourseInNavigationGrace(course, settings, now)) continue;
     hasNavigationGrace = true;
-    const candidateIsos = (course.dates ?? []).filter((iso) => isIsoWithinGraceWindow(iso, settings, now));
+    const candidateIsos = (course.dates ?? []).filter((iso) =>
+      isIsoWithinSwapLookback(iso, course, settings, now),
+    );
     if (candidateIsos.length > 0) {
       for (const iso of candidateIsos) {
         const isoWeek = startOfWeekMonday(new Date(`${iso}T12:00:00.000Z`));
@@ -179,6 +202,7 @@ export function earliestAllowedWeekStart(
 export function canRequestSwapFromPastCancelledOrigin(input: {
   isoDate: string;
   courseTime: string;
+  course?: Pick<Course, "time" | "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate">;
   tenantSettings?: TenantSettings;
   override?: CourseDateOverride;
   userName: string;
@@ -188,7 +212,8 @@ export function canRequestSwapFromPastCancelledOrigin(input: {
 }): boolean {
   const now = input.now ?? new Date();
   if (!isOccurrenceInPast(input.isoDate, input.courseTime, now)) return false;
-  if (!isTermInParticipantSwapGrace(input.isoDate, input.courseTime, input.tenantSettings, now)) {
+  const courseForGrace = input.course ?? { time: input.courseTime };
+  if (!isTermInParticipantSwapGrace(input.isoDate, courseForGrace, input.tenantSettings, now)) {
     return false;
   }
   if (

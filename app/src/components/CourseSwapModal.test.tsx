@@ -219,4 +219,18 @@ describe("CourseSwapModal", () => {
 
     expect(onConfirmWaitlist).toHaveBeenCalledWith(3, "2099-06-20");
   });
+
+  it("beschreibt Tauschziele für Kursblöcke über das Endedatum statt Offset-Fenster", () => {
+    renderSwapModal({ originIsBoundedSeries: true });
+
+    const freeSlotsHint = screen.getByRole("button", { name: /Hilfe: Freie Tauschtermine/i });
+    const describedBy = freeSlotsHint.getAttribute("aria-describedby");
+    expect(document.getElementById(describedBy!)).toHaveTextContent(/bis zum Endedatum/i);
+    expect(document.getElementById(describedBy!)).not.toHaveTextContent(/Tagen nach deinem Kurstermin/i);
+
+    fireEvent.click(freeSlotsHint);
+    expect(screen.getByRole("region", { name: /Freie Tauschtermine/i })).toHaveTextContent(
+      /bis zum Endedatum/i,
+    );
+  });
 });
