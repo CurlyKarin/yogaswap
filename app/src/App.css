@@ -1635,12 +1635,28 @@ a:focus-visible {
 
 .studio-settings-section {
   margin-bottom: 1rem;
+  text-align: left;
+}
+
+.studio-settings-subsection-heading {
+  margin: 1rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  text-align: left;
+}
+
+.studio-settings-divider {
+  margin: 1.25rem 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
 }
 
 .studio-settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
 }
 
 /* Match TermDateSelect / dialog control size — bare inputs inside labeled
@@ -1653,6 +1669,9 @@ a:focus-visible {
   padding: 0;
   border: none;
   background: transparent;
+  width: 100%;
+  max-width: 28rem;
+  text-align: left;
 }
 
 .studio-settings-grid > .dialog-field > .dialog-field-label,
@@ -1662,6 +1681,7 @@ a:focus-visible {
 
 .studio-settings-grid > .dialog-field > input {
   width: 100%;
+  max-width: none;
   box-sizing: border-box;
   padding: 0.5rem;
   font: inherit;

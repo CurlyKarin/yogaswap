@@ -62,7 +62,12 @@ describe("StudioSettingsSection", () => {
     await waitFor(() => {
       expect(mockedUpdateTenantSettings).toHaveBeenCalledWith(
         expect.objectContaining({
+          name: "Yoga Studio",
           cancellationSwapCutoffMinutesBeforeStart: 45,
+          inactiveGraceDaysAfterCourseEnd: 7,
+          minOffsetDays: -7,
+          maxOffsetDays: 7,
+          rollingPlanningHorizonWeeks: 5,
         }),
       );
     });
@@ -73,6 +78,29 @@ describe("StudioSettingsSection", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
     expect(screen.getByRole("region", { name: /studio-einstellungen/i })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /studioname/i })).toBeInTheDocument();
+  });
+
+  it("gruppiert Felder in Allgemein und Durchlaufende Kurse", () => {
+    render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expect(screen.getByRole("heading", { level: 4, name: /allgemein/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 4, name: /durchlaufende kurse/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /allgemein/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /durchlaufende kurse/i })).toBeInTheDocument();
+
+    const generalGroup = screen.getByRole("group", { name: /allgemein/i });
+    expect(generalGroup).toContainElement(screen.getByRole("textbox", { name: /studioname/i }));
+    expect(generalGroup).toContainElement(getCutoffInput());
+
+    const rollingGroup = screen.getByRole("group", { name: /durchlaufende kurse/i });
+    expect(rollingGroup).toContainElement(
+      screen.getByLabelText(/nachlauf nach kursende/i),
+    );
+    expect(rollingGroup).toContainElement(
+      screen.getByLabelText(/tauschfenster: frühestens/i),
+    );
+    expect(rollingGroup).not.toContainElement(getCutoffInput());
   });
 
   it("erhöht Kurzfrist-Absage in 15-Minuten-Schritten", () => {
