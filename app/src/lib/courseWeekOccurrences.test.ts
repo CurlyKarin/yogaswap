@@ -124,7 +124,7 @@ describe("getWeekViewCardDates", () => {
     expect(keys).toContain("2026-06-15");
   });
 
-  it("lists only per-term grace dates symmetrically across weeks", () => {
+  it("lists all past block terms until seriesEndDate, ignoring studio grace days", () => {
     const course: Course = {
       id: 1,
       name: "Test",
@@ -147,10 +147,8 @@ describe("getWeekViewCardDates", () => {
     const lastWeekKeys = getWeekViewCardDates(course, lastWeek, settings, now).map((d) =>
       toLocalDateIso(d),
     );
-    expect(thisWeekKeys).toEqual(["2026-06-10", "2026-06-17"]);
-    expect(lastWeekKeys).toEqual(["2026-06-10", "2026-06-17"]);
-    expect(thisWeekKeys).not.toContain("2026-06-03");
-    expect(lastWeekKeys).not.toContain("2026-06-03");
+    expect(thisWeekKeys).toEqual(["2026-06-03", "2026-06-10", "2026-06-17"]);
+    expect(lastWeekKeys).toEqual(["2026-06-03", "2026-06-10", "2026-06-17"]);
   });
 });
 

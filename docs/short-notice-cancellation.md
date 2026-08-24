@@ -43,7 +43,7 @@ RC-Rücknahme ist möglich (auch im Cutoff), wenn noch Platz frei ist. Vor dem A
 
 | Thema | Feld / Logik |
 |--------|----------------|
-| Welche Zieltermine wählbar sind | `minOffsetDays` / `maxOffsetDays` |
+| Welche Zieltermine wählbar sind | Rollkurse: `minOffsetDays` / `maxOffsetDays`. Kursblöcke: Zukunftstermine bis inklusivem `seriesEndDate` (#296). |
 | Ob kurz vor Start noch getauscht werden darf | `cancellationSwapCutoffMinutesBeforeStart` |
 
 ## Pending-Aufräumen

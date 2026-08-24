@@ -878,6 +878,52 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).excludedDates).toEqual([farFutureIso]);
   });
 
+  test("rejects shrinking seriesEndDate before last term on active bounded course", async () => {
+    mockAdminMembership().mockResolvedValueOnce({
+      Item: {
+        ...baseCourseItem("active"),
+        dates: { L: [{ S: "2026-01-05" }, { S: "2026-03-30" }] },
+      },
+    });
+
+    const result = await handler(
+      makeEvent({
+        planningMode: "bounded_series",
+        visibilityMode: "fixed_window",
+        seriesStartDate: "2026-01-01",
+        seriesEndDate: "2026-01-10",
+        visibleFrom: "2026-01-01",
+        visibleUntil: "2026-01-10",
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/last scheduled term/i);
+  });
+
+  test("rejects seriesStartDate change on active bounded course after first term", async () => {
+    mockAdminMembership().mockResolvedValueOnce({
+      Item: {
+        ...baseCourseItem("active"),
+        dates: { L: [{ S: "2026-01-05" }, { S: "2026-03-30" }] },
+      },
+    });
+
+    const result = await handler(
+      makeEvent({
+        planningMode: "bounded_series",
+        visibilityMode: "fixed_window",
+        seriesStartDate: "2026-01-02",
+        seriesEndDate: "2026-03-31",
+        visibleFrom: "2026-01-02",
+        visibleUntil: "2026-03-31",
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/after the first term/i);
+  });
+
   test("auto-sets active bounded_series to inactive when no future visible dates remain", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({

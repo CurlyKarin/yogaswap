@@ -29,7 +29,7 @@ Für `planningMode: rolling_continuous` gibt es **kein** separates Kursfeld für
 
 ### Auto-Inaktiv und Teilnehmer-Nachlauf (#204)
 
-Rollkurse **mit** `plannedEndDate` nutzen dieselbe Zugriffsfrist wie Kursblöcke:
+Rollkurse **mit** `plannedEndDate` nutzen Studio-Nachlauf; **Kursblöcke** enden inklusiv an `seriesEndDate` ohne Nachlauf (#296):
 
 ```
 ZugriffsfristEnde = max( plannedEndDate, letzterTerminIso + inactiveGraceDaysAfterCourseEnd )

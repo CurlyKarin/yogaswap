@@ -144,8 +144,8 @@ function participantBaseVisible(
  *
  * Teilnehmer:innen:
  * - `draft`: nie sichtbar
- * - `inactive`: nur im Nachlauf (Zugriffsfrist = `participantCourseAccessDeadlineIso`,
- *   Default-Nachlauf 7 Tage nach letztem Termin bzw. Blockende) und nur wenn die
+ * - `inactive`: nur bis zur Zugriffsfrist (`participantCourseAccessDeadlineIso`;
+ *   Kursblock = inklusives `seriesEndDate`, Rollkurs = Ende + Nachlauf) und nur wenn die
  *   bestehende Buchungs-/Instructor-Logik zutrifft
  * - `active` / ohne Status: wie bisher
  *

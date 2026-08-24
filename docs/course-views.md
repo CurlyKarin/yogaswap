@@ -118,7 +118,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 
 | Regel | Verhalten |
 |--------|-----------|
-| **Sichtbarkeit** | Vergangene KW: nur Kurse im Kalender-Nachlauf mit Termin in dieser KW. |
+| **Sichtbarkeit** | Vergangene KW: nur Kurse im Kalender-Nachlauf (Rollkurs) bzw. bis inklusivem Block-Endedatum mit Termin in dieser KW. |
 | **Navigation ‹** | `computeEarliestWeekAnchor`; ‹ deaktiviert am unteren Limit. |
 | **Vergangener Termin** | Keine Absage am laufenden Termin; kein Tausch ohne RC-Absage. |
 | **RC abgesagt** | „Anderen Termin wählen“, weitere Tauschanfragen, offene Anfragen abbrechen — auch im Kurs-Wind-down. |
@@ -130,7 +130,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 
 | Thema | Issue / Doku |
 |--------|----------------|
-| Kursstatus, `visibleDates`, Nachlauf, Wind-down | #149, #204, `course-status-visibility.md` |
+| Kursstatus, `visibleDates`, Nachlauf, Wind-down, Block-Endedatum | #149, #204, #296, `course-status-visibility.md` |
 | Kalender-/Swap-Zeitachse, Sondertermine | #164 (dieses Dokument) |
 | Kontrollierte Überplanung | #153, `course-overbooking.md` |
 | Kurzfristige Absage (SN/RC, Cutoff) | #167, `short-notice-cancellation.md` |

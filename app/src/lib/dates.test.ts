@@ -430,4 +430,126 @@ describe("getAvailableDates / getWaitlistDates", () => {
     expect(available).toHaveLength(0);
     expect(waitlist).toHaveLength(0);
   });
+
+  it("ignores studio offset window for bounded series origin until seriesEndDate", () => {
+    const origin: Course = {
+      ...course,
+      id: 40,
+      planningMode: "bounded_series",
+      seriesEndDate: "2025-07-31",
+      dates: ["2025-06-15"],
+      participants: ["TestUser"],
+    };
+    const farTarget: Course = {
+      ...course,
+      id: 41,
+      planningMode: "bounded_series",
+      seriesEndDate: "2025-07-31",
+      dates: ["2025-07-20"],
+      participants: ["Other"],
+    };
+    const available = getAvailableDates(
+      [origin, farTarget],
+      [],
+      currentUser,
+      swapSettings,
+      new Date("2025-06-15"),
+      TEST_NOW,
+      undefined,
+      [],
+      origin,
+    );
+    expect(available.some((entry) => entry.course.id === 41)).toBe(true);
+  });
+
+  it("excludes bounded targets after their seriesEndDate", () => {
+    const origin: Course = {
+      ...course,
+      id: 40,
+      planningMode: "bounded_series",
+      seriesEndDate: "2025-07-31",
+      dates: ["2025-06-15"],
+      participants: ["TestUser"],
+    };
+    const afterEndTarget: Course = {
+      ...course,
+      id: 42,
+      planningMode: "bounded_series",
+      seriesEndDate: "2025-07-15",
+      dates: ["2025-07-20"],
+      participants: ["Other"],
+    };
+    const available = getAvailableDates(
+      [origin, afterEndTarget],
+      [],
+      currentUser,
+      swapSettings,
+      new Date("2025-06-15"),
+      TEST_NOW,
+      undefined,
+      [],
+      origin,
+    );
+    expect(available.some((entry) => entry.course.id === 42)).toBe(false);
+  });
+
+  it("returns no swap dates after origin seriesEndDate", () => {
+    const origin: Course = {
+      ...course,
+      id: 40,
+      planningMode: "bounded_series",
+      seriesEndDate: "2025-06-14",
+      dates: ["2025-06-10"],
+      participants: ["TestUser"],
+    };
+    const target: Course = {
+      ...course,
+      id: 41,
+      planningMode: "bounded_series",
+      seriesEndDate: "2025-07-31",
+      dates: ["2025-06-20"],
+      participants: ["Other"],
+    };
+    const available = getAvailableDates(
+      [origin, target],
+      [],
+      currentUser,
+      swapSettings,
+      new Date("2025-06-10"),
+      TEST_NOW,
+      undefined,
+      [],
+      origin,
+    );
+    expect(available).toHaveLength(0);
+  });
+
+  it("keeps studio offset window for rolling origin", () => {
+    const origin: Course = {
+      ...course,
+      id: 50,
+      planningMode: "rolling_continuous",
+      dates: ["2025-06-15"],
+      participants: ["TestUser"],
+    };
+    const farTarget: Course = {
+      ...course,
+      id: 51,
+      planningMode: "rolling_continuous",
+      dates: ["2025-07-20"],
+      participants: ["Other"],
+    };
+    const available = getAvailableDates(
+      [origin, farTarget],
+      [],
+      currentUser,
+      swapSettings,
+      new Date("2025-06-15"),
+      TEST_NOW,
+      undefined,
+      [],
+      origin,
+    );
+    expect(available.some((entry) => entry.course.id === 51)).toBe(false);
+  });
 });

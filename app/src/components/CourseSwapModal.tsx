@@ -32,6 +32,7 @@ type CourseSwapModalProps = {
   originTermIso: string;
   originTermDisplay: string;
   swapWindow: SwapSettings;
+  originIsBoundedSeries?: boolean;
   availableSwapDates: SwapTargetOption[];
   waitlistDates: SwapTargetOption[];
   onConfirmFree: (targetCourseId: number, targetDateIso: string) => void;
@@ -114,6 +115,7 @@ export default function CourseSwapModal({
   originTermIso,
   originTermDisplay,
   swapWindow,
+  originIsBoundedSeries = false,
   availableSwapDates,
   waitlistDates,
   onConfirmFree,
@@ -206,15 +208,29 @@ export default function CourseSwapModal({
             <span className="swap-modal-section-title">Freie Termine</span>
             <SwapModalHint
               label="Freie Tauschtermine"
-              description={`Termine mit freien Plätzen zwischen ${swapWindow.minOffsetDays} und ${swapWindow.maxOffsetDays} Tagen nach deinem Kurstermin (nur in der Zukunft). Mit der Bestätigung eines Zieltermins meldest du dich gleichzeitig von deinem aktuellen Termin ab.`}
+              description={
+                originIsBoundedSeries
+                  ? "Termine mit freien Plätzen in diesem Kursblock bis zum Endedatum (nur in der Zukunft). Mit der Bestätigung eines Zieltermins meldest du dich gleichzeitig von deinem aktuellen Termin ab."
+                  : `Termine mit freien Plätzen zwischen ${swapWindow.minOffsetDays} und ${swapWindow.maxOffsetDays} Tagen nach deinem Kurstermin (nur in der Zukunft). Mit der Bestätigung eines Zieltermins meldest du dich gleichzeitig von deinem aktuellen Termin ab.`
+              }
             >
               <p>
-                Termine mit freien Plätzen zwischen{" "}
-                <strong>
-                  {swapWindow.minOffsetDays} und {swapWindow.maxOffsetDays} Tagen
-                </strong>{" "}
-                nach deinem Kurstermin (nur in der Zukunft). Mit der Bestätigung eines Zieltermins meldest
-                du dich gleichzeitig von deinem aktuellen Termin ab.
+                {originIsBoundedSeries ? (
+                  <>
+                    Termine mit freien Plätzen in diesem Kursblock{" "}
+                    <strong>bis zum Endedatum</strong> (nur in der Zukunft). Mit der Bestätigung eines
+                    Zieltermins meldest du dich gleichzeitig von deinem aktuellen Termin ab.
+                  </>
+                ) : (
+                  <>
+                    Termine mit freien Plätzen zwischen{" "}
+                    <strong>
+                      {swapWindow.minOffsetDays} und {swapWindow.maxOffsetDays} Tagen
+                    </strong>{" "}
+                    nach deinem Kurstermin (nur in der Zukunft). Mit der Bestätigung eines Zieltermins meldest
+                    du dich gleichzeitig von deinem aktuellen Termin ab.
+                  </>
+                )}
               </p>
             </SwapModalHint>
           </div>
@@ -255,14 +271,27 @@ export default function CourseSwapModal({
             <span className="swap-modal-section-title">Warteliste</span>
             <SwapModalHint
               label="Warteliste im Tauschdialog"
-              description={`Ausgebuchte Termine im gleichen Zeitfenster (${swapWindow.minOffsetDays} bis ${swapWindow.maxOffsetDays} Tage nach deinem Kurstermin). Die Anfrage landet auf der Warteliste — noch ohne feste Buchung.`}
+              description={
+                originIsBoundedSeries
+                  ? "Ausgebuchte Termine im selben Kursblock bis zum Endedatum. Die Anfrage landet auf der Warteliste — noch ohne feste Buchung."
+                  : `Ausgebuchte Termine im gleichen Zeitfenster (${swapWindow.minOffsetDays} bis ${swapWindow.maxOffsetDays} Tage nach deinem Kurstermin). Die Anfrage landet auf der Warteliste — noch ohne feste Buchung.`
+              }
             >
               <p>
-                Ausgebuchte Termine im gleichen Zeitfenster (
-                <strong>
-                  {swapWindow.minOffsetDays} bis {swapWindow.maxOffsetDays} Tage
-                </strong>{" "}
-                nach deinem Kurstermin). Die Anfrage landet auf der Warteliste — noch ohne feste Buchung.
+                {originIsBoundedSeries ? (
+                  <>
+                    Ausgebuchte Termine im selben Kursblock <strong>bis zum Endedatum</strong>. Die Anfrage
+                    landet auf der Warteliste — noch ohne feste Buchung.
+                  </>
+                ) : (
+                  <>
+                    Ausgebuchte Termine im gleichen Zeitfenster (
+                    <strong>
+                      {swapWindow.minOffsetDays} bis {swapWindow.maxOffsetDays} Tage
+                    </strong>{" "}
+                    nach deinem Kurstermin). Die Anfrage landet auf der Warteliste — noch ohne feste Buchung.
+                  </>
+                )}
               </p>
             </SwapModalHint>
           </div>

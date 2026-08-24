@@ -15,6 +15,8 @@ export type CourseDatesEditorState = {
   excludedCalendarMonth: string;
   rangeDatePickerOpen: boolean;
   excludedDatePickerOpen: boolean;
+  startDatePickerOpen: boolean;
+  endDatePickerOpen: boolean;
   rangeSelectionTarget: "start" | "end";
 };
 
@@ -287,6 +289,8 @@ export function createDatesState(course: Course): CourseDatesEditorState {
     excludedCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
     rangeDatePickerOpen: false,
     excludedDatePickerOpen: false,
+    startDatePickerOpen: false,
+    endDatePickerOpen: false,
     rangeSelectionTarget: "start",
   };
 }

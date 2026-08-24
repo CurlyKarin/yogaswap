@@ -20,7 +20,7 @@ describe("courseReconcile", () => {
   const pastOnly = ["2020-01-06", "2020-01-13"];
   const future = ["2099-06-02"];
 
-  test("auto-inactivates active bounded_series after block end + grace", () => {
+  test("auto-inactivates active bounded_series after series end date", () => {
     expect(
       resolveEffectiveCourseStatus(
         "active",
@@ -113,7 +113,7 @@ describe("courseReconcile", () => {
     ).toBe("active");
   });
 
-  test("auto-inactivates after last term grace when term exceeds block end", () => {
+  test("auto-inactivates bounded_series on the day after seriesEndDate even if a term is later", () => {
     const blockThroughJune = {
       planningMode: "bounded_series",
       seriesEndDate: "2026-06-30",
@@ -126,17 +126,7 @@ describe("courseReconcile", () => {
         lastTermAfterBlock,
         "18:00",
         undefined,
-        new Date(Date.UTC(2026, 6, 10, 12, 0, 0)),
-      ),
-    ).toBe("active");
-    expect(
-      resolveEffectiveCourseStatus(
-        "active",
-        blockThroughJune,
-        lastTermAfterBlock,
-        "18:00",
-        undefined,
-        new Date(Date.UTC(2026, 6, 15, 12, 0, 0)),
+        new Date(Date.UTC(2026, 6, 1, 12, 0, 0)),
       ),
     ).toBe("inactive");
   });

@@ -234,37 +234,38 @@ describe("permissions", () => {
       ).toBe(false);
     });
 
-    it("zeigt Participant inaktive Kurse nur im Nachlauf (UTC) nach Kursende", () => {
+    it("zeigt Participant inaktive Kursblöcke nur bis zum inklusiven Endedatum", () => {
       const inactiveEnded = {
         ...dummyCourse,
         status: "inactive" as const,
         seriesEndDate: "2026-05-10",
         dates: ["2026-05-10"],
       };
-      const withinGrace = new Date(Date.UTC(2026, 4, 17, 12, 0, 0));
+      const onEnd = new Date(Date.UTC(2026, 4, 10, 12, 0, 0));
       expect(
         canSeeCourse(participantMembership, defaultSettings, inactiveEnded, {
           isTaughtByUser: false,
           isBookedByUser: false,
-          now: withinGrace,
+          now: onEnd,
         }),
       ).toBe(true);
 
-      const afterGrace = new Date(Date.UTC(2026, 4, 18, 12, 0, 0));
+      const afterEnd = new Date(Date.UTC(2026, 4, 11, 12, 0, 0));
       expect(
         canSeeCourse(participantMembership, defaultSettings, inactiveEnded, {
           isTaughtByUser: false,
           isBookedByUser: false,
-          now: afterGrace,
+          now: afterEnd,
         }),
       ).toBe(false);
     });
 
-    it("respektiert inactiveGraceDaysAfterCourseEnd im Tenant", () => {
+    it("respektiert inactiveGraceDaysAfterCourseEnd im Tenant für Rollkurse", () => {
       const inactiveEnded = {
         ...dummyCourse,
         status: "inactive" as const,
-        seriesEndDate: "2026-05-10",
+        planningMode: "rolling_continuous" as const,
+        plannedEndDate: "2026-05-10",
         dates: ["2026-05-10"],
       };
       const dayAfterShortGrace = new Date(Date.UTC(2026, 4, 14, 12, 0, 0));
@@ -289,12 +290,12 @@ describe("permissions", () => {
         seriesEndDate: "2026-05-10",
         dates: ["2026-05-10"],
       };
-      const withinGrace = new Date(Date.UTC(2026, 4, 12, 12, 0, 0));
+      const onEnd = new Date(Date.UTC(2026, 4, 10, 12, 0, 0));
       expect(
         canSeeCourse(participantMembership, restrictiveSettings, inactiveEnded, {
           isTaughtByUser: false,
           isBookedByUser: false,
-          now: withinGrace,
+          now: onEnd,
         }),
       ).toBe(false);
     });
@@ -340,19 +341,19 @@ describe("permissions", () => {
       ).toBe(true);
     });
 
-    it("zeigt inaktiven Kurs im Nachlauf auch ohne sichtbare Termine", () => {
+    it("zeigt inaktiven Kursblock am Endedatum auch ohne sichtbare Termine", () => {
       const inactiveEnded = {
         ...dummyCourse,
         status: "inactive" as const,
         seriesEndDate: "2026-05-10",
         dates: ["2026-05-10"],
       };
-      const withinGrace = new Date(Date.UTC(2026, 4, 12, 12, 0, 0));
+      const onEnd = new Date(Date.UTC(2026, 4, 10, 12, 0, 0));
       expect(
         canShowParticipantCourseCard(participantMembership, defaultSettings, inactiveEnded, {
           ...baseCtx,
           hasVisibleCourseDates: false,
-          now: withinGrace,
+          now: onEnd,
         }),
       ).toBe(true);
     });

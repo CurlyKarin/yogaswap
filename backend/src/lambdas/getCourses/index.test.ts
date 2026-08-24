@@ -166,7 +166,7 @@ describe("getCourses Lambda", () => {
     jest.useRealTimers();
   });
 
-  test("bleibt aktiv am Blockend-Tag nach Kurszeit bis Nachlauf abläuft", async () => {
+  test("bleibt aktiv am inklusiven Endedatum nach Kurszeit", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date(Date.UTC(2026, 4, 18, 19, 0, 0)));
 

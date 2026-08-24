@@ -1,6 +1,6 @@
 /**
  * Lazy reconcile for course reads (#149): align persisted status/dates with derived schedule.
- * Auto-inactive when UTC calendar day is past block end + grace (#204).
+ * Auto-inactive when UTC calendar day is past the access deadline (#204 / #296).
  */
 
 import { shouldAutoDeactivateCourse, type TenantSettings } from "@yogaswap/shared";
