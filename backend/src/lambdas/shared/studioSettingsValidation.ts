@@ -48,7 +48,7 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
   if (Object.prototype.hasOwnProperty.call(patch, "cancellationSwapCutoffMinutesBeforeStart")) {
     const minutes = patch.cancellationSwapCutoffMinutesBeforeStart;
     if (!Number.isInteger(minutes) || (minutes ?? 0) < 0 || (minutes ?? 0) > 24 * 60) {
-      return "Kurzfrist-Absage: Minuten vor Terminbeginn müssen eine ganze Zahl zwischen 0 und 1440 sein.";
+      return "Absagefrist für Mitglieder muss eine ganze Zahl zwischen 0 und 1440 sein.";
     }
   }
   return null;
