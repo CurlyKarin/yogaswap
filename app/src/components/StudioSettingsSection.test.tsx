@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import React from "react";
 import StudioSettingsSection from "./StudioSettingsSection";
 import { updateTenantSettings } from "../api/tenantSettings";
@@ -27,14 +27,59 @@ function getCutoffInput(): HTMLInputElement {
   return input;
 }
 
+function getStudioDetails(): HTMLDetailsElement {
+  const heading = screen.getByRole("heading", { level: 3, name: /studio-einstellungen/i });
+  const details = heading.closest("details");
+  if (!(details instanceof HTMLDetailsElement)) {
+    throw new Error("Studio settings details not found");
+  }
+  return details;
+}
+
+function getRollingDetails(): HTMLDetailsElement {
+  const heading = screen.getByRole("heading", { level: 4, name: /durchlaufende kurse/i });
+  const details = heading.closest("details");
+  if (!(details instanceof HTMLDetailsElement)) {
+    throw new Error("Rolling courses details not found");
+  }
+  return details;
+}
+
+function expandStudioSettings() {
+  const details = getStudioDetails();
+  if (!details.open) {
+    fireEvent.click(details.querySelector("summary")!);
+  }
+}
+
+function expandRollingCourses() {
+  expandStudioSettings();
+  const details = getRollingDetails();
+  if (!details.open) {
+    fireEvent.click(details.querySelector("summary")!);
+  }
+}
+
 describe("StudioSettingsSection", () => {
   beforeEach(() => {
     mockedUpdateTenantSettings.mockReset();
     cleanup();
   });
 
+  it("klappt Studio-Einstellungen und Durchlaufende Kurse standardmäßig zu", () => {
+    render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expect(getStudioDetails().open).toBe(false);
+    expect(screen.getByRole("textbox", { name: /studioname/i })).not.toBeVisible();
+
+    expandStudioSettings();
+    expect(getStudioDetails().open).toBe(true);
+    expect(getRollingDetails().open).toBe(false);
+    expect(screen.getByLabelText(/nachlauf nach kursende/i)).not.toBeVisible();
+  });
+
   it("zeigt das Cutoff-Feld mit Defaultwert 60", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expandStudioSettings();
     const cutoffInput = getCutoffInput();
     expect(cutoffInput).toHaveValue(60);
   });
@@ -46,6 +91,7 @@ describe("StudioSettingsSection", () => {
         onSaved={vi.fn()}
       />,
     );
+    expandStudioSettings();
     const cutoffInput = getCutoffInput();
     expect(cutoffInput).toHaveValue(30);
   });
@@ -55,6 +101,7 @@ describe("StudioSettingsSection", () => {
     const updatedTenant = makeTenant({ cancellationSwapCutoffMinutesBeforeStart: 45 });
     mockedUpdateTenantSettings.mockResolvedValue(updatedTenant);
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={onSaved} />);
+    expandStudioSettings();
 
     fireEvent.change(getCutoffInput(), { target: { value: "45" } });
     fireEvent.click(screen.getByRole("button", { name: /studio-einstellungen speichern/i }));
@@ -77,11 +124,14 @@ describe("StudioSettingsSection", () => {
   it("stellt Landmark und beschriftete Formularfelder bereit", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
     expect(screen.getByRole("region", { name: /studio-einstellungen/i })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: /studioname/i })).toBeInTheDocument();
+    expandStudioSettings();
+    expect(screen.getByRole("textbox", { name: /studioname/i })).toBeVisible();
   });
 
   it("gruppiert Felder in Allgemein und Durchlaufende Kurse", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expandRollingCourses();
+
     expect(screen.getByRole("heading", { level: 4, name: /allgemein/i })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 4, name: /durchlaufende kurse/i }),
@@ -95,16 +145,17 @@ describe("StudioSettingsSection", () => {
 
     const rollingGroup = screen.getByRole("group", { name: /durchlaufende kurse/i });
     expect(rollingGroup).toContainElement(
-      screen.getByLabelText(/nachlauf nach kursende/i),
+      within(rollingGroup).getByLabelText(/nachlauf nach kursende/i),
     );
     expect(rollingGroup).toContainElement(
-      screen.getByLabelText(/tauschfenster: frühestens/i),
+      within(rollingGroup).getByLabelText(/tauschfenster: frühestens/i),
     );
     expect(rollingGroup).not.toContainElement(getCutoffInput());
   });
 
   it("erhöht Kurzfrist-Absage in 15-Minuten-Schritten", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expandStudioSettings();
     expect(getCutoffInput()).toHaveValue(60);
     fireEvent.click(screen.getByRole("button", { name: /Erhöhen um 15/i }));
     expect(getCutoffInput()).toHaveValue(75);
@@ -112,6 +163,7 @@ describe("StudioSettingsSection", () => {
 
   it("zeigt Validierungsfehler bei ungültigem Cutoff-Wert", async () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expandStudioSettings();
     fireEvent.change(getCutoffInput(), { target: { value: "1500" } });
     fireEvent.click(screen.getByRole("button", { name: /studio-einstellungen speichern/i }));
 

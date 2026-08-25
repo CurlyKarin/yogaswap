@@ -1638,6 +1638,52 @@ a:focus-visible {
   text-align: left;
 }
 
+.studio-settings-details,
+.studio-settings-subdetails {
+  text-align: left;
+}
+
+.studio-settings-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.studio-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio-settings-summary::before {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 2px solid #555;
+  border-bottom: 2px solid #555;
+  transform: rotate(-45deg);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.studio-settings-details[open] > .studio-settings-summary::before,
+.studio-settings-subdetails[open] > .studio-settings-summary::before {
+  transform: rotate(45deg);
+}
+
+.studio-settings-summary-title {
+  margin: 0;
+  text-align: left;
+}
+
+.studio-settings-summary--sub .studio-settings-summary-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+}
+
 .studio-settings-subsection-heading {
   margin: 1rem 0 0.5rem;
   font-size: 1rem;
@@ -1650,6 +1696,14 @@ a:focus-visible {
   margin: 1.25rem 0;
   border: none;
   border-top: 1px solid #e5e7eb;
+}
+
+.studio-settings-subdetails {
+  margin-top: 0.25rem;
+}
+
+.studio-settings-subdetails > .studio-settings-summary {
+  margin-bottom: 0.5rem;
 }
 
 .studio-settings-grid {
