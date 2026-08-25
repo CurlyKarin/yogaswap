@@ -153,7 +153,7 @@ describe("StudioSettingsSection", () => {
     expect(rollingGroup).not.toContainElement(getCutoffInput());
   });
 
-  it("erhöht Kurzfrist-Absage in 15-Minuten-Schritten", () => {
+  it("erhöht Absagefrist in 15-Minuten-Schritten", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
     expandStudioSettings();
     expect(getCutoffInput()).toHaveValue(60);
@@ -169,7 +169,7 @@ describe("StudioSettingsSection", () => {
 
     expect(
       await screen.findByText(
-        "Kurzfrist-Absage: Minuten vor Terminbeginn müssen eine ganze Zahl zwischen 0 und 1440 sein.",
+        "Absagefrist für Mitglieder muss eine ganze Zahl zwischen 0 und 1440 sein.",
       ),
     ).toBeInTheDocument();
     expect(mockedUpdateTenantSettings).not.toHaveBeenCalled();

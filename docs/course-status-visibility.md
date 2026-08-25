@@ -12,7 +12,7 @@ Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogasw
 | **Nachlauf** | Nur **durchlaufende Kurse**: Teilnehmende sehen den Kurs nach dem letzten Termin noch bis zur Auto-Inaktiv-Schwelle (Default **7** Kalendertage nach letztem Termin bzw. `plannedEndDate`, UTC). **Kursblöcke:** kein Studio-Nachlauf — Frist = inklusives `seriesEndDate` (#296). |
 | **Lazy Reconcile** | Beim **`GET /courses`** werden Status und abgeleitete `dates` bei Bedarf in DynamoDB nachgezogen. |
 
-Studio-Konfiguration: **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44), [#312](https://github.com/CurlyKarin/yogaswap/issues/312)) — **Allgemein** (u. a. Kurzfrist-Absage); unter **Durchlaufende Kurse**: `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays` / `maxOffsetDays`, `rollingPlanningHorizonWeeks` (nicht für Kursblöcke). Rollkurse: [rolling-courses-planning.md](./rolling-courses-planning.md).
+Studio-Konfiguration: **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44), [#312](https://github.com/CurlyKarin/yogaswap/issues/312)) — **Allgemein** (u. a. Absagefrist für Mitglieder); unter **Durchlaufende Kurse**: `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays` / `maxOffsetDays`, `rollingPlanningHorizonWeeks` (nicht für Kursblöcke). Rollkurse: [rolling-courses-planning.md](./rolling-courses-planning.md).
 
 ---
 
@@ -169,7 +169,7 @@ Tauschziele: Rollkurse im Studio-Offset (`minOffsetDays` / `maxOffsetDays`); Kur
 | `minOffsetDays` / `maxOffsetDays` (Tauschfenster) | **-7 / +7** | nur durchlaufende Kurse |
 | `rollingPlanningHorizonWeeks` | **5** | nur durchlaufende Kurse |
 
-In der UI stehen diese Felder unter **Durchlaufende Kurse** ([#312](https://github.com/CurlyKarin/yogaswap/issues/312)); Kurzfrist-Absage bleibt bei **Allgemein**.
+In der UI stehen diese Felder unter **Durchlaufende Kurse** ([#312](https://github.com/CurlyKarin/yogaswap/issues/312)); Absagefrist für Mitglieder bleibt bei **Allgemein**.
 
 **Quellen:** `shared/src/courseStatus.ts`, `app/src/lib/courseTermActions.ts`, `app/src/lib/courseCardLabels.ts`, `app/src/components/CourseCard.tsx`.
 

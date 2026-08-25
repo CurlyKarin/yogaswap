@@ -118,7 +118,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
         </summary>
 
         <p className="muted small" style={{ marginTop: 0 }}>
-          Gilt für das aktuelle Studio ({tenant.tenantId}). Weitere Optionen kommen schrittweise dazu.
+          Einstellungen für das Studio ({window.location.hostname}).
         </p>
 
         <h4 id="studio-settings-general-heading" className="studio-settings-subsection-heading">
@@ -137,8 +137,8 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           </label>
 
           <label className="dialog-field">
-            <FieldLabelWithTooltip tooltip="Ab diesem Zeitpunkt vor Kursbeginn können Mitglieder nur noch kurzfristig absagen (Platz bleibt belegt), aber keinen neuen Tausch mehr vom Termin starten.">
-              Kurzfrist-Absage: Minuten vor Terminbeginn
+            <FieldLabelWithTooltip tooltip="Bis zu dieser Frist können Mitglieder den Termin absagen und einen Tausch starten. Danach ist nur noch eine kurzfristige Absage möglich; der Platz bleibt belegt.">
+              Absagefrist für Mitglieder (Minuten vor Terminbeginn)
             </FieldLabelWithTooltip>
             <NumberStepInput
               min={0}
