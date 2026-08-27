@@ -100,6 +100,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 [ ‹ ]  KW …  [ › ]  [ Heute ]  [Person]   ← nur Wochenansicht; Person = „nur meine Kurse“
 ```
 
+- Die Kurs-Toolbar (`#course-toolbar` / `.course-views-toolbar`) ist **sticky unter dem App-Header** (#287) — auf Mobile und Desktop, damit KW-Wechsel, „Heute“ und Ansichts-Umschalter beim Scrollen durch viele Kacheln erreichbar bleiben.
 - Default **Wochenansicht** für alle Rollen mit Kurszugang.
 - Hinweis unter der Toolbar in der Wochenansicht (Absagen/Tauschen).
 - **„Nur meine Kurse“** (#258): Person-Icon in der Wochen-Navigation.
@@ -172,3 +173,4 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 - [#185](https://github.com/CurlyKarin/yogaswap/issues/185) — Tausch-Ursprung / eigene Absagen in der Kachel
 - [#186](https://github.com/CurlyKarin/yogaswap/issues/186) — Terminübersicht nach Woche
 - [#187](https://github.com/CurlyKarin/yogaswap/issues/187) — `weekAnchor` in Session, Vertretung in gleicher KW
+- [#287](https://github.com/CurlyKarin/yogaswap/issues/287) — Sticky Kurs-/Wochennavigation unter dem Header

@@ -111,6 +111,42 @@ function MainApp() {
     initAuth();
   }, []); 
 
+  // Sticky Kurs-Toolbar unter dem Header (#287): Offset an Header-/Toolbar-Höhe koppeln.
+  useEffect(() => {
+    const header = document.querySelector(".app-top");
+    if (!(header instanceof HTMLElement)) return;
+
+    const syncOffset = () => {
+      const headerHeight = Math.floor(header.getBoundingClientRect().height);
+      const toolbar = document.getElementById("course-toolbar");
+      const toolbarHeight =
+        toolbar instanceof HTMLElement ? Math.floor(toolbar.getBoundingClientRect().height) : 0;
+      document.documentElement.style.setProperty("--app-top-offset", `${Math.max(0, headerHeight)}px`);
+      document.documentElement.style.setProperty(
+        "--app-sticky-chrome-height",
+        `${Math.max(0, headerHeight + toolbarHeight)}px`,
+      );
+    };
+
+    syncOffset();
+    window.addEventListener("resize", syncOffset);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(syncOffset);
+      observer.observe(header);
+      const toolbar = document.getElementById("course-toolbar");
+      if (toolbar) observer.observe(toolbar);
+    }
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncOffset);
+      document.documentElement.style.removeProperty("--app-top-offset");
+      document.documentElement.style.removeProperty("--app-sticky-chrome-height");
+    };
+  }, [currentUser, actingForUserIdState, studioGate]);
+
   // Tenant-Kontext laden, sobald ein User existiert
   useEffect(() => {
     if (!currentUser || studioGate !== "ready") {
@@ -265,7 +301,9 @@ function MainApp() {
     : null;
 
   return (
-    <div className="app-container">
+    <div className="app-shell">
+      <div className="app-scroll-root">
+        <div className="app-container">
       <nav className="skip-links" aria-label="Seitenüberspringen">
         <button type="button" className="skip-link" onClick={handleSkipToMenu}>
           Zum Menü
@@ -277,6 +315,8 @@ function MainApp() {
           Zum Fußbereich
         </button>
       </nav>
+      {/* Deckt Safari-Titlebar/Overscroll hinter dem Sticky-Header (#287). */}
+      <div className="app-safari-chrome-fill" aria-hidden="true" />
       <header className="app-top">
         <h1>YogaSwap</h1>
         {currentUser && (
@@ -380,6 +420,23 @@ function MainApp() {
         )}
       </main>
 
+      <footer className="app-footer">
+        <span className="copyright">© {new Date().getFullYear()} Karin Schrader</span>
+        <nav id="site-footer-nav" className="app-footer-nav" aria-label="Rechtliches und Lizenzen">
+          <Link to="/impressum">Impressum</Link>
+          <span className="sep" aria-hidden="true">
+            ·
+          </span>
+          <Link to="/datenschutz">Datenschutz</Link>
+          <span className="sep" aria-hidden="true">
+            ·
+          </span>
+          <Link to="/open-source-lizenzen">Open-Source-Lizenzen</Link>
+        </nav>
+      </footer>
+        </div>
+      </div>
+
       {pendingActingForUserId && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Vertretung bestätigen">
           <div className="modal modal-compact">
@@ -411,21 +468,6 @@ function MainApp() {
         }}
         onClose={() => setDelegationPickerOpen(false)}
       />
-
-      <footer className="app-footer">
-        <span className="copyright">© {new Date().getFullYear()} Karin Schrader</span>
-        <nav id="site-footer-nav" className="app-footer-nav" aria-label="Rechtliches und Lizenzen">
-          <Link to="/impressum">Impressum</Link>
-          <span className="sep" aria-hidden="true">
-            ·
-          </span>
-          <Link to="/datenschutz">Datenschutz</Link>
-          <span className="sep" aria-hidden="true">
-            ·
-          </span>
-          <Link to="/open-source-lizenzen">Open-Source-Lizenzen</Link>
-        </nav>
-      </footer>
     </div>
   );
 }
