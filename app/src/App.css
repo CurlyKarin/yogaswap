@@ -1,20 +1,107 @@
-/* Body Zentrierung */
+/* Dokument scrollt nicht — nur .app-scroll-root. Verhindert Safari-Mac-Bleed in Titelleiste/Tabs (#287). */
+html {
+  height: 100%;
+  background-color: #f5f5f5;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   padding: 0;
   display: block;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   background-color: #f5f5f5;
   color: #213547;
   color-scheme: only light;
   font-family: Arial, sans-serif;
-  overflow-x: hidden;
+  overscroll-behavior: none;
+}
+
+#root {
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f5f5;
+}
+
+/* Volle Viewport-Breite: Scrollbalken am rechten Fensterrand, nicht im Content. */
+.app-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.app-scroll-root {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  background-color: #f5f5f5;
+}
+
+/*
+ * iOS Safari: innerer Scroll-Container + sticky + scrollIntoView/Tastatur bricht Header.
+ * Auf Touch-Geräten scrollt wieder das Dokument (Desktop Safari-Mac-Bleed-Fix bleibt).
+ */
+@media (hover: none) and (pointer: coarse) {
+  html {
+    height: auto;
+    min-height: 100%;
+  }
+
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: clip;
+    overflow-y: auto;
+  }
+
+  #root {
+    height: auto;
+    min-height: 100%;
+    display: block;
+  }
+
+  .app-shell {
+    display: block;
+    min-height: 100dvh;
+    min-height: 100vh;
+  }
+
+  .app-scroll-root {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+    -webkit-overflow-scrolling: auto;
+  }
+
+  .app-top,
+  .course-views-toolbar {
+    -webkit-backface-visibility: visible;
+    backface-visibility: visible;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
 }
 
 .app-container {
   text-align: center;
   margin: 0 auto;
-  padding: 20px;
+  --app-gutter: 20px;
+  padding: var(--app-gutter);
   max-width: 1120px; /* mehr Platz fuer Admin-Tabelle auf Desktop */
   width: 100%;
   box-sizing: border-box;
@@ -116,13 +203,24 @@ body {
 }
 
 .course-views-toolbar {
+  position: sticky;
+  /* 2px Überlappung schließt Subpixel-Lücke zum Header (Safari/Desktop). */
+  top: calc(var(--app-top-offset, 3.25rem) - 3px);
+  z-index: 90;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin: 0 0 16px;
+  /* Volle Breite inkl. Container-Gutter, damit Kacheln nicht seitlich durchscheinen (#287). */
+  margin: 0 calc(-1 * var(--app-gutter, 20px)) 16px;
+  padding: 10px var(--app-gutter, 20px) 10px;
   text-align: left;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e5e7eb;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  scroll-margin-top: var(--app-top-offset, 3.25rem);
 }
 
 .course-views-toggle {
@@ -159,6 +257,14 @@ body {
 }
 
 .course-week-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.course-week-nav-core,
+.course-week-nav-shortcuts {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -364,6 +470,26 @@ body {
   gap: 4px;
 }
 
+.app-safari-chrome-fill {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  height: 0;
+  margin: 0 calc(-1 * var(--app-gutter, 20px));
+  pointer-events: none;
+}
+
+.app-safari-chrome-fill::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* Nur nach oben in den Browser-Chrome, nicht über den Header legen. */
+  bottom: 100%;
+  height: 50vh;
+  background-color: #f5f5f5;
+}
+
 /* Header */
 .app-top {
   position: sticky;
@@ -373,15 +499,59 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
-  padding: 4px 0 8px;
-  background: #f5f5f5;
+  /* Kein margin-bottom: sonst transparente Lücke zwischen sticky Header und Toolbar. */
+  margin: 0 calc(-1 * var(--app-gutter, 20px));
+  /* Safe-Area: sonst liegt „YogaSwap“ unter Notch/Statusleiste (viewport-fit=cover). */
+  padding: max(4px, env(safe-area-inset-top, 0px)) var(--app-gutter, 20px) 10px;
+  background-color: #f5f5f5;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
   scroll-margin-top: 8px;
+  max-width: calc(100% + 2 * var(--app-gutter, 20px));
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.app-top-title {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Overscroll / Browser-Chrome: Inhalt darf oberhalb des Headers nicht durchscheinen. */
+.app-top::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 100vmax;
+  background-color: #f5f5f5;
+  pointer-events: none;
+}
+
+/* Naht zur Toolbar abdichten (Subpixel / Safari). */
+.app-top::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% - 2px);
+  height: 6px;
+  background-color: #f5f5f5;
+  pointer-events: none;
 }
 .userbox {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .header-action-group {
@@ -1245,7 +1415,7 @@ a:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 auto 12px;
+  margin: 6px auto 12px;
   padding: 10px 12px;
   width: 100%;
   max-width: 980px;
@@ -1254,6 +1424,8 @@ a:focus-visible {
   border-radius: 8px;
   background: var(--delegation-accent-bg);
   color: var(--delegation-accent-text);
+  position: relative;
+  z-index: 1;
 }
 
 .main-section-courses.is-delegation-active .course-card {
@@ -1930,7 +2102,8 @@ a:focus-visible {
   .app-container {
     max-width: 100%;
     width: 100%;
-    padding: 12px;
+    --app-gutter: 12px;
+    padding: var(--app-gutter);
     box-sizing: border-box;
   }
   .grid { grid-template-columns: 1fr; }
@@ -1938,14 +2111,71 @@ a:focus-visible {
   .app-top {
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-bottom: 8px;
+    text-align: left;
+  }
+  .app-top-title {
+    font-size: 1.375rem;
+    font-weight: 600;
+    max-width: none;
   }
   .userbox {
     justify-content: space-between;
     flex-wrap: wrap;
     width: 100%;
+    margin-left: 0;
+    gap: 8px;
+    font-size: 14px;
+  }
+  .userbox-greeting {
+    max-width: none;
   }
   .header-action-group {
     gap: 4px;
+    flex-shrink: 0;
+  }
+  .header-action-btn {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .course-views-toolbar:has(.course-views-toggle) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 10px;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-views-toggle {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-week-nav {
+    display: contents;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-shortcuts {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: start;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-core {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: center;
+    width: 100%;
+  }
+  .course-views-toolbar:not(:has(.course-views-toggle)) .course-week-nav {
+    width: 100%;
+    justify-content: center;
+  }
+  .course-views-toolbar:not(:has(.course-views-toggle)) .course-week-nav-shortcuts {
+    order: -1;
+  }
+  .course-week-nav-label {
+    min-width: 9rem;
+    font-size: 13px;
   }
   .delegation-banner {
     flex-direction: column;

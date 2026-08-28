@@ -8,6 +8,7 @@ import {
   preferredWeekCardDate,
   type WeekCourseRow,
 } from "../lib/courseWeekOccurrences";
+import { isTouchCoarseViewport, scrollIntoViewWithStickyChrome } from "../lib/scrollWithStickyChrome";
 import type { TodayFocusTarget } from "../lib/weekTodayFocus";
 import CourseCard from "./CourseCard";
 
@@ -89,9 +90,11 @@ export default function CourseWeekView({
     const host = cardHostRefs.current.get(todayFocusRequest.courseId);
     if (!host) return;
 
-    host.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    scrollIntoViewWithStickyChrome(host);
     const card = host.querySelector<HTMLElement>(".course-card");
-    card?.focus({ preventScroll: true });
+    if (!isTouchCoarseViewport()) {
+      card?.focus({ preventScroll: true });
+    }
     setHighlightedCourseId(todayFocusRequest.courseId);
 
     const clearHighlight = window.setTimeout(() => {

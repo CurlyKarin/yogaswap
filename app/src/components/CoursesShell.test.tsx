@@ -169,6 +169,8 @@ describe("CoursesShell", () => {
       "aria-describedby",
       "course-views-hint",
     );
+    const toolbar = document.getElementById("course-toolbar");
+    expect(toolbar).toHaveClass("course-views-toolbar");
   });
 
   it("lets admin switch between week and course overview", async () => {
