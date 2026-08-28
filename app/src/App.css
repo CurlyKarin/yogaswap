@@ -3,6 +3,8 @@ html {
   height: 100%;
   background-color: #f5f5f5;
   overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -44,6 +46,55 @@ body {
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
   background-color: #f5f5f5;
+}
+
+/*
+ * iOS Safari: innerer Scroll-Container + sticky + scrollIntoView/Tastatur bricht Header.
+ * Auf Touch-Geräten scrollt wieder das Dokument (Desktop Safari-Mac-Bleed-Fix bleibt).
+ */
+@media (hover: none) and (pointer: coarse) {
+  html {
+    height: auto;
+    min-height: 100%;
+  }
+
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: clip;
+    overflow-y: auto;
+  }
+
+  #root {
+    height: auto;
+    min-height: 100%;
+    display: block;
+  }
+
+  .app-shell {
+    display: block;
+    min-height: 100dvh;
+    min-height: 100vh;
+  }
+
+  .app-scroll-root {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+    -webkit-overflow-scrolling: auto;
+  }
+
+  .app-top,
+  .course-views-toolbar {
+    -webkit-backface-visibility: visible;
+    backface-visibility: visible;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
 }
 
 .app-container {
@@ -206,6 +257,14 @@ body {
 }
 
 .course-week-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.course-week-nav-core,
+.course-week-nav-shortcuts {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -448,6 +507,20 @@ body {
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   scroll-margin-top: 8px;
+  max-width: calc(100% + 2 * var(--app-gutter, 20px));
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.app-top-title {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Overscroll / Browser-Chrome: Inhalt darf oberhalb des Headers nicht durchscheinen. */
@@ -477,6 +550,8 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .header-action-group {
@@ -1340,7 +1415,7 @@ a:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 auto 12px;
+  margin: 6px auto 12px;
   padding: 10px 12px;
   width: 100%;
   max-width: 980px;
@@ -1349,6 +1424,8 @@ a:focus-visible {
   border-radius: 8px;
   background: var(--delegation-accent-bg);
   color: var(--delegation-accent-text);
+  position: relative;
+  z-index: 1;
 }
 
 .main-section-courses.is-delegation-active .course-card {
@@ -2032,16 +2109,77 @@ a:focus-visible {
   .grid { grid-template-columns: 1fr; }
   .login-wrap { margin: 16px auto 0; }
   .app-top {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-bottom: 8px;
+  }
+  .app-top-title {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    max-width: 42vw;
   }
   .userbox {
-    justify-content: space-between;
-    flex-wrap: wrap;
-    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    width: auto;
+    margin-left: auto;
+    gap: 6px;
+    font-size: 14px;
+  }
+  .userbox-greeting {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 28vw;
   }
   .header-action-group {
     gap: 4px;
+    flex-shrink: 0;
+  }
+  .header-action-btn {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .course-views-toolbar:has(.course-views-toggle) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 10px;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-views-toggle {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-week-nav {
+    display: contents;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-shortcuts {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: start;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-core {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: center;
+    width: 100%;
+  }
+  .course-views-toolbar:not(:has(.course-views-toggle)) .course-week-nav {
+    width: 100%;
+    justify-content: center;
+  }
+  .course-views-toolbar:not(:has(.course-views-toggle)) .course-week-nav-shortcuts {
+    order: -1;
+  }
+  .course-week-nav-label {
+    min-width: 9rem;
+    font-size: 13px;
   }
   .delegation-banner {
     flex-direction: column;

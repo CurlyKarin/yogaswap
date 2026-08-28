@@ -19,6 +19,7 @@ import { canInviteParticipants, canManageParticipants } from "shared/permissions
 import { getParticipants, type ParticipantWithStatus } from "./api/participants";
 import { setActingForUserId, setActorUserId } from "./api/delegation";
 import { filterParticipantsBySearch } from "./lib/participants";
+import { scrollIntoViewWithStickyChrome } from "./lib/scrollWithStickyChrome";
 
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 const Impressum = lazy(() => import("./components/Impressum"));
@@ -116,11 +117,20 @@ function MainApp() {
     const header = document.querySelector(".app-top");
     if (!(header instanceof HTMLElement)) return;
 
+    let lastHeaderHeight = 0;
+    let lastToolbarHeight = 0;
+
     const syncOffset = () => {
-      const headerHeight = Math.floor(header.getBoundingClientRect().height);
+      const measuredHeader = Math.floor(header.getBoundingClientRect().height);
+      if (measuredHeader > 0) lastHeaderHeight = measuredHeader;
+      const headerHeight = measuredHeader > 0 ? measuredHeader : lastHeaderHeight;
+
       const toolbar = document.getElementById("course-toolbar");
-      const toolbarHeight =
+      const measuredToolbar =
         toolbar instanceof HTMLElement ? Math.floor(toolbar.getBoundingClientRect().height) : 0;
+      if (measuredToolbar > 0) lastToolbarHeight = measuredToolbar;
+      const toolbarHeight = measuredToolbar > 0 ? measuredToolbar : lastToolbarHeight;
+
       document.documentElement.style.setProperty("--app-top-offset", `${Math.max(0, headerHeight)}px`);
       document.documentElement.style.setProperty(
         "--app-sticky-chrome-height",
@@ -279,14 +289,14 @@ function MainApp() {
   const handleSkipToContent = () => {
     const target = document.getElementById("course-toolbar") ?? document.getElementById("main-content");
     if (!target) return;
-    target.scrollIntoView({ block: "start" });
+    scrollIntoViewWithStickyChrome(target, { extraOffset: 0 });
     focusFirstIn(target);
   };
 
   const handleSkipToFooter = () => {
     const footerNav = document.getElementById("site-footer-nav");
     if (!footerNav) return;
-    footerNav.scrollIntoView({ block: "end" });
+    scrollIntoViewWithStickyChrome(footerNav, { extraOffset: 0 });
     focusFirstIn(footerNav);
   };
 
@@ -318,10 +328,10 @@ function MainApp() {
       {/* Deckt Safari-Titlebar/Overscroll hinter dem Sticky-Header (#287). */}
       <div className="app-safari-chrome-fill" aria-hidden="true" />
       <header className="app-top">
-        <h1>YogaSwap</h1>
+        <h1 className="app-top-title">YogaSwap</h1>
         {currentUser && (
           <nav id="site-nav" className="userbox" aria-label="Benutzer-Menü">
-            <span>Hi, {currentUser.nickname}</span>
+            <span className="userbox-greeting">Hi, {currentUser.nickname}</span>
             <div className="header-action-group">
               <button
                 id="logout-btn"

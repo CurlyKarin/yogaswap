@@ -179,16 +179,16 @@ describe("App shell a11y", () => {
     const toolbar = document.getElementById("course-toolbar");
     expect(toolbar).not.toBeNull();
     const weekButton = screen.getByRole("button", { name: /vorherige woche/i });
-    const scrollIntoView = vi.fn();
+    const scrollTo = vi.fn();
     const focus = vi.fn();
-    toolbar!.scrollIntoView = scrollIntoView;
+    window.scrollTo = scrollTo;
     weekButton.focus = focus;
 
     const skipControl = screen.getByRole("button", { name: /zum inhalt/i });
     skipControl.focus();
     await userEvent.keyboard(" ");
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+    expect(scrollTo).toHaveBeenCalled();
     expect(focus).toHaveBeenCalledWith({ preventScroll: true });
   });
 

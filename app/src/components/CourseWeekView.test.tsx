@@ -1,7 +1,13 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import CourseWeekView from "./CourseWeekView";
 import type { Course, User } from "shared/types";
+import CourseWeekView from "./CourseWeekView";
+
+const scrollIntoViewWithStickyChrome = vi.fn();
+vi.mock("../lib/scrollWithStickyChrome", () => ({
+  isTouchCoarseViewport: vi.fn(() => false),
+  scrollIntoViewWithStickyChrome: (...args: unknown[]) => scrollIntoViewWithStickyChrome(...args),
+}));
 
 const courseCardMock = vi.fn();
 
@@ -121,9 +127,8 @@ describe("CourseWeekView", () => {
   });
 
   it("scrolls and highlights the focused course from Heute", () => {
-    const scrollIntoView = vi.fn();
     const focus = vi.fn();
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    scrollIntoViewWithStickyChrome.mockClear();
 
     const focusCourse: Course = {
       ...sampleCourse,
@@ -162,7 +167,7 @@ describe("CourseWeekView", () => {
       />,
     );
 
-    expect(scrollIntoView).toHaveBeenCalled();
+    expect(scrollIntoViewWithStickyChrome).toHaveBeenCalled();
     expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     expect(hostCard).toHaveClass("course-card--today-focus");
 

@@ -225,70 +225,74 @@ export default function CoursesShell({
             <span id="course-week-nav-prev-limit" className="visually-hidden">
               Früheste sichtbare Kalenderwoche erreicht
             </span>
-            <button
-              ref={prevWeekBtnRef}
-              type="button"
-              className="course-week-nav-btn"
-              aria-label="Vorherige Woche"
-              disabled={!canGoToPreviousWeek}
-              aria-describedby={!canGoToPreviousWeek ? "course-week-nav-prev-limit" : undefined}
-              onClick={() =>
-                setWeekAnchor((prev) => {
-                  const next = addWeeks(prev, -1);
-                  return next.getTime() < earliestWeekAnchor.getTime() ? earliestWeekAnchor : next;
-                })
-              }
-            >
-              <ChevronLeft size={18} aria-hidden="true" />
-            </button>
-            <span
-              id="course-week-nav-label"
-              className="course-week-nav-label"
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              {weekLabel}
-            </span>
-            <button
-              ref={nextWeekBtnRef}
-              type="button"
-              className="course-week-nav-btn"
-              aria-label="Nächste Woche"
-              onClick={() => setWeekAnchor((prev) => addWeeks(prev, 1))}
-            >
-              <ChevronRight size={18} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="course-week-nav-today"
-              aria-label="Zur aktuellen Kalenderwoche und zum laufenden oder nächsten Kurs springen"
-              title="Aktuelle Woche und laufenden bzw. nächsten Kurs anzeigen"
-              onClick={jumpToToday}
-            >
-              Heute
-            </button>
-            <button
-              type="button"
-              className={`course-week-nav-btn course-week-nav-my-courses${onlyMyCourses ? " is-active" : ""}`}
-              aria-pressed={onlyMyCourses}
-              aria-label={
-                onlyMyCourses ? "Nur meine Kurse anzeigen (aktiv)" : "Nur meine Kurse anzeigen"
-              }
-              title={
-                !myCoursesToggle.canToggle
-                  ? "Keine Kurszuordnung — es werden immer alle Kurse gezeigt"
-                  : onlyMyCourses
-                    ? "Nur Kurse mit deiner Beteiligung — Klick zeigt alle Kurse"
-                    : "Alle Kurse der Woche — Klick filtert auf deine Beteiligung"
-              }
-              disabled={!myCoursesToggle.canToggle}
-              onClick={() => {
-                setMyCoursesToggleTouched(true);
-                setOnlyMyCourses((prev) => !prev);
-              }}
-            >
-              <UserIcon size={18} aria-hidden="true" />
-            </button>
+            <div className="course-week-nav-core">
+              <button
+                ref={prevWeekBtnRef}
+                type="button"
+                className="course-week-nav-btn"
+                aria-label="Vorherige Woche"
+                disabled={!canGoToPreviousWeek}
+                aria-describedby={!canGoToPreviousWeek ? "course-week-nav-prev-limit" : undefined}
+                onClick={() =>
+                  setWeekAnchor((prev) => {
+                    const next = addWeeks(prev, -1);
+                    return next.getTime() < earliestWeekAnchor.getTime() ? earliestWeekAnchor : next;
+                  })
+                }
+              >
+                <ChevronLeft size={18} aria-hidden="true" />
+              </button>
+              <span
+                id="course-week-nav-label"
+                className="course-week-nav-label"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {weekLabel}
+              </span>
+              <button
+                ref={nextWeekBtnRef}
+                type="button"
+                className="course-week-nav-btn"
+                aria-label="Nächste Woche"
+                onClick={() => setWeekAnchor((prev) => addWeeks(prev, 1))}
+              >
+                <ChevronRight size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="course-week-nav-shortcuts">
+              <button
+                type="button"
+                className="course-week-nav-today"
+                aria-label="Zur aktuellen Kalenderwoche und zum laufenden oder nächsten Kurs springen"
+                title="Aktuelle Woche und laufenden bzw. nächsten Kurs anzeigen"
+                onClick={jumpToToday}
+              >
+                Heute
+              </button>
+              <button
+                type="button"
+                className={`course-week-nav-btn course-week-nav-my-courses${onlyMyCourses ? " is-active" : ""}`}
+                aria-pressed={onlyMyCourses}
+                aria-label={
+                  onlyMyCourses ? "Nur meine Kurse anzeigen (aktiv)" : "Nur meine Kurse anzeigen"
+                }
+                title={
+                  !myCoursesToggle.canToggle
+                    ? "Keine Kurszuordnung — es werden immer alle Kurse gezeigt"
+                    : onlyMyCourses
+                      ? "Nur Kurse mit deiner Beteiligung — Klick zeigt alle Kurse"
+                      : "Alle Kurse der Woche — Klick filtert auf deine Beteiligung"
+                }
+                disabled={!myCoursesToggle.canToggle}
+                onClick={() => {
+                  setMyCoursesToggleTouched(true);
+                  setOnlyMyCourses((prev) => !prev);
+                }}
+              >
+                <UserIcon size={18} aria-hidden="true" />
+              </button>
+            </div>
           </nav>
         )}
       </div>
