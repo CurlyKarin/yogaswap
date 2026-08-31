@@ -10,6 +10,7 @@ import {
 } from "../api/participants";
 import type { Tenant, UserRole } from "shared/types";
 import { getStatusPresentation } from "../lib/participants";
+import { focusModalOnOpen } from "../lib/focusWithVisibleRing";
 import StudioSettingsSection from "./StudioSettingsSection";
 import TermDateSelect from "./TermDateSelect";
 
@@ -292,16 +293,9 @@ export default function AdminPanel({
   const focusFirstInModal = useCallback(
     (modalEl: HTMLDivElement | null) => {
       if (!modalEl) return;
-      const focusable = getFocusableElements(modalEl);
-      const preferredInput =
-        focusable.find((el) => el.tagName === "INPUT" || el.tagName === "SELECT") ?? focusable[0];
-      if (preferredInput) {
-        preferredInput.focus();
-        return;
-      }
-      modalEl.focus();
+      focusModalOnOpen(modalEl, { preferInput: true });
     },
-    [getFocusableElements],
+    [],
   );
   const shouldHandleModalEnter = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Enter") return false;

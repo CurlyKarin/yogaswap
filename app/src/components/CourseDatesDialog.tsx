@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { Calendar } from "lucide-react";
 import type { Course, CourseDateOverride, CourseEnrollment, Swap, TenantSettings } from "shared/types";
 import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
@@ -172,15 +172,6 @@ function getFocusableElements(node: HTMLElement): HTMLElement[] {
   return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
 }
 
-function focusFirstElement(node: HTMLElement): void {
-  const focusables = getFocusableElements(node);
-  if (focusables.length > 0) {
-    focusables[0].focus();
-    return;
-  }
-  node.focus();
-}
-
 function dedupeAndSortUsers(values: string[]): string[] {
   return Array.from(new Set(values.filter((entry) => entry.trim().length > 0))).sort((a, b) => a.localeCompare(b));
 }
@@ -234,15 +225,6 @@ export default function CourseDatesDialog({
     setRollbackSuccessfulSwaps(false);
     setRollbackPendingWaitlistSwaps(true);
   }, [course]);
-
-  useLayoutEffect(() => {
-    if (!course) return;
-    if (!datesState) return;
-    if (!modalRef.current) return;
-    const active = document.activeElement as Node | null;
-    if (active && modalRef.current.contains(active)) return;
-    focusFirstElement(modalRef.current);
-  }, [course, datesState]);
 
   useEffect(() => {
     if (!course) return;
