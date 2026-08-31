@@ -118,6 +118,7 @@ export default function DelegationPickerDialog({
       title="Vertretung auswählen"
       modalRef={modalRef}
       onKeyDown={onKeyDown}
+      preferInputFocus
     >
       <p className="course-editor-note">Wähle ein Mitglied aus.</p>
       <div className="dialog-stack">
@@ -130,7 +131,6 @@ export default function DelegationPickerDialog({
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Teilnehmer suchen (Nickname oder E-Mail)"
-            autoFocus
           />
           <p id="delegation-list-hint" className="course-editor-note dialog-search-hint dialog-search-hint-mobile-a11y">
             Tastatur: Tab zur Liste, Pfeile hoch/runter, Leertaste oder Enter zum Auswählen.

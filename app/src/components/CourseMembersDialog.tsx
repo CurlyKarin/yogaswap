@@ -1,5 +1,5 @@
 import type { KeyboardEvent, RefObject } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CourseModalFrame from "./CourseModalFrame";
 import type { ParticipantWithStatus } from "../api/participants";
 import { getParticipants } from "../api/participants";
@@ -128,26 +128,6 @@ export default function CourseMembersDialog({
     // arrays are replaced while the user is editing dates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, courseId]);
-
-  useLayoutEffect(() => {
-    if (!open || !courseName) return;
-    searchInputRef.current?.focus();
-  }, [open, courseName]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!modalRef.current) return;
-    const guardId = window.setTimeout(() => {
-      if (!modalRef.current) return;
-      const active = document.activeElement as Node | null;
-      if (active && modalRef.current.contains(active)) return;
-      searchInputRef.current?.focus();
-      if (document.activeElement !== searchInputRef.current) {
-        modalRef.current.focus();
-      }
-    }, 0);
-    return () => window.clearTimeout(guardId);
-  }, [open, loadingParticipants, modalRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -493,6 +473,7 @@ export default function CourseMembersDialog({
       title="Mitglieder verwalten"
       modalRef={modalRef}
       onKeyDown={onKeyDown}
+      preferInputFocus
     >
       <p className="course-editor-note">
         Kurs: <strong>{courseName}</strong>

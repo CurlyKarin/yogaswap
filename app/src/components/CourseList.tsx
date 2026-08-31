@@ -160,15 +160,6 @@ function getFocusableElements(node: HTMLElement): HTMLElement[] {
   return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
 }
 
-function focusFirstElement(node: HTMLElement): void {
-  const focusables = getFocusableElements(node);
-  if (focusables.length > 0) {
-    focusables[0].focus();
-    return;
-  }
-  node.focus();
-}
-
 function sortCoursesForDisplay(a: Course, b: Course): number {
   const weekdayA = WEEKDAY_ORDER[a.weekday] ?? 99;
   const weekdayB = WEEKDAY_ORDER[b.weekday] ?? 99;
@@ -540,19 +531,6 @@ export default function CourseList({
       confirmDeleteCourse();
     }
   };
-
-  useEffect(() => {
-    const activeModal = createOpen
-      ? createModalRef.current
-      : editOpen
-      ? editModalRef.current
-      : deleteOpen
-      ? deleteModalRef.current
-      : null;
-    if (!activeModal) return;
-
-    focusFirstElement(activeModal);
-  }, [createOpen, editOpen, deleteOpen]);
 
   useEffect(() => {
     if (!createOpen && !editOpen && !deleteOpen && !membersTargetId && !datesTargetId) return;

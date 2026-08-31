@@ -10,6 +10,7 @@ import {
 } from "../api/participants";
 import type { Tenant, UserRole } from "shared/types";
 import { getStatusPresentation } from "../lib/participants";
+import { focusModalOnOpen } from "../lib/focusWithVisibleRing";
 import StudioSettingsSection from "./StudioSettingsSection";
 import TermDateSelect from "./TermDateSelect";
 
@@ -292,16 +293,9 @@ export default function AdminPanel({
   const focusFirstInModal = useCallback(
     (modalEl: HTMLDivElement | null) => {
       if (!modalEl) return;
-      const focusable = getFocusableElements(modalEl);
-      const preferredInput =
-        focusable.find((el) => el.tagName === "INPUT" || el.tagName === "SELECT") ?? focusable[0];
-      if (preferredInput) {
-        preferredInput.focus();
-        return;
-      }
-      modalEl.focus();
+      focusModalOnOpen(modalEl, { preferInput: true });
     },
-    [getFocusableElements],
+    [],
   );
   const shouldHandleModalEnter = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Enter") return false;
@@ -1223,7 +1217,10 @@ export default function AdminPanel({
           }}
         >
           <div className="modal modal-compact">
-            <h4>Teilnehmer bearbeiten</h4>
+            <div className="modal-header">
+              <h4>Teilnehmer bearbeiten</h4>
+            </div>
+            <div className="modal-body">
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               User: <strong>{editingUserId}</strong>
             </p>
@@ -1287,6 +1284,7 @@ export default function AdminPanel({
                     : "Speichern"}
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -1315,8 +1313,10 @@ export default function AdminPanel({
           }}
         >
           <div className="modal modal-compact">
-            <h4>Teilnehmer anlegen</h4>
-
+            <div className="modal-header">
+              <h4>Teilnehmer anlegen</h4>
+            </div>
+            <div className="modal-body">
             <div className="dialog-stack">
               <input
                 type="text"
@@ -1517,6 +1517,7 @@ export default function AdminPanel({
                     : "Anlegen"}
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -1537,7 +1538,10 @@ export default function AdminPanel({
           }}
         >
           <div className="modal modal-compact">
-            <h4>Teilnehmer löschen</h4>
+            <div className="modal-header">
+              <h4>Teilnehmer löschen</h4>
+            </div>
+            <div className="modal-body">
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               Teilnehmer <strong>{deleteTarget.userId}</strong> aus diesem Studio entfernen?
             </p>
@@ -1563,6 +1567,7 @@ export default function AdminPanel({
               >
                 {deleteRunningByUserId[deleteTarget.userId] ? "Lösche..." : "Löschen"}
               </button>
+            </div>
             </div>
           </div>
         </div>
