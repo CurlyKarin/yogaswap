@@ -450,18 +450,22 @@ function MainApp() {
       {pendingActingForUserId && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Vertretung bestätigen">
           <div className="modal modal-compact">
-            <h4>Vertretung übernehmen</h4>
-            <p className="course-editor-note">
-              Du handelst im Auftrag von <strong>{pendingActingForUserId}</strong>.
-            </p>
-            <p className="course-editor-note">Bitte bestätigen, dass du für diese Person Aktionen durchführen darfst.</p>
-            <div className="modal-actions">
-              <button type="button" className="modal-action-btn" onClick={cancelDelegationConfirm}>
-                Abbrechen
-              </button>
-              <button type="button" className="btn-primary modal-action-btn" onClick={confirmDelegation}>
-                Bestätigen
-              </button>
+            <div className="modal-header">
+              <h4>Vertretung übernehmen</h4>
+            </div>
+            <div className="modal-body">
+              <p className="course-editor-note">
+                Du handelst im Auftrag von <strong>{pendingActingForUserId}</strong>.
+              </p>
+              <p className="course-editor-note">Bitte bestätigen, dass du für diese Person Aktionen durchführen darfst.</p>
+              <div className="modal-actions">
+                <button type="button" className="modal-action-btn" onClick={cancelDelegationConfirm}>
+                  Abbrechen
+                </button>
+                <button type="button" className="btn-primary modal-action-btn" onClick={confirmDelegation}>
+                  Bestätigen
+                </button>
+              </div>
             </div>
           </div>
         </div>

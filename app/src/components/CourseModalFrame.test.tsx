@@ -25,6 +25,8 @@ describe("CourseModalFrame", () => {
     expect(screen.getByRole("dialog", { name: "Test Modal" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Test Titel" })).toBeInTheDocument();
     expect(screen.getByText("Inhalt")).toBeInTheDocument();
+    expect(document.querySelector(".modal-header")).toBeInTheDocument();
+    expect(document.querySelector(".modal-body")).toBeInTheDocument();
   });
 
   it("forwards keydown events", () => {

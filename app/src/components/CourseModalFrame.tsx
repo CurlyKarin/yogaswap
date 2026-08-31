@@ -34,8 +34,10 @@ export default function CourseModalFrame({
       onKeyDownCapture={onKeyDown}
     >
       <div className="modal modal-compact" ref={modalRef} tabIndex={-1}>
-        <h4>{title}</h4>
-        {children}
+        <div className="modal-header">
+          <h4>{title}</h4>
+        </div>
+        <div className="modal-body">{children}</div>
       </div>
     </div>
   );

@@ -1223,7 +1223,10 @@ export default function AdminPanel({
           }}
         >
           <div className="modal modal-compact">
-            <h4>Teilnehmer bearbeiten</h4>
+            <div className="modal-header">
+              <h4>Teilnehmer bearbeiten</h4>
+            </div>
+            <div className="modal-body">
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               User: <strong>{editingUserId}</strong>
             </p>
@@ -1287,6 +1290,7 @@ export default function AdminPanel({
                     : "Speichern"}
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -1315,8 +1319,10 @@ export default function AdminPanel({
           }}
         >
           <div className="modal modal-compact">
-            <h4>Teilnehmer anlegen</h4>
-
+            <div className="modal-header">
+              <h4>Teilnehmer anlegen</h4>
+            </div>
+            <div className="modal-body">
             <div className="dialog-stack">
               <input
                 type="text"
@@ -1517,6 +1523,7 @@ export default function AdminPanel({
                     : "Anlegen"}
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -1537,7 +1544,10 @@ export default function AdminPanel({
           }}
         >
           <div className="modal modal-compact">
-            <h4>Teilnehmer löschen</h4>
+            <div className="modal-header">
+              <h4>Teilnehmer löschen</h4>
+            </div>
+            <div className="modal-body">
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               Teilnehmer <strong>{deleteTarget.userId}</strong> aus diesem Studio entfernen?
             </p>
@@ -1563,6 +1573,7 @@ export default function AdminPanel({
               >
                 {deleteRunningByUserId[deleteTarget.userId] ? "Lösche..." : "Löschen"}
               </button>
+            </div>
             </div>
           </div>
         </div>
