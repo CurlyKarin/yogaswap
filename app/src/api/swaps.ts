@@ -4,7 +4,9 @@ import { delegationHeaders } from "./delegation";
 
 /** Rohdaten von GET /swaps und /swaps/status (Kurs-IDs oft als String). */
 type ApiSwapRow = {
-  user: string;
+  participantId?: string;
+  /** Legacy API-Feld bis alle Clients migriert sind. */
+  user?: string;
   fromCourseId: string | number;
   fromDate: string;
   toCourseId: string | number;
@@ -15,10 +17,11 @@ type ApiSwapRow = {
 };
 
 function mapApiSwapRow(item: ApiSwapRow): Swap {
+  const participantId = item.participantId ?? item.user ?? "";
   const fromUid = typeof item.fromCourseUid === "string" ? item.fromCourseUid.trim() : "";
   const toUid = typeof item.toCourseUid === "string" ? item.toCourseUid.trim() : "";
   return {
-    user: item.user,
+    participantId,
     fromCourseId: Number(item.fromCourseId),
     fromDate: item.fromDate,
     toCourseId: Number(item.toCourseId),
@@ -74,12 +77,13 @@ export async function createSwap(swap: Swap): Promise<void> {
 export async function updateSwap(swap: Swap, status: Swap['status']): Promise<void> {
   try {
     const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
-    console.log('Update Swap Call:', { swapId, user: swap.user, status });
+    console.log('Update Swap Call:', { swapId, participantId: swap.participantId, status });
+    const params = { user: swap.participantId };
     const headers = delegationHeaders();
     if (headers) {
-      await axios.put(`/swaps/${swapId}`, { status }, { params: { user: swap.user }, headers });
+      await axios.put(`/swaps/${swapId}`, { status }, { params, headers });
     } else {
-      await axios.put(`/swaps/${swapId}`, { status }, { params: { user: swap.user } });
+      await axios.put(`/swaps/${swapId}`, { status }, { params });
     }
   } catch (error) {
     console.error('Fehler beim Updaten des Swaps:', error);
@@ -90,12 +94,13 @@ export async function updateSwap(swap: Swap, status: Swap['status']): Promise<vo
 export async function deleteSwap(swap: Swap): Promise<void> {
   try {
     const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
-    console.log('Delete Swap Call:', { swapId, user: swap.user });
+    console.log('Delete Swap Call:', { swapId, participantId: swap.participantId });
+    const params = { user: swap.participantId };
     const headers = delegationHeaders();
     if (headers) {
-      await axios.delete(`/swaps/${swapId}`, { params: { user: swap.user }, headers });
+      await axios.delete(`/swaps/${swapId}`, { params, headers });
     } else {
-      await axios.delete(`/swaps/${swapId}`, { params: { user: swap.user } });
+      await axios.delete(`/swaps/${swapId}`, { params });
     }
   } catch (error) {
     console.error('Fehler beim Löschen des Swaps:', error);

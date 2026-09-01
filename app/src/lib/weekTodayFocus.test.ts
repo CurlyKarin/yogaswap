@@ -97,7 +97,7 @@ describe("pickTodayFocusTarget", () => {
   it("counts swap involvement as personal for running tie-break", () => {
     const swaps: Swap[] = [
       {
-        user: "maya",
+        participantId: "maya",
         fromCourseId: 2,
         fromDate: "2099-06-16",
         toCourseId: 9,

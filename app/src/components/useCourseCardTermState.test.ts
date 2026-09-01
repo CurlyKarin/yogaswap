@@ -119,7 +119,7 @@ describe("useCourseCardTermState", () => {
       cancelledParticipants: ["alice"],
     };
     const activeSwap: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: pastOrigin,
       toCourseId: 2,
@@ -155,7 +155,7 @@ describe("useCourseCardTermState", () => {
 
   it("findet pending Swap für den gewählten Termin", () => {
     const pendingSwap: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 2,

@@ -35,7 +35,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "no_login",
@@ -62,7 +62,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce([
         {
           tenantId: "default-tenant",
-          userId: "alice",
+          userId: "alice", participantId: "alice",
           role: "participant",
           email: "alice@example.com",
           status: "no_login",
@@ -104,7 +104,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "active",
@@ -147,7 +147,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "no_login",
@@ -174,7 +174,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "no_login",
@@ -232,7 +232,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce([
         {
           tenantId: "default-tenant",
-          userId: "alice",
+          userId: "alice", participantId: "alice",
           role: "participant",
           email: "alice@example.com",
           status: "no_login",
@@ -241,7 +241,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce([
         {
           tenantId: "default-tenant",
-          userId: "alice",
+          userId: "alice", participantId: "alice",
           role: "participant",
           email: "alice@example.com",
           status: "invited",
@@ -278,7 +278,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce([
         {
           tenantId: "default-tenant",
-          userId: "alice",
+          userId: "alice", participantId: "alice",
           role: "participant",
           email: "alice@example.com",
           status: "active",
@@ -289,7 +289,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce([
         {
           tenantId: "default-tenant",
-          userId: "alice",
+          userId: "alice", participantId: "alice",
           role: "participant",
           email: "alice@example.com",
           status: "active",
@@ -304,7 +304,7 @@ describe("AdminPanel", () => {
     });
     mockedUpdateParticipant.mockResolvedValueOnce({
       tenantId: "default-tenant",
-      userId: "alice",
+      userId: "alice", participantId: "alice",
       role: "participant",
       email: "alice@example.com",
       status: "active",
@@ -334,7 +334,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "active",
@@ -356,21 +356,21 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValue([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "no_login",
       },
       {
         tenantId: "default-tenant",
-        userId: "bob",
+        userId: "bob", participantId: "bob",
         role: "participant",
         email: "bob@example.com",
         status: "invited",
       },
       {
         tenantId: "default-tenant",
-        userId: "carol",
+        userId: "carol", participantId: "carol",
         role: "participant",
         email: "carol@example.com",
         status: "active",
@@ -428,7 +428,7 @@ describe("AdminPanel", () => {
 
     mockedUpdateParticipant.mockResolvedValueOnce({
       tenantId: "default-tenant",
-      userId: "alice",
+      userId: "alice", participantId: "alice",
       role: "participant",
       email: "alice@example.com",
       status: "no_login",
@@ -486,7 +486,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValue([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: undefined,
         email: "alice@example.com",
         status: "active",
@@ -531,7 +531,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: undefined,
         email: "alice@example.com",
         status: "active",
@@ -545,7 +545,7 @@ describe("AdminPanel", () => {
     });
     mockedUpdateParticipant.mockResolvedValueOnce({
       tenantId: "default-tenant",
-      userId: "alice",
+      userId: "alice", participantId: "alice",
       role: undefined,
       email: "alice.new@example.com",
       status: "active",
@@ -617,7 +617,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValue([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: undefined,
         email: "alice@example.com",
         status: "active",
@@ -646,7 +646,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValue([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: undefined,
         email: "alice@example.com",
         status: "active",
@@ -692,7 +692,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: undefined,
         email: "alice@example.com",
         status: "active",
@@ -736,7 +736,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce([
         {
           tenantId: "default-tenant",
-          userId: "alice",
+          userId: "alice", participantId: "alice",
           role: undefined,
           email: "alice@example.com",
           status: "active",
@@ -777,7 +777,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValue([
       {
         tenantId: "default-tenant",
-        userId: "Kai",
+        userId: "Kai", participantId: "Kai",
         role: "participant",
         email: "kai@example.com",
         status: "active",
@@ -838,7 +838,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValue([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "invited",
@@ -874,7 +874,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "no_login",
@@ -883,7 +883,7 @@ describe("AdminPanel", () => {
 
     mockedUpdateParticipant.mockResolvedValueOnce({
       tenantId: "default-tenant",
-      userId: "alice",
+      userId: "alice", participantId: "alice",
       role: "participant",
       email: "alice.new@example.com",
       status: "no_login",
@@ -915,7 +915,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "wrong@example.com",
         status: "invited",
@@ -923,7 +923,7 @@ describe("AdminPanel", () => {
     ]);
     mockedUpdateParticipant.mockResolvedValueOnce({
       tenantId: "default-tenant",
-      userId: "alice",
+      userId: "alice", participantId: "alice",
       role: "participant",
       email: "alice@example.com",
       status: "invited",
@@ -962,14 +962,14 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "admin1",
+        userId: "admin1", participantId: "admin1",
         role: "admin",
         email: "admin@example.com",
         status: "invited",
       },
       {
         tenantId: "default-tenant",
-        userId: "trainer1",
+        userId: "trainer1", participantId: "trainer1",
         role: "instructor",
         email: "trainer@example.com",
         status: "no_login",
@@ -1014,7 +1014,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "active",
@@ -1023,7 +1023,7 @@ describe("AdminPanel", () => {
 
     mockedUpdateParticipant.mockResolvedValueOnce({
       tenantId: "default-tenant",
-      userId: "alice",
+      userId: "alice", participantId: "alice",
       role: "participant",
       email: "alice.new@example.com",
       status: "invited",
@@ -1061,7 +1061,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "no_login",
@@ -1069,7 +1069,7 @@ describe("AdminPanel", () => {
     ]);
     mockedUpdateParticipant.mockResolvedValueOnce({
       tenantId: "default-tenant",
-      userId: "alice",
+      userId: "alice", participantId: "alice",
       role: "instructor",
       email: "alice@example.com",
       status: "no_login",
@@ -1104,7 +1104,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "no_login",
@@ -1138,7 +1138,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce([
         {
           tenantId: "default-tenant",
-          userId: "alice",
+          userId: "alice", participantId: "alice",
           role: "participant",
           email: "alice@example.com",
           status: "no_login",
@@ -1147,7 +1147,7 @@ describe("AdminPanel", () => {
       .mockResolvedValueOnce([
         {
           tenantId: "default-tenant",
-          userId: "bob",
+          userId: "bob", participantId: "bob",
           role: "participant",
           email: "bob@example.com",
           status: "active",
@@ -1176,7 +1176,7 @@ describe("AdminPanel", () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
-        userId: "alice",
+        userId: "alice", participantId: "alice",
         role: "participant",
         email: "alice@example.com",
         status: "no_login",

@@ -121,9 +121,9 @@ async function renderLoggedInAdmin() {
 
   vi.mocked(getTenantContext).mockResolvedValue({
     tenantId: "default-tenant",
-    userId: "admin",
+    participantId: "admin",
     tenant: { tenantId: "default-tenant", name: "Default" },
-    membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+    membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
   } as unknown as never);
 
   vi.mocked(getParticipants).mockResolvedValue([] as unknown as never);
@@ -272,12 +272,12 @@ describe("App delegation mode", () => {
 
     vi.mocked(getTenantContext).mockResolvedValue({
       tenant: { tenantId: "default-tenant", name: "Default" },
-      membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+      membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
     } as unknown as never);
 
     vi.mocked(getParticipants).mockResolvedValue([
-      { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
-      { userId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
+      { userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "luca", participantId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
     ] as unknown as never);
 
     render(
@@ -327,11 +327,11 @@ describe("App delegation mode", () => {
 
     vi.mocked(getTenantContext).mockResolvedValue({
       tenant: { tenantId: "default-tenant", name: "Default" },
-      membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+      membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
     } as unknown as never);
 
     vi.mocked(getParticipants).mockResolvedValue([
-      { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
     ] as unknown as never);
 
     render(
@@ -372,7 +372,7 @@ describe("App delegation mode", () => {
 
     vi.mocked(getTenantContext).mockResolvedValue({
       tenant: { tenantId: "default-tenant", name: "Default" },
-      membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+      membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
     } as unknown as never);
 
     vi.mocked(canManageParticipants).mockReturnValue(false);
@@ -409,11 +409,11 @@ describe("App delegation mode", () => {
 
     vi.mocked(getTenantContext).mockResolvedValue({
       tenant: { tenantId: "default-tenant", name: "Default" },
-      membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+      membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
     } as unknown as never);
 
     vi.mocked(getParticipants).mockResolvedValue([
-      { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
     ] as unknown as never);
 
     render(
@@ -453,12 +453,12 @@ describe("App delegation mode", () => {
 
     vi.mocked(getTenantContext).mockResolvedValue({
       tenant: { tenantId: "default-tenant", name: "Default" },
-      membership: { tenantId: "default-tenant", userId: "admin", role: "admin" },
+      membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
     } as unknown as never);
 
     vi.mocked(getParticipants).mockResolvedValue([
-      { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
-      { userId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
+      { userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "luca", participantId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
     ] as unknown as never);
 
     render(

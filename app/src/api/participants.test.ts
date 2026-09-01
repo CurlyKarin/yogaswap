@@ -70,13 +70,13 @@ describe("participants API (getParticipants/updateParticipant)", () => {
   it("getParticipants lädt Teilnehmer inkl. status", async () => {
     vi.mocked(axios.get).mockResolvedValueOnce({
       data: [
-        { tenantId: "default-tenant", userId: "alice", status: "no_login" },
+        { tenantId: "default-tenant", participantId: "alice", status: "no_login" },
       ],
     });
 
     const result = await getParticipants();
     expect(result).toEqual([
-      { tenantId: "default-tenant", userId: "alice", status: "no_login" },
+      { tenantId: "default-tenant", participantId: "alice", status: "no_login" },
     ]);
 
     expect(axios.get).toHaveBeenCalledWith("/participants", undefined);
@@ -131,7 +131,7 @@ describe("participants API (getParticipants/updateParticipant)", () => {
     vi.mocked(axios.put).mockResolvedValueOnce({
       data: {
         tenantId: "default-tenant",
-        userId: "alice",
+        participantId: "alice",
         email: "alice@example.com",
         status: "invited",
       },

@@ -4,6 +4,10 @@ function equalsIgnoreCase(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
 
+function matchesParticipant(participantId: string | undefined, nickname: string): boolean {
+  return participantId != null && equalsIgnoreCase(participantId, nickname);
+}
+
 /** True if the user is listed as instructor on at least one course. */
 export function hasInstructorAssignment(courses: Course[], nickname: string): boolean {
   return courses.some((course) =>
@@ -28,7 +32,7 @@ export function isPersonallyInvolvedInCourse(
   }
   return swaps.some(
     (swap) =>
-      equalsIgnoreCase(swap.user, nickname) &&
+      matchesParticipant(swap.participantId, nickname) &&
       (swap.fromCourseId === course.id || swap.toCourseId === course.id),
   );
 }

@@ -139,7 +139,7 @@ export function useCourseCardTermState({
     });
   const hasActiveOriginSwapInPast = swaps.some(
     (s) =>
-      s.user === userName &&
+      s.participantId === userName &&
       s.status === "active" &&
       s.fromCourseId === course.id &&
       s.fromDate === selectedDateKey &&
@@ -147,7 +147,7 @@ export function useCourseCardTermState({
   );
   const hasActiveSwapFromOrigin = swaps.some(
     (s) =>
-      s.user === userName &&
+      s.participantId === userName &&
       s.status === "active" &&
       s.fromCourseId === course.id &&
       s.fromDate === selectedDateKey,
@@ -165,7 +165,7 @@ export function useCourseCardTermState({
     () =>
       swaps.filter(
         (s) =>
-          s.user === userName &&
+          s.participantId === userName &&
           s.fromCourseId === course.id &&
           s.fromDate === selectedDateKey &&
           s.status === "pending",
@@ -218,7 +218,7 @@ export function useCourseCardTermState({
     () =>
       swaps.find(
         (s) =>
-          s.user === userName &&
+          s.participantId === userName &&
           ((s.fromCourseId === course.id && s.fromDate === selectedDateKey) ||
             (s.toCourseId === course.id && s.toDate === selectedDateKey)),
       ),
@@ -229,8 +229,8 @@ export function useCourseCardTermState({
     () =>
       swaps.filter(
         (s) =>
-          (s.fromCourseId === course.id && s.fromDate === selectedDateKey && s.user === userName) ||
-          (s.toCourseId === course.id && s.toDate === selectedDateKey && s.user === userName),
+          (s.fromCourseId === course.id && s.fromDate === selectedDateKey && s.participantId === userName) ||
+          (s.toCourseId === course.id && s.toDate === selectedDateKey && s.participantId === userName),
       ),
     [swaps, userName, course.id, selectedDateKey],
   );
@@ -239,7 +239,7 @@ export function useCourseCardTermState({
     () =>
       swaps.find(
         (s) =>
-          s.user === userName &&
+          s.participantId === userName &&
           s.toCourseId === course.id &&
           s.toDate === selectedDateKey &&
           s.status === "pending",
@@ -276,7 +276,7 @@ export function useCourseCardTermState({
     () =>
       swaps.filter(
         (s) =>
-          s.user === userName &&
+          s.participantId === userName &&
           (s.fromCourseId === course.id || s.toCourseId === course.id),
       ),
     [swaps, userName, course.id],

@@ -64,6 +64,7 @@ const baseTenant: Tenant = {
 const baseMembership: UserTenantMembership = {
   tenantId: "default-tenant",
   userId: "alice",
+  participantId: "alice",
   role: "participant",
 };
 
@@ -411,7 +412,7 @@ describe("CourseList", () => {
     const adminMembership: UserTenantMembership = {
       ...baseMembership,
       role: "admin",
-      userId: "admin",
+      participantId: "admin",
     };
     const delegatedUser: User = {
       ...baseUser,
@@ -750,7 +751,7 @@ describe("CourseList", () => {
     mockedGetOverrides.mockResolvedValue([]);
     mockedGetSwaps.mockResolvedValue([]);
     mockedGetParticipants.mockResolvedValue([
-      { userId: "luna", status: "active" },
+      { participantId: "luna", status: "active" },
     ]);
     mockedUpdateCourse.mockResolvedValue({
       ...mockCourses[0],

@@ -186,7 +186,7 @@ function dedupeSwaps(values: Swap[]): Swap[] {
   const seen = new Set<string>();
   const result: Swap[] = [];
   for (const swap of values) {
-    const key = `${swap.user}#${swap.fromCourseId}#${swap.fromDate}#${swap.toCourseId}#${swap.toDate}#${swap.status}`;
+    const key = `${swap.participantId}#${swap.fromCourseId}#${swap.fromDate}#${swap.toCourseId}#${swap.toDate}#${swap.status}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(swap);
@@ -262,7 +262,7 @@ export default function CourseList({
   const fetchData = useCallback(async () => {
     try {
       console.log("Fetching courses, overrides, and swaps...", {
-        user: currentUser.nickname,
+        participantId: currentUser.nickname,
       });
       setLoading(true);
       const swapsPromise = canSeeCourseManagement

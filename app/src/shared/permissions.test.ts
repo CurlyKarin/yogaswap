@@ -17,18 +17,21 @@ import type {
 describe("permissions", () => {
   const adminMembership: UserTenantMembership = {
     userId: "admin-user",
+    participantId: "admin-user",
     tenantId: "tenant-1",
     role: "admin",
   };
 
   const instructorMembership: UserTenantMembership = {
     userId: "instructor-user",
+    participantId: "instructor-user",
     tenantId: "tenant-1",
     role: "instructor",
   };
 
   const instructorWithOverrideTrue: UserTenantMembership = {
     userId: "instructor-override-true",
+    participantId: "instructor-override-true",
     tenantId: "tenant-1",
     role: "instructor",
     instructorCanSeeAllCoursesOverride: true,
@@ -36,6 +39,7 @@ describe("permissions", () => {
 
   const instructorWithOverrideFalse: UserTenantMembership = {
     userId: "instructor-override-false",
+    participantId: "instructor-override-false",
     tenantId: "tenant-1",
     role: "instructor",
     instructorCanSeeAllCoursesOverride: false,
@@ -43,6 +47,7 @@ describe("permissions", () => {
 
   const participantMembership: UserTenantMembership = {
     userId: "participant-user",
+    participantId: "participant-user",
     tenantId: "tenant-1",
     role: "participant",
   };
