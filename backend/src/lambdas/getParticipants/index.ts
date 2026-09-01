@@ -112,9 +112,13 @@ export const handler = async (
       }),
     );
 
-    const profiles: ParticipantProfile[] = (result.Items || []).map((item) =>
-      unmarshall(item) as ParticipantProfile,
-    );
+    const profiles: ParticipantProfile[] = (result.Items || []).map((item) => {
+      const profile = unmarshall(item) as ParticipantProfile;
+      return {
+        ...profile,
+        participantId: profile.participantId?.trim() || profile.userId,
+      };
+    });
 
     const membershipsResult = await client.send(
       new QueryCommand({

@@ -370,7 +370,7 @@ describe("updateCourse Lambda", () => {
     mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
     const enrollmentResult = await handler(
       makeEvent({
-        enrollmentChanges: [{ userId: "luna", action: "add", dateIso: "2026-08-14" }],
+        enrollmentChanges: [{ participantId: "luna", action: "add", dateIso: "2026-08-14" }],
       }),
     );
     expect(enrollmentResult.statusCode).toBe(400);
@@ -629,7 +629,7 @@ describe("updateCourse Lambda", () => {
 
     const result = await handler(
       makeEvent({
-        enrollmentChanges: [{ userId: "luna", action: "drop", dateIso: "2026-08-14" }],
+        enrollmentChanges: [{ participantId: "luna", action: "drop", dateIso: "2026-08-14" }],
       }),
     );
     expect(result.statusCode).toBe(400);
@@ -655,7 +655,7 @@ describe("updateCourse Lambda", () => {
             courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
             courseId: { S: "1" },
             courseIdNumeric: { N: "1" },
-            userId: { S: "luna" },
+            participantId: { S: "luna" },
             validFrom: { S: "2026-01-01" },
           },
         ],
@@ -667,7 +667,7 @@ describe("updateCourse Lambda", () => {
     const result = await handler(
       makeEvent({
         participants: ["luna"],
-        enrollmentChanges: [{ userId: "luna", action: "remove", dateIso: "2026-08-14" }],
+        enrollmentChanges: [{ participantId: "luna", action: "remove", dateIso: "2026-08-14" }],
       }),
     );
     expect(result.statusCode).toBe(200);
@@ -676,7 +676,7 @@ describe("updateCourse Lambda", () => {
       expect.objectContaining({
         TableName: "test-courseEnrollments",
         Item: expect.objectContaining({
-          userId: { S: "luna" },
+          participantId: { S: "luna" },
           validFrom: { S: "2026-01-01" },
           validUntil: { S: "2026-08-14" },
         }),
@@ -716,7 +716,7 @@ describe("updateCourse Lambda", () => {
     const result = await handler(
       makeEvent({
         participants: [],
-        enrollmentChanges: [{ userId: "maja", action: "remove", dateIso: "2026-08-17" }],
+        enrollmentChanges: [{ participantId: "maja", action: "remove", dateIso: "2026-08-17" }],
       }),
     );
     expect(result.statusCode).toBe(200);
@@ -749,7 +749,7 @@ describe("updateCourse Lambda", () => {
             courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
             courseId: { S: "1" },
             courseIdNumeric: { N: "1" },
-            userId: { S: "luna" },
+            participantId: { S: "luna" },
             validFrom: { S: "2026-01-01" },
             validUntil: { S: "2026-08-14" },
           },
@@ -762,7 +762,7 @@ describe("updateCourse Lambda", () => {
     const result = await handler(
       makeEvent({
         participants: ["luna"],
-        enrollmentChanges: [{ userId: "luna", action: "remove", dateIso: "2026-08-21" }],
+        enrollmentChanges: [{ participantId: "luna", action: "remove", dateIso: "2026-08-21" }],
       }),
     );
     expect(result.statusCode).toBe(200);
@@ -770,7 +770,7 @@ describe("updateCourse Lambda", () => {
       expect.objectContaining({
         TableName: "test-courseEnrollments",
         Item: expect.objectContaining({
-          userId: { S: "luna" },
+          participantId: { S: "luna" },
           validFrom: { S: "2026-01-01" },
           validUntil: { S: "2026-08-21" },
         }),

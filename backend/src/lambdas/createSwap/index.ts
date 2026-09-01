@@ -81,7 +81,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 500, body: JSON.stringify({ error: 'COURSES_TABLE env var is not set' }) };
     }
     const swap = event.body ? JSON.parse(event.body) : {};
-    if (!swap.user || !swap.fromCourseId || !swap.fromDate || !swap.toCourseId || !swap.toDate || !swap.status) {
+    if (!swap.participantId || !swap.fromCourseId || !swap.fromDate || !swap.toCourseId || !swap.toDate || !swap.status) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
 
@@ -140,7 +140,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const participants = originEffective.participants;
     const stemOnOrigin = resolveStemForDate(fromCourse, fromEnrollments, swap.fromDate);
     const originallyParticipant = stemOnOrigin.some(
-      (p) => p.toLowerCase() === swap.user.toLowerCase(),
+      (p) => p.toLowerCase() === swap.participantId.toLowerCase(),
     );
     if (
       !canCreateSwapFromOrigin({
@@ -148,7 +148,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         courseTime,
         tenantSettings,
         override,
-        userName: swap.user,
+        userName: swap.participantId,
         participants,
         originallyParticipant,
       })
@@ -224,7 +224,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       toEnrollments,
       swap.toDate,
     ).participants;
-    const swapUserLower = swap.user.toLowerCase();
+    const swapUserLower = swap.participantId.toLowerCase();
     const userOnTarget = targetParticipants.some((p) => p.toLowerCase() === swapUserLower);
     const countAfterSwap = userOnTarget
       ? targetParticipants.length
@@ -253,12 +253,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     ]);
 
     const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
-    const user_swapId = `${swap.user}#${swapId}`;
-    const tenantId_user = `${tenantId}#${swap.user}`;
+    const user_swapId = `${swap.participantId}#${swapId}`;
+    const tenantId_user = `${tenantId}#${swap.participantId}`;
     const dynamoItem = {
       tenantId: { S: tenantId },
       user_swapId: { S: user_swapId },
-      user: { S: swap.user },
+      user: { S: swap.participantId },
       swapId: { S: swapId },
       fromCourseId: { S: fromLegacyId },
       fromDate: { S: swap.fromDate },
@@ -283,7 +283,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           client,
           tenantId,
           swap: {
-            user: swap.user,
+            participantId: swap.participantId,
             toCourseId: Number(swap.toCourseId),
             toDate: swap.toDate,
           },

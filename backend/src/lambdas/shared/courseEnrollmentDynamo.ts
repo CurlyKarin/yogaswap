@@ -5,6 +5,7 @@ import {
   buildCourseEnrollmentSortKey,
   type CourseEnrollment,
   type CourseEnrollmentSource,
+  normalizeParticipantRef,
 } from "@yogaswap/shared";
 
 export function enrollmentToDynamoItem(
@@ -15,11 +16,11 @@ export function enrollmentToDynamoItem(
   const item: Record<string, AttributeValue> = {
     tenantId: { S: tenantId },
     courseId_userId_validFrom: {
-      S: buildCourseEnrollmentSortKey(enrollment.courseId, enrollment.userId, validFrom),
+      S: buildCourseEnrollmentSortKey(enrollment.courseId, enrollment.participantId, validFrom),
     },
     courseId: { S: String(enrollment.courseId) },
     courseIdNumeric: { N: String(enrollment.courseId) },
-    userId: { S: enrollment.userId },
+    participantId: { S: enrollment.participantId },
     validFrom: { S: validFrom },
   };
   if (enrollment.validUntil) item.validUntil = { S: enrollment.validUntil };
@@ -34,9 +35,9 @@ export function dynamoItemToEnrollment(
   item: Record<string, AttributeValue>,
 ): CourseEnrollment | null {
   const courseIdRaw = item.courseIdNumeric?.N ?? item.courseId?.S;
-  const userId = item.userId?.S;
+  const participantId = item.participantId?.S ?? item.userId?.S;
   const validFrom = item.validFrom?.S;
-  if (courseIdRaw == null || !userId || !validFrom) return null;
+  if (courseIdRaw == null || !participantId || !validFrom) return null;
   const courseId = Number(courseIdRaw);
   if (!Number.isFinite(courseId)) return null;
 
@@ -44,7 +45,7 @@ export function dynamoItemToEnrollment(
   return {
     ...(item.tenantId?.S ? { tenantId: item.tenantId.S } : {}),
     courseId,
-    userId,
+    participantId,
     validFrom,
     ...(item.validUntil?.S ? { validUntil: item.validUntil.S } : {}),
     ...(item.actorUserId?.S ? { actorUserId: item.actorUserId.S } : {}),
@@ -86,4 +87,12 @@ export async function queryCourseEnrollments(params: {
     if (mapped) enrollments.push(mapped);
   }
   return enrollments;
+}
+
+/** Prefix query for all segments of one participant in a course. */
+export function buildCourseEnrollmentParticipantQueryPrefix(
+  courseId: number | string,
+  participantId: string,
+): string {
+  return `${String(courseId)}#${normalizeParticipantRef(participantId)}#`;
 }

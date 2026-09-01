@@ -55,7 +55,7 @@ describe("getSwaps Lambda", () => {
     });
 
     const event = baseEvent({
-      user: "Nia",
+      participantId: "Nia",
       fromDate: "2025-10-01",
       fromCourseId: "1",
     });
@@ -64,7 +64,7 @@ describe("getSwaps Lambda", () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body[0].user).toBe("Nia");
+    expect(body[0].participantId).toBe("Nia");
 
     expect(QueryCommand).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -83,7 +83,7 @@ describe("getSwaps Lambda", () => {
     mockSend.mockResolvedValueOnce({ Items: [] });
 
     const event = baseEvent({
-      user: "Nia",
+      participantId: "Nia",
       toDate: "2025-10-05",
       toCourseId: "3",
     });
@@ -106,7 +106,7 @@ describe("getSwaps Lambda", () => {
     mockSend.mockResolvedValueOnce({ Items: [] });
 
     const event = baseEvent({
-      user: "Nia",
+      participantId: "Nia",
     });
 
     await handler(event);
@@ -126,7 +126,7 @@ describe("getSwaps Lambda", () => {
     mockSend.mockRejectedValueOnce(new Error("DynamoDB error"));
 
     const event = baseEvent({
-      user: "Nia",
+      participantId: "Nia",
     });
 
     const result = await handler(event);

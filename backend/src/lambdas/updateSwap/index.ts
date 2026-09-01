@@ -96,7 +96,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           client,
           tenantId,
           swap: {
-            user,
+            participantId: user,
             toCourseId: Number(toCourseId),
             toDate,
           },

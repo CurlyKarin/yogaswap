@@ -170,7 +170,7 @@ export const handler = async (
       const studioName = await loadTenantName(client, tenantsTable, tenantId);
       const removedMail = buildStudioAccessRemovedMail({
         locale: mailLocale,
-        nickname: profile.userId || userId,
+        nickname: profile.participantId || userId,
         studioName,
         studioUrl: resolveAppBaseUrlForTenant(tenantId),
       });

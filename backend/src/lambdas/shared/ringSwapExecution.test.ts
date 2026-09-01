@@ -3,7 +3,7 @@ import { buildRingSwapGraph, findRingCycles, selectDisjointCycles } from "./ring
 import { planRingCycleExecution } from "./ringSwapExecution";
 
 function pendingSwap(
-  input: Partial<Swap> & Pick<Swap, "user" | "fromCourseId" | "fromDate" | "toCourseId" | "toDate">,
+  input: Partial<Swap> & Pick<Swap, "participantId" | "fromCourseId" | "fromDate" | "toCourseId" | "toDate">,
 ): Swap {
   return {
     status: "pending",
@@ -47,8 +47,8 @@ const courses: Course[] = [
 describe("ringSwapExecution", () => {
   test("plans a 2-cycle with origin cleanup and target booking", () => {
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));
@@ -92,9 +92,9 @@ describe("ringSwapExecution", () => {
 
   test("plans a 3-cycle", () => {
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 3, toDate: "2099-06-03" }),
-      pendingSwap({ user: "Carol", fromCourseId: 3, fromDate: "2099-06-03", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 3, toDate: "2099-06-03" }),
+      pendingSwap({ participantId: "Carol", fromCourseId: 3, fromDate: "2099-06-03", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));
@@ -134,8 +134,8 @@ describe("ringSwapExecution", () => {
       },
     ];
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));
@@ -152,8 +152,8 @@ describe("ringSwapExecution", () => {
 
   test("rejects when user is not on origin", () => {
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));
@@ -175,9 +175,9 @@ describe("ringSwapExecution", () => {
 
   test("deletes alternate pending swaps from same origin", () => {
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 3, toDate: "2099-06-03" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 3, toDate: "2099-06-03" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));
@@ -197,8 +197,8 @@ describe("ringSwapExecution", () => {
 
   test("rejects when target is in cutoff window", () => {
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));
@@ -230,8 +230,8 @@ describe("ringSwapExecution", () => {
       },
     ];
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));
@@ -262,8 +262,8 @@ describe("ringSwapExecution", () => {
       },
     ];
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
     ];
     const graph = buildRingSwapGraph(pendingSwaps);
     const [cycle] = selectDisjointCycles(findRingCycles(graph));

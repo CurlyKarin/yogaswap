@@ -4,6 +4,7 @@ import { Swap } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
 import { applySwapCutoffReconcileIfConfigured } from "../shared/applySwapCutoffReconcile";
+import { dynamoItemToSwap } from "../shared/swapDynamo";
 
 const client = dynamoClient;
 
@@ -43,16 +44,9 @@ export const handler = async (
   try {
     console.log('getSwapsByStatus QueryCommand:', command.input);
     const data = await client.send(command);
-    const items: Swap[] = (data.Items || []).map((item) => ({
-      user: item.user.S!,
-      fromCourseId: Number(item.fromCourseId?.S ?? item.fromCourseId?.N ?? 0),
-      ...(item.fromCourseUid?.S ? { fromCourseUid: item.fromCourseUid.S } : {}),
-      fromDate: item.fromDate.S!,
-      toCourseId: Number(item.toCourseId?.S ?? item.toCourseId?.N ?? 0),
-      ...(item.toCourseUid?.S ? { toCourseUid: item.toCourseUid.S } : {}),
-      toDate: item.toDate.S!,
-      status: item.status.S as Swap["status"],
-    }));
+    const items: Swap[] = (data.Items || [])
+      .map((item) => dynamoItemToSwap(item))
+      .filter((swap): swap is Swap => swap != null);
     const reconciled = await applySwapCutoffReconcileIfConfigured({
       client,
       tenantId,

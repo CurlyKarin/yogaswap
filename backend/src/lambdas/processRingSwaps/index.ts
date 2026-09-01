@@ -23,18 +23,23 @@ import {
   type RejectedRingLog,
 } from "../shared/ringSwapLogging";
 import { notifySwapSuccess } from "../shared/notifications/swapSuccessNotification";
+import { dynamoItemToSwap } from "../shared/swapDynamo";
 
 const client = dynamoClient;
 
+function cycleParticipantIds(cycle: { edges: Array<{ swap: Swap }> }): string[] {
+  return cycle.edges.flatMap((edge) => {
+    const participantId = edge.swap.participantId?.trim();
+    return participantId ? [participantId] : [];
+  });
+}
+
 function mapSwapItem(item: Record<string, any>): Swap {
-  return {
-    user: item.user.S!,
-    fromCourseId: Number(item.fromCourseId.N || item.fromCourseId.S),
-    fromDate: item.fromDate.S!,
-    toCourseId: Number(item.toCourseId.N || item.toCourseId.S),
-    toDate: item.toDate.S!,
-    status: item.status.S as Swap["status"],
-  };
+  const mapped = dynamoItemToSwap(item);
+  if (!mapped) {
+    throw new Error("Invalid swap item");
+  }
+  return mapped;
 }
 
 function mapCourseItem(item: Record<string, any>): Course {
@@ -123,12 +128,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     let executedCycles = 0;
 
     const swapKey = (swap: Swap) =>
-      `${swap.user}|${swap.fromCourseId}|${swap.fromDate}|${swap.toCourseId}|${swap.toDate}`;
+      `${swap.participantId}|${swap.fromCourseId}|${swap.fromDate}|${swap.toCourseId}|${swap.toDate}`;
 
     for (const cycle of selectedCycles) {
       const planned = planRingCycleExecution(cycle, executionContext);
       if (!planned.ok) {
-        const users = cycle.edges.map((edge) => edge.swap.user);
+        const users = cycleParticipantIds(cycle);
         rejectedCycles.push({
           reason: planned.reason,
           users,
@@ -185,7 +190,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             });
             console.info("processRingSwaps swap success mail summary", {
               tenantId,
-              user: activatedSwap.user,
+              user: activatedSwap.participantId,
               ...mailSummary,
             });
           }
@@ -197,7 +202,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }
       } catch (error) {
         if (isTransactionConflict(error)) {
-          const users = cycle.edges.map((edge) => edge.swap.user);
+          const users = cycleParticipantIds(cycle);
           const reason = "Transaction conflict (likely concurrent or stale state)";
           rejectedCycles.push({ reason, users });
           logCycleTransactionConflict(users);

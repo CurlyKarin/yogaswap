@@ -16,13 +16,14 @@ import { queryCourseEnrollments } from "../shared/courseEnrollmentDynamo";
 import { mapOverrideItem } from "../shared/overrideDynamo";
 import { loadTenantSettings } from "../shared/tenantSettingsLoader";
 import { notifyWaitlistPromotion } from "../shared/notifications/waitlistPromotionNotification";
+import { dynamoItemToSwap } from "../shared/swapDynamo";
 
 const client = dynamoClient;
 
 const DEFAULT_NO_AUTOMATION_MINUTES = 60;
 
-function normalized(value: string): string {
-  return value.trim().toLowerCase();
+function normalized(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
 }
 
 function includesUserCaseInsensitive(values: string[] | undefined, user: string): boolean {
@@ -216,14 +217,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ConsistentRead: true,
       });
       const pendingSwapsData = await client.send(pendingSwapsCommand);
-      const pendingSwaps: Swap[] = (pendingSwapsData.Items || []).map((item) => ({
-        user: item.user.S!,
-        fromCourseId: Number(item.fromCourseId.N || item.fromCourseId.S),
-        fromDate: item.fromDate.S!,
-        toCourseId: Number(item.toCourseId.N || item.toCourseId.S),
-        toDate: item.toDate.S!,
-        status: item.status.S as Swap["status"],
-      }));
+      const pendingSwaps: Swap[] = (pendingSwapsData.Items || [])
+        .map((item) => dynamoItemToSwap(item))
+        .filter((swap): swap is Swap => swap != null);
       console.log('pendingSwaps:', pendingSwaps);
 
       // 2) Alle Courses des Tenants laden
@@ -314,7 +310,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         for (const candidate of prioritizedCandidates) {
           const match = pendingSwaps.find(
             (s) =>
-              normalized(s.user) === normalized(candidate) &&
+              normalized(s.participantId) === normalized(candidate) &&
               s.toCourseId === override.courseId &&
               s.toDate === override.date,
           );
@@ -334,7 +330,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         );
         if (!correspondingSwap) continue;
 
-        const promotedSwapUser = correspondingSwap.user;
+        const promotedSwapUser = correspondingSwap.participantId!;
         changed = true;
         promotedSwaps.push(correspondingSwap);
 
@@ -450,14 +446,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         // 8) Andere pending Swaps des Users stornieren
         const pendingOriginSwaps = pendingSwaps.filter(
           (s) =>
-            normalized(s.user) === normalized(promotedSwapUser) &&
+            normalized(s.participantId) === normalized(promotedSwapUser) &&
             s.fromCourseId === correspondingSwap.fromCourseId &&
             s.fromDate === correspondingSwap.fromDate &&
             (s.toCourseId !== correspondingSwap.toCourseId || s.toDate !== correspondingSwap.toDate)
         );
         for (const originSwap of pendingOriginSwaps) {
           const originSwapId = `${originSwap.fromDate}_${originSwap.fromCourseId}_${originSwap.toDate}_${originSwap.toCourseId}`;
-          const originUser_swapId = `${originSwap.user}#${originSwapId}`;
+          const originUser_swapId = `${originSwap.participantId}#${originSwapId}`;
           const deleteCommand = new DeleteItemCommand({
             TableName: process.env.SWAPS_TABLE,
             Key: {
@@ -465,7 +461,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               user_swapId: { S: originUser_swapId },
             },
           });
-          console.log('Deleting swap:', { originSwapId, user: originSwap.user });
+          console.log('Deleting swap:', { originSwapId, participantId: originSwap.participantId });
           await client.send(deleteCommand);
 
           const targetOriginOverride = allOverrides.find(
@@ -484,7 +480,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           }
 
           console.log(
-            `[processPromotions] Storniert pending Swap: ${originSwap.user} von ${originSwap.fromCourseId}/${originSwap.fromDate} → ${originSwap.toCourseId}/${originSwap.toDate}`
+            `[processPromotions] Storniert pending Swap: ${originSwap.participantId} von ${originSwap.fromCourseId}/${originSwap.fromDate} → ${originSwap.toCourseId}/${originSwap.toDate}`
           );
         }
 
@@ -497,7 +493,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           const mailSummary = await notifyWaitlistPromotion(client, {
             tenantId,
             swap: {
-              user: promotedSwapUser,
+              participantId: promotedSwapUser,
               toCourseId: correspondingSwap.toCourseId,
               toDate: correspondingSwap.toDate,
             },
@@ -533,14 +529,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ConsistentRead: true,
     });
     const updatedSwapsData = await client.send(updatedSwapsCommand);
-    const updatedSwaps: Swap[] = (updatedSwapsData.Items || []).map((item) => ({
-      user: item.user.S!,
-      fromCourseId: Number(item.fromCourseId.N || item.fromCourseId.S),
-      fromDate: item.fromDate.S!,
-      toCourseId: Number(item.toCourseId.N || item.toCourseId.S),
-      toDate: item.toDate.S!,
-      status: item.status.S as Swap["status"],
-    }));
+    const updatedSwaps: Swap[] = (updatedSwapsData.Items || [])
+      .map((item) => dynamoItemToSwap(item))
+      .filter((swap): swap is Swap => swap != null);
 
     const updatedOverridesCommand = new QueryCommand({
       TableName: process.env.OVERRIDES_TABLE,

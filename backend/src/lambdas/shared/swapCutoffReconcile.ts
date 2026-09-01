@@ -50,7 +50,9 @@ async function removeUserFromTargetWaitlist(
   );
   if (!resp.Item) return;
   const override = mapOverrideItem(resp.Item);
-  const waitlist = removeUserCaseInsensitive(override.waitlist ?? [], swap.user);
+  const participantId = swap.participantId?.trim();
+  if (!participantId) return;
+  const waitlist = removeUserCaseInsensitive(override.waitlist ?? [], participantId);
   if (waitlist.length === (override.waitlist ?? []).length) return;
   await client.send(
     new UpdateItemCommand({
@@ -94,7 +96,12 @@ export async function reconcilePendingSwapsPastOriginCutoff(input: {
     }
 
     const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
-    const user_swapId = `${swap.user}#${swapId}`;
+    const participantId = swap.participantId?.trim();
+    if (!participantId) {
+      kept.push(swap);
+      continue;
+    }
+    const user_swapId = `${participantId}#${swapId}`;
     await client.send(
       new DeleteItemCommand({
         TableName: swapsTable,
@@ -107,7 +114,7 @@ export async function reconcilePendingSwapsPastOriginCutoff(input: {
         source: "swapCutoffReconcile",
         tenantId,
         swapId,
-        user: swap.user,
+        participantId: swap.participantId,
         fromCourseId: swap.fromCourseId,
         fromDate: swap.fromDate,
       }),

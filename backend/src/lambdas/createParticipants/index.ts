@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
+import { generateParticipantId } from "@yogaswap/shared";
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
@@ -46,15 +47,16 @@ function generateOneTimeToken(bytes = 32) {
 async function saveParticipantProfile(params: {
   tenantId: string;
   userId: string;
+  participantId?: string;
   email?: string;
   inviteSentAt?: string;
   cognitoUsername?: string;
   authUserId?: string;
   latestAuthTokenNonce?: string;
-}) {
+}): Promise<string> {
   if (!process.env.PARTICIPANTS_TABLE) {
     console.warn("PARTICIPANTS_TABLE environment variable not set, skipping participant profile write.");
-    return;
+    return params.participantId?.trim() || generateParticipantId();
   }
 
   let item: Record<string, AttributeValue> = {
@@ -86,6 +88,12 @@ async function saveParticipantProfile(params: {
     console.warn("Could not read existing participant profile, proceeding with upsert.", err);
   }
 
+  const participantIdValue =
+    params.participantId?.trim() ||
+    item.participantId?.S?.trim() ||
+    generateParticipantId();
+  item.participantId = { S: participantIdValue };
+
   if (params.email && params.email.trim()) {
     item.email = { S: params.email.trim() };
   }
@@ -108,6 +116,7 @@ async function saveParticipantProfile(params: {
       Item: item,
     }),
   );
+  return participantIdValue;
 }
 
 /** Cognito liefert den kanonischen Username + sub; beides kann von Dynamo (z. B. nach Altlasten) abweichen. */
@@ -203,6 +212,7 @@ export const handler = async (event: any) => {
   let cognitoUsername = nicknameRaw;
   let existingAuthUserId: string | undefined;
   let existingEmail: string | undefined;
+  let participantId = generateParticipantId();
   if (process.env.PARTICIPANTS_TABLE) {
     try {
       const existingExactLower = await dynamodb.send(
@@ -218,6 +228,7 @@ export const handler = async (event: any) => {
             authUserId?: { S?: string };
             cognitoUsername?: { S?: string };
             email?: { S?: string };
+            participantId?: { S?: string };
           }
         | undefined;
       if (lowerItem?.userId?.S) {
@@ -225,6 +236,7 @@ export const handler = async (event: any) => {
         cognitoUsername = lowerItem.cognitoUsername?.S || lowerItem.userId.S;
         existingAuthUserId = lowerItem.authUserId?.S;
         existingEmail = lowerItem.email?.S;
+        if (lowerItem.participantId?.S?.trim()) participantId = lowerItem.participantId.S.trim();
       } else {
         const queryResp = await dynamodb.send(
           new QueryCommand({
@@ -244,6 +256,7 @@ export const handler = async (event: any) => {
           cognitoUsername = matched.cognitoUsername?.S || matched.userId.S;
           existingAuthUserId = matched.authUserId?.S;
           existingEmail = matched.email?.S;
+          if (matched.participantId?.S?.trim()) participantId = matched.participantId.S.trim();
         }
       }
     } catch (lookupErr) {
@@ -297,6 +310,7 @@ export const handler = async (event: any) => {
             Item: {
               tenantId: { S: tenantId },
               userId: { S: canonicalUserId },
+              participantId: { S: participantId },
               role: { S: role },
             },
           }),
@@ -313,6 +327,7 @@ export const handler = async (event: any) => {
       await saveParticipantProfile({
         tenantId,
         userId: canonicalUserId,
+        participantId,
       });
 
       // If an already registered user is reactivated without passing email in request,
@@ -513,6 +528,7 @@ export const handler = async (event: any) => {
         Item: {
           tenantId: { S: tenantId },
           userId: { S: userId },
+          participantId: { S: participantId },
           role: { S: role }
         }
       }));
@@ -537,6 +553,7 @@ export const handler = async (event: any) => {
         await saveParticipantProfile({
           tenantId,
           userId,
+          participantId,
           email: emailNormalized,
           cognitoUsername: resolved.username,
         });
@@ -646,6 +663,7 @@ export const handler = async (event: any) => {
     await saveParticipantProfile({
       tenantId,
       userId,
+      participantId,
       email: emailNormalized,
       inviteSentAt,
       cognitoUsername,

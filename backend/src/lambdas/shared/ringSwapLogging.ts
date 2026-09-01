@@ -9,11 +9,11 @@ function courseLabel(courseId: number, date: string, courses: Course[]): string 
 }
 
 export function formatSwapLeg(swap: Swap, courses: Course[]): string {
-  return `${swap.user}: ${courseLabel(swap.fromCourseId, swap.fromDate, courses)} → ${courseLabel(swap.toCourseId, swap.toDate, courses)}`;
+  return `${swap.participantId}: ${courseLabel(swap.fromCourseId, swap.fromDate, courses)} → ${courseLabel(swap.toCourseId, swap.toDate, courses)}`;
 }
 
 export function formatCycleChain(cycle: RingCycle): string {
-  const users = cycle.edges.map((edge) => edge.swap.user);
+  const users = cycle.edges.map((edge) => edge.swap.participantId);
   if (users.length === 0) return "(leer)";
   return [...users, users[0]].join(" → ");
 }

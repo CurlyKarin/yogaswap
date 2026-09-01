@@ -26,7 +26,7 @@ const courses: Course[] = [
 ];
 
 const swap: Swap = {
-  user: "Alice",
+  participantId: "Alice",
   fromCourseId: 1,
   fromDate: "2099-06-01",
   toCourseId: 2,
@@ -49,7 +49,7 @@ describe("ringSwapLogging", () => {
         {
           from: "2:2099-06-02",
           to: "1:2099-06-01",
-          swap: { ...swap, user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" },
+          swap: { ...swap, participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" },
         },
       ],
     };
