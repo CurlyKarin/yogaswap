@@ -38,7 +38,8 @@ export type SwapStatus = "pending" | "active";
 export type Swap = {
   // Tenant-Kontext für den Swap
   tenantId?: string;
-  user: string;        // der Teilnehmer
+  /** Stabile Mitglieds-ID im Tenant (#317). Fehlt bei Altbestand bis Backfill. */
+  participantId?: string;
   /**
    * Legacy-Kurs-ID (numerisch): bleibt u. a. für lesbare Swap-Schlüssel und GSI-Range-Attribute
    * (`fromDate_fromCourseId_status`, `toDate_toCourseId_status`, `swapId`), nicht nur für UI.
@@ -96,10 +97,10 @@ export type Course = {
   includedDates?: string[];
   visibleDates?: string[];
   /**
-   * Aktueller Stamm-Cache (Nicknames). Parallel zu CourseEnrollments (#302);
-   * Occupancy pro Termin folgt später `stemOn(date)` aus Enrollments (#303).
+   * Aktueller Stamm-Cache (`participantId` pro Mitglied, #317).
+   * Parallel zu CourseEnrollments (#302); Occupancy pro Termin via `stemOn(date)` (#303).
    */
-  participants: string[]; // Nicknames
+  participants: string[];
   dates: string[]; // Liste der Termine
   // Optional zugeordnete Kursleiter (Nicknames oder User-IDs)
   instructors?: string[];
@@ -119,8 +120,8 @@ export type CourseEnrollment = {
   tenantId?: string;
   /** Legacy-Kurs-ID (numerisch), analog Course.id / Override.courseId. */
   courseId: number;
-  /** Dynamo SK-Teil und API: Nickname. */
-  userId: string;
+  /** Stabile Mitglieds-ID im Tenant (#317); Dynamo SK-Teil. */
+  participantId: string;
   /**
    * Erster gültiger Kurstermin (YYYY-MM-DD).
    * Migration ohne bekanntes Startdatum: `0001-01-01` (siehe `ENROLLMENT_OPEN_START`).
@@ -238,7 +239,9 @@ export interface TenantSettings {
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.
 export interface UserTenantMembership {
-  // Referenz auf User (aktuell der nickname; kann später auf eine separate userId wechseln)
+  /** Stabile Mitglieds-ID im Tenant (#317). Fehlt bei Altbestand bis Backfill. */
+  participantId?: string;
+  /** Anzeige-/Login-Spitzname (Dynamo SK in memberships-table, bis Auth-Migration #324). */
   userId: string;
   tenantId: string;
   role: UserTenantRole;
@@ -256,7 +259,9 @@ export interface UserTenantMembership {
  */
 export interface ParticipantProfile {
   tenantId: string;
-  /** Aktuell: Nickname. Kann später auf eine stabile ID migriert werden. */
+  /** Stabile Mitglieds-ID im Tenant (#317). Fehlt bei Altbestand bis Backfill. */
+  participantId?: string;
+  /** Anzeige-/Login-Spitzname im Studio (eindeutig pro Tenant, case-insensitive). */
   userId: string;
   /** Kanonische Lookup-ID für case-insensitive Suchen. */
   userIdNormalized?: string;

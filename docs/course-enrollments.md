@@ -1,32 +1,33 @@
-# CourseEnrollments (Issue #302 / #293)
+# CourseEnrollments (Issue #302 / #293, #317 `participantId`)
 
-Stamm-Mitgliedschaft als **Segmente mit Gültigkeit**, parallel zu `course.participants[]` (Cache, vorerst behalten).
+Stamm-Mitgliedschaft als **Segmente mit Gültigkeit**, parallel zu `course.participants[]` (Cache aus `participantId`-Werten, vorerst behalten).
 
 ## DynamoDB
 
 | Attribut | Typ | Schlüssel | Beschreibung |
 |----------|-----|-----------|--------------|
 | `tenantId` | S | PK | Tenant |
-| `courseId_userId_validFrom` | S | SK | z. B. `1#luna#2026-03-10` |
+| `courseId_userId_validFrom` | S | SK | z. B. `1#<participantId>#2026-03-10` (Attributname historisch; Wert enthält `participantId`, nicht Nickname) |
 | `courseId` | S | – | Kurs-ID (String, wie Overrides) |
 | `courseIdNumeric` | N | – | Numerische Kurs-ID |
-| `userId` | S | – | Nickname |
+| `participantId` | S | – | Stabile Mitglieds-ID pro Tenant (UUID, #317) |
+| `userId` | S | – | **Legacy** — Nickname; Reader-Fallback bis Backfill |
 | `validFrom` | S | – | Erster gültiger Termin (`YYYY-MM-DD`) |
 | `validUntil` | S | – | Optional, letzter gültiger Termin (inkl.) |
 | `actorUserId` / `createdAt` / `closedAt` / `source` | S | – | Optional Audit |
 
-**Zugriff:** `Query(tenantId, begins_with(SK, "{courseId}#"))`; Segmente einer Person: `begins_with(SK, "{courseId}#{userId}#")`.
+**Zugriff:** `Query(tenantId, begins_with(SK, "{courseId}#"))`; Segmente einer Person: `begins_with(SK, "{courseId}#{participantId}#")`.
 
 Terraform: `module.course_enrollments_table` → `{project}-courseEnrollments-table`.  
 Env: `COURSE_ENROLLMENTS_TABLE` (create/update/delete/get course Lambdas; Occupancy-Reads #303; Writes #304).
 
-API: `GET /course-enrollments` (optional `?courseId=`).
+API: `GET /course-enrollments` (optional `?courseId=`). Response-Felder: `participantId` (Legacy `userId` wird beim Lesen gemappt).
 
 ## Regeln
 
 `validUntil` ist **inklusiv**. Segmente derselben Person im selben Kurs dürfen sich **nicht überschneiden**. Benachbart (`bis 10.`, `ab 17.`) ist erlaubt.
 
-Eine Zeile ist identisch über den Sort Key `courseId#userId#validFrom`. **Ändern** = Put auf denselben Key. **Neu** = anderer `validFrom` → neue Zeile; die alte bleibt stehen.
+Eine Zeile ist identisch über den Sort Key `courseId#participantId#validFrom`. **Ändern** = Put auf denselben Key. **Neu** = anderer `validFrom` → neue Zeile; die alte bleibt stehen.
 
 | Aktion im Dialog | Wann | Schreibweise |
 |------------------|------|----------------|
@@ -45,7 +46,7 @@ Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehend
 1. **Kein Overlap** – `enrollmentRangesOverlap(a, b)` verhindert das Anlegen einer neuen Zeile, wenn sie eine bestehende Zeile derselben Person überlappt.
 2. **Clamp bei Korrektur** – `clampUntilToAvoidOverlap` begrenzt ein neues `validUntil` so, dass es nicht in eine spätere Zeile derselben Person hineinragt.
 3. **Wieder aufnehmen nur nach realem Austritt** – Der Dialog erlaubt „Wieder aufnehmen" nur für Personen in der **Ehemalig-Liste** (letztes `validUntil` liegt in der Vergangenheit). Geplante Pausen (Austritt in Zukunft + geplanter Wiedereintritt) sind ein separates Feature.
-4. **`validUntil` wird am selben Segment korrigiert** – `findLatestEnrollmentForUser` stellt sicher, dass die Korrektur immer die zuletzt angelegte Zeile trifft, egal ob offen oder schon geschlossen.
+4. **`validUntil` wird am selben Segment korrigiert** – `findLatestEnrollmentForParticipant` stellt sicher, dass die Korrektur immer die zuletzt angelegte Zeile trifft, egal ob offen oder schon geschlossen.
 5. **Historie bleibt erhalten** – Geschlossene Segmente werden nie gelöscht; `stemOn(T)` für vergangene Termine bleibt damit korrekt.
 6. **Austritt vor Kursstart** – Ein Segment, das noch nicht begonnen hat (`validUntil` würde vor `validFrom` liegen), wird **gelöscht**, nicht mit einem umgedrehten Intervall geschlossen.
 
@@ -79,7 +80,7 @@ Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas` für den **angezeigten** Termin,
 - Kommt zählen nicht in `n`
 - Kopfzeile z. B. `Teilnehmer 6/6 · 2 enden · 2 kommen neu dazu` (ohne Daten)
 - Obere Liste immer offen; untere Liste (nicht dabei / ehemals) eingeklappt
-- Speichern (nur Draft/Active) sendet `participants[]` (Dabei + Kommt) und `enrollmentChanges[]` (`add`/`remove` + `dateIso`). Inactive: kein Speichern; `updateCourse` lehnt Mitglieder-Patches ab.
+- Speichern (nur Draft/Active) sendet `participants[]` (Dabei + Kommt, Werte = `participantId`) und `enrollmentChanges[]` (`participantId`, `add`/`remove`, `dateIso`; Legacy `userId` wird vom Backend akzeptiert). Inactive: kein Speichern; `updateCourse` lehnt Mitglieder-Patches ab.
 - Remove mit letztem Termin (`validUntil < R`) nimmt die Person aus dem nächsten Termin (Ehemalige)
 - „endet“ = noch Stamm an R, aber `validUntil` gesetzt (letzter Termin = R oder später)
 - **Vergangenes Ende** (`validUntil < R`) ist in der unteren Liste nur Anzeige, nicht editierbar. Wiederaufnahme: neues **ab** nach dem letzten `validUntil` (neues Segment).
@@ -88,11 +89,23 @@ Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas` für den **angezeigten** Termin,
 
 `migrateParticipantsToEnrollments` in `shared/courseEnrollment.ts`:
 
-- Pro Eintrag in `participants[]` ein offenes Segment
+- Pro Eintrag in `participants[]` ein offenes Segment (`participantId` = Eintrag; vor Backfill oft noch Nickname)
 - `validFrom` = `seriesStartDate` bzw. `visibleFrom`, sonst Sentinel `ENROLLMENT_OPEN_START` (`0001-01-01` = „schon immer“)
 - `source`: `migration` | `seed` | …
 
 Seed schreibt Enrollments aus denselben Kursdaten mit.
+
+### Backfill `participantId` (#317)
+
+Neue Mitglieder erhalten beim Anlegen (`createParticipants`) eine UUID in `participants-table` (`participantId`, GSI `GSI_ParticipantId`).
+
+Bestehende Daten: `backend` → `npm run backfill:participant-ids` (zuerst `DRY_RUN=1`). Das Skript:
+
+1. vergibt fehlende `participantId` in Profil/Membership,
+2. ersetzt Nicknames in Enrollments, Swaps, Overrides und `course.participants[]` durch die jeweilige `participantId`,
+3. aktualisiert Sort Keys (`courseId_userId_validFrom`, `user_swapId`, GSI-Felder).
+
+Auth/Login bleibt beim Nickname (`userId` im JWT); Anzeige mappt `participantId` → Nickname über `getParticipants`.
 
 ## Occupancy (#303)
 
@@ -107,8 +120,8 @@ Ohne Segmente für den Kurs → Fallback `course.participants`.
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
 - `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy`
-- `migrateParticipantsToEnrollments` / `openEnrollmentUserIds`
-- `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForUser` / `enrollmentRangesOverlap`
+- `migrateParticipantsToEnrollments` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
+- `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForParticipant` / `enrollmentRangesOverlap`
 - `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`
 
 Backend: `courseEnrollmentDynamo.ts` (Put/Get/Query-Mapping).
