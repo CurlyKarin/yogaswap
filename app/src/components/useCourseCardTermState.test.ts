@@ -1,13 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import type { Course, CourseDateOverride, Swap, User } from "shared/types";
+import type { Course, CourseDateOverride, Swap } from "shared/types";
 import { useCourseCardTermState } from "./useCourseCardTermState";
-
-const baseUser: User = {
-  nickname: "alice",
-  email: "",
-  role: "participant",
-};
 
 const baseCourse: Course = {
   tenantId: "default-tenant",
@@ -37,7 +31,7 @@ function renderTermState(
     useCourseCardTermState({
       course: baseCourse,
       allCourses: [baseCourse],
-      currentUser: baseUser,
+      actor: { nickname: "alice" },
       dates: [futureDate],
       overrides: [baseOverride],
       swaps: [],

@@ -85,6 +85,8 @@ export default function CoursesShell({
     adjustGuestCount,
     canManageGuestSeats,
     earliestWeekAnchor,
+    actor,
+    participantNameByRef,
   } = useCoursesData({
     currentUser,
     tenant,
@@ -134,10 +136,10 @@ export default function CoursesShell({
     const currentWeek = startOfWeekMonday(new Date());
     if (weekAnchor.getTime() !== currentWeek.getTime()) return;
 
-    const target = pickTodayFocusTarget(weekCourseRows, currentUser.nickname, swaps);
+    const target = pickTodayFocusTarget(weekCourseRows, actor, swaps);
     setTodayFocusRequest(target ? { ...target, nonce: Date.now() } : null);
     setPendingTodayFocus(false);
-  }, [pendingTodayFocus, loading, weekAnchor, weekCourseRows, currentUser.nickname, swaps]);
+  }, [pendingTodayFocus, loading, weekAnchor, weekCourseRows, actor, swaps]);
 
   const jumpToToday = useCallback(() => {
     setWeekAnchor(startOfWeekMonday(new Date()));
@@ -319,6 +321,8 @@ export default function CoursesShell({
             enrollments={enrollments}
             swaps={swaps}
             currentUser={currentUser}
+            actor={actor}
+            participantNameByRef={participantNameByRef}
             canSeeCourseManagement={canSeeCourseManagement}
             tenantSettings={tenant?.settings}
             todayFocusRequest={todayFocusRequest}

@@ -108,6 +108,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -151,6 +152,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -188,6 +190,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -235,6 +238,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
         { cancellationSwapCutoffMinutesBeforeStart: 60 },
       ),
@@ -284,6 +288,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -329,6 +334,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -370,6 +376,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -455,6 +462,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -520,6 +528,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -582,6 +591,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -630,6 +640,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -715,6 +726,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -786,6 +798,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -828,6 +841,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -872,6 +886,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -903,6 +918,7 @@ describe("useCourseSwaps", () => {
         [],
         vi.fn(),
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -932,6 +948,7 @@ describe("useCourseSwaps", () => {
         [],
         vi.fn(),
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -968,6 +985,7 @@ describe("useCourseSwaps", () => {
         [],
         vi.fn(),
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );

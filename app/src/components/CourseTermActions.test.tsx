@@ -42,7 +42,7 @@ function renderCourseTermActions(
     useCourseCardTermState({
       course: baseCourse,
       allCourses: [baseCourse],
-      currentUser: baseUser,
+      actor: { nickname: baseUser.nickname },
       dates: [futureDate],
       overrides: [baseOverride],
       swaps: [],

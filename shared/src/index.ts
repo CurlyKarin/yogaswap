@@ -10,5 +10,6 @@ export * from './courseCapacity';
 export * from './overrideOccupancy';
 export * from './courseEnrollment';
 export * from './participantId';
+export * from './participantActor';
 export * from './lib/storage';
 export * from './data/mockUsers';

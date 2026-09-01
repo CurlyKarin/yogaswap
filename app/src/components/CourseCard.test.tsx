@@ -60,6 +60,7 @@ function renderCourseCard(
     course: baseCourse,
     allCourses: [baseCourse],
     currentUser: baseUser,
+    actor: { nickname: baseUser.nickname },
     dates,
     overrides: [baseOverride],
     swaps: [],

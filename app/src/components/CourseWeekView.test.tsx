@@ -45,6 +45,7 @@ const baseProps = {
   overrides: [],
   swaps: [],
   currentUser: baseUser,
+  actor: { nickname: baseUser.nickname },
   canSeeCourseManagement: false,
   onToggleAbsence: noopToggleAbsence,
   confirmSwap: noop,

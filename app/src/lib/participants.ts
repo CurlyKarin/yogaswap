@@ -1,5 +1,6 @@
-import { Course, CourseDateOverride, CourseEnrollment } from "shared/types";
+import { Course, CourseDateOverride, CourseEnrollment, UserTenantMembership } from "shared/types";
 import { resolveEffectiveTermOccupancy } from "shared/courseEnrollment";
+import type { ParticipantActor } from "shared/participantActor";
 import type { ParticipantWithStatus } from "../api/participants";
 
 export const getEffectiveParticipants = (
@@ -27,6 +28,44 @@ export function participantDisplayName(
   profile: Pick<ParticipantWithStatus, "userId">,
 ): string {
   return profile.userId;
+}
+
+export function resolveActorFromMembership(
+  nickname: string,
+  membership?: UserTenantMembership | null,
+  roster?: Array<Pick<ParticipantWithStatus, "userId" | "participantId">>,
+): ParticipantActor {
+  const normalizedNickname = nickname.trim();
+  let participantId =
+    membership?.userId?.toLowerCase() === normalizedNickname.toLowerCase()
+      ? membership.participantId
+      : undefined;
+  if (!participantId?.trim() && roster) {
+    participantId = roster.find(
+      (entry) => entry.userId.toLowerCase() === normalizedNickname.toLowerCase(),
+    )?.participantId;
+  }
+  return { nickname: normalizedNickname, participantId: participantId?.trim() || undefined };
+}
+
+export function buildParticipantNameByRefMap(
+  roster: Array<Pick<ParticipantWithStatus, "userId" | "participantId">>,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const entry of roster) {
+    const name = entry.userId;
+    map.set(name.toLowerCase(), name);
+    const participantId = entry.participantId?.trim();
+    if (participantId) map.set(participantId.toLowerCase(), name);
+  }
+  return map;
+}
+
+export function displayNameForParticipantRef(
+  ref: string,
+  nameByRef?: Map<string, string>,
+): string {
+  return nameByRef?.get(ref.toLowerCase()) ?? ref;
 }
 
 export function getStatusPresentation(

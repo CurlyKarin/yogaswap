@@ -26,7 +26,7 @@ describe("pickTodayFocusTarget", () => {
       row(course({ id: 2, time: "10:00" }), "2099-06-16"),
       row(course({ id: 3, time: "18:00", participants: ["maya"] }), "2099-06-16"),
     ];
-    expect(pickTodayFocusTarget(rows, "maya", [], mondayMorning)).toEqual({
+    expect(pickTodayFocusTarget(rows, { nickname: "maya" }, [], mondayMorning)).toEqual({
       courseId: 2,
       dateIso: "2099-06-16",
     });
@@ -37,7 +37,7 @@ describe("pickTodayFocusTarget", () => {
       row(course({ id: 1, time: "10:00" }), "2099-06-16"),
       row(course({ id: 2, time: "10:00", instructors: ["maya"] }), "2099-06-16"),
     ];
-    expect(pickTodayFocusTarget(rows, "maya", [], mondayMorning)).toEqual({
+    expect(pickTodayFocusTarget(rows, { nickname: "maya" }, [], mondayMorning)).toEqual({
       courseId: 2,
       dateIso: "2099-06-16",
     });
@@ -50,7 +50,7 @@ describe("pickTodayFocusTarget", () => {
       row(course({ id: 2, time: "18:00", participants: ["maya"] }), "2099-06-16"),
     ];
     // Overview: earliest studio class wins over personal involvement later today
-    expect(pickTodayFocusTarget(rows, "maya", [], beforeAll)).toEqual({
+    expect(pickTodayFocusTarget(rows, { nickname: "maya" }, [], beforeAll)).toEqual({
       courseId: 1,
       dateIso: "2099-06-16",
     });
@@ -62,7 +62,7 @@ describe("pickTodayFocusTarget", () => {
       row(course({ id: 2, time: "18:00" }), "2099-06-16"),
       row(course({ id: 1, time: "10:00" }), "2099-06-16"),
     ];
-    expect(pickTodayFocusTarget(rows, "maya", [], beforeAll)).toEqual({
+    expect(pickTodayFocusTarget(rows, { nickname: "maya" }, [], beforeAll)).toEqual({
       courseId: 1,
       dateIso: "2099-06-16",
     });
@@ -73,7 +73,7 @@ describe("pickTodayFocusTarget", () => {
       row(course({ id: 1, time: "10:00" }), "2099-06-16", "excluded"),
       row(course({ id: 2, time: "18:00" }), "2099-06-16"),
     ];
-    expect(pickTodayFocusTarget(rows, "maya", [], mondayMorning)).toEqual({
+    expect(pickTodayFocusTarget(rows, { nickname: "maya" }, [], mondayMorning)).toEqual({
       courseId: 2,
       dateIso: "2099-06-16",
     });
@@ -82,13 +82,13 @@ describe("pickTodayFocusTarget", () => {
   it("returns null when nothing is running or upcoming", () => {
     const evening = new Date(2099, 5, 16, 20, 0, 0);
     const rows = [row(course({ id: 1, time: "10:00" }), "2099-06-16")];
-    expect(pickTodayFocusTarget(rows, "maya", [], evening)).toBeNull();
+    expect(pickTodayFocusTarget(rows, { nickname: "maya" }, [], evening)).toBeNull();
   });
 
   it("with only involved rows visible, picks next personal upcoming", () => {
     const beforeAll = new Date(2099, 5, 16, 8, 0, 0);
     const rows = [row(course({ id: 2, time: "18:00", participants: ["maya"] }), "2099-06-16")];
-    expect(pickTodayFocusTarget(rows, "maya", [], beforeAll)).toEqual({
+    expect(pickTodayFocusTarget(rows, { nickname: "maya" }, [], beforeAll)).toEqual({
       courseId: 2,
       dateIso: "2099-06-16",
     });
@@ -109,7 +109,7 @@ describe("pickTodayFocusTarget", () => {
       row(course({ id: 1, time: "10:00" }), "2099-06-16"),
       row(course({ id: 2, time: "10:00" }), "2099-06-16"),
     ];
-    expect(pickTodayFocusTarget(rows, "maya", swaps, mondayMorning)).toEqual({
+    expect(pickTodayFocusTarget(rows, { nickname: "maya" }, swaps, mondayMorning)).toEqual({
       courseId: 2,
       dateIso: "2099-06-16",
     });

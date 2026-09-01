@@ -65,15 +65,17 @@ describe("hasInstructorAssignment", () => {
 });
 
 describe("isPersonallyInvolvedInCourse", () => {
+  const maya = { nickname: "maya" };
+
   it("matches instructor assignment", () => {
     expect(
-      isPersonallyInvolvedInCourse(course({ id: 1, instructors: ["maya"] }), "maya", []),
+      isPersonallyInvolvedInCourse(course({ id: 1, instructors: ["maya"] }), maya, []),
     ).toBe(true);
   });
 
   it("matches stem participation", () => {
     expect(
-      isPersonallyInvolvedInCourse(course({ id: 1, participants: ["maya"] }), "maya", []),
+      isPersonallyInvolvedInCourse(course({ id: 1, participants: ["maya"] }), maya, []),
     ).toBe(true);
   });
 
@@ -81,13 +83,13 @@ describe("isPersonallyInvolvedInCourse", () => {
     const origin = course({ id: 1 });
     const target = course({ id: 2 });
     const swaps = [swap({ participantId: "maya", fromCourseId: 1, toCourseId: 2 })];
-    expect(isPersonallyInvolvedInCourse(origin, "maya", swaps)).toBe(true);
-    expect(isPersonallyInvolvedInCourse(target, "maya", swaps)).toBe(true);
-    expect(isPersonallyInvolvedInCourse(course({ id: 3 }), "maya", swaps)).toBe(false);
+    expect(isPersonallyInvolvedInCourse(origin, maya, swaps)).toBe(true);
+    expect(isPersonallyInvolvedInCourse(target, maya, swaps)).toBe(true);
+    expect(isPersonallyInvolvedInCourse(course({ id: 3 }), maya, swaps)).toBe(false);
   });
 
   it("ignores other users' swaps", () => {
     const swaps = [swap({ participantId: "other", fromCourseId: 1, toCourseId: 2 })];
-    expect(isPersonallyInvolvedInCourse(course({ id: 1 }), "maya", swaps)).toBe(false);
+    expect(isPersonallyInvolvedInCourse(course({ id: 1 }), maya, swaps)).toBe(false);
   });
 });

@@ -5,6 +5,10 @@ import { findOverrideForCourseDate, sameInstant } from "../lib/dates";
 import { overrideCourseUidFields, swapCourseUidFields } from "../lib/courseUid";
 import { Swap, CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import {
+  resolveActorParticipantRef,
+  type ParticipantActor,
+} from "shared/participantActor";
+import {
   addUserUniqueCaseInsensitive,
   canCancelSwap,
   canCreateSwapFromOrigin,
@@ -170,11 +174,11 @@ function equalsIgnoreCase(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
 
-function matchesParticipant(participantId: string | undefined, name: string): boolean {
-  return participantId != null && equalsIgnoreCase(participantId, name);
+function matchesNamedParticipant(participantId: string | undefined, ref: string): boolean {
+  return participantId != null && equalsIgnoreCase(participantId, ref);
 }
 
-function sameParticipant(left: string | undefined, right: string | undefined): boolean {
+function sameParticipantRef(left: string | undefined, right: string | undefined): boolean {
   return left != null && right != null && equalsIgnoreCase(left, right);
 }
 
@@ -185,10 +189,12 @@ export function useCourseSwaps(
   swaps: Swap[], 
   setSwaps: React.Dispatch<React.SetStateAction<Swap[]>>, 
   currentUser: User,
+  actor: ParticipantActor,
   fetchData: () => Promise<void>,
   tenantSettings?: TenantSettings,
   enrollments: CourseEnrollment[] = [],
 ) {
+  const actorRef = resolveActorParticipantRef(actor);
   const requestSwapRef = useRef<(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => Promise<void>>(null!);
   // Filtere Overrides für aktuelle und zukünftige Termine
   // Fallback auf leeres Array, wenn overrides undefined oder kein Array ist
@@ -213,7 +219,7 @@ export function useCourseSwaps(
       const pendingFromOrigin = swaps.filter(
         (s) =>
           s.status === "pending" &&
-          matchesParticipant(s.participantId, userName) &&
+          matchesNamedParticipant(s.participantId, userName) &&
           s.fromCourseId === fromCourseId &&
           s.fromDate === fromDateIso,
       );
@@ -229,7 +235,7 @@ export function useCourseSwaps(
                 p.fromDate === s.fromDate &&
                 p.toCourseId === s.toCourseId &&
                 p.toDate === s.toDate &&
-                sameParticipant(p.participantId, s.participantId),
+                sameParticipantRef(p.participantId, s.participantId),
             ),
         ),
       );
@@ -256,7 +262,7 @@ export function useCourseSwaps(
     async (fromCourseId: number, fromDateIso: string, userName: string) => {
       const originSwaps = swaps.filter(
         (s) =>
-          matchesParticipant(s.participantId, userName) &&
+          matchesNamedParticipant(s.participantId, userName) &&
           s.fromCourseId === fromCourseId &&
           s.fromDate === fromDateIso,
       );
@@ -268,7 +274,7 @@ export function useCourseSwaps(
           (s) =>
             !originSwaps.some(
               (o) =>
-                sameParticipant(o.participantId, s.participantId) &&
+                sameParticipantRef(o.participantId, s.participantId) &&
                 o.fromCourseId === s.fromCourseId &&
                 o.fromDate === s.fromDate &&
                 o.toCourseId === s.toCourseId &&
@@ -284,18 +290,18 @@ export function useCourseSwaps(
           for (const swap of originSwaps) {
             if (o.courseId === swap.fromCourseId && o.date === swap.fromDate) {
               if (swap.status === "active") {
-                next.swapped = (next.swapped ?? []).filter((u) => !matchesParticipant(swap.participantId, u));
-                next.participants = next.participants.filter((p) => !matchesParticipant(swap.participantId, p));
+                next.swapped = (next.swapped ?? []).filter((u) => !matchesNamedParticipant(swap.participantId, u));
+                next.participants = next.participants.filter((p) => !matchesNamedParticipant(swap.participantId, p));
               } else {
-                next.waitlist = (next.waitlist ?? []).filter((u) => !matchesParticipant(swap.participantId, u));
+                next.waitlist = (next.waitlist ?? []).filter((u) => !matchesNamedParticipant(swap.participantId, u));
               }
             }
             if (o.courseId === swap.toCourseId && o.date === swap.toDate) {
               if (swap.status === "active") {
-                next.participants = next.participants.filter((p) => !matchesParticipant(swap.participantId, p));
-                next.swapped = (next.swapped ?? []).filter((u) => !matchesParticipant(swap.participantId, u));
+                next.participants = next.participants.filter((p) => !matchesNamedParticipant(swap.participantId, p));
+                next.swapped = (next.swapped ?? []).filter((u) => !matchesNamedParticipant(swap.participantId, u));
               } else {
-                next.waitlist = (next.waitlist ?? []).filter((u) => !matchesParticipant(swap.participantId, u));
+                next.waitlist = (next.waitlist ?? []).filter((u) => !matchesNamedParticipant(swap.participantId, u));
               }
             }
           }
@@ -322,7 +328,7 @@ export function useCourseSwaps(
       try {
       const hasActiveSwapFromOrigin = swaps.some(
         (s: Swap) =>
-          matchesParticipant(s.participantId, userName) &&
+          matchesNamedParticipant(s.participantId, userName) &&
           s.fromCourseId === course.id &&
           s.fromDate === dateIso &&
           s.status === "active",
@@ -361,7 +367,7 @@ export function useCourseSwaps(
 
       const originSwaps = swaps.filter(
         (s) =>
-          matchesParticipant(s.participantId, userName) &&
+          matchesNamedParticipant(s.participantId, userName) &&
           s.fromCourseId === course.id &&
           s.fromDate === dateIso,
       );
@@ -480,7 +486,7 @@ export function useCourseSwaps(
     },
     // courses, currentUser.nickname kept so callback updates when they change
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setOverrides/setSwaps stable; courses/nickname intentional
-    [courses, filteredOverrides, enrollments, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings, cleanupPendingSwapsFromOrigin, cleanupAllSwapsFromOrigin]
+    [courses, filteredOverrides, enrollments, swaps, actorRef, fetchData, setOverrides, setSwaps, tenantSettings, cleanupPendingSwapsFromOrigin, cleanupAllSwapsFromOrigin]
   );
 
   /**
@@ -541,7 +547,7 @@ export function useCourseSwaps(
         // TODO: nur zur Sicherheit hier drin, Prüfen!!!
         const existing = swaps.find(
           (s) =>
-            matchesParticipant(s.participantId, userName) &&
+            matchesNamedParticipant(s.participantId, userName) &&
             s.fromCourseId === fromCourse.id &&
             s.fromDate === fromDateIso &&
             s.status === "active"
@@ -675,7 +681,7 @@ export function useCourseSwaps(
         const pendingFromSameOrigin = swaps.filter(
           (s) =>
             s.status === "pending" &&
-            matchesParticipant(s.participantId, userName) &&
+            matchesNamedParticipant(s.participantId, userName) &&
             s.fromCourseId === fromCourse.id &&
             s.fromDate === fromDateIso &&
             !(s.toCourseId === toCourseId && s.toDate === toDateIso)
@@ -727,7 +733,7 @@ export function useCourseSwaps(
     },
     // requestSwap via ref to avoid circular dependency (confirmSwap -> requestSwap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [courses, filteredOverrides, enrollments, swaps, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
+    [courses, filteredOverrides, enrollments, swaps, actorRef, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   /**
@@ -920,8 +926,8 @@ export function useCourseSwaps(
         await fetchData();
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentUser.nickname intentional for refresh
-    [swaps, courses, filteredOverrides, enrollments, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- actorRef intentional for refresh
+    [swaps, courses, filteredOverrides, enrollments, actorRef, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   /**
@@ -941,7 +947,7 @@ export function useCourseSwaps(
         // 1) prüfen, ob schon ein Swap existiert
         const existing = swaps.find(
           (s) =>
-            matchesParticipant(s.participantId, userName) &&
+            matchesNamedParticipant(s.participantId, userName) &&
             s.fromCourseId === fromCourse.id &&
             s.fromDate === fromDateIso &&
             s.toCourseId === toCourseId &&
@@ -970,7 +976,7 @@ export function useCourseSwaps(
         const hasPendingSwapToTarget = swaps.some(
           (s) =>
             s.status === "pending" &&
-            matchesParticipant(s.participantId, userName) &&
+            matchesNamedParticipant(s.participantId, userName) &&
             s.fromCourseId === fromCourse.id &&
             s.fromDate === fromDateIso &&
             s.toCourseId === toCourseId &&
@@ -1080,8 +1086,8 @@ export function useCourseSwaps(
         await fetchData();
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentUser.nickname intentional for refresh
-    [courses, swaps, filteredOverrides, enrollments, currentUser.nickname, fetchData, setOverrides, setSwaps, tenantSettings]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- actorRef intentional for refresh
+    [courses, swaps, filteredOverrides, enrollments, actorRef, fetchData, setOverrides, setSwaps, tenantSettings]
   );
 
   requestSwapRef.current = requestSwap;

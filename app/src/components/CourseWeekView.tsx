@@ -10,6 +10,7 @@ import {
 } from "../lib/courseWeekOccurrences";
 import { isTouchCoarseViewport, scrollIntoViewWithStickyChrome } from "../lib/scrollWithStickyChrome";
 import type { TodayFocusTarget } from "../lib/weekTodayFocus";
+import type { ParticipantActor } from "shared/participantActor";
 import CourseCard from "./CourseCard";
 
 export type TodayFocusRequest = TodayFocusTarget & { nonce: number };
@@ -26,6 +27,8 @@ type Props = {
   enrollments?: CourseEnrollment[];
   swaps: Swap[];
   currentUser: User;
+  actor: ParticipantActor;
+  participantNameByRef?: Map<string, string>;
   canSeeCourseManagement: boolean;
   tenantSettings?: TenantSettings;
   /** One-shot focus from „Heute“ (scroll + highlight + select occurrence). */
@@ -62,6 +65,8 @@ export default function CourseWeekView({
   enrollments = [],
   swaps,
   currentUser,
+  actor,
+  participantNameByRef,
   canSeeCourseManagement,
   tenantSettings,
   todayFocusRequest = null,
@@ -160,6 +165,8 @@ export default function CourseWeekView({
                 course={course}
                 allCourses={courses}
                 currentUser={currentUser}
+                actor={actor}
+                participantNameByRef={participantNameByRef}
                 showOverbookingDetails={canSeeCourseManagement}
                 canManageGuestSeats={canManageGuestSeats}
                 onAdjustGuestCount={onAdjustGuestCount}
