@@ -21,6 +21,7 @@ import { loadTenantSettings } from '../shared/tenantSettingsLoader';
 import { mapOverrideItem, mapStringList } from '../shared/overrideDynamo';
 import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
 import { notifySwapSuccess } from '../shared/notifications/swapSuccessNotification';
+import { resolveOperationalNickname } from '../shared/participantResolver';
 
 const client = dynamoClient;
 
@@ -83,6 +84,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const swap = event.body ? JSON.parse(event.body) : {};
     if (!swap.participantId || !swap.fromCourseId || !swap.fromDate || !swap.toCourseId || !swap.toDate || !swap.status) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
+    }
+
+    const participantsTable = process.env.PARTICIPANTS_TABLE;
+    if (participantsTable) {
+      swap.participantId = await resolveOperationalNickname(
+        client,
+        participantsTable,
+        tenantId,
+        swap.participantId,
+      );
     }
 
     const fromLegacyId = swap.fromCourseId.toString();
@@ -259,6 +270,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       tenantId: { S: tenantId },
       user_swapId: { S: user_swapId },
       user: { S: swap.participantId },
+      participantId: { S: swap.participantId },
       swapId: { S: swapId },
       fromCourseId: { S: fromLegacyId },
       fromDate: { S: swap.fromDate },

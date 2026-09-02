@@ -6,6 +6,7 @@ import { overrideCourseUidFields, swapCourseUidFields } from "../lib/courseUid";
 import { Swap, CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import {
   resolveActorParticipantRef,
+  includesParticipantRef,
   type ParticipantActor,
 } from "shared/participantActor";
 import {
@@ -180,6 +181,17 @@ function matchesNamedParticipant(participantId: string | undefined, ref: string)
 
 function sameParticipantRef(left: string | undefined, right: string | undefined): boolean {
   return left != null && right != null && equalsIgnoreCase(left, right);
+}
+
+function isOnStemForDate(
+  course: Course,
+  enrollments: CourseEnrollment[],
+  dateIso: string,
+  actor: ParticipantActor,
+): boolean {
+  const stem = resolveStemForDate(course, enrollments, dateIso);
+  const list = stem.length > 0 ? stem : course.participants;
+  return includesParticipantRef(list, actor);
 }
 
 export function useCourseSwaps(
@@ -413,10 +425,7 @@ export function useCourseSwaps(
       let nextCancelled = [...(baseOverride.cancelledParticipants ?? [])];
       let nextSwapped = [...(baseOverride.swapped ?? [])];
       let nextShortNotice = [...(baseOverride.shortNoticeCancellations ?? [])];
-      const onStem = includesUserCaseInsensitive(
-        resolveStemForDate(course, enrollments, dateIso),
-        userName,
-      );
+      const onStem = isOnStemForDate(course, enrollments, dateIso, actor);
 
       if (isSn) {
         nextShortNotice = removeUserCaseInsensitive(nextShortNotice, userName);
@@ -630,7 +639,7 @@ export function useCourseSwaps(
             fromDateIso,
             originIdx >= 0 ? updated[originIdx] : null,
           );
-          const onOriginStem = includesUserCaseInsensitive(fromCourse.participants, userName);
+          const onOriginStem = isOnStemForDate(fromCourse, enrollments, fromDateIso, actor);
           const originNextOverride: CourseDateOverride = {
             ...originOverride,
             participants: [],

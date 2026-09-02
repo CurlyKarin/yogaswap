@@ -4,6 +4,7 @@ import { canCancelSwap } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getDelegationErrorResponse } from "../shared/delegation";
+import { findSwapByUserRef } from "../shared/swapQueryHelpers";
 
 const client = dynamoClient;
 
@@ -53,7 +54,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 
-  const user_swapId = `${user}#${swapId}`;
   console.log("deleteSwap audit", {
     tenantId,
     actorUserId: userId ?? null,
@@ -63,28 +63,26 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   });
 
   try {
-    const swapItem = await client.send(
-      new GetItemCommand({
-        TableName: swapsTable,
-        Key: {
-          tenantId: { S: tenantId },
-          user_swapId: { S: user_swapId },
-        },
-        ConsistentRead: true,
-      }),
-    );
-
-    if (!swapItem.Item) {
+    const found = await findSwapByUserRef({
+      client,
+      swapsTable,
+      tenantId,
+      swapId,
+      userRef: user,
+      participantsTable: process.env.PARTICIPANTS_TABLE,
+    });
+    if (!found) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: "Swap not found" }),
       };
     }
+    const { user_swapId, item: swapItem } = found;
 
-    const fromDate = swapItem.Item.fromDate?.S;
-    const toDate = swapItem.Item.toDate?.S;
-    const fromCourseId = swapItem.Item.fromCourseId?.S;
-    const toCourseId = swapItem.Item.toCourseId?.S;
+    const fromDate = swapItem.fromDate?.S;
+    const toDate = swapItem.toDate?.S;
+    const fromCourseId = swapItem.fromCourseId?.S;
+    const toCourseId = swapItem.toCourseId?.S;
 
     if (fromDate && toDate && fromCourseId && toCourseId && coursesTable) {
       const [fromTime, toTime] = await Promise.all([

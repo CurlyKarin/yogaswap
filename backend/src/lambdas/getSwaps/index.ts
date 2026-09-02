@@ -1,10 +1,9 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { QueryCommand } from "@aws-sdk/client-dynamodb";
-import { Swap } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { dynamoClient } from "../shared/dynamoClient";
 import { applySwapCutoffReconcileIfConfigured } from "../shared/applySwapCutoffReconcile";
-import { dynamoItemToSwap } from "../shared/swapDynamo";
+import { resolveParticipantQueryRefs } from "../shared/participantResolver";
+import { querySwapsForUserRefs } from "../shared/swapQueryHelpers";
 
 const client = dynamoClient;
 
@@ -37,53 +36,21 @@ export const handler = async (
   const fromCourseId = event.queryStringParameters?.fromCourseId;
   const toDate = event.queryStringParameters?.toDate;
   const toCourseId = event.queryStringParameters?.toCourseId;
-  //const status = event.queryStringParameters?.status; // Kein Default-Wert
 
-  const tenantId_user = `${tenantId}#${user}`;
-  let command: QueryCommand;
-  if (fromDate && fromCourseId) {
-    // GSI_From: :tu = tenantId#user (PK), :f = Präfix fromDate_fromCourseId
-    command = new QueryCommand({
-      TableName: tableName,
-      IndexName: "GSI_From",
-      KeyConditionExpression: "tenantId_user = :tu AND begins_with(fromDate_fromCourseId_status, :f)",
-      ExpressionAttributeValues: {
-        ":tu": { S: tenantId_user },
-        ":f": { S: `${fromDate}_${fromCourseId}` },
-      },
-      ConsistentRead: true,
-    });
-  } else if (toDate && toCourseId) {
-    // GSI_To: :tu = tenantId#user (PK), :t = Präfix toDate_toCourseId
-    command = new QueryCommand({
-      TableName: tableName,
-      IndexName: "GSI_To",
-      KeyConditionExpression: "tenantId_user = :tu AND begins_with(toDate_toCourseId_status, :t)",
-      ExpressionAttributeValues: {
-        ":tu": { S: tenantId_user },
-        ":t": { S: `${toDate}_${toCourseId}` },
-      },
-      ConsistentRead: true,
-    });
-  } else {
-    // Haupttabelle: :tid = tenantId (PK), :uprefix = user# für alle Swaps des Users
-    command = new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: "tenantId = :tid AND begins_with(user_swapId, :uprefix)",
-      ExpressionAttributeValues: {
-        ":tid": { S: tenantId },
-        ":uprefix": { S: `${user}#` },
-      },
-      ConsistentRead: true,
-    });
-  }
+  const participantsTable = process.env.PARTICIPANTS_TABLE;
 
   try {
-    console.log('QueryCommand:', command.input);
-    const data = await client.send(command);
-    const items: Swap[] = (data.Items || [])
-      .map((item) => dynamoItemToSwap(item))
-      .filter((swap): swap is Swap => swap != null);
+    const userRefs = await resolveParticipantQueryRefs(client, participantsTable, tenantId, user);
+    const items = await querySwapsForUserRefs({
+      client,
+      swapsTable: tableName,
+      tenantId,
+      userRefs,
+      fromDate,
+      fromCourseId,
+      toDate,
+      toCourseId,
+    });
     const reconciled = await applySwapCutoffReconcileIfConfigured({
       client,
       tenantId,

@@ -23,6 +23,8 @@ import {
   type RejectedRingLog,
 } from "../shared/ringSwapLogging";
 import { notifySwapSuccess } from "../shared/notifications/swapSuccessNotification";
+import { resolveParticipantRefAliases } from "../shared/participantResolver";
+import { queryCourseEnrollments } from "../shared/courseEnrollmentDynamo";
 import { dynamoItemToSwap } from "../shared/swapDynamo";
 
 const client = dynamoClient;
@@ -110,6 +112,33 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ? await loadTenantSettings(client, tenantsTable, tenantId)
       : undefined;
 
+    const participantsTable = process.env.PARTICIPANTS_TABLE;
+    const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+    const allEnrollments = enrollmentsTable
+      ? await queryCourseEnrollments({ client, tableName: enrollmentsTable, tenantId })
+      : [];
+    const participantRefAliases = new Map<string, string[]>();
+    if (participantsTable) {
+      const uniqueRefs = [
+        ...new Set(
+          pendingSwaps
+            .map((swap) => swap.participantId?.trim())
+            .filter((ref): ref is string => Boolean(ref)),
+        ),
+      ];
+      await Promise.all(
+        uniqueRefs.map(async (ref) => {
+          const aliases = await resolveParticipantRefAliases(
+            client,
+            participantsTable,
+            tenantId,
+            ref,
+          );
+          participantRefAliases.set(ref.toLowerCase(), aliases);
+        }),
+      );
+    }
+
     const graph = buildRingSwapGraph(pendingSwaps);
     const cycles = findRingCycles(graph);
     const selectedCycles = selectDisjointCycles(cycles);
@@ -119,6 +148,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       courses,
       overrides,
       pendingSwaps,
+      enrollments: allEnrollments,
+      participantRefAliases,
       tenantSettings,
     };
 

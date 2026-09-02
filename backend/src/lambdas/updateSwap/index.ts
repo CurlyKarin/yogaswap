@@ -5,6 +5,7 @@ import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getDelegationErrorResponse } from "../shared/delegation";
 import { notifySwapSuccess } from "../shared/notifications/swapSuccessNotification";
+import { resolveSwapUserKey } from "../shared/swapQueryHelpers";
 
 const client = dynamoClient;
 
@@ -61,7 +62,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
   const [fromDate, fromCourseId, toDate, toCourseId] = parts;
 
-  const user_swapId = `${user}#${swapId}`;
+  const user_swapId = await resolveSwapUserKey({
+    client,
+    swapsTable: process.env.SWAPS_TABLE!,
+    tenantId,
+    swapId,
+    userRef: user,
+    participantsTable: process.env.PARTICIPANTS_TABLE,
+  });
+  if (!user_swapId) {
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ error: "Swap not found" }),
+    };
+  }
+
   const command = new UpdateItemCommand({
     TableName: process.env.SWAPS_TABLE,
     Key: {

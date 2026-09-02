@@ -6,9 +6,9 @@ export type ParticipantActor = {
   participantId?: string;
 };
 
-/** Canonical ref for Dynamo keys, swaps, and course occupancy after backfill. */
+/** Operational ref for Dynamo keys, swaps, and course occupancy (#317 hybrid: nickname). */
 export function resolveActorParticipantRef(actor: ParticipantActor): string {
-  return actor.participantId?.trim() || actor.nickname.trim();
+  return actor.nickname.trim() || actor.participantId?.trim() || "";
 }
 
 /** Match a stored course/swap/override ref against nickname or participantId. */
@@ -23,6 +23,18 @@ export function matchesParticipantRef(storedRef: string, actor: ParticipantActor
 
 export function includesParticipantRef(refs: string[] | undefined, actor: ParticipantActor): boolean {
   return (refs ?? []).some((ref) => matchesParticipantRef(ref, actor));
+}
+
+/** Match any alias (nickname or participantId) against stored refs. */
+export function listIncludesAnyUserRef(
+  refs: string[] | undefined,
+  aliases: string[],
+): boolean {
+  const wanted = new Set(
+    aliases.map((alias) => alias.trim().toLowerCase()).filter(Boolean),
+  );
+  if (wanted.size === 0) return false;
+  return (refs ?? []).some((ref) => wanted.has(ref.trim().toLowerCase()));
 }
 
 export function sameParticipantRef(

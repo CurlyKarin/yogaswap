@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   includesParticipantRef,
+  listIncludesAnyUserRef,
   matchesParticipantRef,
   matchesSwapParticipant,
   resolveActorParticipantRef,
@@ -9,8 +10,8 @@ import {
 const actor = { nickname: "Max", participantId: "11111111-1111-4111-8111-111111111111" };
 
 describe("participantActor", () => {
-  it("prefers participantId as canonical ref", () => {
-    expect(resolveActorParticipantRef(actor)).toBe("11111111-1111-4111-8111-111111111111");
+  it("prefers nickname as operational ref", () => {
+    expect(resolveActorParticipantRef(actor)).toBe("Max");
   });
 
   it("matches nickname and participantId refs", () => {
@@ -28,5 +29,11 @@ describe("participantActor", () => {
     expect(matchesSwapParticipant({ participantId: actor.participantId }, actor)).toBe(true);
     expect(matchesSwapParticipant({ participantId: "Max" }, actor)).toBe(true);
     expect(matchesSwapParticipant({ participantId: "other" }, actor)).toBe(false);
+  });
+
+  it("matches stem lists by nickname or participantId alias", () => {
+    const stem = [actor.participantId!];
+    expect(listIncludesAnyUserRef(stem, ["Max", actor.participantId!])).toBe(true);
+    expect(listIncludesAnyUserRef(stem, ["other"])).toBe(false);
   });
 });

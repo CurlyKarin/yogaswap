@@ -5,8 +5,10 @@ import {
   CourseDateOverride,
   Course,
   canPromoteFromWaitlist,
+  listIncludesAnyUserRef,
   resolveCancellationSwapCutoffMinutes,
   resolveEffectiveTermOccupancy,
+  resolveStemForDate,
   withRegularCancellation,
 } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
@@ -16,6 +18,7 @@ import { queryCourseEnrollments } from "../shared/courseEnrollmentDynamo";
 import { mapOverrideItem } from "../shared/overrideDynamo";
 import { loadTenantSettings } from "../shared/tenantSettingsLoader";
 import { notifyWaitlistPromotion } from "../shared/notifications/waitlistPromotionNotification";
+import { resolveParticipantRefAliases } from "../shared/participantResolver";
 import { dynamoItemToSwap } from "../shared/swapDynamo";
 
 const client = dynamoClient;
@@ -331,6 +334,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         if (!correspondingSwap) continue;
 
         const promotedSwapUser = correspondingSwap.participantId!;
+        const participantsTable = process.env.PARTICIPANTS_TABLE;
+        const promotedAliases = participantsTable
+          ? await resolveParticipantRefAliases(
+              client,
+              participantsTable,
+              tenantId,
+              promotedSwapUser,
+            )
+          : [promotedSwapUser];
         changed = true;
         promotedSwaps.push(correspondingSwap);
 
@@ -394,9 +406,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 cancelledParticipants: originOverride.cancelledParticipants ?? [],
                 swapped: originOverride.swapped ?? [],
               };
+          const stemParticipants = originCourse
+            ? resolveStemForDate(originCourse, allEnrollments, correspondingSwap.fromDate)
+            : [];
           const onStem =
             !!originCourse &&
-            includesUserCaseInsensitive(originCourse.participants, promotedSwapUser);
+            (listIncludesAnyUserRef(stemParticipants, promotedAliases) ||
+              listIncludesAnyUserRef(originCourse.participants, promotedAliases));
           const newOriginCancelled = onStem
             ? withRegularCancellation(
                 Array.isArray(originOverride.cancelledParticipants)
@@ -429,7 +445,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           });
         } else if (
           originCourse &&
-          includesUserCaseInsensitive(originCourse.participants, promotedSwapUser)
+          (listIncludesAnyUserRef(
+            resolveStemForDate(originCourse, allEnrollments, correspondingSwap.fromDate),
+            promotedAliases,
+          ) ||
+            listIncludesAnyUserRef(originCourse.participants, promotedAliases))
         ) {
           const newOriginOverride: CourseDateOverride = {
             courseId: correspondingSwap.fromCourseId,

@@ -136,6 +136,80 @@ export function ensureParticipantId(profile?: Pick<ParticipantProfile, "particip
 }
 
 /**
+ * Nickname for operational Dynamo writes (#317 hybrid).
+ * Falls back to the raw ref when no profile exists (legacy nickname).
+ */
+export async function resolveOperationalNickname(
+  client: DynamoDBClient,
+  participantsTable: string,
+  tenantId: string,
+  nicknameOrId: string,
+): Promise<string> {
+  const raw = nicknameOrId.trim();
+  if (!raw) return raw;
+  const resolved = await resolveParticipantRef(client, participantsTable, tenantId, raw);
+  return resolved?.nickname ?? raw;
+}
+
+/**
+ * Refs to query for swaps/overrides during migration (nickname + UUID aliases).
+ */
+export async function resolveParticipantQueryRefs(
+  client: DynamoDBClient,
+  participantsTable: string | undefined,
+  tenantId: string,
+  nicknameOrId: string,
+): Promise<string[]> {
+  const trimmed = nicknameOrId.trim();
+  if (!trimmed) return [];
+  if (!participantsTable) return [trimmed];
+
+  const resolved = await resolveParticipantRef(client, participantsTable, tenantId, trimmed);
+  const refs: string[] = [];
+  if (resolved) {
+    refs.push(resolved.nickname);
+    if (resolved.participantId.toLowerCase() !== resolved.nickname.toLowerCase()) {
+      refs.push(resolved.participantId);
+    }
+  }
+  if (!refs.some((entry) => entry.toLowerCase() === trimmed.toLowerCase())) {
+    refs.push(trimmed);
+  }
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const entry of refs) {
+    const key = entry.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(entry);
+  }
+  return unique;
+}
+
+/**
+ * Map nickname or participantId refs to operational nicknames for storage.
+ */
+export async function resolveOperationalNicknameList(
+  client: DynamoDBClient,
+  participantsTable: string,
+  tenantId: string,
+  refs: string[],
+): Promise<string[]> {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const ref of refs) {
+    const trimmed = ref.trim();
+    if (!trimmed) continue;
+    const nickname = await resolveOperationalNickname(client, participantsTable, tenantId, trimmed);
+    const key = normalizeParticipantRef(nickname);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(nickname);
+  }
+  return out;
+}
+
+/**
  * Map a list of nickname or participantId refs to participantIds.
  * Unknown refs are passed through unchanged (legacy data during migration).
  */
@@ -156,6 +230,28 @@ export async function resolveParticipantIdList(
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(id);
+  }
+  return out;
+}
+
+/** Nickname + participantId aliases for dual-read stem/override matching. */
+export async function resolveParticipantRefAliases(
+  client: DynamoDBClient,
+  participantsTable: string,
+  tenantId: string,
+  nicknameOrId: string,
+): Promise<string[]> {
+  const trimmed = nicknameOrId.trim();
+  if (!trimmed) return [];
+  const resolved = await resolveParticipantRef(client, participantsTable, tenantId, trimmed);
+  const aliases = resolved ? [resolved.nickname, resolved.participantId] : [trimmed];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const alias of aliases) {
+    const key = alias.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(alias.trim());
   }
   return out;
 }

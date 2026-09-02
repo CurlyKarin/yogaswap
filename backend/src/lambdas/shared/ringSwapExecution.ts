@@ -1,12 +1,14 @@
-import type { Course, CourseDateOverride, Swap, TenantSettings } from "@yogaswap/shared";
+import type { Course, CourseDateOverride, CourseEnrollment, Swap, TenantSettings } from "@yogaswap/shared";
 import {
   addUserUniqueCaseInsensitive,
   canCreateSwapFromOrigin,
   includesUserCaseInsensitive,
   isSwapTargetInCutoffWindow,
+  listIncludesAnyUserRef,
   removeUserCaseInsensitive,
   resolveEffectiveTermParticipants,
   resolveGuestCount,
+  resolveStemForDate,
   validateTermOccupancy,
   withRegularCancellation,
 } from "@yogaswap/shared";
@@ -16,6 +18,9 @@ export type RingExecutionContext = {
   courses: Course[];
   overrides: CourseDateOverride[];
   pendingSwaps: Swap[];
+  enrollments?: CourseEnrollment[];
+  /** normalized userRef → [nickname, participantId, …] */
+  participantRefAliases?: Map<string, string[]>;
   tenantSettings?: TenantSettings;
   now?: Date;
 };
@@ -111,6 +116,22 @@ function resolveOverrideState(
   };
 }
 
+function aliasesFor(ctx: RingExecutionContext, userRef: string): string[] {
+  const fromMap = ctx.participantRefAliases?.get(normalized(userRef));
+  return fromMap?.length ? fromMap : [userRef.trim()];
+}
+
+function isOriginallyOnStem(
+  course: Course,
+  enrollments: CourseEnrollment[] | undefined,
+  dateIso: string,
+  aliases: string[],
+): boolean {
+  const stem = enrollments ? resolveStemForDate(course, enrollments, dateIso) : [];
+  const list = stem.length > 0 ? stem : course.participants;
+  return listIncludesAnyUserRef(list, aliases);
+}
+
 function applyEdgeToState(
   state: Map<string, CourseDateOverride>,
   swap: Swap,
@@ -118,6 +139,7 @@ function applyEdgeToState(
   overrides: CourseDateOverride[],
   tenantSettings: TenantSettings | undefined,
   now: Date,
+  ctx: RingExecutionContext,
 ): RingCyclePlanResult | null {
   const participantId = swap.participantId?.trim();
   if (!participantId) {
@@ -146,8 +168,12 @@ function applyEdgeToState(
   const originOverride = state.get(originKey)!;
   const targetOverride = state.get(targetKey)!;
   const originEffective = resolveEffectiveTermParticipants(originCourse, originOverride);
-  const originallyParticipant = originCourse.participants.some(
-    (p) => normalized(p) === normalized(participantId),
+  const aliases = aliasesFor(ctx, participantId);
+  const originallyParticipant = isOriginallyOnStem(
+    originCourse,
+    ctx.enrollments,
+    swap.fromDate,
+    aliases,
   );
 
   if (!includesUserCaseInsensitive(originEffective.participants, participantId)) {
@@ -227,6 +253,7 @@ export function planRingCycleExecution(
       ctx.overrides,
       ctx.tenantSettings,
       now,
+      ctx,
     );
     if (failure) return failure;
   }
@@ -329,11 +356,11 @@ export function planRingCycleExecution(
 }
 
 export function buildSwapDynamoKeys(swap: Swap): { swapId: string; user_swapId: string } {
-  const participantId = swap.participantId?.trim();
-  if (!participantId) {
+  const operationalRef = swap.participantId?.trim();
+  if (!operationalRef) {
     throw new Error("swap.participantId is required");
   }
   const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
-  const user_swapId = `${participantId}#${swapId}`;
+  const user_swapId = `${operationalRef}#${swapId}`;
   return { swapId, user_swapId };
 }

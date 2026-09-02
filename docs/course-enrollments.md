@@ -1,22 +1,24 @@
-# CourseEnrollments (Issue #302 / #293, #317 `participantId`)
+# CourseEnrollments (Issue #302 / #293, #317 hybrid)
 
-Stamm-Mitgliedschaft als **Segmente mit Gültigkeit**, parallel zu `course.participants[]` (Cache aus `participantId`-Werten, vorerst behalten).
+Stamm-Mitgliedschaft als **Segmente mit Gültigkeit**, parallel zu `course.participants[]` (Cache aus Nicknames, vorerst behalten).
 
 ## DynamoDB
 
 | Attribut | Typ | Schlüssel | Beschreibung |
 |----------|-----|-----------|--------------|
 | `tenantId` | S | PK | Tenant |
-| `courseId_userId_validFrom` | S | SK | z. B. `1#<participantId>#2026-03-10` (Attributname historisch; Wert enthält `participantId`, nicht Nickname) |
+| `courseId_userId_validFrom` | S | SK | z. B. `1#luna#2026-03-10` (Attributname historisch; Wert = Nickname) |
 | `courseId` | S | – | Kurs-ID (String, wie Overrides) |
 | `courseIdNumeric` | N | – | Numerische Kurs-ID |
-| `participantId` | S | – | Stabile Mitglieds-ID pro Tenant (UUID, #317) |
-| `userId` | S | – | **Legacy** — Nickname; Reader-Fallback bis Backfill |
+| `participantId` | S | – | **Operativ:** Nickname in Kurs-Referenzen; Feldname historisch (#317) |
+| `userId` | S | – | **Legacy** — Nickname; Reader-Fallback |
 | `validFrom` | S | – | Erster gültiger Termin (`YYYY-MM-DD`) |
 | `validUntil` | S | – | Optional, letzter gültiger Termin (inkl.) |
 | `actorUserId` / `createdAt` / `closedAt` / `source` | S | – | Optional Audit |
 
-**Zugriff:** `Query(tenantId, begins_with(SK, "{courseId}#"))`; Segmente einer Person: `begins_with(SK, "{courseId}#{participantId}#")`.
+**Zugriff:** `Query(tenantId, begins_with(SK, "{courseId}#"))`; Segmente einer Person: `begins_with(SK, "{courseId}#{nickname}#")`.
+
+Stabile UUID `participantId` liegt nur am **Profil** (GSI `GSI_ParticipantId`); operative Kurs-Refs bleiben Nicknames (#317 hybrid).
 
 Terraform: `module.course_enrollments_table` → `{project}-courseEnrollments-table`.  
 Env: `COURSE_ENROLLMENTS_TABLE` (create/update/delete/get course Lambdas; Occupancy-Reads #303; Writes #304).
