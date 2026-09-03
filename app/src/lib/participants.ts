@@ -18,10 +18,47 @@ export type ParticipantStatusPresentation = {
   label: string;
 };
 
+/** Operational ref for course enrollments / member dialogs (#317 hybrid: nickname). */
 export function resolveParticipantRef(
   profile: Pick<ParticipantWithStatus, "userId" | "participantId">,
 ): string {
-  return profile.participantId?.trim() || profile.userId;
+  return profile.userId?.trim() || profile.participantId?.trim() || "";
+}
+
+/** Nickname + UUID aliases for dual-read against enrollment/course refs. */
+export function participantRefAliases(
+  profile: Pick<ParticipantWithStatus, "userId" | "participantId">,
+): string[] {
+  const aliases: string[] = [];
+  const nickname = profile.userId?.trim();
+  if (nickname) aliases.push(nickname);
+  const participantId = profile.participantId?.trim();
+  if (participantId && participantId.toLowerCase() !== nickname?.toLowerCase()) {
+    aliases.push(participantId);
+  }
+  return aliases;
+}
+
+export function profileMatchesStoredRef(
+  profile: Pick<ParticipantWithStatus, "userId" | "participantId">,
+  storedRef: string,
+): boolean {
+  const needle = storedRef.trim().toLowerCase();
+  if (!needle) return false;
+  return participantRefAliases(profile).some((alias) => alias.toLowerCase() === needle);
+}
+
+/** Index profiles by nickname and optional UUID so enrollment refs resolve either way. */
+export function buildProfileByRefMap<
+  T extends Pick<ParticipantWithStatus, "userId" | "participantId">,
+>(profiles: T[]): Map<string, T> {
+  const map = new Map<string, T>();
+  for (const entry of profiles) {
+    for (const alias of participantRefAliases(entry)) {
+      map.set(alias.toLowerCase(), entry);
+    }
+  }
+  return map;
 }
 
 export function participantDisplayName(

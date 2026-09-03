@@ -3,7 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CourseModalFrame from "./CourseModalFrame";
 import type { ParticipantWithStatus } from "../api/participants";
 import { getParticipants } from "../api/participants";
-import { filterParticipantsBySearch, getStatusPresentation, resolveParticipantRef, type ParticipantStatusPresentation } from "../lib/participants";
+import {
+  buildProfileByRefMap,
+  filterParticipantsBySearch,
+  getStatusPresentation,
+  participantRefAliases,
+  resolveParticipantRef,
+  type ParticipantStatusPresentation,
+} from "../lib/participants";
 import {
   classifyMembersForDialog,
   findOpenEnrollmentForParticipant,
@@ -157,13 +164,7 @@ export default function CourseMembersDialog({
   }, [open]);
 
   const availableParticipants = useMemo(
-    () =>
-      participants
-        .filter((entry) => (entry.role ?? "participant") === "participant")
-        .map((entry) => ({
-          ...entry,
-          participantId: resolveParticipantRef(entry),
-        })),
+    () => participants.filter((entry) => (entry.role ?? "participant") === "participant"),
     [participants],
   );
 
@@ -184,13 +185,14 @@ export default function CourseMembersDialog({
     const searched = filterParticipantsBySearch(availableParticipants, search);
     if (!isIntervalUi) return searched;
     return searched.filter((entry) => {
-      const key = entry.participantId.toLowerCase();
-      return !rosterIds.has(key) && !formerIds.has(key);
+      const onRoster = participantRefAliases(entry).some((alias) => rosterIds.has(alias.toLowerCase()));
+      const isFormer = participantRefAliases(entry).some((alias) => formerIds.has(alias.toLowerCase()));
+      return !onRoster && !isFormer;
     });
   }, [availableParticipants, search, isIntervalUi, rosterIds, formerIds]);
 
   const profileById = useMemo(
-    () => new Map(availableParticipants.map((entry) => [entry.participantId.toLowerCase(), entry])),
+    () => buildProfileByRefMap(availableParticipants),
     [availableParticipants],
   );
 
@@ -206,15 +208,19 @@ export default function CourseMembersDialog({
 
   const toggleDraftParticipant = (userId: string) => {
     if (saving) return;
-    const alreadySelected = selectedParticipants.some((entry) => entry.toLowerCase() === userId.toLowerCase());
+    const operationalRef = userId.trim();
+    if (!operationalRef) return;
+    const alreadySelected = selectedParticipants.some(
+      (entry) => entry.toLowerCase() === operationalRef.toLowerCase(),
+    );
     if (!alreadySelected && selectedParticipants.length >= maxCapacity) {
       setLocalError(`Maximal ${maxCapacity} Teilnehmer können zugeordnet werden.`);
       return;
     }
     setSelectedParticipants((prev) => {
-      const exists = prev.some((entry) => entry.toLowerCase() === userId.toLowerCase());
-      if (exists) return prev.filter((entry) => entry.toLowerCase() !== userId.toLowerCase());
-      return [...prev, userId].sort((a, b) => a.localeCompare(b));
+      const exists = prev.some((entry) => entry.toLowerCase() === operationalRef.toLowerCase());
+      if (exists) return prev.filter((entry) => entry.toLowerCase() !== operationalRef.toLowerCase());
+      return [...prev, operationalRef].sort((a, b) => a.localeCompare(b));
     });
     setLocalError(null);
   };
@@ -358,7 +364,7 @@ export default function CourseMembersDialog({
       event.preventDefault();
       const active = filteredParticipants[activeListIndex];
       if (!active || !isDraft) return;
-      toggleDraftParticipant(active.participantId);
+      toggleDraftParticipant(resolveParticipantRef(active));
     }
   };
 
@@ -566,16 +572,17 @@ export default function CourseMembersDialog({
                 className={listHasFocus ? "course-members-listbox is-focused" : "course-members-listbox"}
               >
                 {filteredParticipants.map((entry, index) => {
+                  const operationalRef = resolveParticipantRef(entry);
                   const checked = selectedParticipants.some(
-                    (value) => value.toLowerCase() === entry.participantId.toLowerCase(),
+                    (value) => value.toLowerCase() === operationalRef.toLowerCase(),
                   );
                   const atCapacity = selectedParticipants.length >= maxCapacity;
                   const isActive = index === activeListIndex;
                   const status = getStatusPresentation(entry.status);
                   return (
                     <div
-                      key={entry.participantId}
-                      id={`participant-option-${entry.participantId.toLowerCase()}`}
+                      key={operationalRef || entry.participantId}
+                      id={`participant-option-${operationalRef.toLowerCase()}`}
                       role="option"
                       aria-selected={isActive}
                       className="course-members-row"
@@ -589,7 +596,7 @@ export default function CourseMembersDialog({
                       onMouseDownCapture={() => {
                         pointerPrimedSelectionRef.current = document.activeElement !== listBoxRef.current;
                       }}
-                      onClick={() => handleParticipantOptionClick(index, entry.participantId)}
+                      onClick={() => handleParticipantOptionClick(index, operationalRef)}
                     >
                       <span
                         ref={(element) => {
@@ -654,7 +661,11 @@ export default function CourseMembersDialog({
                               aria-label={`${row.participantId} gültig ab`}
                               onChange={(event) => {
                                 const next = event.target.value;
-                                if (next) addIntervalMember(row.participantId, next);
+                                if (!next) return;
+                                const operationalRef = profile
+                                  ? resolveParticipantRef(profile)
+                                  : row.participantId;
+                                addIntervalMember(operationalRef, next);
                               }}
                             >
                               <option value="">wählen</option>
@@ -672,19 +683,20 @@ export default function CourseMembersDialog({
                 })}
                 {!isInactive &&
                   filteredParticipants.map((entry) => {
+                    const operationalRef = resolveParticipantRef(entry);
                     const status = getStatusPresentation(entry.status);
                     return (
-                      <div key={entry.participantId} className="course-members-row">
+                      <div key={operationalRef || entry.participantId} className="course-members-row">
                         <MemberIdentity userId={entry.userId} email={entry.email} status={status} />
                         <label className="course-members-date">
                           ab
                           <select
                             value=""
                             disabled={saving}
-                            aria-label={`${entry.participantId} gültig ab`}
+                            aria-label={`${operationalRef} gültig ab`}
                             onChange={(event) => {
                               const next = event.target.value;
-                              if (next) addIntervalMember(entry.participantId, next);
+                              if (next) addIntervalMember(operationalRef, next);
                             }}
                           >
                             <option value="">wählen</option>
@@ -712,7 +724,11 @@ export default function CourseMembersDialog({
         {participantsLoaded && isDraft && (
           <StaleNote
             selected={selectedParticipants}
-            availableIds={new Set(availableParticipants.map((entry) => entry.participantId.toLowerCase()))}
+            availableIds={new Set(
+              availableParticipants.flatMap((entry) =>
+                participantRefAliases(entry).map((alias) => alias.toLowerCase()),
+              ),
+            )}
           />
         )}
         {(formError || localError) && <p style={{ color: "crimson", margin: 0 }}>{formError ?? localError}</p>}
