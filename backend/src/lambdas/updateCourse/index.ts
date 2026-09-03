@@ -14,7 +14,7 @@ import {
   findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
-import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeriesRangeEditErrorMessage, type Course } from "@yogaswap/shared";
+import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeriesRangeEditErrorMessage, looksLikeParticipantId, type Course } from "@yogaswap/shared";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
@@ -30,6 +30,7 @@ import {
   resolveRollingPlanningHorizonWeeks,
 } from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
+import { resolveOperationalNickname, resolveOperationalNicknameList } from "../shared/participantResolver";
 import { notifyParticipantsPlannedEndDate } from "../shared/plannedEndDateNotifications";
 import {
   notifyCourseActivated,
@@ -330,10 +331,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const includedDates = Object.prototype.hasOwnProperty.call(body, "includedDates")
     ? normalizeDateListInput(body.includedDates)
     : undefined;
-  const participants = Object.prototype.hasOwnProperty.call(body, "participants")
+  let participants = Object.prototype.hasOwnProperty.call(body, "participants")
     ? normalizeParticipantListInput(body.participants)
     : undefined;
-  const enrollmentChanges = Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
+  let enrollmentChanges = Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
     ? normalizeEnrollmentChangesInput(body.enrollmentChanges)
     : undefined;
   const capacity =
@@ -401,6 +402,38 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     };
   }
+
+  const participantsTable = process.env.PARTICIPANTS_TABLE;
+  const refsNeedingResolve = [
+    ...(participants ?? []),
+    ...(enrollmentChanges ?? []).map((change) => change.participantId),
+  ].filter((ref) => looksLikeParticipantId(ref));
+  if (participantsTable && refsNeedingResolve.length > 0) {
+    if (participants?.length) {
+      participants = await resolveOperationalNicknameList(
+        client,
+        participantsTable,
+        tenantId,
+        participants,
+      );
+    }
+    if (enrollmentChanges?.length) {
+      enrollmentChanges = await Promise.all(
+        enrollmentChanges.map(async (change) => ({
+          ...change,
+          participantId: looksLikeParticipantId(change.participantId)
+            ? await resolveOperationalNickname(
+                client,
+                participantsTable,
+                tenantId,
+                change.participantId,
+              )
+            : change.participantId,
+        })),
+      );
+    }
+  }
+
   try {
     const membershipResp = await client.send(
       new GetItemCommand({

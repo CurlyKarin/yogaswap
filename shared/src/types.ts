@@ -38,12 +38,11 @@ export type SwapStatus = "pending" | "active";
 export type Swap = {
   // Tenant-Kontext für den Swap
   tenantId?: string;
-  /** Stabile Mitglieds-ID im Tenant (#317). Fehlt bei Altbestand bis Backfill. */
-  participantId?: string;
   /**
-   * Legacy-Kurs-ID (numerisch): bleibt u. a. für lesbare Swap-Schlüssel und GSI-Range-Attribute
-   * (`fromDate_fromCourseId_status`, `toDate_toCourseId_status`, `swapId`), nicht nur für UI.
+   * Operative Person-Referenz (#317 hybrid): Nickname (`userId`).
+   * Feldname historisch; UUID `participantId` liegt nur am Profil.
    */
+  participantId?: string;
   fromCourseId: number;
   /** Stabile Kurs-ID am Ursprung (Dual-Write). */
   fromCourseUid?: string;
@@ -97,7 +96,7 @@ export type Course = {
   includedDates?: string[];
   visibleDates?: string[];
   /**
-   * Aktueller Stamm-Cache (`participantId` pro Mitglied, #317).
+   * Aktueller Stamm-Cache: Nicknames (#317 hybrid).
    * Parallel zu CourseEnrollments (#302); Occupancy pro Termin via `stemOn(date)` (#303).
    */
   participants: string[];
@@ -120,7 +119,10 @@ export type CourseEnrollment = {
   tenantId?: string;
   /** Legacy-Kurs-ID (numerisch), analog Course.id / Override.courseId. */
   courseId: number;
-  /** Stabile Mitglieds-ID im Tenant (#317); Dynamo SK-Teil. */
+  /**
+   * Operative Person-Referenz im Kurs (#317 hybrid): Nickname.
+   * Feldname historisch; stabile UUID nur am Profil (`ParticipantProfile.participantId`).
+   */
   participantId: string;
   /**
    * Erster gültiger Kurstermin (YYYY-MM-DD).

@@ -1,13 +1,17 @@
 /**
- * Backfill #317: participantId auf Profilen (und Memberships). Kurs-Referenzen nur für Legacy-Migration.
- * Für Hybrid (#317): operative Refs bleiben Nicknames — Reverse-Backfill: backfill:operational-nicknames.
+ * Backfill #317 hybrid: participantId auf Profilen + Memberships.
+ *
+ * Default schreibt KEINE Kurs-/Swap-/Override-/Enrollment-Refs um (operative Refs = Nicknames).
+ * Veralteter UUID-Ops-Rewrite nur mit REWRITE_OPERATIONAL_TO_UUID=1 (nicht für Demo/Prod).
+ * UUID→Nickname in Ops: npm run backfill:operational-nicknames
  *
  * Runbook:
- * - Env: PARTICIPANTS_TABLE, MEMBERSHIPS_TABLE, COURSES_TABLE, OVERRIDES_TABLE, SWAPS_TABLE, COURSE_ENROLLMENTS_TABLE
+ * - Env: PARTICIPANTS_TABLE, MEMBERSHIPS_TABLE
+ *   (bei REWRITE_OPERATIONAL_TO_UUID=1 zusätzlich COURSES/OVERRIDES/SWAPS/COURSE_ENROLLMENTS)
  * - Dry-Run: DRY_RUN=1 npm run backfill:participant-ids
- * - Live: npm run backfill:participant-ids
+ * - Live (Profile only): npm run backfill:participant-ids
  *
- * Idempotent: bestehende participantId auf Profilen bleibt; Kurs-Daten nur wenn Wert noch Nickname (kein UUID-Muster).
+ * Idempotent: bestehende participantId auf Profilen bleibt.
  */
 import {
   DeleteItemCommand,
@@ -24,6 +28,9 @@ import type { Swap } from "@yogaswap/shared";
 
 const client = dynamoClient;
 const DRY_RUN = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
+const REWRITE_OPERATIONAL_TO_UUID =
+  process.env.REWRITE_OPERATIONAL_TO_UUID === "1" ||
+  process.env.REWRITE_OPERATIONAL_TO_UUID === "true";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -33,10 +40,6 @@ function requireEnv(name: string): string {
 
 const PARTICIPANTS_TABLE = requireEnv("PARTICIPANTS_TABLE");
 const MEMBERSHIPS_TABLE = requireEnv("MEMBERSHIPS_TABLE");
-const COURSES_TABLE = requireEnv("COURSES_TABLE");
-const OVERRIDES_TABLE = requireEnv("OVERRIDES_TABLE");
-const SWAPS_TABLE = requireEnv("SWAPS_TABLE");
-const COURSE_ENROLLMENTS_TABLE = requireEnv("COURSE_ENROLLMENTS_TABLE");
 
 async function scanAll(tableName: string): Promise<Record<string, AttributeValue>[]> {
   const out: Record<string, AttributeValue>[] = [];
@@ -55,56 +58,23 @@ function mapKey(tenantId: string, nickname: string): string {
   return `${tenantId}#${nickname.trim().toLowerCase()}`;
 }
 
-async function run(): Promise<void> {
-  console.log(JSON.stringify({ dryRun: DRY_RUN, step: "start" }));
+async function rewriteOperationalToUuid(idMap: Map<string, string>): Promise<{
+  coursesUpdated: number;
+  enrollmentsRewritten: number;
+  overridesUpdated: number;
+  swapsRewritten: number;
+}> {
+  const COURSES_TABLE = requireEnv("COURSES_TABLE");
+  const OVERRIDES_TABLE = requireEnv("OVERRIDES_TABLE");
+  const SWAPS_TABLE = requireEnv("SWAPS_TABLE");
+  const COURSE_ENROLLMENTS_TABLE = requireEnv("COURSE_ENROLLMENTS_TABLE");
 
-  const idMap = new Map<string, string>();
-  let profilesUpdated = 0;
-  let membershipsUpdated = 0;
-
-  const profiles = await scanAll(PARTICIPANTS_TABLE);
-  for (const item of profiles) {
-    const tenantId = item.tenantId?.S;
-    const userId = item.userId?.S?.trim();
-    if (!tenantId || !userId) continue;
-    const existing = item.participantId?.S?.trim();
-    const participantId = existing && looksLikeParticipantId(existing) ? existing : generateParticipantId();
-    idMap.set(mapKey(tenantId, userId), participantId);
-    if (!existing) {
-      profilesUpdated += 1;
-      if (!DRY_RUN) {
-        await client.send(
-          new UpdateItemCommand({
-            TableName: PARTICIPANTS_TABLE,
-            Key: { tenantId: { S: tenantId }, userId: { S: userId } },
-            UpdateExpression: "SET participantId = :pid",
-            ExpressionAttributeValues: { ":pid": { S: participantId } },
-          }),
-        );
-      }
-    }
-  }
-
-  const memberships = await scanAll(MEMBERSHIPS_TABLE);
-  for (const item of memberships) {
-    const tenantId = item.tenantId?.S;
-    const userId = item.userId?.S?.trim();
-    if (!tenantId || !userId) continue;
-    if (item.participantId?.S?.trim()) continue;
-    const participantId = idMap.get(mapKey(tenantId, userId));
-    if (!participantId) continue;
-    membershipsUpdated += 1;
-    if (!DRY_RUN) {
-      await client.send(
-        new UpdateItemCommand({
-          TableName: MEMBERSHIPS_TABLE,
-          Key: { tenantId: { S: tenantId }, userId: { S: userId } },
-          UpdateExpression: "SET participantId = :pid",
-          ExpressionAttributeValues: { ":pid": { S: participantId } },
-        }),
-      );
-    }
-  }
+  console.warn(
+    JSON.stringify({
+      warning: "REWRITE_OPERATIONAL_TO_UUID writes nicknames→UUID in course/swap/override/enrollment refs",
+      hybrid: "prefer backfill:operational-nicknames to restore nicknames",
+    }),
+  );
 
   let coursesUpdated = 0;
   const courses = await scanAll(COURSES_TABLE);
@@ -265,15 +235,82 @@ async function run(): Promise<void> {
     }
   }
 
+  return { coursesUpdated, enrollmentsRewritten, overridesUpdated, swapsRewritten };
+}
+
+async function run(): Promise<void> {
   console.log(
     JSON.stringify({
       dryRun: DRY_RUN,
+      rewriteOperationalToUuid: REWRITE_OPERATIONAL_TO_UUID,
+      step: "start_profile_participant_ids",
+    }),
+  );
+
+  const idMap = new Map<string, string>();
+  let profilesUpdated = 0;
+  let membershipsUpdated = 0;
+
+  const profiles = await scanAll(PARTICIPANTS_TABLE);
+  for (const item of profiles) {
+    const tenantId = item.tenantId?.S;
+    const userId = item.userId?.S?.trim();
+    if (!tenantId || !userId) continue;
+    const existing = item.participantId?.S?.trim();
+    const participantId = existing && looksLikeParticipantId(existing) ? existing : generateParticipantId();
+    idMap.set(mapKey(tenantId, userId), participantId);
+    if (!existing) {
+      profilesUpdated += 1;
+      if (!DRY_RUN) {
+        await client.send(
+          new UpdateItemCommand({
+            TableName: PARTICIPANTS_TABLE,
+            Key: { tenantId: { S: tenantId }, userId: { S: userId } },
+            UpdateExpression: "SET participantId = :pid",
+            ExpressionAttributeValues: { ":pid": { S: participantId } },
+          }),
+        );
+      }
+    }
+  }
+
+  const memberships = await scanAll(MEMBERSHIPS_TABLE);
+  for (const item of memberships) {
+    const tenantId = item.tenantId?.S;
+    const userId = item.userId?.S?.trim();
+    if (!tenantId || !userId) continue;
+    if (item.participantId?.S?.trim()) continue;
+    const participantId = idMap.get(mapKey(tenantId, userId));
+    if (!participantId) continue;
+    membershipsUpdated += 1;
+    if (!DRY_RUN) {
+      await client.send(
+        new UpdateItemCommand({
+          TableName: MEMBERSHIPS_TABLE,
+          Key: { tenantId: { S: tenantId }, userId: { S: userId } },
+          UpdateExpression: "SET participantId = :pid",
+          ExpressionAttributeValues: { ":pid": { S: participantId } },
+        }),
+      );
+    }
+  }
+
+  const operational = REWRITE_OPERATIONAL_TO_UUID
+    ? await rewriteOperationalToUuid(idMap)
+    : {
+        coursesUpdated: 0,
+        enrollmentsRewritten: 0,
+        overridesUpdated: 0,
+        swapsRewritten: 0,
+      };
+
+  console.log(
+    JSON.stringify({
+      dryRun: DRY_RUN,
+      rewriteOperationalToUuid: REWRITE_OPERATIONAL_TO_UUID,
       profilesUpdated,
       membershipsUpdated,
-      coursesUpdated,
-      enrollmentsRewritten,
-      overridesUpdated,
-      swapsRewritten,
+      ...operational,
       idMapSize: idMap.size,
     }),
   );

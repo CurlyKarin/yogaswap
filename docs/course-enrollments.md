@@ -97,17 +97,19 @@ Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas` für den **angezeigten** Termin,
 
 Seed schreibt Enrollments aus denselben Kursdaten mit.
 
-### Backfill `participantId` (#317)
+### Backfill `participantId` (#317 hybrid)
 
-Neue Mitglieder erhalten beim Anlegen (`createParticipants`) eine UUID in `participants-table` (`participantId`, GSI `GSI_ParticipantId`).
+Neue Mitglieder erhalten beim Anlegen (`createParticipants`) eine UUID in `participants-table` (`participantId`, GSI `GSI_ParticipantId`). Operative Kurs-/Swap-/Enrollment-Refs bleiben **Nicknames**.
 
-Bestehende Daten: `backend` → `npm run backfill:participant-ids` (zuerst `DRY_RUN=1`). Das Skript:
+Bestehende Profile: `backend` → `npm run backfill:participant-ids` (zuerst `DRY_RUN=1`). Default:
 
 1. vergibt fehlende `participantId` in Profil/Membership,
-2. ersetzt Nicknames in Enrollments, Swaps, Overrides und `course.participants[]` durch die jeweilige `participantId`,
-3. aktualisiert Sort Keys (`courseId_userId_validFrom`, `user_swapId`, GSI-Felder).
+2. **ändert keine** Kurs-/Swap-/Override-/Enrollment-Refs.
 
-Auth/Login bleibt beim Nickname (`userId` im JWT); Anzeige mappt `participantId` → Nickname über `getParticipants`.
+Ops mit UUIDs bereinigen: `npm run backfill:operational-nicknames`.  
+Veraltet und nicht für Demo/Prod: `REWRITE_OPERATIONAL_TO_UUID=1` schreibt Nicknames→UUID in Ops (widerspricht Hybrid).
+
+Auth/Login bleibt beim Nickname (`userId` im JWT); Anzeige mappt über Roster/`getParticipants`.
 
 ## Occupancy (#303)
 
