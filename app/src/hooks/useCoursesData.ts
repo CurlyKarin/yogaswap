@@ -19,7 +19,6 @@ import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getOverrides } from "../api/overrides";
 import { getSwaps, getSwapsByStatus } from "../api/swaps";
 import { getParticipantRoster } from "../api/participants";
-import { getActorUserId } from "../api/delegation";
 import { getCourseDates } from "../lib/dates";
 import { canShowCourseInPastWeek, computeEarliestWeekAnchor } from "../lib/courseTermActions";
 import { collectWeekOccurrences, type WeekCourseRow } from "../lib/courseWeekOccurrences";
@@ -98,8 +97,9 @@ export function useCoursesData({
   const effectiveMembership = useMemo<UserTenantMembership | undefined>(() => {
     if (!membership) return undefined;
     if (!forceParticipantView) return membership;
+    // Vertretung: Subject ist currentUser.nickname — Admin-participantId nicht übernehmen.
     return {
-      ...membership,
+      tenantId: membership.tenantId,
       role: "participant",
       userId: currentUser.nickname,
     };
@@ -117,10 +117,10 @@ export function useCoursesData({
   const resolvedRole = effectiveMembership?.role ?? currentUser.role;
   const canSeeCourseManagement = resolvedRole === "admin" || resolvedRole === "instructor";
 
-  const actorNickname = getActorUserId() ?? currentUser.nickname;
+  // Subject = effectiveUser (Vertretung: vertretene Person), nicht getActorUserId (Admin).
   const actor = useMemo(
-    () => resolveActorFromMembership(actorNickname, effectiveMembership, participantRoster),
-    [actorNickname, effectiveMembership, participantRoster],
+    () => resolveActorFromMembership(currentUser.nickname, effectiveMembership, participantRoster),
+    [currentUser.nickname, effectiveMembership, participantRoster],
   );
   const actorRef = useMemo(() => resolveActorParticipantRef(actor), [actor]);
   const participantNameByRef = useMemo(

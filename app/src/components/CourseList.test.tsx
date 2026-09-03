@@ -411,11 +411,17 @@ describe("CourseList", () => {
     ).toBe(true);
   });
 
-  it("blendet Kursverwaltung im Vertretungsmodus aus (auch für Admin)", async () => {
+  it("blendet Kursverwaltung im Vertretungsmodus aus und zeigt Kurse der vertretenen Person", async () => {
+    const { canSeeCourse: realCanSeeCourse } = await vi.importActual<
+      typeof import("shared/permissions")
+    >("shared/permissions");
+    mockedCanSeeCourse.mockImplementation(realCanSeeCourse);
+
     const adminMembership: UserTenantMembership = {
       ...baseMembership,
+      userId: "admin",
       role: "admin",
-      participantId: "admin",
+      participantId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     };
     const delegatedUser: User = {
       ...baseUser,
@@ -439,6 +445,10 @@ describe("CourseList", () => {
     mockedGetCourses.mockResolvedValue(mockCourses);
     mockedGetOverrides.mockResolvedValue([]);
     mockedGetSwaps.mockResolvedValue([]);
+    mockedGetParticipantRoster.mockResolvedValue([
+      { userId: "maya", participantId: "11111111-2222-4333-8444-555555555555" },
+      { userId: "admin", participantId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+    ]);
 
     render(
       <CourseList
@@ -458,6 +468,11 @@ describe("CourseList", () => {
     const firstMembershipArg = mockedCanSeeCourse.mock.calls[0][0] as UserTenantMembership;
     expect(firstMembershipArg.role).toBe("participant");
     expect(firstMembershipArg.userId).toBe("maya");
+    expect(firstMembershipArg.participantId).toBeUndefined();
+
+    await waitFor(() => {
+      expect(mockedGetSwaps).toHaveBeenCalledWith("maya");
+    });
   });
 
   it("aktiviert Speichern im Edit-Dialog erst nach Änderungen", async () => {

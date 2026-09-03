@@ -50,7 +50,6 @@ import {
 } from "shared/courseStatus";
 import { isParticipantCourseWindDown } from "../lib/courseTermActions";
 import { getParticipantRoster } from "../api/participants";
-import { getActorUserId } from "../api/delegation";
 import {
   buildParticipantNameByRefMap,
   resolveActorFromMembership,
@@ -244,8 +243,9 @@ export default function CourseList({
   const effectiveMembership = useMemo<UserTenantMembership | undefined>(() => {
     if (!membership) return undefined;
     if (!forceParticipantView) return membership;
+    // Vertretung: Subject ist currentUser.nickname — Admin-participantId nicht übernehmen.
     return {
-      ...membership,
+      tenantId: membership.tenantId,
       role: "participant",
       userId: currentUser.nickname,
     };
@@ -269,10 +269,10 @@ export default function CourseList({
   const canConfigureOverbooking = isAdmin || isInstructor;
   const editOverbookingOnly = canConfigureOverbooking && !canManageCourses;
 
-  const actorNickname = getActorUserId() ?? currentUser.nickname;
+  // Subject = effectiveUser (Vertretung: vertretene Person), nicht getActorUserId (Admin).
   const actor = useMemo(
-    () => resolveActorFromMembership(actorNickname, effectiveMembership, participantRoster),
-    [actorNickname, effectiveMembership, participantRoster],
+    () => resolveActorFromMembership(currentUser.nickname, effectiveMembership, participantRoster),
+    [currentUser.nickname, effectiveMembership, participantRoster],
   );
   const actorRef = useMemo(() => resolveActorParticipantRef(actor), [actor]);
   const participantNameByRef = useMemo(
