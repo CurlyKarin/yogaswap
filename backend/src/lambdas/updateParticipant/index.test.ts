@@ -154,6 +154,7 @@ describe("updateParticipant Lambda", () => {
           userId: { S: "alice" },
           email: { S: "alice@example.com" },
           authUserId: { S: "sub-123" },
+          participantId: { S: "11111111-2222-4333-8444-555555555555" },
         },
       }) // target participant
       .mockResolvedValueOnce({
@@ -161,6 +162,7 @@ describe("updateParticipant Lambda", () => {
           tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
           role: { S: "participant" },
+          participantId: { S: "11111111-2222-4333-8444-555555555555" },
         },
       }) // target membership (current role)
       .mockResolvedValueOnce({}) // memberships PutItem (role change)
@@ -189,6 +191,7 @@ describe("updateParticipant Lambda", () => {
         Item: expect.objectContaining({
           tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
+          participantId: { S: "11111111-2222-4333-8444-555555555555" },
           role: { S: "instructor" },
         }),
       }),
@@ -196,6 +199,66 @@ describe("updateParticipant Lambda", () => {
     expect(sesMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         Destination: { ToAddresses: ["alice@example.com"] },
+      }),
+    );
+  });
+
+  test("restores membership participantId from profile on role change", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "yoganja" },
+          participantId: { S: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "yoganja" },
+          role: { S: "participant" },
+          // participantId missing — regresses older role PutItem
+        },
+      })
+      .mockResolvedValueOnce({}) // memberships PutItem
+      .mockResolvedValueOnce({}); // participants PutItem
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "yoganja" },
+        body: JSON.stringify({ role: "instructor" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-memberships",
+        Item: expect.objectContaining({
+          userId: { S: "yoganja" },
+          participantId: { S: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+          role: { S: "instructor" },
+        }),
       }),
     );
   });

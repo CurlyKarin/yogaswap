@@ -17,6 +17,7 @@ import type {
   ParticipantSettings,
   UserRole,
 } from "@yogaswap/shared";
+import { generateParticipantId } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { deriveParticipantStatus } from "../shared/participantStatus";
@@ -220,6 +221,7 @@ export const handler = async (
     const existingCognitoUsername = existingItem.cognitoUsername?.S;
     const existingStatus = deriveParticipantStatus(existing);
     let targetMembershipRole: UserRole | undefined;
+    let targetMembershipParticipantId: string | undefined;
     if (actorMembershipRole === "instructor" || requestsRoleChange) {
       const targetMembershipResp = await client.send(
         new GetItemCommand({
@@ -232,6 +234,7 @@ export const handler = async (
         }),
       );
       targetMembershipRole = targetMembershipResp.Item?.role?.S as UserRole | undefined;
+      targetMembershipParticipantId = targetMembershipResp.Item?.participantId?.S?.trim() || undefined;
     }
     if (requestsEmailChange) {
       const requestedEmail = typeof body.email === "string" ? body.email.trim() : body.email;
@@ -474,16 +477,25 @@ export const handler = async (
         };
       }
       const currentRole = targetMembershipRole;
+      // PutItem ersetzt das Membership-Item — participantId mitnehmen (#317).
+      const membershipParticipantId =
+        targetMembershipParticipantId ||
+        existing.participantId?.trim() ||
+        generateParticipantId();
       await client.send(
         new PutItemCommand({
           TableName: membershipsTable,
           Item: marshall({
             tenantId,
             userId: targetUserId,
+            participantId: membershipParticipantId,
             role: nextRole,
           }),
         }),
       );
+      if (!updated.participantId?.trim()) {
+        updated.participantId = membershipParticipantId;
+      }
       previousRole = currentRole;
       nextRoleForMail = nextRole;
       roleChanged = currentRole !== nextRole;
