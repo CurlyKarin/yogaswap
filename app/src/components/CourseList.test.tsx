@@ -7,7 +7,7 @@ import { createCourse, deleteCourse, getCourses, updateCourse } from "../api/cou
 import { getOverrides } from "../api/overrides";
 import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getSwaps, getSwapsByStatus } from "../api/swaps";
-import { getParticipants } from "../api/participants";
+import { getParticipants, getParticipantRoster } from "../api/participants";
 import type { User, Tenant, UserTenantMembership, Course } from "shared/types";
 import { canSeeCourse } from "shared/permissions";
 
@@ -39,6 +39,7 @@ const mockedGetCourseEnrollments = getCourseEnrollments as unknown as ReturnType
 const mockedGetSwaps = getSwaps as unknown as ReturnType<typeof vi.fn>;
 const mockedGetSwapsByStatus = getSwapsByStatus as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
+const mockedGetParticipantRoster = getParticipantRoster as unknown as ReturnType<typeof vi.fn>;
 const mockedCanSeeCourse = canSeeCourse as unknown as ReturnType<typeof vi.fn>;
 
 vi.mock("shared/permissions", async (importOriginal) => {
@@ -64,6 +65,7 @@ const baseTenant: Tenant = {
 const baseMembership: UserTenantMembership = {
   tenantId: "default-tenant",
   userId: "alice",
+  participantId: "alice",
   role: "participant",
 };
 
@@ -85,7 +87,9 @@ describe("CourseList", () => {
     mockedUpdateCourse.mockReset();
     mockedDeleteCourse.mockReset();
     mockedGetParticipants.mockReset();
+    mockedGetParticipantRoster.mockReset();
     mockedGetParticipants.mockResolvedValue([]);
+    mockedGetParticipantRoster.mockResolvedValue([]);
     mockedGetCourseEnrollments.mockResolvedValue([]);
     mockedCanSeeCourse.mockImplementation(() => true);
     mockedGetSwapsByStatus.mockResolvedValue([]);
@@ -407,11 +411,17 @@ describe("CourseList", () => {
     ).toBe(true);
   });
 
-  it("blendet Kursverwaltung im Vertretungsmodus aus (auch für Admin)", async () => {
+  it("blendet Kursverwaltung im Vertretungsmodus aus und zeigt Kurse der vertretenen Person", async () => {
+    const { canSeeCourse: realCanSeeCourse } = await vi.importActual<
+      typeof import("shared/permissions")
+    >("shared/permissions");
+    mockedCanSeeCourse.mockImplementation(realCanSeeCourse);
+
     const adminMembership: UserTenantMembership = {
       ...baseMembership,
-      role: "admin",
       userId: "admin",
+      role: "admin",
+      participantId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     };
     const delegatedUser: User = {
       ...baseUser,
@@ -435,6 +445,10 @@ describe("CourseList", () => {
     mockedGetCourses.mockResolvedValue(mockCourses);
     mockedGetOverrides.mockResolvedValue([]);
     mockedGetSwaps.mockResolvedValue([]);
+    mockedGetParticipantRoster.mockResolvedValue([
+      { userId: "maya", participantId: "11111111-2222-4333-8444-555555555555" },
+      { userId: "admin", participantId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+    ]);
 
     render(
       <CourseList
@@ -454,6 +468,11 @@ describe("CourseList", () => {
     const firstMembershipArg = mockedCanSeeCourse.mock.calls[0][0] as UserTenantMembership;
     expect(firstMembershipArg.role).toBe("participant");
     expect(firstMembershipArg.userId).toBe("maya");
+    expect(firstMembershipArg.participantId).toBeUndefined();
+
+    await waitFor(() => {
+      expect(mockedGetSwaps).toHaveBeenCalledWith("maya");
+    });
   });
 
   it("aktiviert Speichern im Edit-Dialog erst nach Änderungen", async () => {
@@ -750,7 +769,7 @@ describe("CourseList", () => {
     mockedGetOverrides.mockResolvedValue([]);
     mockedGetSwaps.mockResolvedValue([]);
     mockedGetParticipants.mockResolvedValue([
-      { userId: "luna", status: "active" },
+      { participantId: "luna", status: "active" },
     ]);
     mockedUpdateCourse.mockResolvedValue({
       ...mockCourses[0],

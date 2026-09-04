@@ -48,7 +48,7 @@ const baseOverride: CourseDateOverride = {
 };
 
 const pendingSwap: Swap = {
-  user: "alice",
+  participantId: "alice",
   fromCourseId: 1,
   fromDate: "2099-06-16",
   toCourseId: 2,
@@ -108,6 +108,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -151,6 +152,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -188,6 +190,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -235,6 +238,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
         { cancellationSwapCutoffMinutesBeforeStart: 60 },
       ),
@@ -284,6 +288,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -329,6 +334,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -370,6 +376,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -413,7 +420,7 @@ describe("useCourseSwaps", () => {
       waitlist: ["alice"],
     };
     const pendingToA: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 2,
@@ -421,7 +428,7 @@ describe("useCourseSwaps", () => {
       status: "pending",
     };
     const pendingToB: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 3,
@@ -455,6 +462,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -520,6 +528,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -582,6 +591,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -630,6 +640,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -676,7 +687,7 @@ describe("useCourseSwaps", () => {
       dates: ["2099-06-19"],
     };
     const pendingA: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 2,
@@ -684,7 +695,7 @@ describe("useCourseSwaps", () => {
       status: "pending",
     };
     const pendingB: Swap = {
-      user: "Alice",
+      participantId: "Alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 3,
@@ -715,6 +726,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -756,7 +768,7 @@ describe("useCourseSwaps", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     const pending: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 2,
@@ -786,6 +798,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -828,6 +841,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -850,7 +864,7 @@ describe("useCourseSwaps", () => {
     const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
 
     const activePast: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 9,
@@ -872,6 +886,7 @@ describe("useCourseSwaps", () => {
           value: Swap[] | ((prev: Swap[]) => Swap[])
         ) => void,
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -903,6 +918,7 @@ describe("useCourseSwaps", () => {
         [],
         vi.fn(),
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -932,6 +948,7 @@ describe("useCourseSwaps", () => {
         [],
         vi.fn(),
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );
@@ -968,6 +985,7 @@ describe("useCourseSwaps", () => {
         [],
         vi.fn(),
         baseUser,
+        { nickname: baseUser.nickname },
         fetchData,
       ),
     );

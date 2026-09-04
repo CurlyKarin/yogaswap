@@ -39,7 +39,7 @@ describe("getCourseEnrollments Lambda", () => {
       {
         tenantId: "default-tenant",
         courseId: 1,
-        userId: "luna",
+        participantId: "luna",
         validFrom: "2026-03-10",
         source: "seed",
       },

@@ -42,12 +42,18 @@ import {
   updateCourse,
 } from "../api/courses";
 import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
+import { includesParticipantRef, resolveActorParticipantRef } from "shared/participantActor";
 import type { EnrollmentChange } from "shared/courseEnrollment";
 import {
   looksLikeAutomaticallyInactive,
   wouldAutoDeactivateOnReconcile,
 } from "shared/courseStatus";
 import { isParticipantCourseWindDown } from "../lib/courseTermActions";
+import { getParticipantRoster } from "../api/participants";
+import {
+  buildParticipantNameByRefMap,
+  resolveActorFromMembership,
+} from "../lib/participants";
 import { courseApiPathKey } from "../lib/courseUid";
 
 type Props = {
@@ -186,7 +192,7 @@ function dedupeSwaps(values: Swap[]): Swap[] {
   const seen = new Set<string>();
   const result: Swap[] = [];
   for (const swap of values) {
-    const key = `${swap.user}#${swap.fromCourseId}#${swap.fromDate}#${swap.toCourseId}#${swap.toDate}#${swap.status}`;
+    const key = `${swap.participantId}#${swap.fromCourseId}#${swap.fromDate}#${swap.toCourseId}#${swap.toDate}#${swap.status}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(swap);
@@ -205,6 +211,9 @@ export default function CourseList({
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
   const [enrollments, setEnrollments] = useState<CourseEnrollment[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [participantRoster, setParticipantRoster] = useState<
+    Array<{ userId: string; participantId?: string }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -234,8 +243,9 @@ export default function CourseList({
   const effectiveMembership = useMemo<UserTenantMembership | undefined>(() => {
     if (!membership) return undefined;
     if (!forceParticipantView) return membership;
+    // Vertretung: Subject ist currentUser.nickname — Admin-participantId nicht übernehmen.
     return {
-      ...membership,
+      tenantId: membership.tenantId,
       role: "participant",
       userId: currentUser.nickname,
     };
@@ -259,23 +269,35 @@ export default function CourseList({
   const canConfigureOverbooking = isAdmin || isInstructor;
   const editOverbookingOnly = canConfigureOverbooking && !canManageCourses;
 
+  // Subject = effectiveUser (Vertretung: vertretene Person), nicht getActorUserId (Admin).
+  const actor = useMemo(
+    () => resolveActorFromMembership(currentUser.nickname, effectiveMembership, participantRoster),
+    [currentUser.nickname, effectiveMembership, participantRoster],
+  );
+  const actorRef = useMemo(() => resolveActorParticipantRef(actor), [actor]);
+  const participantNameByRef = useMemo(
+    () => buildParticipantNameByRefMap(participantRoster),
+    [participantRoster],
+  );
+
   const fetchData = useCallback(async () => {
     try {
       console.log("Fetching courses, overrides, and swaps...", {
-        user: currentUser.nickname,
+        participantId: actorRef,
       });
       setLoading(true);
       const swapsPromise = canSeeCourseManagement
         ? Promise.all([getSwapsByStatus("pending"), getSwapsByStatus("active")]).then(([pending, active]) =>
             dedupeSwaps([...pending, ...active]),
           )
-        : getSwaps(currentUser.nickname);
+        : getSwaps(actorRef);
 
-      const [courseData, overrideData, enrollmentData, swapsData] = await Promise.all([
+      const [courseData, overrideData, enrollmentData, swapsData, rosterData] = await Promise.all([
         getCourses(),
         getOverrides(),
         getCourseEnrollments(),
         swapsPromise,
+        getParticipantRoster().catch(() => []),
       ]);
 
       console.log("Data fetched:", {
@@ -288,16 +310,18 @@ export default function CourseList({
       setOverrides(Array.isArray(overrideData) ? overrideData : []);
       setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
       setSwaps(swapsData);
+      setParticipantRoster(rosterData);
       setError(null);
     } catch (err) {
       console.error("Error in fetchData:", err);
       setError("Failed to load data");
       setSwaps([]);
       setEnrollments([]);
+      setParticipantRoster([]);
     } finally {
       setLoading(false);
     }
-  }, [canSeeCourseManagement, currentUser.nickname]);
+  }, [canSeeCourseManagement, actorRef]);
 
   useEffect(() => {
     fetchData();
@@ -324,6 +348,7 @@ export default function CourseList({
     swaps,
     setSwaps,
     currentUser,
+    actor,
     fetchData,
     tenant?.settings,
     enrollments,
@@ -343,17 +368,17 @@ export default function CourseList({
   const visibleCourses = useMemo(() => {
     return courses.filter((course) =>
       canSeeCourse(membershipForPermissions, tenant?.settings, course, {
-        isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
-        isBookedByUser: course.participants.some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
+        isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === actor.nickname.toLowerCase()),
+        isBookedByUser: includesParticipantRef(course.participants, actor),
       }),
     );
-  }, [courses, membershipForPermissions, tenant?.settings, currentUser.nickname]);
+  }, [courses, membershipForPermissions, tenant?.settings, actor]);
 
   const participantCoursesToRender = useMemo(() => {
     const hasVisibleCourseDates = (c: Course) => getCourseDates(c).length > 0;
     const seeCtx = (course: Course) => ({
-      isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
-      isBookedByUser: course.participants.some((p) => p.toLowerCase() === currentUser.nickname.toLowerCase()),
+      isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === actor.nickname.toLowerCase()),
+      isBookedByUser: includesParticipantRef(course.participants, actor),
     });
     return visibleCourses.filter((c) =>
       canShowParticipantCourseCard(membershipForPermissions, tenant?.settings, c, {
@@ -361,7 +386,7 @@ export default function CourseList({
         hasVisibleCourseDates: hasVisibleCourseDates(c),
       }),
     );
-  }, [visibleCourses, membershipForPermissions, tenant?.settings, currentUser.nickname]);
+  }, [visibleCourses, membershipForPermissions, tenant?.settings, actor]);
   const coursesToRender = canSeeCourseManagement ? visibleCourses : participantCoursesToRender;
   const deleteTargetCourse = deleteTargetId
     ? visibleCourses.find((course) => course.id === deleteTargetId)
@@ -896,6 +921,8 @@ export default function CourseList({
                   course={course}
                   allCourses={courses}
                   currentUser={currentUser}
+                  actor={actor}
+                  participantNameByRef={participantNameByRef}
                   showOverbookingDetails={canSeeCourseManagement}
                   canManageGuestSeats={canManageGuestSeats}
                   onAdjustGuestCount={adjustGuestCount}

@@ -280,7 +280,7 @@ describe("CourseDatesDialog", () => {
         ]}
         swaps={[
           {
-            user: "maya",
+            participantId: "maya",
             fromCourseId: 1,
             fromDate: "2026-01-06",
             toCourseId: 2,
@@ -541,7 +541,7 @@ describe("CourseDatesDialog", () => {
         ]}
         swaps={[
           {
-            user: "luna",
+            participantId: "luna",
             fromCourseId: 1,
             fromDate: "2026-01-06",
             toCourseId: 2,
@@ -549,7 +549,7 @@ describe("CourseDatesDialog", () => {
             status: "active",
           },
           {
-            user: "luna",
+            participantId: "luna",
             fromCourseId: 1,
             fromDate: "2026-01-06",
             toCourseId: 3,

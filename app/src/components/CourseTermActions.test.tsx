@@ -42,7 +42,7 @@ function renderCourseTermActions(
     useCourseCardTermState({
       course: baseCourse,
       allCourses: [baseCourse],
-      currentUser: baseUser,
+      actor: { nickname: baseUser.nickname },
       dates: [futureDate],
       overrides: [baseOverride],
       swaps: [],
@@ -152,7 +152,7 @@ describe("CourseTermActions", () => {
         allCourses: [baseCourse, targetCourse],
         swaps: [
           {
-            user: "alice",
+            participantId: "alice",
             fromCourseId: 1,
             fromDate: "2099-06-16",
             toCourseId: 2,
@@ -200,7 +200,7 @@ describe("CourseTermActions", () => {
         allCourses: [baseCourse, targetCourse, alternativeCourse],
         swaps: [
           {
-            user: "alice",
+            participantId: "alice",
             fromCourseId: 1,
             fromDate: "2099-06-16",
             toCourseId: 2,

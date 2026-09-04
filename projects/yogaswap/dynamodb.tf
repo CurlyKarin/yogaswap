@@ -116,13 +116,20 @@ module "participants_table" {
   attributes = [
     { name = "tenantId", type = "S" },
     { name = "userId", type = "S" },
-    { name = "userIdNormalized", type = "S" }
+    { name = "userIdNormalized", type = "S" },
+    { name = "participantId", type = "S" }
   ]
   global_secondary_index = [
     {
       name            = "GSI_UserIdNormalized"
       hash_key        = "tenantId"
       range_key       = "userIdNormalized"
+      projection_type = "ALL"
+    },
+    {
+      name            = "GSI_ParticipantId"
+      hash_key        = "tenantId"
+      range_key       = "participantId"
       projection_type = "ALL"
     }
   ]

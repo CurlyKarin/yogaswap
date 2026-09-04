@@ -1,12 +1,14 @@
-import type { Course, CourseDateOverride, Swap, TenantSettings } from "@yogaswap/shared";
+import type { Course, CourseDateOverride, CourseEnrollment, Swap, TenantSettings } from "@yogaswap/shared";
 import {
   addUserUniqueCaseInsensitive,
   canCreateSwapFromOrigin,
   includesUserCaseInsensitive,
   isSwapTargetInCutoffWindow,
+  listIncludesAnyUserRef,
   removeUserCaseInsensitive,
   resolveEffectiveTermParticipants,
   resolveGuestCount,
+  resolveStemForDate,
   validateTermOccupancy,
   withRegularCancellation,
 } from "@yogaswap/shared";
@@ -16,6 +18,9 @@ export type RingExecutionContext = {
   courses: Course[];
   overrides: CourseDateOverride[];
   pendingSwaps: Swap[];
+  enrollments?: CourseEnrollment[];
+  /** normalized userRef → [nickname, participantId, …] */
+  participantRefAliases?: Map<string, string[]>;
   tenantSettings?: TenantSettings;
   now?: Date;
 };
@@ -36,8 +41,8 @@ export type RingCyclePlanResult =
   | { ok: true; plan: RingCyclePlan }
   | { ok: false; reason: string };
 
-function normalized(value: string): string {
-  return value.trim().toLowerCase();
+function normalized(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
 }
 
 function overrideKey(courseId: number, date: string): string {
@@ -46,7 +51,7 @@ function overrideKey(courseId: number, date: string): string {
 
 function sameSwap(a: Swap, b: Swap): boolean {
   return (
-    normalized(a.user) === normalized(b.user) &&
+    normalized(a.participantId) === normalized(b.participantId) &&
     a.fromCourseId === b.fromCourseId &&
     a.fromDate === b.fromDate &&
     a.toCourseId === b.toCourseId &&
@@ -111,6 +116,22 @@ function resolveOverrideState(
   };
 }
 
+function aliasesFor(ctx: RingExecutionContext, userRef: string): string[] {
+  const fromMap = ctx.participantRefAliases?.get(normalized(userRef));
+  return fromMap?.length ? fromMap : [userRef.trim()];
+}
+
+function isOriginallyOnStem(
+  course: Course,
+  enrollments: CourseEnrollment[] | undefined,
+  dateIso: string,
+  aliases: string[],
+): boolean {
+  const stem = enrollments ? resolveStemForDate(course, enrollments, dateIso) : [];
+  const list = stem.length > 0 ? stem : course.participants;
+  return listIncludesAnyUserRef(list, aliases);
+}
+
 function applyEdgeToState(
   state: Map<string, CourseDateOverride>,
   swap: Swap,
@@ -118,7 +139,13 @@ function applyEdgeToState(
   overrides: CourseDateOverride[],
   tenantSettings: TenantSettings | undefined,
   now: Date,
+  ctx: RingExecutionContext,
 ): RingCyclePlanResult | null {
+  const participantId = swap.participantId?.trim();
+  if (!participantId) {
+    return { ok: false, reason: "Swap missing participantId" };
+  }
+
   const originCourse = courses.find((c) => c.id === swap.fromCourseId);
   const targetCourse = courses.find((c) => c.id === swap.toCourseId);
   if (!originCourse) {
@@ -141,12 +168,16 @@ function applyEdgeToState(
   const originOverride = state.get(originKey)!;
   const targetOverride = state.get(targetKey)!;
   const originEffective = resolveEffectiveTermParticipants(originCourse, originOverride);
-  const originallyParticipant = originCourse.participants.some(
-    (p) => normalized(p) === normalized(swap.user),
+  const aliases = aliasesFor(ctx, participantId);
+  const originallyParticipant = isOriginallyOnStem(
+    originCourse,
+    ctx.enrollments,
+    swap.fromDate,
+    aliases,
   );
 
-  if (!includesUserCaseInsensitive(originEffective.participants, swap.user)) {
-    return { ok: false, reason: `${swap.user} is not booked on origin ${originKey}` };
+  if (!includesUserCaseInsensitive(originEffective.participants, participantId)) {
+    return { ok: false, reason: `${participantId} is not booked on origin ${originKey}` };
   }
 
   if (
@@ -155,40 +186,40 @@ function applyEdgeToState(
       courseTime: originCourse.time,
       tenantSettings,
       override: originOverride,
-      userName: swap.user,
+      userName: participantId,
       participants: originEffective.participants,
       originallyParticipant,
       now,
     })
   ) {
-    return { ok: false, reason: `Origin cutoff blocks swap for ${swap.user}` };
+    return { ok: false, reason: `Origin cutoff blocks swap for ${participantId}` };
   }
 
   if (isSwapTargetInCutoffWindow(swap.toDate, targetCourse.time, tenantSettings, now)) {
-    return { ok: false, reason: `Target cutoff blocks swap for ${swap.user}` };
+    return { ok: false, reason: `Target cutoff blocks swap for ${participantId}` };
   }
 
   const nextOriginCancelled = originallyParticipant
-    ? withRegularCancellation(originOverride.cancelledParticipants, swap.user)
+    ? withRegularCancellation(originOverride.cancelledParticipants, participantId)
     : [...(originOverride.cancelledParticipants ?? [])];
   const nextOrigin: CourseDateOverride = {
     ...originOverride,
     participants: [],
     cancelledParticipants: nextOriginCancelled,
-    swapped: removeUserCaseInsensitive(originOverride.swapped ?? [], swap.user),
-    waitlist: removeUserCaseInsensitive(originOverride.waitlist ?? [], swap.user),
+    swapped: removeUserCaseInsensitive(originOverride.swapped ?? [], participantId),
+    waitlist: removeUserCaseInsensitive(originOverride.waitlist ?? [], participantId),
   };
   const nextTarget: CourseDateOverride = {
     ...targetOverride,
     participants: [],
     cancelledParticipants: targetOverride.cancelledParticipants ?? [],
-    swapped: addUserUniqueCaseInsensitive(targetOverride.swapped ?? [], swap.user),
-    waitlist: removeUserCaseInsensitive(targetOverride.waitlist ?? [], swap.user),
+    swapped: addUserUniqueCaseInsensitive(targetOverride.swapped ?? [], participantId),
+    waitlist: removeUserCaseInsensitive(targetOverride.waitlist ?? [], participantId),
   };
 
   const nextOriginEffective = resolveEffectiveTermParticipants(originCourse, nextOrigin);
-  if (includesUserCaseInsensitive(nextOriginEffective.participants, swap.user)) {
-    return { ok: false, reason: `${swap.user} would remain on origin ${originKey}` };
+  if (includesUserCaseInsensitive(nextOriginEffective.participants, participantId)) {
+    return { ok: false, reason: `${participantId} would remain on origin ${originKey}` };
   }
 
   state.set(originKey, nextOrigin);
@@ -209,10 +240,10 @@ export function planRingCycleExecution(
   for (const edge of cycle.edges) {
     const swap = edge.swap;
     if (swap.status !== "pending") {
-      return { ok: false, reason: `Swap for ${swap.user} is not pending` };
+      return { ok: false, reason: `Swap for ${swap.participantId} is not pending` };
     }
     if (!ctx.pendingSwaps.some((pending) => sameSwap(pending, swap))) {
-      return { ok: false, reason: `Swap for ${swap.user} is stale` };
+      return { ok: false, reason: `Swap for ${swap.participantId} is stale` };
     }
 
     const failure = applyEdgeToState(
@@ -222,6 +253,7 @@ export function planRingCycleExecution(
       ctx.overrides,
       ctx.tenantSettings,
       now,
+      ctx,
     );
     if (failure) return failure;
   }
@@ -256,12 +288,12 @@ export function planRingCycleExecution(
     for (const pending of ctx.pendingSwaps) {
       if (pending.status !== "pending") continue;
       if (
-        normalized(pending.user) === normalized(swap.user) &&
+        normalized(pending.participantId) === normalized(swap.participantId) &&
         pending.fromCourseId === swap.fromCourseId &&
         pending.fromDate === swap.fromDate &&
         (pending.toCourseId !== swap.toCourseId || pending.toDate !== swap.toDate)
       ) {
-        const deletionKey = `${pending.user}|${pending.fromCourseId}|${pending.fromDate}|${pending.toCourseId}|${pending.toDate}`;
+        const deletionKey = `${pending.participantId}|${pending.fromCourseId}|${pending.fromDate}|${pending.toCourseId}|${pending.toDate}`;
         if (!seenDeletion.has(deletionKey)) {
           seenDeletion.add(deletionKey);
           swapDeletions.push(pending);
@@ -279,7 +311,7 @@ export function planRingCycleExecution(
       );
     }
     const target = state.get(targetKey)!;
-    const nextWaitlist = removeUserCaseInsensitive(target.waitlist ?? [], deleted.user);
+    const nextWaitlist = removeUserCaseInsensitive(target.waitlist ?? [], deleted.participantId ?? "");
     state.set(targetKey, { ...target, waitlist: nextWaitlist });
   }
 
@@ -324,7 +356,11 @@ export function planRingCycleExecution(
 }
 
 export function buildSwapDynamoKeys(swap: Swap): { swapId: string; user_swapId: string } {
+  const operationalRef = swap.participantId?.trim();
+  if (!operationalRef) {
+    throw new Error("swap.participantId is required");
+  }
   const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
-  const user_swapId = `${swap.user}#${swapId}`;
+  const user_swapId = `${operationalRef}#${swapId}`;
   return { swapId, user_swapId };
 }

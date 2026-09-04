@@ -4,7 +4,7 @@ import { planRingCycleExecution } from "./ringSwapExecution";
 import type { Course } from "@yogaswap/shared";
 
 function pendingSwap(
-  input: Partial<Swap> & Pick<Swap, "user" | "fromCourseId" | "fromDate" | "toCourseId" | "toDate">,
+  input: Partial<Swap> & Pick<Swap, "participantId" | "fromCourseId" | "fromDate" | "toCourseId" | "toDate">,
 ): Swap {
   return { status: "pending", ...input };
 }
@@ -45,10 +45,10 @@ const courses: Course[] = [
 describe("ringSwapPipeline", () => {
   test("selects one disjoint cycle from overlapping candidates and plans it", () => {
     const pendingSwaps = [
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
-      pendingSwap({ user: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
-      pendingSwap({ user: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 3, toDate: "2099-06-03" }),
-      pendingSwap({ user: "Carol", fromCourseId: 3, fromDate: "2099-06-03", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 2, toDate: "2099-06-02" }),
+      pendingSwap({ participantId: "Bob", fromCourseId: 2, fromDate: "2099-06-02", toCourseId: 1, toDate: "2099-06-01" }),
+      pendingSwap({ participantId: "Alice", fromCourseId: 1, fromDate: "2099-06-01", toCourseId: 3, toDate: "2099-06-03" }),
+      pendingSwap({ participantId: "Carol", fromCourseId: 3, fromDate: "2099-06-03", toCourseId: 1, toDate: "2099-06-01" }),
     ];
 
     const graph = buildRingSwapGraph(pendingSwaps);

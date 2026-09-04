@@ -19,6 +19,8 @@ import {
 } from "../lib/courseCardLabels";
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
 import type { CourseCardTermState } from "./useCourseCardTermState";
+import { displayNameForParticipantRef } from "../lib/participants";
+import { matchesParticipantRef } from "shared/participantActor";
 import GuestSeatControls from "./GuestSeatControls";
 import TermDateSelect from "./TermDateSelect";
 
@@ -31,6 +33,7 @@ type CourseCardDetailsProps = {
   onAdjustGuestCount?: (delta: 1 | -1) => void;
   includePastTermsInSelect: boolean;
   termState: CourseCardTermState;
+  participantNameByRef?: Map<string, string>;
   selectedDate: string;
   onSelectedDateChange: (isoValue: string, date: Date) => void;
   titleId: string;
@@ -46,6 +49,7 @@ export default function CourseCardDetails({
   onAdjustGuestCount,
   includePastTermsInSelect,
   termState,
+  participantNameByRef,
   selectedDate,
   onSelectedDateChange,
   titleId,
@@ -62,7 +66,7 @@ export default function CourseCardDetails({
     shortNotice,
     waitlist,
     guestCount: rawGuestCount,
-    userNameLower,
+    actor,
     hasNoUpcomingDates,
     showLastTermInSelect,
     showLastTermMarkerInSelect,
@@ -259,10 +263,11 @@ export default function CourseCardDetails({
                 </li>
               )}
               {participants.map((name) => {
-                const isSelf = name.toLowerCase() === userNameLower;
-                const isSn = shortNotice.some((n) => n.toLowerCase() === name.toLowerCase());
-                const isSwapped = swapped.includes(name);
-                const chipLabel = participantChipAriaLabel(name, { isSelf, isSn, isSwapped });
+                const displayName = displayNameForParticipantRef(name, participantNameByRef);
+                const isSelf = matchesParticipantRef(name, actor);
+                const isSn = shortNotice.some((entry) => entry.toLowerCase() === name.toLowerCase());
+                const isSwapped = swapped.some((entry) => entry.toLowerCase() === name.toLowerCase());
+                const chipLabel = participantChipAriaLabel(displayName, { isSelf, isSn, isSwapped });
                 return (
                   <li
                     className={`chip${isSelf ? " chip-self" : ""}${
@@ -271,7 +276,7 @@ export default function CourseCardDetails({
                     key={name}
                     aria-label={chipLabel}
                   >
-                    {name}
+                    {displayName}
                   </li>
                 );
               })}
@@ -320,14 +325,15 @@ export default function CourseCardDetails({
             <li className="chip muted small">Keine Anfragen</li>
           ) : (
             waitlist.map((name) => {
-              const isSelf = name.toLowerCase() === userNameLower;
+              const displayName = displayNameForParticipantRef(name, participantNameByRef);
+              const isSelf = matchesParticipantRef(name, actor);
               return (
                 <li
                   className={`chip wait${isSelf ? " chip-self" : ""}`}
                   key={name}
-                  aria-label={waitlistChipAriaLabel(name, isSelf)}
+                  aria-label={waitlistChipAriaLabel(displayName, isSelf)}
                 >
-                  {name}
+                  {displayName}
                 </li>
               );
             })

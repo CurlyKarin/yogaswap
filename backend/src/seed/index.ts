@@ -328,7 +328,7 @@ async function seedCourseEnrollmentsFromCourses(tableName: string, courseItems: 
       );
       console.log(`✅ Inserted enrollment into ${tableName}:`, {
         courseId: enrollment.courseId,
-        userId: enrollment.userId,
+        userId: enrollment.participantId,
         validFrom: enrollment.validFrom,
       });
     }

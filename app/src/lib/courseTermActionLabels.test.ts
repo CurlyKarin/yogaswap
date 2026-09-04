@@ -25,7 +25,7 @@ const targetCourse: Course = {
 };
 
 const pendingSwap: Swap = {
-  user: "alice",
+  participantId: "alice",
   fromCourseId: 1,
   fromDate: "2099-06-16",
   toCourseId: 2,

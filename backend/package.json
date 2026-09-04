@@ -14,6 +14,8 @@
     "create-tenant": "ts-node src/scripts/create_tenant.ts",
     "backfill:participants": "ts-node src/scripts/backfill_participant_profiles.ts",
     "backfill:course-uids": "ts-node src/scripts/backfill_course_uids.ts",
+    "backfill:participant-ids": "tsx src/scripts/backfill_participant_ids.ts",
+    "backfill:operational-nicknames": "tsx src/scripts/backfill_operational_nicknames.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test": "jest",
     "lint": "eslint ."
@@ -41,6 +43,7 @@
     "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0"
   },

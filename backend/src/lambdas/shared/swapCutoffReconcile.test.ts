@@ -13,7 +13,7 @@ describe("reconcilePendingSwapsPastOriginCutoff", () => {
     const now = new Date(2099, 5, 15, 9, 30);
     const swaps = [
       {
-        user: "alice",
+        participantId: "alice",
         fromCourseId: 1,
         fromDate: "2099-06-15",
         toCourseId: 1,
@@ -40,7 +40,7 @@ describe("reconcilePendingSwapsPastOriginCutoff", () => {
     const now = new Date(2099, 5, 15, 7, 0);
     const swaps = [
       {
-        user: "alice",
+        participantId: "alice",
         fromCourseId: 1,
         fromDate: "2099-06-15",
         toCourseId: 1,

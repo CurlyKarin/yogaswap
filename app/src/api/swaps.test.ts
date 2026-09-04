@@ -15,7 +15,7 @@ import type { Swap } from "shared/types";
 vi.mock("axios");
 
 const sampleSwap: Swap = {
-  user: "alice",
+  participantId: "alice",
   fromCourseId: 1,
   fromDate: "2025-06-16",
   toCourseId: 2,
@@ -32,7 +32,7 @@ describe("getSwaps", () => {
     vi.mocked(axios.get).mockResolvedValueOnce({
       data: [
         {
-          user: "alice",
+          participantId: "alice",
           fromCourseId: "1",
           fromDate: "2025-06-16",
           toCourseId: "2",
@@ -56,7 +56,7 @@ describe("getSwaps", () => {
     vi.mocked(axios.get).mockResolvedValueOnce({
       data: [
         {
-          user: "bob",
+          participantId: "bob",
           fromCourseId: "3",
           fromCourseUid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
           fromDate: "2025-07-01",

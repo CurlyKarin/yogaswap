@@ -51,8 +51,8 @@ describe("CourseMembersDialog", () => {
   it("allows selecting participants and saving in draft", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
-      { userId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", participantId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
     ]);
     render(
       <CourseMembersDialog
@@ -75,8 +75,8 @@ describe("CourseMembersDialog", () => {
 
   it("prevents selecting above capacity in draft", async () => {
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
-      { userId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", participantId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
     ]);
     render(
       <CourseMembersDialog
@@ -99,7 +99,7 @@ describe("CourseMembersDialog", () => {
 
   it("deselects a draft participant from the list", async () => {
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     const onSaveParticipants = vi.fn();
     render(
@@ -123,7 +123,7 @@ describe("CourseMembersDialog", () => {
 
   it("keeps listbox connected to keyboard hint via aria-describedby", async () => {
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     render(<CourseMembersDialog open {...defaultProps} courseStatus="draft" />);
 
@@ -136,13 +136,13 @@ describe("CourseMembersDialog", () => {
   it("groups active members and saves enrollment changes", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
-      { userId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
-      { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", participantId: "bob", status: "invited", role: "participant", tenantId: "default-tenant" },
+      { userId: "cara", participantId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     const enrollments: CourseEnrollment[] = [
-      { courseId: 7, userId: "alice", validFrom: "2020-01-01" },
-      { courseId: 7, userId: "bob", validFrom: "2099-06-23" },
+      { courseId: 7, participantId: "alice", validFrom: "2020-01-01" },
+      { courseId: 7, participantId: "bob", validFrom: "2099-06-23" },
     ];
     render(
       <CourseMembersDialog
@@ -170,7 +170,7 @@ describe("CourseMembersDialog", () => {
       7,
       ["bob"],
       expect.arrayContaining([
-        expect.objectContaining({ userId: "alice", action: "remove", dateIso: "2020-01-06" }),
+        expect.objectContaining({ participantId: "alice", action: "remove", dateIso: "2020-01-06" }),
       ]),
     );
   });
@@ -178,7 +178,7 @@ describe("CourseMembersDialog", () => {
   it("drops an upcoming member without writing an until before validFrom", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "bob", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", participantId: "bob", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     render(
       <CourseMembersDialog
@@ -187,7 +187,7 @@ describe("CourseMembersDialog", () => {
         courseStatus="active"
         courseDates={["2020-01-06", "2099-06-16", "2099-06-23"]}
         courseTime="10:00"
-        enrollments={[{ courseId: 7, userId: "bob", validFrom: "2099-06-23" }]}
+        enrollments={[{ courseId: 7, participantId: "bob", validFrom: "2099-06-23" }]}
         initialParticipants={[]}
         onSaveParticipants={onSaveParticipants}
       />,
@@ -201,7 +201,7 @@ describe("CourseMembersDialog", () => {
       7,
       [],
       expect.arrayContaining([
-        expect.objectContaining({ userId: "bob", action: "remove" }),
+        expect.objectContaining({ participantId: "bob", action: "remove" }),
       ]),
     );
   });
@@ -209,8 +209,8 @@ describe("CourseMembersDialog", () => {
   it("adds a member from the collapsed lower list with next term as validFrom", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant", email: "alice@studio.test" },
-      { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant", email: "cara@studio.test" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant", email: "alice@studio.test" },
+      { userId: "cara", participantId: "cara", status: "active", role: "participant", tenantId: "default-tenant", email: "cara@studio.test" },
     ]);
     render(
       <CourseMembersDialog
@@ -219,7 +219,7 @@ describe("CourseMembersDialog", () => {
         courseStatus="active"
         courseDates={["2099-06-16"]}
         courseTime="10:00"
-        enrollments={[{ courseId: 7, userId: "alice", validFrom: "2026-01-01" }]}
+        enrollments={[{ courseId: 7, participantId: "alice", validFrom: "2026-01-01" }]}
         initialParticipants={["alice"]}
         onSaveParticipants={onSaveParticipants}
       />,
@@ -239,7 +239,7 @@ describe("CourseMembersDialog", () => {
       7,
       expect.arrayContaining(["alice", "cara"]),
       expect.arrayContaining([
-        expect.objectContaining({ userId: "cara", action: "add", dateIso: "2099-06-16" }),
+        expect.objectContaining({ participantId: "cara", action: "add", dateIso: "2099-06-16" }),
       ]),
     );
   });
@@ -247,8 +247,8 @@ describe("CourseMembersDialog", () => {
   it("hides incoming members and add actions for inactive courses", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
-      { userId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "cara", participantId: "cara", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     render(
       <CourseMembersDialog
@@ -257,9 +257,9 @@ describe("CourseMembersDialog", () => {
         courseStatus="inactive"
         courseDates={["2026-01-06"]}
         enrollments={[
-          { courseId: 7, userId: "alice", validFrom: "2026-01-01" },
-          { courseId: 7, userId: "bob", validFrom: "2026-09-01" },
-          { courseId: 7, userId: "dana", validFrom: "2025-01-01", validUntil: "2025-12-01" },
+          { courseId: 7, participantId: "alice", validFrom: "2026-01-01" },
+          { courseId: 7, participantId: "bob", validFrom: "2026-09-01" },
+          { courseId: 7, participantId: "dana", validFrom: "2025-01-01", validUntil: "2025-12-01" },
         ]}
         initialParticipants={["alice"]}
         onSaveParticipants={onSaveParticipants}
@@ -284,7 +284,7 @@ describe("CourseMembersDialog", () => {
   it("saves a corrected validUntil on an already closed enrollment", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     render(
       <CourseMembersDialog
@@ -294,7 +294,7 @@ describe("CourseMembersDialog", () => {
         courseDates={["2020-01-06", "2099-06-16", "2099-06-23"]}
         courseTime="10:00"
         enrollments={[
-          { courseId: 7, userId: "alice", validFrom: "2026-01-01", validUntil: "2099-06-16" },
+          { courseId: 7, participantId: "alice", validFrom: "2026-01-01", validUntil: "2099-06-16" },
         ]}
         initialParticipants={["alice"]}
         onSaveParticipants={onSaveParticipants}
@@ -306,17 +306,17 @@ describe("CourseMembersDialog", () => {
     await userEvent.selectOptions(untilSelect, "2099-06-23");
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
     expect(onSaveParticipants).toHaveBeenCalledWith(7, ["alice"], [
-      { userId: "alice", action: "remove", dateIso: "2099-06-23" },
+      { participantId: "alice", action: "remove", dateIso: "2099-06-23" },
     ]);
   });
 
   it("keeps a future validUntil edit when enrollments are replaced", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     const enrollments: CourseEnrollment[] = [
-      { courseId: 7, userId: "alice", validFrom: "2026-01-01", validUntil: "2099-06-16" },
+      { courseId: 7, participantId: "alice", validFrom: "2026-01-01", validUntil: "2099-06-16" },
     ];
     const view = render(
       <CourseMembersDialog
@@ -348,13 +348,13 @@ describe("CourseMembersDialog", () => {
     expect(screen.getByLabelText("alice gültig bis")).toHaveValue("2099-06-23");
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
     expect(onSaveParticipants).toHaveBeenCalledWith(7, ["alice"], [
-      { userId: "alice", action: "remove", dateIso: "2099-06-23" },
+      { participantId: "alice", action: "remove", dateIso: "2099-06-23" },
     ]);
   });
 
   it("does not move an active member by clicking the name", async () => {
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     render(
       <CourseMembersDialog
@@ -363,7 +363,7 @@ describe("CourseMembersDialog", () => {
         courseStatus="active"
         courseDates={["2020-01-06", "2099-06-16"]}
         courseTime="10:00"
-        enrollments={[{ courseId: 7, userId: "alice", validFrom: "2026-01-01" }]}
+        enrollments={[{ courseId: 7, participantId: "alice", validFrom: "2026-01-01" }]}
         initialParticipants={["alice"]}
       />,
     );
@@ -377,7 +377,7 @@ describe("CourseMembersDialog", () => {
   it("shows a former end date as read-only and rejoins via a start date", async () => {
     const onSaveParticipants = vi.fn();
     mockedGetParticipants.mockResolvedValue([
-      { userId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
     ]);
     render(
       <CourseMembersDialog
@@ -387,7 +387,7 @@ describe("CourseMembersDialog", () => {
         courseDates={["2020-01-06", "2020-01-13", "2099-06-16"]}
         courseTime="10:00"
         enrollments={[
-          { courseId: 7, userId: "alice", validFrom: "2020-01-01", validUntil: "2020-01-06" },
+          { courseId: 7, participantId: "alice", validFrom: "2020-01-01", validUntil: "2020-01-06" },
         ]}
         initialParticipants={[]}
         onSaveParticipants={onSaveParticipants}
@@ -403,7 +403,7 @@ describe("CourseMembersDialog", () => {
       7,
       ["alice"],
       expect.arrayContaining([
-        expect.objectContaining({ userId: "alice", action: "add", dateIso: "2099-06-16" }),
+        expect.objectContaining({ participantId: "alice", action: "add", dateIso: "2099-06-16" }),
       ]),
     );
   });

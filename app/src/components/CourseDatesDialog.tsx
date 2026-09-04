@@ -446,23 +446,25 @@ export default function CourseDatesDialog({
     const cancelledSetNormalized = new Set(alreadyCancelledParticipants.map((userId) => userId.toLowerCase()));
     const successfulSwapsFromCancelledParticipants = swaps
       .filter(
-        (swap) =>
+        (swap): swap is Swap & { participantId: string } =>
           swap.fromCourseId === course.id &&
           swap.fromDate === selectedCancellationDate &&
           swap.status === "active" &&
           isIsoDateInFuture(swap.toDate) &&
-          cancelledSetNormalized.has(swap.user.toLowerCase()),
+          typeof swap.participantId === "string" &&
+          cancelledSetNormalized.has(swap.participantId.toLowerCase()),
       )
-      .map((swap) => swap.user);
+      .map((swap) => swap.participantId);
     const outgoingSwapsFromCancelledParticipants = swaps
       .filter(
-        (swap) =>
+        (swap): swap is Swap & { participantId: string } =>
           swap.fromCourseId === course.id &&
           swap.fromDate === selectedCancellationDate &&
           swap.status === "pending" &&
-          cancelledSetNormalized.has(swap.user.toLowerCase()),
+          typeof swap.participantId === "string" &&
+          cancelledSetNormalized.has(swap.participantId.toLowerCase()),
       )
-      .map((swap) => swap.user);
+      .map((swap) => swap.participantId);
     const pendingSwapsWithOriginOnCancelledDate = swaps.filter(
       (swap) =>
         swap.fromCourseId === course.id &&

@@ -1,7 +1,11 @@
 // lib/dates.ts
-import { CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
+import { CourseDateOverride, Course, CourseEnrollment, TenantSettings } from "shared/types";
 import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
 import { isSwapTargetInCutoffWindow } from "shared/cancellationSwapCutoff";
+import {
+  includesParticipantRef,
+  type ParticipantActor,
+} from "shared/participantActor";
 import {
   buildCourseOccurrenceLocal,
   courseBlockEndIso,
@@ -85,7 +89,7 @@ export function findOverrideForCourseDate(
 function collectCourseDates(
   allCourses: Course[],
   overrides: CourseDateOverride[],
-  currentUser: User,
+  actor: ParticipantActor,
   settings: SwapSettings,
   referenceDate: Date,
   now: Date = new Date(),
@@ -151,11 +155,10 @@ function collectCourseDates(
           tenantSettings,
           now,
         );
-        const currentUserLower = currentUser.nickname.toLowerCase();
         const stem = resolveStemForDate(course, enrollments, dateKey);
         const userAlreadyInThisCourse =
-          participants.some((p) => p.toLowerCase() === currentUserLower) ||
-          stem.some((p) => p.toLowerCase() === currentUserLower);
+          includesParticipantRef(participants, actor) ||
+          includesParticipantRef(stem, actor);
 
         return {
           course,
@@ -190,7 +193,7 @@ function isWaitlistSwapTarget(
 export function getAvailableDates(
   allCourses: Course[],
   overrides: CourseDateOverride[],
-  currentUser: User,
+  actor: ParticipantActor,
   settings: SwapSettings,
   referenceDate: Date,
   now: Date = new Date(),
@@ -201,7 +204,7 @@ export function getAvailableDates(
   return collectCourseDates(
     allCourses,
     overrides,
-    currentUser,
+    actor,
     settings,
     referenceDate,
     now,
@@ -217,7 +220,7 @@ export function getAvailableDates(
 export function getWaitlistDates(
   allCourses: Course[],
   overrides: CourseDateOverride[],
-  currentUser: User,
+  actor: ParticipantActor,
   settings: SwapSettings,
   referenceDate: Date,
   now: Date = new Date(),
@@ -228,7 +231,7 @@ export function getWaitlistDates(
   return collectCourseDates(
     allCourses,
     overrides,
-    currentUser,
+    actor,
     settings,
     referenceDate,
     now,

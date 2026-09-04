@@ -22,7 +22,7 @@ DynamoDB erlaubt keine Änderung von Partition- oder Sort-Key bestehender Tabell
 | weekday       | S   | –             | Wochentag (z. B. Mon, Tue) |
 | time          | S   | –             | Uhrzeit (z. B. 19:30) |
 | capacity      | N   | –             | Kapazität |
-| participants  | L   | –             | Liste Teilnehmer (Strings) |
+| participants  | L   | –             | Stamm-Cache: **Nicknames** (#317 hybrid; UUID nur am Profil) |
 | dates         | L   | –             | Liste Termine (ISO-Datum) |
 
 - **Zugriff:** `Query` mit `KeyConditionExpression: tenantId = :tid`. Einzelner Kurs: `Query(tenantId, courseId)`.
@@ -37,9 +37,9 @@ DynamoDB erlaubt keine Änderung von Partition- oder Sort-Key bestehender Tabell
 | courseId_date  | S   | Range (SK)    | Zusammengesetzt: `courseId + "_" + date`, z. B. `"1_2026-01-26"` (Unterstrich, URL-tauglich) |
 | courseId       | S   | –             | Kurs-ID (auch einzeln für Filter/Response) |
 | date           | S   | –             | Datum (ISO) |
-| participants   | L   | –             | Teilnehmer |
-| swapped        | L   | –             | Getauschte |
-| waitlist       | L   | –             | Warteliste |
+| participants   | L   | –             | Legacy-Snapshot; Delta-Felder nutzen **Nicknames** |
+| swapped        | L   | –             | Getauschte (Nicknames) |
+| waitlist       | L   | –             | Warteliste (Nicknames) |
 
 - **Zugriff:** `Query(tenantId)`; optional `begins_with(courseId_date, courseId + "_")` für einen Kurs. Einzelner Override: `GetItem(tenantId, courseId + "_" + date)`.
 
@@ -50,22 +50,23 @@ DynamoDB erlaubt keine Änderung von Partition- oder Sort-Key bestehender Tabell
 | Attribut                      | Typ | Schlüssel     | Beschreibung |
 |------------------------------|-----|---------------|--------------|
 | tenantId                      | S   | Hash (PK)     | Tenant-ID |
-| user_swapId                  | S   | Range (SK)    | `user + "#" + swapId`, z. B. `Nia#2026-01-29_5_2026-01-28_4` |
-| user                         | S   | –             | User (Nickname) |
+| user_swapId                  | S   | Range (SK)    | `nickname + "#" + swapId` (#317 hybrid) |
+| participantId                | S   | –             | Operativ: Nickname (Feldname historisch) |
+| user                         | S   | –             | Legacy-Alias zum Nickname |
 | swapId                       | S   | –             | `fromDate_fromCourseId_toDate_toCourseId` |
 | fromDate, fromCourseId       | S/N | –             | Quelle |
 | toDate, toCourseId            | S/N | –             | Ziel |
 | status                       | S   | –             | pending | active | cancelled |
 | fromDate_fromCourseId_status | S   | –             | Für GSI_From |
 | toDate_toCourseId_status     | S   | –             | Für GSI_To |
-| tenantId_user                 | S   | –             | `tenantId + "#" + user` für GSI_From / GSI_To |
+| tenantId_user                 | S   | –             | `tenantId + "#" + nickname` für GSI_From / GSI_To |
 
 **GSI_From:** PK = `tenantId_user` (S), SK = `fromDate_fromCourseId_status` (S)  
 **GSI_To:**   PK = `tenantId_user` (S), SK = `toDate_toCourseId_status` (S)
 
 - **Zugriff:**
-  - Alle Swaps eines Users: `Query(tenantId, begins_with(user_swapId, user + "#"))`.
-  - Nach From-Ziel: Query über **GSI_From** mit `tenantId_user = tenantId + "#" + user` und `begins_with(fromDate_fromCourseId_status, fromDate + "_" + fromCourseId)`.
+  - Alle Swaps einer Person: `Query(tenantId, begins_with(user_swapId, nickname + "#"))`.
+  - Nach From-Ziel: Query über **GSI_From** mit `tenantId_user = tenantId + "#" + nickname` und `begins_with(fromDate_fromCourseId_status, fromDate + "_" + fromCourseId)`.
   - Nach To-Ziel: Query über **GSI_To** mit `tenantId_user` und `begins_with(toDate_toCourseId_status, ...)`.
   - Nach Status: `Query(tenantId)` + `FilterExpression: status = :status`.
 - **Schreibzugriffe:** Immer mit `tenantId` und `user_swapId` als Table-Key.
@@ -79,10 +80,11 @@ Siehe auch [course-enrollments.md](./course-enrollments.md) (#302 / #293).
 | Attribut | Typ | Schlüssel | Beschreibung |
 |----------|-----|-----------|--------------|
 | tenantId | S | Hash (PK) | Tenant-ID |
-| courseId_userId_validFrom | S | Range (SK) | `courseId#userId#validFrom`, z. B. `1#luna#2026-03-10` |
+| courseId_userId_validFrom | S | Range (SK) | `courseId#nickname#validFrom` (Attributname historisch) |
 | courseId | S | – | Kurs-ID (String) |
 | courseIdNumeric | N | – | Numerische Kurs-ID |
-| userId | S | – | Nickname |
+| participantId | S | – | Operativ: Nickname (#317 hybrid; Feldname historisch) |
+| userId | S | – | **Legacy** — Nickname |
 | validFrom | S | – | Erster gültiger Termin |
 | validUntil | S | – | Optional letzter gültiger Termin (inkl.) |
 
@@ -91,11 +93,28 @@ Siehe auch [course-enrollments.md](./course-enrollments.md) (#302 / #293).
 
 ---
 
+## 5. Participants (Profile & Membership)
+
+| Attribut | Typ | Schlüssel | Beschreibung |
+|----------|-----|-----------|--------------|
+| tenantId | S | Hash (PK) | Tenant-ID |
+| userId | S | Range (SK) | Nickname (Anzeige, Login, Admin) |
+| participantId | S | – | Stabile UUID pro Tenant (#317) |
+| authUserId | S | – | Cognito `sub` (optional, #324) |
+| … | | | weitere Profil-/Membership-Felder |
+
+**GSI_ParticipantId:** PK `tenantId`, SK `participantId` — Lookup ohne Nickname.
+
+Neue Mitglieder erhalten `participantId` (UUID) am Profil beim Anlegen; Backfill nur Profile/Memberships: `npm run backfill:participant-ids` (Ops bleiben Nicknames). UUID→Nickname in Ops: `npm run backfill:operational-nicknames`.
+
+---
+
 ## Konventionen
 
 - **tenantId:** Immer aus dem Request-Kontext (z. B. JWT oder Default) und in **jeder** DynamoDB-Operation (Query/Get/Put/Update/Delete) verwenden.
 - **courseId:** In Courses und Overrides als **String** im Key (SK bzw. courseId_date), numerisch weiterhin als Attribut `id` (Courses) bzw. `courseId` (Overrides) für API-Kompatibilität.
-- **swapId:** Unverändert `fromDate_fromCourseId_toDate_toCourseId`; Sort-Key der Tabelle ist `user_swapId = user + "#" + swapId`.
+- **Operative Personen-Refs (#317 hybrid):** In Swaps, Kurs-Caches, Overrides und Enrollments = **Nickname**. Stabile UUID nur am Profil (`GSI_ParticipantId`).
+- **swapId:** Unverändert `fromDate_fromCourseId_toDate_toCourseId`; Sort-Key der Tabelle ist `user_swapId = nickname + "#" + swapId`.
 
 Dieses Dokument dient als Referenz für Terraform, Seed und alle Lambdas.
 

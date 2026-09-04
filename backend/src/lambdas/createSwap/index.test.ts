@@ -50,7 +50,7 @@ describe("createSwap capacity guard", () => {
 
     const result = await handler(
       makeEvent({
-        user: "alice",
+        participantId: "alice",
         fromCourseId: 1,
         fromDate: "2099-06-16",
         toCourseId: 2,
@@ -73,7 +73,7 @@ describe("createSwap capacity guard", () => {
 
     const result = await handler(
       makeEvent({
-        user: "alice",
+        participantId: "alice",
         fromCourseId: 1,
         fromDate: "2099-06-16",
         toCourseId: 2,
@@ -99,7 +99,7 @@ describe("createSwap capacity guard", () => {
 
     const result = await handler(
       makeEvent({
-        user: "alice",
+        participantId: "alice",
         fromCourseId: 1,
         fromDate: "2099-06-16",
         toCourseId: 2,
@@ -124,7 +124,7 @@ describe("createSwap capacity guard", () => {
 
     const result = await handler(
       makeEvent({
-        user: "alice",
+        participantId: "alice",
         fromCourseId: 1,
         fromDate: "2099-06-16",
         toCourseId: 2,
@@ -153,7 +153,7 @@ describe("createSwap capacity guard", () => {
 
     const result = await handler(
       makeEvent({
-        user: "alice",
+        participantId: "alice",
         fromCourseId: 1,
         fromDate: "2026-05-12",
         toCourseId: 2,
@@ -190,7 +190,7 @@ describe("createSwap capacity guard", () => {
 
     const result = await handler(
       makeEvent({
-        user: "alice",
+        participantId: "alice",
         fromCourseId: 1,
         fromDate: "2026-05-12",
         toCourseId: 2,

@@ -33,8 +33,8 @@ export const DEFAULT_RING_GRAPH_LIMITS: RingGraphLimits = {
   maxCycles: 200,
 };
 
-function normalized(value: string): string {
-  return value.trim().toLowerCase();
+function normalized(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
 }
 
 function makeNodeKey(courseId: number, dateIso: string): RingNodeKey {
@@ -43,7 +43,7 @@ function makeNodeKey(courseId: number, dateIso: string): RingNodeKey {
 
 function makeSwapKey(swap: Swap): string {
   return [
-    normalized(swap.user),
+    normalized(swap.participantId),
     swap.fromCourseId,
     swap.fromDate,
     swap.toCourseId,
@@ -58,7 +58,7 @@ function isValidPendingSwap(swap: Swap): boolean {
     Number.isFinite(swap.toCourseId) &&
     !!swap.fromDate &&
     !!swap.toDate &&
-    normalized(swap.user).length > 0
+    normalized(swap.participantId).length > 0
   );
 }
 
@@ -82,7 +82,7 @@ export function buildRingSwapGraph(swaps: Swap[], limits: RingGraphLimits = DEFA
     }
     const from = makeNodeKey(swap.fromCourseId, swap.fromDate);
     const to = makeNodeKey(swap.toCourseId, swap.toDate);
-    const edgeKey = `${from}->${to}|${normalized(swap.user)}`;
+    const edgeKey = `${from}->${to}|${normalized(swap.participantId)}`;
     if (dedup.has(edgeKey)) continue;
     dedup.add(edgeKey);
 
@@ -103,7 +103,7 @@ export function buildRingSwapGraph(swaps: Swap[], limits: RingGraphLimits = DEFA
       node,
       [...edges].sort((a, b) => {
         if (a.to !== b.to) return a.to.localeCompare(b.to);
-        return normalized(a.swap.user).localeCompare(normalized(b.swap.user));
+        return normalized(a.swap.participantId).localeCompare(normalized(b.swap.participantId));
       }),
     );
   }

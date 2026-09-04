@@ -8,7 +8,7 @@ import {
   classifyMembersForDialog,
   ENROLLMENT_OPEN_START,
   isEnrollmentActiveOnDate,
-  pickRelevantEnrollmentForUser,
+  pickRelevantEnrollmentForParticipant,
   type EnrollmentChange,
 } from "shared/courseEnrollment";
 
@@ -157,16 +157,16 @@ function isRosterMember(
 
 export function openRosterUserIds(enrollments: CourseEnrollment[], refIso: string): string[] {
   const groups = classifyMembersForDialog(enrollments, refIso);
-  return [...groups.dabei, ...groups.kommt].map((row) => row.userId);
+  return [...groups.dabei, ...groups.kommt].map((row) => row.participantId);
 }
 
 export function syntheticOpenEnrollments(
   courseId: number,
   participants: string[],
 ): CourseEnrollment[] {
-  return participants.map((userId) => ({
+  return participants.map((participantId) => ({
     courseId,
-    userId,
+    participantId,
     validFrom: ENROLLMENT_OPEN_START,
   }));
 }
@@ -178,13 +178,13 @@ export function diffEnrollmentChanges(
 ): EnrollmentChange[] {
   const userIds = new Set<string>();
   for (const enrollment of [...previous, ...next]) {
-    userIds.add(enrollment.userId.toLowerCase());
+    userIds.add(enrollment.participantId.toLowerCase());
   }
 
   const changes: EnrollmentChange[] = [];
   for (const userId of userIds) {
-    const prev = pickRelevantEnrollmentForUser(previous, userId, refIso);
-    const current = pickRelevantEnrollmentForUser(next, userId, refIso);
+    const prev = pickRelevantEnrollmentForParticipant(previous, userId, refIso);
+    const current = pickRelevantEnrollmentForParticipant(next, userId, refIso);
     const wasRoster = isRosterMember(prev, refIso);
     const isRoster = isRosterMember(current, refIso);
     const prevUntil = prev?.validUntil ?? "";
@@ -192,15 +192,15 @@ export function diffEnrollmentChanges(
 
     if (!wasRoster && isRoster && current) {
       if (nextUntil) {
-        changes.push({ userId: current.userId, action: "remove", dateIso: nextUntil });
+        changes.push({ participantId: current.participantId, action: "remove", dateIso: nextUntil });
       } else {
-        changes.push({ userId: current.userId, action: "add", dateIso: current.validFrom });
+        changes.push({ participantId: current.participantId, action: "add", dateIso: current.validFrom });
       }
       continue;
     }
     if (wasRoster && !isRoster) {
       changes.push({
-        userId: current?.userId ?? prev?.userId ?? userId,
+        participantId: current?.participantId ?? prev?.participantId ?? userId,
         action: "remove",
         dateIso: current?.validUntil ?? refIso,
       });
@@ -208,13 +208,13 @@ export function diffEnrollmentChanges(
     }
     if (prev && current) {
       if (nextUntil && nextUntil !== prevUntil) {
-        changes.push({ userId: current.userId, action: "remove", dateIso: nextUntil });
+        changes.push({ participantId: current.participantId, action: "remove", dateIso: nextUntil });
       }
       if (prevUntil && !nextUntil) {
-        changes.push({ userId: current.userId, action: "add", dateIso: current.validFrom });
+        changes.push({ participantId: current.participantId, action: "add", dateIso: current.validFrom });
       }
       if (!nextUntil && current.validFrom !== prev.validFrom) {
-        changes.push({ userId: current.userId, action: "add", dateIso: current.validFrom });
+        changes.push({ participantId: current.participantId, action: "add", dateIso: current.validFrom });
       }
     }
   }

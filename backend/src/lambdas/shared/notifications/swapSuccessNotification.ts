@@ -8,7 +8,7 @@ import { buildSwapSuccessMail } from "../templates/swap/swapMailTemplates";
 export type SwapSuccessNotificationParams = {
   client: DynamoDBClient;
   tenantId: string;
-  swap: Pick<Swap, "user" | "toCourseId" | "toDate">;
+  swap: Pick<Swap, "participantId" | "toCourseId" | "toDate">;
   coursesTable?: string;
   participantsTable?: string;
   sesSourceEmail?: string;
@@ -36,6 +36,17 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
       mailSkippedInvitedCount: 0,
       mailFailedCount: 0,
       skippedReason: "missing_env",
+    };
+  }
+
+  const participantId = swap.participantId?.trim();
+  if (!participantId) {
+    return {
+      mailSentCount: 0,
+      mailSkippedNoProfileCount: 0,
+      mailSkippedInvitedCount: 0,
+      mailFailedCount: 0,
+      skippedReason: "missing_participant_id",
     };
   }
 
@@ -69,7 +80,7 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
     participantsTable,
     sesSourceEmail,
     tenantId,
-    participantUserIds: [swap.user],
+    participantUserIds: [participantId],
     buildMail: (nickname) => {
       const mail = buildSwapSuccessMail({
         nickname,

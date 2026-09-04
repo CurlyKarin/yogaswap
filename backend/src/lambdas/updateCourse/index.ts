@@ -14,7 +14,7 @@ import {
   findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
-import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeriesRangeEditErrorMessage, type Course } from "@yogaswap/shared";
+import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeriesRangeEditErrorMessage, looksLikeParticipantId, type Course } from "@yogaswap/shared";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
@@ -30,6 +30,7 @@ import {
   resolveRollingPlanningHorizonWeeks,
 } from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
+import { resolveOperationalNickname, resolveOperationalNicknameList } from "../shared/participantResolver";
 import { notifyParticipantsPlannedEndDate } from "../shared/plannedEndDateNotifications";
 import {
   notifyCourseActivated,
@@ -132,13 +133,15 @@ function normalizeEnrollmentChangesInput(value: unknown): EnrollmentChange[] | n
   for (const entry of value) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
     const record = entry as Record<string, unknown>;
-    const userId = typeof record.userId === "string" ? record.userId.trim() : "";
+    const participantId =
+      (typeof record.participantId === "string" ? record.participantId.trim() : "") ||
+      (typeof record.userId === "string" ? record.userId.trim() : "");
     const action = record.action;
     const dateIso = typeof record.dateIso === "string" ? record.dateIso.trim() : "";
-    if (!userId || (action !== "add" && action !== "remove") || !ISO_DATE_ONLY.test(dateIso)) {
+    if (!participantId || (action !== "add" && action !== "remove") || !ISO_DATE_ONLY.test(dateIso)) {
       return null;
     }
-    changes.push({ userId, action, dateIso });
+    changes.push({ participantId, action, dateIso });
   }
   return changes;
 }
@@ -328,10 +331,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const includedDates = Object.prototype.hasOwnProperty.call(body, "includedDates")
     ? normalizeDateListInput(body.includedDates)
     : undefined;
-  const participants = Object.prototype.hasOwnProperty.call(body, "participants")
+  let participants = Object.prototype.hasOwnProperty.call(body, "participants")
     ? normalizeParticipantListInput(body.participants)
     : undefined;
-  const enrollmentChanges = Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
+  let enrollmentChanges = Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
     ? normalizeEnrollmentChangesInput(body.enrollmentChanges)
     : undefined;
   const capacity =
@@ -395,10 +398,42 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return {
       statusCode: 400,
       body: JSON.stringify({
-        error: "enrollmentChanges must be an array of { userId, action: add|remove, dateIso }",
+        error: "enrollmentChanges must be an array of { participantId, action: add|remove, dateIso }",
       }),
     };
   }
+
+  const participantsTable = process.env.PARTICIPANTS_TABLE;
+  const refsNeedingResolve = [
+    ...(participants ?? []),
+    ...(enrollmentChanges ?? []).map((change) => change.participantId),
+  ].filter((ref) => looksLikeParticipantId(ref));
+  if (participantsTable && refsNeedingResolve.length > 0) {
+    if (participants?.length) {
+      participants = await resolveOperationalNicknameList(
+        client,
+        participantsTable,
+        tenantId,
+        participants,
+      );
+    }
+    if (enrollmentChanges?.length) {
+      enrollmentChanges = await Promise.all(
+        enrollmentChanges.map(async (change) => ({
+          ...change,
+          participantId: looksLikeParticipantId(change.participantId)
+            ? await resolveOperationalNickname(
+                client,
+                participantsTable,
+                tenantId,
+                change.participantId,
+              )
+            : change.participantId,
+        })),
+      );
+    }
+  }
+
   try {
     const membershipResp = await client.send(
       new GetItemCommand({
@@ -868,8 +903,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           existingEnrollments,
           addValidFrom,
           removeValidUntil,
-          addValidFromByUser: dateMaps.addValidFromByUser,
-          removeValidUntilByUser: dateMaps.removeValidUntilByUser,
+          addValidFromByParticipant: dateMaps.addValidFromByParticipant,
+          removeValidUntilByParticipant: dateMaps.removeValidUntilByParticipant,
           bootstrapValidFrom: migrationValidFrom,
           actorUserId: actorUserId ?? undefined,
           createdAt: new Date().toISOString(),
@@ -892,7 +927,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 courseId_userId_validFrom: {
                   S: buildCourseEnrollmentSortKey(
                     enrollment.courseId,
-                    enrollment.userId,
+                    enrollment.participantId,
                     enrollment.validFrom,
                   ),
                 },
@@ -908,9 +943,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               courseId,
               reason: "course_enrollments_sync",
               bootstrapped: planned.bootstrapped,
-              added: planned.addedUserIds,
-              closed: planned.closedUserIds,
-              deleted: planned.deletedUserIds,
+              added: planned.addedParticipantIds,
+              closed: planned.closedParticipantIds,
+              deleted: planned.deletedParticipantIds,
               putCount: planned.puts.length,
               deleteCount: planned.deletes.length,
             }),
@@ -1052,10 +1087,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const nextParticipantsSet = new Set(participants.map((entry) => entry.toLowerCase()));
       const addedFromChanges = (enrollmentChanges ?? [])
         .filter((change) => change.action === "add")
-        .map((change) => change.userId);
+        .map((change) => change.participantId);
       const removedFromChanges = (enrollmentChanges ?? [])
         .filter((change) => change.action === "remove")
-        .map((change) => change.userId);
+        .map((change) => change.participantId);
       const addedParticipants = [
         ...participants.filter((entry) => !previousParticipantsSet.has(entry.toLowerCase())),
         ...addedFromChanges.filter((entry) => !previousParticipantsSet.has(entry.toLowerCase())),
@@ -1333,7 +1368,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             weekday: mailWeekday,
             time: mailTime,
             termDateIso: upcomingTermIso,
-            termDateByUser: mailDateMaps.addValidFromByUser,
+            termDateByUser: mailDateMaps.addValidFromByParticipant,
             participantsTable,
             sesSourceEmail,
             baseUrl: baseUrlEnv,
@@ -1364,8 +1399,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             courseName: mailCourseName,
             addedParticipants: addedParticipantsForMail,
             removedParticipants: removedParticipantsForMail,
-            addedFromByUser: mailDateMaps.addValidFromByUser,
-            removedUntilByUser: mailDateMaps.removeValidUntilByUser,
+            addedFromByUser: mailDateMaps.addValidFromByParticipant,
+            removedUntilByUser: mailDateMaps.removeValidUntilByParticipant,
             participantsTable,
             sesSourceEmail,
             baseUrl: baseUrlEnv,

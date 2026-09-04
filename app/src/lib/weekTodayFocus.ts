@@ -1,5 +1,6 @@
 import { buildCourseOccurrenceLocal } from "shared/courseStatus";
 import type { Swap } from "shared/types";
+import type { ParticipantActor } from "shared/participantActor";
 import { isPersonallyInvolvedInCourse } from "./weekMyCoursesFilter";
 import type { WeekCourseRow } from "./courseWeekOccurrences";
 
@@ -33,13 +34,13 @@ function compareUpcomingCandidates(a: RankedOccurrence, b: RankedOccurrence): nu
 
 function collectScheduledOccurrences(
   rows: WeekCourseRow[],
-  nickname: string,
+  actor: ParticipantActor,
   swaps: Swap[],
   durationMinutes: number,
 ): RankedOccurrence[] {
   const result: RankedOccurrence[] = [];
   for (const { course, occurrences } of rows) {
-    const involved = isPersonallyInvolvedInCourse(course, nickname, swaps);
+    const involved = isPersonallyInvolvedInCourse(course, actor, swaps);
     for (const occurrence of occurrences) {
       if (occurrence.kind !== "scheduled") continue;
       const start = buildCourseOccurrenceLocal(occurrence.dateIso, course.time);
@@ -67,13 +68,13 @@ function collectScheduledOccurrences(
  */
 export function pickTodayFocusTarget(
   rows: WeekCourseRow[],
-  nickname: string,
+  actor: ParticipantActor,
   swaps: Swap[],
   now: Date = new Date(),
   durationMinutes: number = DEFAULT_COURSE_DURATION_MINUTES,
 ): TodayFocusTarget | null {
   const nowMs = now.getTime();
-  const candidates = collectScheduledOccurrences(rows, nickname, swaps, durationMinutes);
+  const candidates = collectScheduledOccurrences(rows, actor, swaps, durationMinutes);
   if (candidates.length === 0) return null;
 
   const running = candidates.filter((c) => c.startMs <= nowMs && nowMs < c.endMs);

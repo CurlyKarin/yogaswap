@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { getEffectiveParticipants, getStatusPresentation } from "./participants";
+import {
+  buildProfileByRefMap,
+  getEffectiveParticipants,
+  getStatusPresentation,
+  resolveParticipantRef,
+} from "./participants";
 import type { Course, CourseDateOverride } from "shared/types";
 
 const baseCourse: Course = {
@@ -105,6 +110,40 @@ describe("getEffectiveParticipants", () => {
       },
     ];
     expect(getEffectiveParticipants(baseCourse, overrides, "2025-06-16")).toEqual(["alice", "bob"]);
+  });
+});
+
+describe("resolveParticipantRef", () => {
+  it("prefers nickname over UUID for operational refs", () => {
+    expect(
+      resolveParticipantRef({
+        userId: "Bjorn",
+        participantId: "11111111-1111-4111-8111-111111111111",
+      }),
+    ).toBe("Bjorn");
+  });
+});
+
+describe("buildProfileByRefMap", () => {
+  it("resolves profiles by nickname or participantId", () => {
+    const profile = {
+      userId: "Anton",
+      participantId: "11111111-1111-4111-8111-111111111111",
+      status: "active" as const,
+    };
+    const map = buildProfileByRefMap([profile]);
+    expect(map.get("anton")).toEqual(profile);
+    expect(map.get(profile.participantId!.toLowerCase())).toEqual(profile);
+  });
+
+  it("keeps UUID lookup when profile still has both fields", () => {
+    const profile = {
+      userId: "Bjorn",
+      participantId: "22222222-2222-4222-8222-222222222222",
+      status: "invited" as const,
+    };
+    const map = buildProfileByRefMap([profile]);
+    expect(map.get("22222222-2222-4222-8222-222222222222")?.userId).toBe("Bjorn");
   });
 });
 

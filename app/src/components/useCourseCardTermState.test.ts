@@ -1,13 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import type { Course, CourseDateOverride, Swap, User } from "shared/types";
+import type { Course, CourseDateOverride, Swap } from "shared/types";
 import { useCourseCardTermState } from "./useCourseCardTermState";
-
-const baseUser: User = {
-  nickname: "alice",
-  email: "",
-  role: "participant",
-};
 
 const baseCourse: Course = {
   tenantId: "default-tenant",
@@ -37,7 +31,7 @@ function renderTermState(
     useCourseCardTermState({
       course: baseCourse,
       allCourses: [baseCourse],
-      currentUser: baseUser,
+      actor: { nickname: "alice" },
       dates: [futureDate],
       overrides: [baseOverride],
       swaps: [],
@@ -119,7 +113,7 @@ describe("useCourseCardTermState", () => {
       cancelledParticipants: ["alice"],
     };
     const activeSwap: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: pastOrigin,
       toCourseId: 2,
@@ -155,7 +149,7 @@ describe("useCourseCardTermState", () => {
 
   it("findet pending Swap für den gewählten Termin", () => {
     const pendingSwap: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 2,

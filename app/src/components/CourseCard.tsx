@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Swap, CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
+import type { ParticipantActor } from "shared/participantActor";
 import { formatAbsenceAnnouncement } from "../lib/courseCardLabels";
 import CourseCardDetails from "./CourseCardDetails";
 import CourseTermActions from "./CourseTermActions";
@@ -12,6 +13,8 @@ type Props = {
   course: Course;
   allCourses: Course[];
   currentUser: User;
+  actor: ParticipantActor;
+  participantNameByRef?: Map<string, string>;
   showOverbookingDetails?: boolean;
   dates: Date[];
   overrides: CourseDateOverride[];
@@ -39,7 +42,8 @@ type Props = {
 export default function CourseCard({
   course,
   allCourses,
-  currentUser,
+  actor,
+  participantNameByRef,
   showOverbookingDetails = false,
   dates,
   overrides,
@@ -61,7 +65,7 @@ export default function CourseCard({
   const termState = useCourseCardTermState({
     course,
     allCourses,
-    currentUser,
+    actor,
     dates,
     overrides,
     enrollments,
@@ -169,6 +173,7 @@ export default function CourseCard({
       <CourseCardDetails
         course={course}
         dates={dates}
+        participantNameByRef={participantNameByRef}
         showOverbookingDetails={showOverbookingDetails}
         canManageGuestSeats={canManageGuestSeats}
         guestSeatSaving={guestSeatSaving}

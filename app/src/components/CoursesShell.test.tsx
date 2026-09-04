@@ -129,12 +129,14 @@ const baseTenant: Tenant = {
 const participantMembership: UserTenantMembership = {
   tenantId: "default-tenant",
   userId: "maya",
+  participantId: "maya",
   role: "participant",
 };
 
 const adminMembership: UserTenantMembership = {
   tenantId: "default-tenant",
   userId: "admin",
+  participantId: "admin",
   role: "admin",
 };
 

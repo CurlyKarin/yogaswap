@@ -43,6 +43,7 @@ export const handler = async (
 
   const { tenantId, userId } = getTenantContext(event);
   const search = (event.queryStringParameters?.search || "").trim().toLowerCase();
+  const rosterOnly = (event.queryStringParameters?.roster || "").trim().toLowerCase() === "true";
   const includeOrphaned = (event.queryStringParameters?.includeOrphaned || "")
     .trim()
     .toLowerCase() === "true";
@@ -95,7 +96,7 @@ export const handler = async (
       tenantId,
       actorUserId: userId,
     });
-    if (!canManage) {
+    if (!canManage && !rosterOnly) {
       console.warn("getParticipants forbidden: actor cannot manage participants", {
         tenantId,
         actorUserId: userId,
@@ -112,9 +113,13 @@ export const handler = async (
       }),
     );
 
-    const profiles: ParticipantProfile[] = (result.Items || []).map((item) =>
-      unmarshall(item) as ParticipantProfile,
-    );
+    const profiles: ParticipantProfile[] = (result.Items || []).map((item) => {
+      const profile = unmarshall(item) as ParticipantProfile;
+      return {
+        ...profile,
+        participantId: profile.participantId?.trim() || profile.userId,
+      };
+    });
 
     const membershipsResult = await client.send(
       new QueryCommand({
@@ -130,6 +135,27 @@ export const handler = async (
     const roleByUserId = new Map<string, UserRole>(
       memberships.map((m) => [m.userId, m.role]),
     );
+
+    if (rosterOnly) {
+      if (!memberships.some((membership) => membership.userId === userId)) {
+        return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+      }
+      const roster = profiles
+        .filter((profile) => roleByUserId.has(profile.userId))
+        .map((profile) => ({
+          tenantId: profile.tenantId,
+          userId: profile.userId,
+          participantId: profile.participantId,
+        }));
+      return {
+        statusCode: 200,
+        body: JSON.stringify(roster),
+      };
+    }
+
+    if (!canManage) {
+      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+    }
 
     console.log("getParticipants query result", {
       tenantId,

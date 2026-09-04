@@ -31,7 +31,7 @@ const baseOverride: CourseDateOverride = {
 };
 
 const baseSwap: Swap = {
-  user: "alice",
+  participantId: "alice",
   fromCourseId: 1,
   fromDate: "2099-06-16",
   toCourseId: 2,
@@ -60,6 +60,7 @@ function renderCourseCard(
     course: baseCourse,
     allCourses: [baseCourse],
     currentUser: baseUser,
+    actor: { nickname: baseUser.nickname },
     dates,
     overrides: [baseOverride],
     swaps: [],
@@ -742,7 +743,7 @@ describe("CourseCard", () => {
     const confirmSwap = vi.fn();
     const requestSwap = vi.fn();
     const existingPendingToCourse2: Swap = {
-      user: "alice",
+      participantId: "alice",
       fromCourseId: 1,
       fromDate: "2099-06-16",
       toCourseId: 2,

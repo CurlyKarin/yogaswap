@@ -9,15 +9,24 @@ import {
   UserTenantMembership,
   DEFAULT_TENANT_ID,
 } from "shared/types";
+import {
+  includesParticipantRef,
+  resolveActorParticipantRef,
+} from "shared/participantActor";
 import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
 import { getCourses } from "../api/courses";
 import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getOverrides } from "../api/overrides";
 import { getSwaps, getSwapsByStatus } from "../api/swaps";
+import { getParticipantRoster } from "../api/participants";
 import { getCourseDates } from "../lib/dates";
 import { canShowCourseInPastWeek, computeEarliestWeekAnchor } from "../lib/courseTermActions";
 import { collectWeekOccurrences, type WeekCourseRow } from "../lib/courseWeekOccurrences";
 import { isPersonallyInvolvedInCourse } from "../lib/weekMyCoursesFilter";
+import {
+  buildParticipantNameByRefMap,
+  resolveActorFromMembership,
+} from "../lib/participants";
 import { useCourseSwaps } from "../components/useCourseSwaps";
 
 const WEEKDAY_ORDER: Record<string, number> = {
@@ -49,7 +58,7 @@ function dedupeSwaps(values: Swap[]): Swap[] {
   const seen = new Set<string>();
   const result: Swap[] = [];
   for (const swap of values) {
-    const key = `${swap.user}#${swap.fromCourseId}#${swap.fromDate}#${swap.toCourseId}#${swap.toDate}#${swap.status}`;
+    const key = `${swap.participantId}#${swap.fromCourseId}#${swap.fromDate}#${swap.toCourseId}#${swap.toDate}#${swap.status}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(swap);
@@ -79,14 +88,18 @@ export function useCoursesData({
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
   const [enrollments, setEnrollments] = useState<CourseEnrollment[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [participantRoster, setParticipantRoster] = useState<
+    Array<{ userId: string; participantId?: string }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const effectiveMembership = useMemo<UserTenantMembership | undefined>(() => {
     if (!membership) return undefined;
     if (!forceParticipantView) return membership;
+    // Vertretung: Subject ist currentUser.nickname — Admin-participantId nicht übernehmen.
     return {
-      ...membership,
+      tenantId: membership.tenantId,
       role: "participant",
       userId: currentUser.nickname,
     };
@@ -104,16 +117,25 @@ export function useCoursesData({
   const resolvedRole = effectiveMembership?.role ?? currentUser.role;
   const canSeeCourseManagement = resolvedRole === "admin" || resolvedRole === "instructor";
 
+  // Subject = effectiveUser (Vertretung: vertretene Person), nicht getActorUserId (Admin).
+  const actor = useMemo(
+    () => resolveActorFromMembership(currentUser.nickname, effectiveMembership, participantRoster),
+    [currentUser.nickname, effectiveMembership, participantRoster],
+  );
+  const actorRef = useMemo(() => resolveActorParticipantRef(actor), [actor]);
+  const participantNameByRef = useMemo(
+    () => buildParticipantNameByRefMap(participantRoster),
+    [participantRoster],
+  );
+
   const courseContext = useCallback(
     (course: Course) => ({
       isTaughtByUser: (course.instructors ?? []).some(
-        (p) => p.toLowerCase() === currentUser.nickname.toLowerCase(),
+        (p) => p.toLowerCase() === actor.nickname.toLowerCase(),
       ),
-      isBookedByUser: course.participants.some(
-        (p) => p.toLowerCase() === currentUser.nickname.toLowerCase(),
-      ),
+      isBookedByUser: includesParticipantRef(course.participants, actor),
     }),
-    [currentUser.nickname],
+    [actor],
   );
 
   const fetchData = useCallback(async () => {
@@ -123,29 +145,32 @@ export function useCoursesData({
         ? Promise.all([getSwapsByStatus("pending"), getSwapsByStatus("active")]).then(([pending, active]) =>
             dedupeSwaps([...pending, ...active]),
           )
-        : getSwaps(currentUser.nickname);
+        : getSwaps(actorRef);
 
-      const [courseData, overrideData, enrollmentData, swapsData] = await Promise.all([
+      const [courseData, overrideData, enrollmentData, swapsData, rosterData] = await Promise.all([
         getCourses(),
         getOverrides(),
         getCourseEnrollments(),
         swapsPromise,
+        getParticipantRoster().catch(() => []),
       ]);
 
       setCourses(courseData.sort(sortCoursesForDisplay));
       setOverrides(Array.isArray(overrideData) ? overrideData : []);
       setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
       setSwaps(swapsData);
+      setParticipantRoster(rosterData);
       setError(null);
     } catch (err) {
       console.error("Error in useCoursesData:", err);
       setError("Failed to load data");
       setSwaps([]);
       setEnrollments([]);
+      setParticipantRoster([]);
     } finally {
       setLoading(false);
     }
-  }, [canSeeCourseManagement, currentUser.nickname]);
+  }, [canSeeCourseManagement, actorRef]);
 
   useEffect(() => {
     fetchData();
@@ -158,6 +183,7 @@ export function useCoursesData({
     swaps,
     setSwaps,
     currentUser,
+    actor,
     fetchData,
     tenant?.settings,
     enrollments,
@@ -192,7 +218,7 @@ export function useCoursesData({
 
       if (
         onlyMyCourses &&
-        !isPersonallyInvolvedInCourse(course, currentUser.nickname, swaps)
+        !isPersonallyInvolvedInCourse(course, actor, swaps)
       ) {
         continue;
       }
@@ -211,7 +237,7 @@ export function useCoursesData({
     tenant?.settings,
     courseContext,
     onlyMyCourses,
-    currentUser.nickname,
+    actor,
     swaps,
   ]);
 
@@ -240,5 +266,8 @@ export function useCoursesData({
     onToggleAbsence: swapHandlers.onToggleAbsence,
     adjustGuestCount: swapHandlers.adjustGuestCount,
     canManageGuestSeats: canManageParticipants(membershipForPermissions, tenant?.settings),
+    actor,
+    actorRef,
+    participantNameByRef,
   };
 }

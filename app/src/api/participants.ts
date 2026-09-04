@@ -37,6 +37,7 @@ export type ParticipantSortOrder = "asc" | "desc";
 export interface GetParticipantsRequest {
   search?: string;
   includeOrphaned?: boolean;
+  roster?: boolean;
   status?: ParticipantStatus;
   hasEmail?: boolean;
   sortBy?: ParticipantSortBy;
@@ -85,6 +86,7 @@ export async function getParticipants(
     if (typeof request.includeOrphaned === "boolean") {
       params.includeOrphaned = String(request.includeOrphaned);
     }
+    if (request.roster) params.roster = "true";
     if (request.status) params.status = request.status;
     if (typeof request.hasEmail === "boolean") params.hasEmail = String(request.hasEmail);
     if (request.sortBy) params.sortBy = request.sortBy;
@@ -98,6 +100,18 @@ export async function getParticipants(
   }
 
   throw new Error("Unexpected /participants response format");
+}
+
+export type ParticipantRosterEntry = Pick<ParticipantWithStatus, "userId" | "participantId" | "tenantId">;
+
+export async function getParticipantRoster(): Promise<ParticipantRosterEntry[]> {
+  const response = await axios.get<ParticipantRosterEntry[]>("/participants", {
+    params: { roster: "true" },
+  });
+  if (Array.isArray(response.data)) {
+    return response.data;
+  }
+  throw new Error("Unexpected /participants roster response format");
 }
 
 export async function updateParticipant(

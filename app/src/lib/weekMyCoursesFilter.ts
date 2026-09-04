@@ -1,4 +1,9 @@
-import type { Course, Swap, UserRole } from "shared/types";
+import type { Course, Swap } from "shared/types";
+import {
+  includesParticipantRef,
+  matchesSwapParticipant,
+  type ParticipantActor,
+} from "shared/participantActor";
 
 function equalsIgnoreCase(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
@@ -17,18 +22,18 @@ export function hasInstructorAssignment(courses: Course[], nickname: string): bo
  */
 export function isPersonallyInvolvedInCourse(
   course: Course,
-  nickname: string,
+  actor: ParticipantActor,
   swaps: Swap[],
 ): boolean {
-  if ((course.instructors ?? []).some((instructor) => equalsIgnoreCase(instructor, nickname))) {
+  if ((course.instructors ?? []).some((instructor) => equalsIgnoreCase(instructor, actor.nickname))) {
     return true;
   }
-  if (course.participants.some((participant) => equalsIgnoreCase(participant, nickname))) {
+  if (includesParticipantRef(course.participants, actor)) {
     return true;
   }
   return swaps.some(
     (swap) =>
-      equalsIgnoreCase(swap.user, nickname) &&
+      matchesSwapParticipant(swap, actor) &&
       (swap.fromCourseId === course.id || swap.toCourseId === course.id),
   );
 }
@@ -45,7 +50,7 @@ export type MyCoursesToggleResolution = {
  * Admin/instructor without instructor assignment: disabled, always all courses.
  */
 export function resolveMyCoursesToggle(
-  role: UserRole,
+  role: import("shared/types").UserRole,
   hasAssignment: boolean,
 ): MyCoursesToggleResolution {
   if (role === "participant") {

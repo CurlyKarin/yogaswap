@@ -58,19 +58,19 @@ describe("courseMembersDialogModel", () => {
 
   it("diffs add, end-while-staying, and reopen", () => {
     const previous: CourseEnrollment[] = [
-      { courseId: 1, userId: "alice", validFrom: "2026-01-01" },
-      { courseId: 1, userId: "dana", validFrom: "2026-01-01", validUntil: "2026-08-20" },
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01" },
+      { courseId: 1, participantId: "dana", validFrom: "2026-01-01", validUntil: "2026-08-20" },
     ];
     const next: CourseEnrollment[] = [
-      { courseId: 1, userId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-10" },
-      { courseId: 1, userId: "cara", validFrom: "2026-08-24" },
-      { courseId: 1, userId: "dana", validFrom: "2026-01-01" },
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-10" },
+      { courseId: 1, participantId: "cara", validFrom: "2026-08-24" },
+      { courseId: 1, participantId: "dana", validFrom: "2026-01-01" },
     ];
     expect(diffEnrollmentChanges(previous, next, "2026-08-17")).toEqual(
       expect.arrayContaining([
-        { userId: "alice", action: "remove", dateIso: "2026-08-10" },
-        { userId: "cara", action: "add", dateIso: "2026-08-24" },
-        { userId: "dana", action: "add", dateIso: "2026-01-01" },
+        { participantId: "alice", action: "remove", dateIso: "2026-08-10" },
+        { participantId: "cara", action: "add", dateIso: "2026-08-24" },
+        { participantId: "dana", action: "add", dateIso: "2026-01-01" },
       ]),
     );
     expect(openRosterUserIds(next, "2026-08-17")).toEqual(["dana", "cara"]);
@@ -78,37 +78,37 @@ describe("courseMembersDialogModel", () => {
 
   it("diffs a corrected validUntil even when the person already left the roster", () => {
     const previous: CourseEnrollment[] = [
-      { courseId: 1, userId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-10" },
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-10" },
     ];
     const next: CourseEnrollment[] = [
-      { courseId: 1, userId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-03" },
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-03" },
     ];
     expect(diffEnrollmentChanges(previous, next, "2026-08-17")).toEqual([
-      { userId: "alice", action: "remove", dateIso: "2026-08-03" },
+      { participantId: "alice", action: "remove", dateIso: "2026-08-03" },
     ]);
   });
 
   it("diffs an extended validUntil that brings a former member back onto the roster", () => {
     const previous: CourseEnrollment[] = [
-      { courseId: 1, userId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-10" },
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-10" },
     ];
     const next: CourseEnrollment[] = [
-      { courseId: 1, userId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-24" },
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-24" },
     ];
     expect(diffEnrollmentChanges(previous, next, "2026-08-17")).toEqual([
-      { userId: "alice", action: "remove", dateIso: "2026-08-24" },
+      { participantId: "alice", action: "remove", dateIso: "2026-08-24" },
     ]);
   });
 
   it("diffs a validUntil correction while the person is still on the roster", () => {
     const previous: CourseEnrollment[] = [
-      { courseId: 1, userId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-24" },
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-24" },
     ];
     const next: CourseEnrollment[] = [
-      { courseId: 1, userId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-31" },
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01", validUntil: "2026-08-31" },
     ];
     expect(diffEnrollmentChanges(previous, next, "2026-08-17")).toEqual([
-      { userId: "alice", action: "remove", dateIso: "2026-08-31" },
+      { participantId: "alice", action: "remove", dateIso: "2026-08-31" },
     ]);
   });
 
@@ -147,7 +147,7 @@ describe("courseMembersDialogModel", () => {
 
   it("synthesizes open enrollments from the cache", () => {
     expect(syntheticOpenEnrollments(3, ["luna"])).toEqual([
-      { courseId: 3, userId: "luna", validFrom: ENROLLMENT_OPEN_START },
+      { courseId: 3, participantId: "luna", validFrom: ENROLLMENT_OPEN_START },
     ]);
   });
 });

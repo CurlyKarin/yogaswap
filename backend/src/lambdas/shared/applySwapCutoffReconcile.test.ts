@@ -24,7 +24,7 @@ describe("applySwapCutoffReconcileIfConfigured", () => {
   const oldEnv = process.env;
   const client = { send: jest.fn() } as never;
   const pendingSwap: Swap = {
-    user: "alice",
+    participantId: "alice",
     fromCourseId: 1,
     fromDate: "2099-06-15",
     toCourseId: 2,

@@ -29,7 +29,7 @@ describe("DelegationPickerDialog", () => {
         open
         search=""
         candidates={[
-          { userId: "maya", email: "maya@example.com", status: "active", role: "participant", tenantId: "default-tenant" },
+          { userId: "maya", participantId: "maya", email: "maya@example.com", status: "active", role: "participant", tenantId: "default-tenant" },
         ]}
         onSearchChange={vi.fn()}
         onSelectUser={vi.fn()}
@@ -78,8 +78,8 @@ describe("DelegationPickerDialog", () => {
         open
         search=""
         candidates={[
-          { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
-          { userId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
+          { userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+          { userId: "luca", participantId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
         ]}
         onSearchChange={vi.fn()}
         onSelectUser={onSelectUser}
@@ -101,8 +101,8 @@ describe("DelegationPickerDialog", () => {
         open
         search=""
         candidates={[
-          { userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
-          { userId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
+          { userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+          { userId: "luca", participantId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
         ]}
         onSearchChange={vi.fn()}
         onSelectUser={vi.fn()}
@@ -128,7 +128,7 @@ describe("DelegationPickerDialog", () => {
       <DelegationPickerDialog
         open
         search=""
-        candidates={[{ userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" }]}
+        candidates={[{ userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" }]}
         onSearchChange={vi.fn()}
         onSelectUser={onSelectUser}
         onClose={onClose}
@@ -147,7 +147,7 @@ describe("DelegationPickerDialog", () => {
       <DelegationPickerDialog
         open
         search=""
-        candidates={[{ userId: "maya", status: "active", role: "participant", tenantId: "default-tenant" }]}
+        candidates={[{ userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" }]}
         onSearchChange={vi.fn()}
         onSelectUser={vi.fn()}
         onClose={vi.fn()}

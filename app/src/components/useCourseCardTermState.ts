@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Course, CourseDateOverride, CourseEnrollment, Swap, TenantSettings, User } from "shared/types";
+import type { Course, CourseDateOverride, CourseEnrollment, Swap, TenantSettings } from "shared/types";
+import {
+  includesParticipantRef,
+  matchesSwapParticipant,
+  resolveActorParticipantRef,
+  type ParticipantActor,
+} from "shared/participantActor";
 import {
   buildCourseOccurrenceLocal,
   getInactiveGraceLastDayIso,
@@ -40,7 +46,7 @@ function sameDayUTC(a: Date, b: Date) {
 export type UseCourseCardTermStateParams = {
   course: Course;
   allCourses: Course[];
-  currentUser: User;
+  actor: ParticipantActor;
   dates: Date[];
   overrides: CourseDateOverride[];
   enrollments?: CourseEnrollment[];
@@ -54,7 +60,7 @@ export type UseCourseCardTermStateParams = {
 export function useCourseCardTermState({
   course,
   allCourses,
-  currentUser,
+  actor,
   dates,
   overrides,
   enrollments = [],
@@ -73,7 +79,8 @@ export function useCourseCardTermState({
     () => (initialSelectedDate ?? dates[0])?.toISOString() || "",
   );
 
-  const userName = currentUser.nickname;
+  const actorRef = resolveActorParticipantRef(actor);
+  const userName = actorRef;
   const selectedDateKey = toDateKey(new Date(selectedDate));
 
   const override = useMemo(
@@ -108,11 +115,11 @@ export function useCourseCardTermState({
   const waitlist = useTermScopedParticipantState ? (override?.waitlist ?? []) : [];
   const guestCount = useTermScopedParticipantState ? (override?.anonymousTrialCount ?? 0) : 0;
 
-  const userNameLower = userName.toLowerCase();
-  const isParticipant = participants.some((p) => p.toLowerCase() === userNameLower);
+  const userNameLower = actorRef.toLowerCase();
+  const isParticipant = includesParticipantRef(participants, actor);
   const originallyParticipant = useTermScopedParticipantState
-    ? stemForSelectedDate.some((p) => p.toLowerCase() === userNameLower)
-    : course.participants.some((p) => p.toLowerCase() === userNameLower);
+    ? includesParticipantRef(stemForSelectedDate, actor)
+    : includesParticipantRef(course.participants, actor);
   const isShortNotice = isShortNoticeCancelled(override, userName);
   const hasCancelled = hasEffectiveCancellation(
     originallyParticipant,
@@ -139,7 +146,7 @@ export function useCourseCardTermState({
     });
   const hasActiveOriginSwapInPast = swaps.some(
     (s) =>
-      s.user === userName &&
+      matchesSwapParticipant(s, actor) &&
       s.status === "active" &&
       s.fromCourseId === course.id &&
       s.fromDate === selectedDateKey &&
@@ -147,7 +154,7 @@ export function useCourseCardTermState({
   );
   const hasActiveSwapFromOrigin = swaps.some(
     (s) =>
-      s.user === userName &&
+      matchesSwapParticipant(s, actor) &&
       s.status === "active" &&
       s.fromCourseId === course.id &&
       s.fromDate === selectedDateKey,
@@ -165,12 +172,12 @@ export function useCourseCardTermState({
     () =>
       swaps.filter(
         (s) =>
-          s.user === userName &&
+          matchesSwapParticipant(s, actor) &&
           s.fromCourseId === course.id &&
           s.fromDate === selectedDateKey &&
           s.status === "pending",
       ),
-    [swaps, userName, course.id, selectedDateKey],
+    [swaps, actor, course.id, selectedDateKey],
   );
 
   const existingPendingTargetCourseIds = useMemo(
@@ -183,7 +190,7 @@ export function useCourseCardTermState({
       getAvailableDates(
         allCourses,
         overrides,
-        currentUser,
+        actor,
         swapWindow,
         new Date(selectedDate),
         undefined,
@@ -193,7 +200,7 @@ export function useCourseCardTermState({
       )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, enrollments, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings, course],
+    [allCourses, overrides, enrollments, actor, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings, course],
   );
 
   const waitlistDates = useMemo(
@@ -201,7 +208,7 @@ export function useCourseCardTermState({
       getWaitlistDates(
         allCourses,
         overrides,
-        currentUser,
+        actor,
         swapWindow,
         new Date(selectedDate),
         undefined,
@@ -211,40 +218,40 @@ export function useCourseCardTermState({
       )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, enrollments, currentUser, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings, course],
+    [allCourses, overrides, enrollments, actor, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings, course],
   );
 
   const swapForThisTerm = useMemo(
     () =>
       swaps.find(
         (s) =>
-          s.user === userName &&
+          matchesSwapParticipant(s, actor) &&
           ((s.fromCourseId === course.id && s.fromDate === selectedDateKey) ||
             (s.toCourseId === course.id && s.toDate === selectedDateKey)),
       ),
-    [swaps, userName, course.id, selectedDateKey],
+    [swaps, actor, course.id, selectedDateKey],
   );
 
   const allSwapsForThisTerm = useMemo(
     () =>
       swaps.filter(
         (s) =>
-          (s.fromCourseId === course.id && s.fromDate === selectedDateKey && s.user === userName) ||
-          (s.toCourseId === course.id && s.toDate === selectedDateKey && s.user === userName),
+          (s.fromCourseId === course.id && s.fromDate === selectedDateKey && matchesSwapParticipant(s, actor)) ||
+          (s.toCourseId === course.id && s.toDate === selectedDateKey && matchesSwapParticipant(s, actor)),
       ),
-    [swaps, userName, course.id, selectedDateKey],
+    [swaps, actor, course.id, selectedDateKey],
   );
 
   const swapForWaitlist = useMemo(
     () =>
       swaps.find(
         (s) =>
-          s.user === userName &&
+          matchesSwapParticipant(s, actor) &&
           s.toCourseId === course.id &&
           s.toDate === selectedDateKey &&
           s.status === "pending",
       ),
-    [swaps, userName, course.id, selectedDateKey],
+    [swaps, actor, course.id, selectedDateKey],
   );
 
   const pendingCount = pendingSwapsFromOrigin.length;
@@ -276,10 +283,10 @@ export function useCourseCardTermState({
     () =>
       swaps.filter(
         (s) =>
-          s.user === userName &&
+          matchesSwapParticipant(s, actor) &&
           (s.fromCourseId === course.id || s.toCourseId === course.id),
       ),
-    [swaps, userName, course.id],
+    [swaps, actor, course.id],
   );
   const cancellableUserSwapsOnCourse = useMemo(
     () => userSwapsOnCourse.filter((swap) => canCancelSwap(swap, allCourses)),
@@ -440,6 +447,8 @@ export function useCourseCardTermState({
     guestCount,
     userName,
     userNameLower,
+    actorRef,
+    actor,
     isParticipant,
     originallyParticipant,
     isShortNotice,
