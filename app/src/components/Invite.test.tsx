@@ -187,5 +187,24 @@ describe("Invite", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("zeigt Nickname-Formatfehler und sperrt Submit (#326)", async () => {
+    mockedStartPasswordResetFromToken.mockResolvedValue({
+      success: true,
+      username: "Björn",
+    });
+
+    const { panel } = renderWithParams(
+      "?tenantId=default-tenant&token=t1&nickname=Björn&email=bjoern@example.com",
+    );
+
+    await waitFor(() => {
+      expect(within(panel).getByRole("alert")).toHaveTextContent(/ohne Umlaute/i);
+      expect(within(panel).getByRole("alert")).toHaveTextContent(/Studioleitung/i);
+    });
+
+    const submit = within(panel).getByRole("button", { name: /Passwort setzen|Zugang aktivieren/i });
+    expect(submit).toBeDisabled();
+  });
 });
 
