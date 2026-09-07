@@ -11,5 +11,6 @@ export * from './overrideOccupancy';
 export * from './courseEnrollment';
 export * from './participantId';
 export * from './participantActor';
+export * from './nickname';
 export * from './lib/storage';
 export * from './data/mockUsers';

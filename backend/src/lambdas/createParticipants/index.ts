@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
-import { generateParticipantId } from "@yogaswap/shared";
+import { generateParticipantId, validateNickname } from "@yogaswap/shared";
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
@@ -173,10 +173,20 @@ export const handler = async (event: any) => {
 
   const emailNormalized = typeof email === "string" ? email.trim() : "";
   const hasEmail = emailNormalized.length > 0;
-  const nicknameRaw = typeof nickname === "string" ? nickname.trim() : "";
+  const nicknameCheck = validateNickname(typeof nickname === "string" ? nickname : "");
+  if (!nicknameCheck.ok) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: nicknameCheck.message,
+        code: nicknameCheck.code,
+      }),
+    };
+  }
+  const nicknameRaw = nicknameCheck.nickname;
   const nicknameNormalized = nicknameRaw.toLowerCase();
 
-  if (!nicknameRaw || !role) {
+  if (!role) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing required fields" }) };
   }
 

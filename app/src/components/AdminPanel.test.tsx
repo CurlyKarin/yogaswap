@@ -482,6 +482,50 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("lehnt Nickname mit Umlauten ab und ruft invite nicht auf (#326)", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([]);
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "Björn" },
+    });
+    fireEvent.blur(within(dialog).getByPlaceholderText("Spitzname"));
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/ohne Umlaute/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Anlegen$/i }));
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/ohne Umlaute/i)).toBeInTheDocument();
+    });
+    expect(mockedInviteUser).not.toHaveBeenCalled();
+  });
+
+  it("lehnt Nickname mit # ab (#326)", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([]);
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+      target: { value: "Max#1" },
+    });
+    fireEvent.blur(within(dialog).getByPlaceholderText("Spitzname"));
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/kein #/i)).toBeInTheDocument();
+    });
+    expect(mockedInviteUser).not.toHaveBeenCalled();
+  });
+
   it("ueberschreibt E-Mail bei Reaktivierung standardmaessig nicht", async () => {
     mockedGetParticipants.mockResolvedValue([
       {

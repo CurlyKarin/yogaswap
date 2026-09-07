@@ -9,6 +9,7 @@ import {
   type ParticipantWithStatus,
 } from "../api/participants";
 import type { Tenant, UserRole } from "shared/types";
+import { NICKNAME_MIN_LENGTH, validateNickname } from "shared/nickname";
 import { getStatusPresentation } from "../lib/participants";
 import { focusModalOnOpen } from "../lib/focusWithVisibleRing";
 import StudioSettingsSection from "./StudioSettingsSection";
@@ -34,6 +35,7 @@ type AdminPanelProps = {
 type CreateNicknameCheckState =
   | "idle"
   | "too_short"
+  | "invalid"
   | "new"
   | "reactivation"
   | "active_conflict"
@@ -180,23 +182,26 @@ export default function AdminPanel({
     return candidate;
   }, [createActiveConflict, createNickname, safeParticipants]);
   const resolveCreateNicknameContext = useCallback(async (nicknameValue: string) => {
-    const normalized = nicknameValue.trim().toLowerCase();
-    if (!normalized) {
+    const formatCheck = validateNickname(nicknameValue);
+    if (!formatCheck.ok) {
       setCreateReactivationUserId(null);
       setCreateOverwriteEmailOnReactivate(false);
       setCreateMatchedParticipant(null);
-      setCreateNicknameCheckState("idle");
       setCreateLastResolvedNickname(null);
-      return { state: "idle" as const, match: null as ParticipantWithStatus | null };
+      if (formatCheck.code === "empty") {
+        setCreateNicknameCheckState("idle");
+        return { state: "idle" as const, match: null as ParticipantWithStatus | null };
+      }
+      if (formatCheck.code === "too_short") {
+        setCreateNicknameCheckState("too_short");
+        return { state: "too_short" as const, match: null as ParticipantWithStatus | null };
+      }
+      setCreateNicknameCheckState("invalid");
+      setCreateError(formatCheck.message);
+      return { state: "invalid" as const, match: null as ParticipantWithStatus | null };
     }
-    if (normalized.length < 3) {
-      setCreateReactivationUserId(null);
-      setCreateOverwriteEmailOnReactivate(false);
-      setCreateMatchedParticipant(null);
-      setCreateNicknameCheckState("too_short");
-      setCreateLastResolvedNickname(null);
-      return { state: "too_short" as const, match: null as ParticipantWithStatus | null };
-    }
+    const normalized = formatCheck.nickname.toLowerCase();
+    setCreateError("");
     if (normalized === createLastResolvedNickname && createNicknameCheckState !== "idle") {
       return {
         state: createNicknameCheckState,
@@ -638,17 +643,21 @@ export default function AdminPanel({
   };
 
   const saveCreate = async () => {
-    const nicknameValue = createNickname.trim();
-    if (!nicknameValue) {
-      setCreateError("Bitte einen Nickname eingeben.");
+    const nicknameCheck = validateNickname(createNickname);
+    if (!nicknameCheck.ok) {
+      if (nicknameCheck.code === "too_short") {
+        setCreateNicknameCheckState("too_short");
+      } else if (nicknameCheck.code !== "empty") {
+        setCreateNicknameCheckState("invalid");
+      }
+      setCreateError(nicknameCheck.message);
       return;
     }
-    if (nicknameValue.length < 3) {
-      setCreateNicknameCheckState("too_short");
-      setCreateError("Bitte mindestens 3 Zeichen für den Nickname eingeben.");
-      return;
-    }
+    const nicknameValue = nicknameCheck.nickname;
     const resolved = await resolveCreateNicknameContext(nicknameValue);
+    if (resolved.state === "invalid" || resolved.state === "too_short") {
+      return;
+    }
     if (resolved.state === "active_conflict") {
       setCreateError(
         createSuggestedNickname
@@ -698,7 +707,7 @@ export default function AdminPanel({
         return;
       }
       if (!result.success) {
-        setCreateError("Teilnehmer konnte nicht angelegt werden.");
+        setCreateError(result.error || "Teilnehmer konnte nicht angelegt werden.");
         return;
       }
 
@@ -1328,6 +1337,7 @@ export default function AdminPanel({
                   const nextNickname = e.target.value;
                   setCreateNickname(nextNickname);
                   resetCreateNicknameResolution();
+                  setCreateError("");
                 }}
                 onKeyDown={(event) => {
                   void handleCreateNicknameKeyDown(event);
@@ -1337,6 +1347,7 @@ export default function AdminPanel({
                 }}
                 disabled={createSaving}
                 className="dialog-field"
+                aria-invalid={createNicknameCheckState === "invalid" || createNicknameCheckState === "too_short"}
               />
 
               {createIsReactivation && (
@@ -1424,7 +1435,7 @@ export default function AdminPanel({
               />
               {createNicknameCheckState === "too_short" && (
                 <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
-                  Nickname-Prüfung startet ab 3 Zeichen.
+                  Nickname-Prüfung startet ab {NICKNAME_MIN_LENGTH} Zeichen.
                 </p>
               )}
               {createNicknameCheckState === "exists_in_tenant" && (

@@ -93,6 +93,35 @@ describe('createParticipants Lambda', () => {
     const result = await handler(event);
 
     expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toBe('Bitte einen Nickname eingeben.');
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 if nickname has umlauts', async () => {
+    const event = baseEvent({ nickname: 'Björn', role: 'participant' });
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.code).toBe('umlauts');
+    expect(body.error).toMatch(/Umlaute/i);
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 if nickname contains #', async () => {
+    const event = baseEvent({ nickname: 'Max#1', role: 'participant' });
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).code).toBe('invalid_chars');
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 if role is missing', async () => {
+    const event = baseEvent({ nickname: 'Max' });
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
     expect(JSON.parse(result.body).error).toBe('Missing required fields');
     expect(cognitoMockSend).not.toHaveBeenCalled();
   });

@@ -98,12 +98,14 @@ Siehe auch [course-enrollments.md](./course-enrollments.md) (#302 / #293).
 | Attribut | Typ | Schlüssel | Beschreibung |
 |----------|-----|-----------|--------------|
 | tenantId | S | Hash (PK) | Tenant-ID |
-| userId | S | Range (SK) | Nickname (Anzeige, Login, Admin) |
+| userId | S | Range (SK) | Nickname (Login / operative Referenz; Regeln #326) |
 | participantId | S | – | Stabile UUID pro Tenant (#317) |
 | authUserId | S | – | Cognito `sub` (optional, #324) |
 | … | | | weitere Profil-/Membership-Felder |
 
 **GSI_ParticipantId:** PK `tenantId`, SK `participantId` — Lookup ohne Nickname.
+
+**Nickname (#326):** ASCII `a-z` `A-Z` `0-9` `.` `-` `_`, Länge 3–32, kein `#`/Leerzeichen/Umlaute. Validierung: Shared `validateNickname()` (Backend + Admin-UI). Anzeigename mit Umlauten: [#327](https://github.com/CurlyKarin/yogaswap/issues/327). Case-insensitive eindeutig pro Tenant (`userIdNormalized`).
 
 Neue Mitglieder erhalten `participantId` (UUID) am Profil beim Anlegen; Backfill nur Profile/Memberships: `npm run backfill:participant-ids` (Ops bleiben Nicknames). UUID→Nickname in Ops: `npm run backfill:operational-nicknames`.
 
@@ -114,7 +116,7 @@ Neue Mitglieder erhalten `participantId` (UUID) am Profil beim Anlegen; Backfill
 - **tenantId:** Immer aus dem Request-Kontext (z. B. JWT oder Default) und in **jeder** DynamoDB-Operation (Query/Get/Put/Update/Delete) verwenden.
 - **courseId:** In Courses und Overrides als **String** im Key (SK bzw. courseId_date), numerisch weiterhin als Attribut `id` (Courses) bzw. `courseId` (Overrides) für API-Kompatibilität.
 - **Operative Personen-Refs (#317 hybrid):** In Swaps, Kurs-Caches, Overrides und Enrollments = **Nickname**. Stabile UUID nur am Profil (`GSI_ParticipantId`).
-- **swapId:** Unverändert `fromDate_fromCourseId_toDate_toCourseId`; Sort-Key der Tabelle ist `user_swapId = nickname + "#" + swapId`.
+- **swapId:** Unverändert `fromDate_fromCourseId_toDate_toCourseId`; Sort-Key der Tabelle ist `user_swapId = nickname + "#" + swapId` — deshalb kein `#` im Nickname (#326).
 
 Dieses Dokument dient als Referenz für Terraform, Seed und alle Lambdas.
 
