@@ -4,6 +4,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { signIn, fetchAuthSession, signOut, confirmResetPassword } from "@aws-amplify/auth";
 import { saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
 import { User, UserRole } from "shared/types";
+import { validateNickname } from "shared/nickname";
 import { updateParticipant } from "../api/participants";
 import { startPasswordResetFromToken } from "../api/auth";
 
@@ -38,6 +39,9 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
 
   // nickname (username) and optional email for display
   const nicknameParam = searchParams.get("nickname") || "";
+  const nicknameFormat = validateNickname(nicknameParam);
+  const nicknameFormatError =
+    nicknameParam.trim().length > 0 && !nicknameFormat.ok ? nicknameFormat.message : null;
   const emailDisplay = searchParams.get("email") || "";
   const tokenParam = searchParams.get("token");
   const tenantIdParam = searchParams.get("tenantId");
@@ -231,6 +235,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       <p className="muted" style={{ marginTop: 0 }}>
         Hallo <strong>{nicknameParam || usernameForReset}</strong>,
       </p>
+      {nicknameFormatError && (
+        <p role="alert" style={{ color: "crimson", marginTop: 0 }}>
+          {nicknameFormatError} Bitte die Studioleitung um einen neuen Einladungslink bitten.
+        </p>
+      )}
       <p className="muted" style={{ marginTop: 0 }}>{subtitleText}</p>
       {emailDisplay && (
         <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
@@ -238,7 +247,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
         </p>
       )}
 
-      <form onSubmit={handleSubmitTokenReset} className="invite-form">
+      <form
+        onSubmit={handleSubmitTokenReset}
+        className="invite-form"
+        aria-disabled={nicknameFormatError ? true : undefined}
+      >
         {/* Password managers need an explicit username field in reset flows. */}
         <input
           type="text"
@@ -289,7 +302,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
           </p>
         )}
 
-        <button type="submit" disabled={loading || !authCleared || !codeSent} className="btn-primary btn-block">
+        <button
+          type="submit"
+          disabled={loading || !authCleared || !codeSent || !!nicknameFormatError}
+          className="btn-primary btn-block"
+        >
           {loading ? "Verarbeite…" : modeCopy[authMode].submitLabel}
         </button>
       </form>
