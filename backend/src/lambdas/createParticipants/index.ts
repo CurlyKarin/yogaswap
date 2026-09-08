@@ -387,6 +387,7 @@ export const handler = async (event: any) => {
         const reactivationMail = buildReactivationMail({
           locale: mailLocale,
           nickname: nicknameRaw,
+          displayName: displayNameCanonical,
           loginUrl: baseUrl,
           studioName,
           studioUrl: baseUrl,
@@ -617,14 +618,17 @@ export const handler = async (event: any) => {
     }
   }
 
-  // Build link (only nickname in the URL)
+  // Build link (nickname = Login; optional displayName for greeting #327)
   const baseUrl = resolveAppBaseUrlForTenant(tenantId);
   const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
   const nowSeconds = Math.floor(Date.now() / 1000);
+  const displayNameQuery = displayNameCanonical
+    ? `&displayName=${encodeURIComponent(displayNameCanonical)}`
+    : "";
 
   let oneTimeToken: string | undefined;
   let oneTimeTokenNonce: string | undefined;
-  let link = `${baseUrl}/invite?mode=invite_activation&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
+  let link = `${baseUrl}/invite?mode=invite_activation&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}${displayNameQuery}`;
 
   // Token nur für "echte Einladung" (nicht für Reaktivierung ohne Passwortreset).
   if (!reactivated && tokensTable) {
@@ -654,7 +658,7 @@ export const handler = async (event: any) => {
     if (oneTimeToken) {
       link = `${baseUrl}/invite?mode=invite_activation&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(
         oneTimeToken,
-      )}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}`;
+      )}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}${displayNameQuery}`;
     }
   }
 
@@ -671,6 +675,7 @@ export const handler = async (event: any) => {
   const reactivationMail = buildReactivationMail({
     locale: mailLocale,
     nickname: nicknameRaw,
+    displayName: displayNameCanonical,
     loginUrl: baseUrl,
     studioName,
     studioUrl: baseUrl,
@@ -678,6 +683,7 @@ export const handler = async (event: any) => {
   const inviteMail = buildInviteMail({
     locale: mailLocale,
     nickname: nicknameRaw,
+    displayName: displayNameCanonical,
     link,
     studioName,
     studioUrl: baseUrl,

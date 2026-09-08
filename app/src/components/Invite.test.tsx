@@ -51,6 +51,24 @@ describe("Invite", () => {
     mockedSignOut.mockResolvedValue(undefined);
   });
 
+  it("zeigt Anzeigename in der Begrüßung und Nickname als Login-Name (#327)", async () => {
+    mockedStartPasswordResetFromToken.mockResolvedValue({
+      success: true,
+      username: "Bjoern",
+    });
+
+    const { panel } = renderWithParams(
+      "?tenantId=default-tenant&token=t1&nickname=Bjoern&displayName=Bj%C3%B6rn&email=bjoern@example.com",
+    );
+
+    await waitFor(() => {
+      expect(within(panel).getByText(/Hallo/i)).toBeInTheDocument();
+      expect(within(panel).getByText("Björn")).toBeInTheDocument();
+      expect(within(panel).getByText(/Dein Login-Name \(Spitzname\):/i)).toBeInTheDocument();
+      expect(within(panel).getByText("Bjoern")).toBeInTheDocument();
+    });
+  });
+
   it("zeigt 'Ungültiger Link.', wenn kein Token-Link vorhanden ist", () => {
     const { panel } = renderWithParams("");
 
@@ -82,6 +100,7 @@ describe("Invite", () => {
     );
 
     await waitFor(() => {
+      expect(within(panel).getByText(/Dein Login-Name \(Spitzname\):/i)).toBeInTheDocument();
       expect(mockedStartPasswordResetFromToken).toHaveBeenCalledWith({
         tenantId: "default-tenant",
         token: "t1",

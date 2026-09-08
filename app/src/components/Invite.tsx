@@ -39,6 +39,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
 
   // nickname (username) and optional email for display
   const nicknameParam = searchParams.get("nickname") || "";
+  const displayNameParam = (searchParams.get("displayName") || "").trim();
   const nicknameFormat = validateNickname(nicknameParam);
   const nicknameFormatError =
     nicknameParam.trim().length > 0 && !nicknameFormat.ok ? nicknameFormat.message : null;
@@ -233,8 +234,19 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
     <div style={{ maxWidth: 480, margin: "2rem auto", padding: "1rem", border: "1px solid #eee", borderRadius: 8 }}>
       <h2>Willkommen bei YogaSwap</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        Hallo <strong>{nicknameParam || usernameForReset}</strong>,
+        {displayNameParam ? (
+          <>
+            Hallo <strong>{displayNameParam}</strong>,
+          </>
+        ) : (
+          "Hallo,"
+        )}
       </p>
+      {(nicknameParam || usernameForReset) && (
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+          Dein Login-Name (Spitzname): <strong>{nicknameParam || usernameForReset}</strong>
+        </p>
+      )}
       {nicknameFormatError && (
         <p role="alert" style={{ color: "crimson", marginTop: 0 }}>
           {nicknameFormatError} Bitte die Studioleitung um einen neuen Einladungslink bitten.

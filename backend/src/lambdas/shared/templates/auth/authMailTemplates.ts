@@ -10,6 +10,34 @@ export function resolveStudioDisplayName(studioName?: string | null): string {
   return trimmed || DEFAULT_STUDIO_LABEL;
 }
 
+/**
+ * Anrede in Auth-Mails (#327): displayName wenn gesetzt, sonst Login-Nickname.
+ */
+export function resolveAuthMailGreetingName(input: {
+  nickname: string;
+  displayName?: string | null;
+}): string {
+  const displayName = input.displayName?.trim();
+  if (displayName) return displayName;
+  return (input.nickname || "").trim();
+}
+
+function loginNameLineHtml(nickname: string): string {
+  return `Dein Login-Name (Spitzname) lautet <strong>${nickname}</strong>.`;
+}
+
+function loginNameLineText(nickname: string): string {
+  return `Dein Login-Name (Spitzname) lautet "${nickname}".`;
+}
+
+function loginNameStillHtml(nickname: string): string {
+  return `Dein Login-Name (Spitzname) ist weiterhin <strong>${nickname}</strong>.`;
+}
+
+function loginNameStillText(nickname: string): string {
+  return `Dein Login-Name (Spitzname) ist weiterhin "${nickname}".`;
+}
+
 function hasNamedStudio(studio: string): boolean {
   return studio !== DEFAULT_STUDIO_LABEL;
 }
@@ -112,41 +140,49 @@ function composeMail(params: {
 
 type InviteMailInput = StudioMailFields & {
   nickname: string;
+  displayName?: string | null;
   link: string;
 };
 
 type RecoveryMailInput = StudioMailFields & {
   nickname: string;
+  displayName?: string | null;
   link: string;
 };
 
 type ReactivationMailInput = StudioMailFields & {
   nickname: string;
+  displayName?: string | null;
   loginUrl: string;
 };
 
 type InvitePreparationMailInput = StudioMailFields & {
   nickname: string;
+  displayName?: string | null;
 };
 
 type StudioAccessRemovedMailInput = StudioMailFields & {
   nickname: string;
+  displayName?: string | null;
 };
 
 type EmailChangedNewAddressMailInput = StudioMailFields & {
   nickname: string;
+  displayName?: string | null;
   loginUrl: string;
   newEmail: string;
 };
 
 type EmailChangedOldAddressMailInput = StudioMailFields & {
   nickname: string;
+  displayName?: string | null;
   loginUrl: string;
   newEmail: string;
 };
 
 type RoleChangedMailInput = StudioMailFields & {
   nickname: string;
+  displayName?: string | null;
   loginUrl: string;
   oldRole: string;
   newRole: string;
@@ -155,6 +191,7 @@ type RoleChangedMailInput = StudioMailFields & {
 export function buildInviteMail(input: InviteMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
     return { subject: `${studio}: Einladung`, html: "", text: "" };
   }
@@ -171,18 +208,18 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
     studioName: studio,
     studioUrl: input.studioUrl,
     htmlBody: `
-        <h2>Willkommen ${input.nickname}!</h2>
+        <h2>Willkommen ${greeting}!</h2>
         <p>${inviteHtml}</p>
-        <p>Dein Accountname auf YogaSwap ist <strong>${input.nickname}</strong>.</p>
+        <p>${loginNameLineHtml(input.nickname)}</p>
         <p><a href="${input.link}">Passwort fuer YogaSwap festlegen</a></p>
         <p>Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode.</p>
         <p>Falls Du diese Einladung nicht erwartet hast, kannst Du die E-Mail ignorieren oder Dein Studio kontaktieren.</p>
       `,
     textBody: [
-      `Willkommen ${input.nickname}!`,
+      `Willkommen ${greeting}!`,
       "",
       inviteText,
-      `Dein Accountname auf YogaSwap ist "${input.nickname}".`,
+      loginNameLineText(input.nickname),
       "",
       `Passwort festlegen: ${input.link}`,
       "",
@@ -195,6 +232,7 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
 export function buildRecoveryMail(input: RecoveryMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
     return { subject: `${studio}: Passwort zuruecksetzen`, html: "", text: "" };
   }
@@ -204,19 +242,19 @@ export function buildRecoveryMail(input: RecoveryMailInput): MailTemplate {
     studioName: studio,
     studioUrl: input.studioUrl,
     htmlBody: `
-        <h2>Hallo ${input.nickname}!</h2>
+        <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} das Passwort zurueckgesetzt
         (durch Dich selbst oder durch Dein Studio).</p>
-        <p>Dein Accountname ist weiterhin <strong>${input.nickname}</strong>.</p>
+        <p>${loginNameStillHtml(input.nickname)}</p>
         <p><a href="${input.link}">Neues Passwort fuer YogaSwap festlegen</a></p>
         <p>Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode.</p>
         <p>Falls Du das nicht angefordert hast, kontaktiere bitte Dein Studio.</p>
       `,
     textBody: [
-      `Hallo ${input.nickname}!`,
+      `Hallo ${greeting}!`,
       "",
       `Auf YogaSwap wurde ${forStudioAccessText(studio)} das Passwort zurueckgesetzt (durch Dich selbst oder durch Dein Studio).`,
-      `Dein Accountname ist weiterhin "${input.nickname}".`,
+      loginNameStillText(input.nickname),
       "",
       `Neues Passwort festlegen: ${input.link}`,
       "",
@@ -229,6 +267,7 @@ export function buildRecoveryMail(input: RecoveryMailInput): MailTemplate {
 export function buildReactivationMail(input: ReactivationMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
     return { subject: `${studio}: Reaktivierung`, html: "", text: "" };
   }
@@ -245,17 +284,17 @@ export function buildReactivationMail(input: ReactivationMailInput): MailTemplat
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
     htmlBody: `
-        <h2>Hallo ${input.nickname}!</h2>
+        <h2>Hallo ${greeting}!</h2>
         <p>${accessHtml}</p>
-        <p>Dein Accountname auf YogaSwap ist <strong>${input.nickname}</strong>.</p>
+        <p>${loginNameLineHtml(input.nickname)}</p>
         <p>Du kannst Dich mit Deinem bestehenden Passwort wieder anmelden.</p>
         <p><a href="${input.loginUrl}">Zur YogaSwap-Anmeldung</a></p>
       `,
     textBody: [
-      `Hallo ${input.nickname}!`,
+      `Hallo ${greeting}!`,
       "",
       accessText,
-      `Dein Accountname auf YogaSwap ist "${input.nickname}".`,
+      loginNameLineText(input.nickname),
       "",
       "Du kannst Dich mit Deinem bestehenden Passwort wieder anmelden.",
       `Anmeldung: ${input.loginUrl}`,
@@ -266,6 +305,7 @@ export function buildReactivationMail(input: ReactivationMailInput): MailTemplat
 export function buildInvitePreparationMail(input: InvitePreparationMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
     return { subject: `${studio}: Einladung`, html: "", text: "" };
   }
@@ -282,16 +322,16 @@ export function buildInvitePreparationMail(input: InvitePreparationMailInput): M
     studioName: studio,
     studioUrl: input.studioUrl,
     htmlBody: `
-        <h2>Willkommen ${input.nickname}!</h2>
+        <h2>Willkommen ${greeting}!</h2>
         <p>${prepHtml}</p>
-        <p>Dein Accountname auf YogaSwap ist <strong>${input.nickname}</strong>.</p>
+        <p>${loginNameLineHtml(input.nickname)}</p>
         <p>Bitte kontaktiere Dein Studio, falls Du keinen gueltigen Einladungslink erhalten hast.</p>
       `,
     textBody: [
-      `Willkommen ${input.nickname}!`,
+      `Willkommen ${greeting}!`,
       "",
       prepText,
-      `Dein Accountname auf YogaSwap ist "${input.nickname}".`,
+      loginNameLineText(input.nickname),
       "",
       "Bitte kontaktiere Dein Studio, falls Du keinen gueltigen Einladungslink erhalten hast.",
     ].join("\n"),
@@ -301,6 +341,7 @@ export function buildInvitePreparationMail(input: InvitePreparationMailInput): M
 export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
     return { subject: `${studio}: Zugang entfernt`, html: "", text: "" };
   }
@@ -317,18 +358,18 @@ export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput
     studioName: studio,
     studioUrl: input.studioUrl,
     htmlBody: `
-        <h2>Hallo ${input.nickname}!</h2>
+        <h2>Hallo ${greeting}!</h2>
         <p>${removedHtml}</p>
-        <p>Dein Konto fuer den Account <strong>${input.nickname}</strong> ist nur deaktiviert
+        <p>Dein Konto fuer den Login-Namen <strong>${input.nickname}</strong> ist nur deaktiviert
         und noch nicht vollstaendig geloescht.</p>
         <p>Wenn Du eine vollstaendige Entfernung Deines Kontos moechtest, schreibe bitte an support@yogaswap.de.</p>
         <p>Falls das ein Versehen war, melde Dich bitte bei Deinem Studio.</p>
       `,
     textBody: [
-      `Hallo ${input.nickname}!`,
+      `Hallo ${greeting}!`,
       "",
       removedText,
-      `Dein Konto fuer den Account "${input.nickname}" ist nur deaktiviert und noch nicht vollstaendig geloescht.`,
+      `Dein Konto fuer den Login-Namen "${input.nickname}" ist nur deaktiviert und noch nicht vollstaendig geloescht.`,
       "",
       "Wenn Du eine vollstaendige Entfernung Deines Kontos moechtest, schreibe bitte an support@yogaswap.de.",
       "Falls das ein Versehen war, melde Dich bitte bei Deinem Studio.",
@@ -341,6 +382,7 @@ export function buildEmailChangedNewAddressMail(
 ): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
     return { subject: `${studio}: E-Mail-Adresse aktualisiert`, html: "", text: "" };
   }
@@ -350,17 +392,17 @@ export function buildEmailChangedNewAddressMail(
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
     htmlBody: `
-        <h2>Hallo ${input.nickname}!</h2>
+        <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} die Login-E-Mail-Adresse
         auf <strong>${input.newEmail}</strong> geaendert.</p>
-        <p>Dein Accountname ist weiterhin <strong>${input.nickname}</strong>.</p>
+        <p>${loginNameStillHtml(input.nickname)}</p>
         <p><a href="${input.loginUrl}">Zur YogaSwap-Anmeldung</a></p>
       `,
     textBody: [
-      `Hallo ${input.nickname}!`,
+      `Hallo ${greeting}!`,
       "",
       `Auf YogaSwap wurde ${forStudioAccessText(studio)} die Login-E-Mail-Adresse auf "${input.newEmail}" geaendert.`,
-      `Dein Accountname ist weiterhin "${input.nickname}".`,
+      loginNameStillText(input.nickname),
       "",
       `Anmeldung: ${input.loginUrl}`,
     ].join("\n"),
@@ -372,6 +414,7 @@ export function buildEmailChangedOldAddressMail(
 ): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
     return {
       subject: `${studio}: Sicherheitshinweis E-Mail geaendert`,
@@ -385,18 +428,18 @@ export function buildEmailChangedOldAddressMail(
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
     htmlBody: `
-        <h2>Hallo ${input.nickname}!</h2>
+        <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} die Login-E-Mail-Adresse
         auf <strong>${input.newEmail}</strong> geaendert.</p>
-        <p>Dein Accountname ist weiterhin <strong>${input.nickname}</strong>.</p>
+        <p>${loginNameStillHtml(input.nickname)}</p>
         <p>Falls das nicht von Dir veranlasst wurde, kontaktiere bitte umgehend Dein Studio.</p>
         <p><a href="${input.loginUrl}">Zur YogaSwap-Anmeldung</a></p>
       `,
     textBody: [
-      `Hallo ${input.nickname}!`,
+      `Hallo ${greeting}!`,
       "",
       `Auf YogaSwap wurde ${forStudioAccessText(studio)} die Login-E-Mail-Adresse auf "${input.newEmail}" geaendert.`,
-      `Dein Accountname ist weiterhin "${input.nickname}".`,
+      loginNameStillText(input.nickname),
       "",
       "Falls das nicht von Dir veranlasst wurde, kontaktiere bitte umgehend Dein Studio.",
       `Anmeldung: ${input.loginUrl}`,
@@ -407,6 +450,7 @@ export function buildEmailChangedOldAddressMail(
 export function buildRoleChangedMail(input: RoleChangedMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
     return { subject: `${studio}: Rolle aktualisiert`, html: "", text: "" };
   }
@@ -416,17 +460,17 @@ export function buildRoleChangedMail(input: RoleChangedMailInput): MailTemplate 
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
     htmlBody: `
-        <h2>Hallo ${input.nickname}!</h2>
+        <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} Deine Rolle von
         <strong>${input.oldRole}</strong> &rarr; <strong>${input.newRole}</strong> geaendert.</p>
-        <p>Dein Accountname ist weiterhin <strong>${input.nickname}</strong>.</p>
+        <p>${loginNameStillHtml(input.nickname)}</p>
         <p><a href="${input.loginUrl}">Zur YogaSwap-Anmeldung</a></p>
       `,
     textBody: [
-      `Hallo ${input.nickname}!`,
+      `Hallo ${greeting}!`,
       "",
       `Auf YogaSwap wurde ${forStudioAccessText(studio)} Deine Rolle von "${input.oldRole}" -> "${input.newRole}" geaendert.`,
-      `Dein Accountname ist weiterhin "${input.nickname}".`,
+      loginNameStillText(input.nickname),
       "",
       `Anmeldung: ${input.loginUrl}`,
     ].join("\n"),

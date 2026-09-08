@@ -56,13 +56,14 @@ export default function ForgotPassword() {
       <h2>Passwort vergessen</h2>
       <p className="muted">
         Mit "Reset-Link anfordern" erhältst du eine E-Mail mit einem Link, über den du ein neues
-        Passwort setzen kannst.
+        Passwort setzen kannst. Nutze deinen Login-Namen (Spitzname), nicht den Anzeigenamen.
       </p>
 
       <form onSubmit={onSubmit} className="todo-form" autoComplete="on">
         <input
           type="text"
           name="username"
+          aria-label="Spitzname"
           placeholder="Spitzname"
           value={username}
           autoComplete="username"
@@ -70,6 +71,9 @@ export default function ForgotPassword() {
           disabled={loading}
           required
         />
+        <p className="muted" style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
+          Login-Name aus der Einladung — nicht der Anzeigename.
+        </p>
 
         {info && (
           <p style={{ color: "#374151" }} role="status" aria-live="polite">

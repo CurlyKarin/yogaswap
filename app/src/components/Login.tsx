@@ -81,6 +81,9 @@ export default function Login({ onLogin }: Props) {
           onChange={e => setUsername(e.target.value)}
           disabled={isLoading}
         />
+        <p className="muted" style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
+          Login-Name aus der Einladung — nicht der Anzeigename.
+        </p>
         <input
           aria-label="Passwort"
           type="password"

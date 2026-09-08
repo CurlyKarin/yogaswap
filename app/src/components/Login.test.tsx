@@ -56,6 +56,7 @@ describe("Login", () => {
 
     expect(screen.getByPlaceholderText("Spitzname")).toHaveValue("Luna");
     expect(screen.getByPlaceholderText("Passwort")).toHaveValue("Hallo123!");
+    expect(screen.getByText(/Login-Name aus der Einladung/i)).toBeInTheDocument();
     expect(screen.getByText(/Demo:/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Login/i }));
