@@ -6,6 +6,8 @@ import Login from "./Login";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
 import { loadCurrentUser } from "shared/lib/storage";
 import { isDemoLoginEnabled } from "../lib/demoLoginFlag";
+import { fetchAuthSession } from "aws-amplify/auth";
+import { clearCognitoSession } from "../auth/cognitoSession";
 
 vi.mock("../auth/useCognitoAuth", () => ({
   useCognitoAuth: vi.fn(),
@@ -15,6 +17,14 @@ vi.mock("shared/lib/storage", () => ({
   loadCurrentUser: vi.fn(),
 }));
 
+vi.mock("aws-amplify/auth", () => ({
+  fetchAuthSession: vi.fn().mockResolvedValue({ tokens: undefined }),
+}));
+
+vi.mock("../auth/cognitoSession", () => ({
+  clearCognitoSession: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../lib/demoLoginFlag", () => ({
   isDemoLoginEnabled: vi.fn(() => true),
 }));
@@ -22,11 +32,32 @@ vi.mock("../lib/demoLoginFlag", () => ({
 const useCognitoAuthMock = useCognitoAuth as unknown as ReturnType<typeof vi.fn>;
 const mockedLoadCurrentUser = loadCurrentUser as unknown as ReturnType<typeof vi.fn>;
 const mockedIsDemoLoginEnabled = isDemoLoginEnabled as unknown as ReturnType<typeof vi.fn>;
+const mockedFetchAuthSession = fetchAuthSession as unknown as ReturnType<typeof vi.fn>;
+const mockedClearCognitoSession = clearCognitoSession as unknown as ReturnType<typeof vi.fn>;
+
+function authStub(
+  overrides: Partial<{
+    login: ReturnType<typeof vi.fn>;
+    logout: ReturnType<typeof vi.fn>;
+    isLoading: boolean;
+    error: string | null;
+  }> = {},
+) {
+  return {
+    login: vi.fn().mockResolvedValue(false),
+    logout: vi.fn().mockResolvedValue(undefined),
+    isLoading: false,
+    error: null,
+    ...overrides,
+  };
+}
 
 describe("Login", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedIsDemoLoginEnabled.mockReturnValue(true);
+    mockedFetchAuthSession.mockResolvedValue({ tokens: undefined });
+    mockedClearCognitoSession.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -36,11 +67,11 @@ describe("Login", () => {
   it("rendert Formular mit Demo-Credentials und ruft bei Erfolg onLogin mit gespeichertem User auf", async () => {
     const onLogin = vi.fn();
 
-    useCognitoAuthMock.mockReturnValue({
-      login: vi.fn().mockResolvedValue(true),
-      isLoading: false,
-      error: null,
-    });
+    useCognitoAuthMock.mockReturnValue(
+      authStub({
+        login: vi.fn().mockResolvedValue(true),
+      }),
+    );
 
     mockedLoadCurrentUser.mockReturnValue({
       nickname: "Luna",
@@ -78,11 +109,7 @@ describe("Login", () => {
     mockedIsDemoLoginEnabled.mockReturnValue(false);
     const onLogin = vi.fn();
 
-    useCognitoAuthMock.mockReturnValue({
-      login: vi.fn().mockResolvedValue(false),
-      isLoading: false,
-      error: null,
-    });
+    useCognitoAuthMock.mockReturnValue(authStub());
 
     render(
       <MemoryRouter>
@@ -98,11 +125,7 @@ describe("Login", () => {
   it("zeigt eine Fehlermeldung aus useCognitoAuth an", () => {
     const onLogin = vi.fn();
 
-    useCognitoAuthMock.mockReturnValue({
-      login: vi.fn().mockResolvedValue(false),
-      isLoading: false,
-      error: "Login fehlgeschlagen",
-    });
+    useCognitoAuthMock.mockReturnValue(authStub({ error: "Login fehlgeschlagen" }));
 
     render(
       <MemoryRouter>
@@ -113,14 +136,62 @@ describe("Login", () => {
     expect(screen.getByText(/Login fehlgeschlagen/i)).toBeInTheDocument();
   });
 
+  it("zeigt Abmelden-Button bei Already-Authenticated-Fehler (#338)", () => {
+    useCognitoAuthMock.mockReturnValue(
+      authStub({ error: "There is already a signed in user." }),
+    );
+
+    render(
+      <MemoryRouter>
+        <Login onLogin={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: /Abmelden und neu anmelden/i })).toBeInTheDocument();
+  });
+
+  it("guestRoute: leitet bei gültiger Session zur App weiter (#338)", async () => {
+    mockedFetchAuthSession.mockResolvedValue({
+      tokens: { idToken: { payload: { nickname: "alice" } } },
+    });
+    useCognitoAuthMock.mockReturnValue(authStub());
+
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <Routes>
+          <Route path="/login" element={<Login onLogin={vi.fn()} guestRoute />} />
+          <Route path="/" element={<div>Home</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Home")).toBeInTheDocument();
+    });
+  });
+
+  it("guestRoute: cleared verwaiste Session ohne Token (#338)", async () => {
+    mockedFetchAuthSession.mockResolvedValue({ tokens: undefined });
+    useCognitoAuthMock.mockReturnValue(authStub());
+
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <Routes>
+          <Route path="/login" element={<Login onLogin={vi.fn()} guestRoute />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(mockedClearCognitoSession).toHaveBeenCalled();
+      expect(screen.getByPlaceholderText("Login-Name")).toBeInTheDocument();
+    });
+  });
+
   it("nutzt bei Weiterleitung aus Passwort-Reset den Nutzernamen statt Demo-Prefill", () => {
     const onLogin = vi.fn();
 
-    useCognitoAuthMock.mockReturnValue({
-      login: vi.fn().mockResolvedValue(false),
-      isLoading: false,
-      error: null,
-    });
+    useCognitoAuthMock.mockReturnValue(authStub());
 
     const { container } = render(
       <MemoryRouter

@@ -9,9 +9,15 @@ vi.mock("../api/auth", () => ({
   requestSelfPasswordReset: vi.fn(),
 }));
 
+vi.mock("../auth/cognitoSession", () => ({
+  clearCognitoSession: vi.fn().mockResolvedValue(undefined),
+}));
+
 const mockedRequestSelfPasswordReset = requestSelfPasswordReset as unknown as ReturnType<
   typeof vi.fn
 >;
+const { clearCognitoSession } = await import("../auth/cognitoSession");
+const mockedClearCognitoSession = clearCognitoSession as unknown as ReturnType<typeof vi.fn>;
 
 function renderWithRouter(initialEntries: string[] = ["/forgot-password"]) {
   function LoginStateProbe() {
@@ -47,6 +53,14 @@ function renderWithRouter(initialEntries: string[] = ["/forgot-password"]) {
 describe("ForgotPassword", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedClearCognitoSession.mockResolvedValue(undefined);
+  });
+
+  it("cleared Cognito-Session beim Öffnen (#338)", async () => {
+    renderWithRouter();
+    await waitFor(() => {
+      expect(mockedClearCognitoSession).toHaveBeenCalled();
+    });
   });
 
   it("fordert einen Reset-Link an", async () => {

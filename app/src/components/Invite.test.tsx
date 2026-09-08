@@ -3,18 +3,21 @@ import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Invite from "./Invite";
-import { signIn, fetchAuthSession, signOut, confirmResetPassword } from "@aws-amplify/auth";
+import { signIn, fetchAuthSession, confirmResetPassword } from "@aws-amplify/auth";
 import { saveCurrentUser } from "shared/lib/storage";
 
 vi.mock("@aws-amplify/auth", () => ({
   signIn: vi.fn(),
   fetchAuthSession: vi.fn(),
-  signOut: vi.fn(),
   confirmResetPassword: vi.fn(),
 }));
 
 vi.mock("shared/lib/storage", () => ({
   saveCurrentUser: vi.fn(),
+}));
+
+vi.mock("../auth/cognitoSession", () => ({
+  clearCognitoSession: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../api/auth", () => ({
@@ -23,9 +26,10 @@ vi.mock("../api/auth", () => ({
 
 const mockedSignIn = signIn as unknown as ReturnType<typeof vi.fn>;
 const mockedFetchAuthSession = fetchAuthSession as unknown as ReturnType<typeof vi.fn>;
-const mockedSignOut = signOut as unknown as ReturnType<typeof vi.fn>;
 const mockedConfirmResetPassword = confirmResetPassword as unknown as ReturnType<typeof vi.fn>;
 const mockedSaveCurrentUser = saveCurrentUser as unknown as ReturnType<typeof vi.fn>;
+const { clearCognitoSession } = await import("../auth/cognitoSession");
+const mockedClearCognitoSession = clearCognitoSession as unknown as ReturnType<typeof vi.fn>;
 const { startPasswordResetFromToken } = await import("../api/auth");
 const mockedStartPasswordResetFromToken =
   startPasswordResetFromToken as unknown as ReturnType<typeof vi.fn>;
@@ -48,7 +52,7 @@ describe("Invite", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    mockedSignOut.mockResolvedValue(undefined);
+    mockedClearCognitoSession.mockResolvedValue(undefined);
   });
 
   it("zeigt Anzeigename in der Begrüßung und Nickname als Login-Name (#327)", async () => {
