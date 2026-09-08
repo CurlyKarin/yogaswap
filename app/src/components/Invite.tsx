@@ -1,12 +1,13 @@
 // src/components/Invite.tsx
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { signIn, fetchAuthSession, signOut, confirmResetPassword } from "@aws-amplify/auth";
-import { saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
+import { signIn, fetchAuthSession, confirmResetPassword } from "@aws-amplify/auth";
+import { saveCurrentUser } from "shared/lib/storage";
 import { User, UserRole } from "shared/types";
 import { validateNickname } from "shared/nickname";
 import { updateParticipant } from "../api/participants";
 import { startPasswordResetFromToken } from "../api/auth";
+import { clearCognitoSession } from "../auth/cognitoSession";
 
 type AuthViewMode = "invite_activation" | "password_recovery" | "admin_reset";
 
@@ -91,17 +92,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
     if (!tokenMode) return;
     setAuthCleared(false);
     (async () => {
-      try {
-        await signOut({ global: true });
-      } catch {
-        // Wenn niemand eingeloggt ist, ist signOut ein No-Op.
-      }
-      // Token-Flow ist "public": wir wollen auf keinen Fall einen alten localStorage-User behalten.
-      try {
-        clearCurrentUser();
-      } catch {
-        // ignore
-      }
+      await clearCognitoSession();
       setAuthCleared(true);
     })();
   }, [nicknameParam, tokenMode]);
@@ -191,11 +182,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
 
       // Wichtig: confirmResetPassword setzt nicht zwingend eine Session.
       // Deshalb explizit mit neuem Passwort einloggen, damit Axios danach ein JWT hat.
-      try {
-        await signOut({ global: true });
-      } catch {
-        // ignore
-      }
+      await clearCognitoSession();
       await signIn({ username: usernameForReset, password: newPassword });
 
       const session = await fetchAuthSession();

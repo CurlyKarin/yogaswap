@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { requestSelfPasswordReset } from "../api/auth";
+import { clearCognitoSession } from "../auth/cognitoSession";
 
 export default function ForgotPassword() {
   const [username, setUsername] = useState("");
@@ -8,6 +9,11 @@ export default function ForgotPassword() {
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const [requested, setRequested] = useState(false);
+
+  // Wie Invite: Guest-Route ohne hängende Cognito-Session (#338).
+  useEffect(() => {
+    void clearCognitoSession();
+  }, []);
 
   const mapResetRequestErrorMessage = (err: unknown): string => {
     const msg = err instanceof Error ? err.message : String(err ?? "");

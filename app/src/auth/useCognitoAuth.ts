@@ -1,8 +1,9 @@
 // app/src/auth/useCognitoAuth.ts
-import { signIn, signOut, fetchAuthSession } from 'aws-amplify/auth';
-import { saveCurrentUser, loadCurrentUser, clearCurrentUser } from 'shared/lib/storage';
-import { useCallback, useState } from 'react';
-import { User, UserRole } from 'shared/types';
+import { signIn, fetchAuthSession } from "aws-amplify/auth";
+import { saveCurrentUser, loadCurrentUser } from "shared/lib/storage";
+import { useCallback, useState } from "react";
+import { User, UserRole } from "shared/types";
+import { clearCognitoSession, isUserAlreadyAuthenticatedError } from "./cognitoSession";
 
 type AuthReturn = {
   user: User | null;
@@ -21,6 +22,11 @@ export const useCognitoAuth = (): AuthReturn => {
     setIsLoading(true);
     setError(null);
     try {
+      // Vor signIn immer Session clearen — sonst "There is already a signed in user."
+      // (Amplify message enthält nicht den Exception-Namen; Catch allein war unzuverlässig.)
+      await clearCognitoSession();
+      setUser(null);
+
       let result;
       try {
         result = await signIn({
@@ -28,14 +34,8 @@ export const useCognitoAuth = (): AuthReturn => {
           password: credentials.password,
         });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("UserAlreadyAuthenticatedException")) {
-          try {
-            await signOut({ global: true });
-          } catch {
-            // continue with local cleanup and retry
-          }
-          clearCurrentUser();
+        if (isUserAlreadyAuthenticatedError(err)) {
+          await clearCognitoSession();
           setUser(null);
           result = await signIn({
             username: credentials.username,
@@ -46,29 +46,26 @@ export const useCognitoAuth = (): AuthReturn => {
         }
       }
 
-      if (result.nextStep?.signInStep?.includes('NEW_PASSWORD_REQUIRED')) {
-        try {
-          await signOut({ global: true });
-        } catch {
-          // ignore signout errors
-        }
-        clearCurrentUser();
+      if (result.nextStep?.signInStep?.includes("NEW_PASSWORD_REQUIRED")) {
+        await clearCognitoSession();
         setUser(null);
-        setError("Dieser Zugang erwartet einen veralteten Temp-Passwort-Flow. Bitte nutze 'Passwort vergessen?'.");
+        setError(
+          "Dieser Zugang erwartet einen veralteten Temp-Passwort-Flow. Bitte nutze 'Passwort vergessen?'.",
+        );
         return false;
       }
 
       const session = await fetchAuthSession();
       const payload = session.tokens?.idToken?.payload;
 
-      const user: User = {
+      const nextUser: User = {
         nickname: payload?.nickname as string,
         email: payload?.email as string,
-        role: (payload?.['custom:role'] as UserRole) || 'participant',
+        role: (payload?.["custom:role"] as UserRole) || "participant",
       };
 
-      saveCurrentUser(user);
-      setUser(user);
+      saveCurrentUser(nextUser);
+      setUser(nextUser);
       return true;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login fehlgeschlagen");
@@ -79,12 +76,7 @@ export const useCognitoAuth = (): AuthReturn => {
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await signOut({ global: true });
-    } catch {
-      // User ist lokal trotzdem ausgeloggt
-    }
-    clearCurrentUser();
+    await clearCognitoSession();
     setUser(null);
   }, []);
 

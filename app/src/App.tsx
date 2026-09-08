@@ -110,7 +110,22 @@ function MainApp() {
     };
 
     initAuth();
-  }, []); 
+  }, []);
+
+  // Anderer Tab hat ausgeloggt / Session gecleared (#338).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== "currentUser" && e.key !== "yogaswap_current_user") return;
+      if (e.newValue != null) return;
+      setCurrentUser(null);
+      setActorUserId(null);
+      setActingForUserId(null);
+      setActingForUserIdState(null);
+      setPendingActingForUserId(null);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // Sticky Kurs-Toolbar unter dem Header (#287): Offset an Header-/Toolbar-Höhe koppeln.
   useEffect(() => {
@@ -504,7 +519,7 @@ export default function App() {
     <Routes>
       <Route path="/invite" element={<InviteWithRedirect />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/login" element={<Login onLogin={() => {}} />} />
+      <Route path="/login" element={<Login onLogin={() => {}} guestRoute />} />
       <Route
         path="/impressum"
         element={
