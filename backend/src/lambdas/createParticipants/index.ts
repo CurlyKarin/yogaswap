@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
-import { generateParticipantId, validateNickname } from "@yogaswap/shared";
+import { generateParticipantId, validateDisplayName, validateNickname } from "@yogaswap/shared";
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
@@ -48,6 +48,7 @@ async function saveParticipantProfile(params: {
   tenantId: string;
   userId: string;
   participantId?: string;
+  displayName?: string;
   email?: string;
   inviteSentAt?: string;
   cognitoUsername?: string;
@@ -93,6 +94,12 @@ async function saveParticipantProfile(params: {
     item.participantId?.S?.trim() ||
     generateParticipantId();
   item.participantId = { S: participantIdValue };
+
+  if (Object.prototype.hasOwnProperty.call(params, "displayName")) {
+    const displayName = params.displayName?.trim();
+    if (displayName) item.displayName = { S: displayName };
+    else delete item.displayName;
+  }
 
   if (params.email && params.email.trim()) {
     item.email = { S: params.email.trim() };
@@ -160,7 +167,7 @@ export const handler = async (event: any) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing request body" }) };
   }
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
-  const { email, nickname, role } = body ?? {};
+  const { email, nickname, role, displayName } = body ?? {};
   const tenantId = getTenantId(event);
   const { userId: actorUserId } = getTenantContext(event as any);
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
@@ -185,6 +192,24 @@ export const handler = async (event: any) => {
   }
   const nicknameRaw = nicknameCheck.nickname;
   const nicknameNormalized = nicknameRaw.toLowerCase();
+
+  const displayNameProvided = Object.prototype.hasOwnProperty.call(body ?? {}, "displayName");
+  let displayNameCanonical: string | undefined;
+  if (displayNameProvided) {
+    const displayNameCheck = validateDisplayName(
+      typeof displayName === "string" ? displayName : "",
+    );
+    if (!displayNameCheck.ok) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: displayNameCheck.message,
+          code: displayNameCheck.code,
+        }),
+      };
+    }
+    displayNameCanonical = displayNameCheck.displayName;
+  }
 
   if (!role) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing required fields" }) };
@@ -222,6 +247,7 @@ export const handler = async (event: any) => {
   let cognitoUsername = nicknameRaw;
   let existingAuthUserId: string | undefined;
   let existingEmail: string | undefined;
+  let existingProfileFound = false;
   let participantId = generateParticipantId();
   if (process.env.PARTICIPANTS_TABLE) {
     try {
@@ -242,6 +268,7 @@ export const handler = async (event: any) => {
           }
         | undefined;
       if (lowerItem?.userId?.S) {
+        existingProfileFound = true;
         canonicalUserId = lowerItem.userId.S;
         cognitoUsername = lowerItem.cognitoUsername?.S || lowerItem.userId.S;
         existingAuthUserId = lowerItem.authUserId?.S;
@@ -262,6 +289,7 @@ export const handler = async (event: any) => {
         );
         const matched = queryResp.Items?.[0];
         if (matched?.userId?.S) {
+          existingProfileFound = true;
           canonicalUserId = matched.userId.S;
           cognitoUsername = matched.cognitoUsername?.S || matched.userId.S;
           existingAuthUserId = matched.authUserId?.S;
@@ -272,6 +300,16 @@ export const handler = async (event: any) => {
     } catch (lookupErr) {
       console.warn("Failed canonical participant lookup, fallback to raw nickname", lookupErr);
     }
+  }
+
+  if (!existingProfileFound && !displayNameCanonical) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: "Bitte einen Anzeigenamen eingeben.",
+        code: "empty",
+      }),
+    };
   }
 
   if (actorRole === "instructor" && process.env.MEMBERSHIPS_TABLE) {
@@ -338,6 +376,7 @@ export const handler = async (event: any) => {
         tenantId,
         userId: canonicalUserId,
         participantId,
+        ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
       });
 
       // If an already registered user is reactivated without passing email in request,
@@ -566,6 +605,7 @@ export const handler = async (event: any) => {
           participantId,
           email: emailNormalized,
           cognitoUsername: resolved.username,
+          ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
         });
       } catch (syncErr) {
         console.warn("Could not persist Cognito sync to participant profile:", syncErr);
@@ -678,6 +718,7 @@ export const handler = async (event: any) => {
       inviteSentAt,
       cognitoUsername,
       latestAuthTokenNonce: oneTimeTokenNonce,
+      ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
     });
   } catch (err: any) {
     console.warn("Failed to save participant profile (ignored):", err?.message || err);

@@ -10,7 +10,11 @@ import {
 } from "../api/participants";
 import type { Tenant, UserRole } from "shared/types";
 import { NICKNAME_MIN_LENGTH, validateNickname } from "shared/nickname";
-import { getStatusPresentation } from "../lib/participants";
+import {
+  suggestNicknameFromDisplayName,
+  validateDisplayName,
+} from "shared/displayName";
+import { getStatusPresentation, participantDisplayName } from "../lib/participants";
 import { focusModalOnOpen } from "../lib/focusWithVisibleRing";
 import StudioSettingsSection from "./StudioSettingsSection";
 import TermDateSelect from "./TermDateSelect";
@@ -53,6 +57,7 @@ export default function AdminPanel({
 
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingEmail, setEditingEmail] = useState("");
+  const [editingDisplayName, setEditingDisplayName] = useState("");
   const [editingRole, setEditingRole] = useState<UserRole>("participant");
   const [editingForcePasswordResetOnEmailChange, setEditingForcePasswordResetOnEmailChange] =
     useState(false);
@@ -60,7 +65,9 @@ export default function AdminPanel({
   const [editingError, setEditingError] = useState("");
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createDisplayName, setCreateDisplayName] = useState("");
   const [createNickname, setCreateNickname] = useState("");
+  const [createNicknameManual, setCreateNicknameManual] = useState(false);
   const [createEmail, setCreateEmail] = useState("");
   const [createRole, setCreateRole] = useState<"participant" | "instructor" | "admin">(
     "participant",
@@ -91,6 +98,7 @@ export default function AdminPanel({
   const editingModalRef = useRef<HTMLDivElement | null>(null);
   const createModalRef = useRef<HTMLDivElement | null>(null);
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
+  const createDisplayNameInputRef = useRef<HTMLInputElement | null>(null);
   const createNicknameInputRef = useRef<HTMLInputElement | null>(null);
   const createEmailInputRef = useRef<HTMLInputElement | null>(null);
   const createRoleSelectRef = useRef<HTMLButtonElement | null>(null);
@@ -167,12 +175,16 @@ export default function AdminPanel({
     },
     [safeParticipants],
   );
+  const takenNicknamesNormalized = useMemo(
+    () => safeParticipants.map((p) => (p.userId || "").trim().toLowerCase()).filter(Boolean),
+    [safeParticipants],
+  );
   const createActiveConflict = createNicknameCheckState === "active_conflict";
   const createSuggestedNickname = useMemo(() => {
     if (!createActiveConflict) return "";
     const base = createNickname.trim();
     if (!base) return "";
-    const used = new Set(safeParticipants.map((p) => (p.userId || "").trim().toLowerCase()));
+    const used = new Set(takenNicknamesNormalized);
     let idx = 1;
     let candidate = `${base}${idx}`;
     while (used.has(candidate.toLowerCase()) && idx < 1000) {
@@ -180,7 +192,7 @@ export default function AdminPanel({
       candidate = `${base}${idx}`;
     }
     return candidate;
-  }, [createActiveConflict, createNickname, safeParticipants]);
+  }, [createActiveConflict, createNickname, takenNicknamesNormalized]);
   const resolveCreateNicknameContext = useCallback(async (nicknameValue: string) => {
     const formatCheck = validateNickname(nicknameValue);
     if (!formatCheck.ok) {
@@ -211,6 +223,7 @@ export default function AdminPanel({
 
     const applyMatch = (match: ParticipantWithStatus) => {
       setCreateMatchedParticipant(match);
+      setCreateDisplayName((prev) => (prev.trim() ? prev : match.displayName ?? prev));
       const hasTenantMembership = !!match.role;
       if (hasTenantMembership && match.status === "active") {
         setCreateNicknameCheckState("active_conflict");
@@ -347,6 +360,7 @@ export default function AdminPanel({
   const startEditEmail = (p: ParticipantWithStatus) => {
     setEditingUserId(p.userId);
     setEditingEmail(p.email ?? "");
+    setEditingDisplayName(p.displayName ?? "");
     setEditingRole(p.role ?? "participant");
     setEditingForcePasswordResetOnEmailChange(false);
     setEditingError("");
@@ -378,6 +392,21 @@ export default function AdminPanel({
       const originalEmail = (original?.email ?? "").trim();
       const nextEmailText = (nextEmail ?? "").trim();
       const emailChanged = originalEmail.toLowerCase() !== nextEmailText.toLowerCase();
+      const originalDisplayName = (original?.displayName ?? "").trim();
+      let nextDisplayName: string | null | undefined;
+      let displayNameChanged = false;
+      if (editingDisplayName.trim()) {
+        const displayNameCheck = validateDisplayName(editingDisplayName);
+        if (!displayNameCheck.ok) {
+          setEditingError(displayNameCheck.message);
+          return;
+        }
+        nextDisplayName = displayNameCheck.displayName;
+        displayNameChanged = originalDisplayName !== nextDisplayName;
+      } else if (originalDisplayName) {
+        nextDisplayName = null;
+        displayNameChanged = true;
+      }
       if (!canEditRoles && original?.status === "active" && emailChanged) {
         setEditingError("E-Mail von registrierten Teilnehmern kann nur von Admins geändert werden.");
         return;
@@ -392,10 +421,12 @@ export default function AdminPanel({
         canEditRoles
           ? {
               email: nextEmail,
+              ...(displayNameChanged ? { displayName: nextDisplayName ?? null } : {}),
               role: editingRole,
             }
           : {
               email: nextEmail,
+              ...(displayNameChanged ? { displayName: nextDisplayName ?? null } : {}),
             },
       );
 
@@ -406,6 +437,9 @@ export default function AdminPanel({
             ? {
                 ...p,
                 email: nextEmail ?? undefined,
+                ...(displayNameChanged
+                  ? { displayName: nextDisplayName ?? undefined }
+                  : {}),
                 role: canEditRoles ? editingRole : p.role,
               }
             : p,
@@ -427,6 +461,8 @@ export default function AdminPanel({
         setBulkInviteResult("Rolle aktualisiert. Nutzer wurde über die Änderung informiert.");
       } else if (roleChanged) {
         setBulkInviteResult("Rolle aktualisiert.");
+      } else if (displayNameChanged) {
+        setBulkInviteResult("Anzeigename aktualisiert.");
       }
       if (canEditRoles && original?.status === "active" && nextEmailText.length > 0) {
         const effectiveParticipant: ParticipantWithStatus = {
@@ -474,11 +510,17 @@ export default function AdminPanel({
   const editingEmailTrimmed = editingEmail.trim();
   const editingOriginalEmail = (editingOriginal?.email ?? "").trim();
   const editingEmailChanged = editingEmailTrimmed.toLowerCase() !== editingOriginalEmail.toLowerCase();
+  const editingDisplayNameTrimmed = editingDisplayName.trim();
+  const editingOriginalDisplayName = (editingOriginal?.displayName ?? "").trim();
+  const editingDisplayNameChanged = editingDisplayNameTrimmed !== editingOriginalDisplayName;
   const editingRoleChanged = !!(canEditRoles && editingOriginal && editingOriginal.role !== editingRole);
   const editingCanSendReset = !!(canEditRoles && editingOriginal?.status === "active");
   const editingSendsInvite = editingOriginal?.status === "invited";
   const editingHasChanges =
-    editingEmailChanged || editingRoleChanged || (editingCanSendReset && editingForcePasswordResetOnEmailChange);
+    editingEmailChanged ||
+    editingDisplayNameChanged ||
+    editingRoleChanged ||
+    (editingCanSendReset && editingForcePasswordResetOnEmailChange);
   const createIsReactivation = createNicknameCheckState === "reactivation";
   const createCanUnlockReactivationEmail = canEditRoles && createIsReactivation;
   const createEmailEditable =
@@ -499,9 +541,20 @@ export default function AdminPanel({
     setCreateLastResolvedNickname(null);
   };
 
+  const syncNicknameFromDisplayName = (displayNameValue: string, force = false) => {
+    if (!force && createNicknameManual) return;
+    const suggestion = suggestNicknameFromDisplayName(displayNameValue, {
+      takenNormalized: takenNicknamesNormalized,
+    });
+    setCreateNickname(suggestion);
+    resetCreateNicknameResolution();
+  };
+
   const openCreate = () => {
     setCreateOpen(true);
+    setCreateDisplayName("");
     setCreateNickname("");
+    setCreateNicknameManual(false);
     setCreateEmail("");
     setCreateEmailAutoFilled(false);
     setCreateRole("participant");
@@ -673,6 +726,22 @@ export default function AdminPanel({
 
     const isReactivationFlow = resolved.state === "reactivation";
     const reactivationUserId = isReactivationFlow ? resolved.match?.userId ?? null : null;
+
+    let displayNameCanonical: string | undefined;
+    if (createDisplayName.trim()) {
+      const displayNameCheck = validateDisplayName(createDisplayName);
+      if (!displayNameCheck.ok) {
+        setCreateError(displayNameCheck.message);
+        return;
+      }
+      displayNameCanonical = displayNameCheck.displayName;
+    } else if (!isReactivationFlow) {
+      setCreateError("Bitte einen Anzeigenamen eingeben.");
+      return;
+    } else if (resolved.match?.displayName?.trim()) {
+      displayNameCanonical = resolved.match.displayName.trim();
+    }
+
     const emailValue = (isReactivationFlow && !(canEditRoles && createOverwriteEmailOnReactivate))
       ? (resolved.match?.email ?? "").trim()
       : createEmail.trim();
@@ -700,6 +769,7 @@ export default function AdminPanel({
       // Wir legen zunächst ohne E-Mail an, speichern E-Mail (falls vorhanden) danach separat im Profil.
       const result = await inviteUser({
         nickname: nicknameValue,
+        ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
         role: canEditRoles ? createRole : "participant",
       });
       if (result.error === "Nickname already exists") {
@@ -969,7 +1039,7 @@ export default function AdminPanel({
         <div style={{ marginBottom: "0.5rem" }}>
           <input
             type="search"
-            placeholder="Suche (Nickname oder E-Mail)"
+            placeholder="Suche (Name, Nickname oder E-Mail)"
             aria-label="Teilnehmer suchen"
             value={participantsSearch}
             onChange={(e) => setParticipantsSearch(e.target.value)}
@@ -1042,7 +1112,7 @@ export default function AdminPanel({
                   onChange={(e) => toggleSelectAllEligible(e.target.checked)}
                 />
               </span>
-              <span role="columnheader">Nickname</span>
+              <span role="columnheader">Name</span>
               <span role="columnheader">Rolle</span>
               <span role="columnheader">Status</span>
                   <span role="columnheader" style={{ whiteSpace: "nowrap" }}>E-Mail</span>
@@ -1076,8 +1146,25 @@ export default function AdminPanel({
                       onChange={(e) => toggleSelectedInviteUserId(p.userId, e.target.checked)}
                     />
                   </span>
-                  <span role="rowheader" style={{ fontWeight: 600 }}>
-                    {p.userId}
+                  <span role="rowheader" style={{ fontWeight: 600, minWidth: 0 }}>
+                    <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {participantDisplayName(p)}
+                    </span>
+                    {p.displayName?.trim() &&
+                      p.displayName.trim().toLowerCase() !== (p.userId || "").trim().toLowerCase() && (
+                        <span
+                          style={{
+                            display: "block",
+                            fontSize: 11,
+                            fontWeight: 400,
+                            color: "#6b7280",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {p.userId}
+                        </span>
+                      )}
                   </span>
                   <span role="cell" style={{ color: "#374151" }}>
                     {getRoleLabel(p.role)}
@@ -1231,10 +1318,19 @@ export default function AdminPanel({
             </div>
             <div className="modal-body">
             <p style={{ marginTop: 0, color: "#4b5563" }}>
-              User: <strong>{editingUserId}</strong>
+              Spitzname: <strong>{editingUserId}</strong>
             </p>
 
             <div className="dialog-stack">
+              <input
+                type="text"
+                aria-label="Anzeigename"
+                placeholder="Anzeigename"
+                value={editingDisplayName}
+                onChange={(e) => setEditingDisplayName(e.target.value)}
+                disabled={editingSaving}
+                className="dialog-field"
+              />
               <input
                 type="email"
                 aria-label="E-Mail"
@@ -1329,6 +1425,26 @@ export default function AdminPanel({
             <div className="dialog-stack">
               <input
                 type="text"
+                aria-label="Anzeigename"
+                placeholder="Anzeigename"
+                ref={createDisplayNameInputRef}
+                value={createDisplayName}
+                onChange={(e) => {
+                  const nextDisplayName = e.target.value;
+                  setCreateDisplayName(nextDisplayName);
+                  setCreateError("");
+                  syncNicknameFromDisplayName(nextDisplayName);
+                }}
+                onBlur={() => {
+                  if (createNickname.trim().length >= NICKNAME_MIN_LENGTH) {
+                    void resolveCreateNicknameContext(createNickname);
+                  }
+                }}
+                disabled={createSaving}
+                className="dialog-field"
+              />
+              <input
+                type="text"
                 aria-label="Spitzname"
                 placeholder="Spitzname"
                 ref={createNicknameInputRef}
@@ -1336,6 +1452,7 @@ export default function AdminPanel({
                 onChange={(e) => {
                   const nextNickname = e.target.value;
                   setCreateNickname(nextNickname);
+                  setCreateNicknameManual(true);
                   resetCreateNicknameResolution();
                   setCreateError("");
                 }}
@@ -1462,6 +1579,7 @@ export default function AdminPanel({
                         onClick={() => {
                           const nextNickname = createSuggestedNickname;
                           setCreateNickname(nextNickname);
+                          setCreateNicknameManual(true);
                           setCreateError("");
                           resetCreateNicknameResolution();
                           setCreateNicknameCheckState("new");
@@ -1554,7 +1672,11 @@ export default function AdminPanel({
             </div>
             <div className="modal-body">
             <p style={{ marginTop: 0, color: "#4b5563" }}>
-              Teilnehmer <strong>{deleteTarget.userId}</strong> aus diesem Studio entfernen?
+              Teilnehmer <strong>{participantDisplayName(deleteTarget)}</strong>
+              {deleteTarget.displayName?.trim()
+                ? ` (${deleteTarget.userId})`
+                : ""}{" "}
+              aus diesem Studio entfernen?
             </p>
             <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
               {deleteTargetHasLoginHistory

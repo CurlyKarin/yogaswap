@@ -418,7 +418,7 @@ describe("AdminPanel", () => {
     });
   });
 
-  it("legt einen Teilnehmer über + Neu an (Nickname Pflicht, E-Mail optional)", async () => {
+  it("legt einen Teilnehmer über + Neu an (Anzeigename + Nickname, E-Mail optional)", async () => {
     mockedGetParticipants.mockResolvedValue([]);
 
     mockedInviteUser.mockResolvedValueOnce({
@@ -441,8 +441,11 @@ describe("AdminPanel", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
 
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
-    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
-      target: { value: "alice" },
+    fireEvent.change(within(dialog).getByPlaceholderText("Anzeigename"), {
+      target: { value: "Alice" },
+    });
+    await waitFor(() => {
+      expect((within(dialog).getByPlaceholderText("Spitzname") as HTMLInputElement).value).toBe("Alice");
     });
     fireEvent.blur(within(dialog).getByPlaceholderText("Spitzname"));
     await waitFor(() => {
@@ -455,8 +458,29 @@ describe("AdminPanel", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^Anlegen$/i }));
 
     await waitFor(() => {
-      expect(mockedInviteUser).toHaveBeenCalledWith({ nickname: "alice", role: "participant" });
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        nickname: "Alice",
+        displayName: "Alice",
+        role: "participant",
+      });
       expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", { email: "alice@example.com" });
+    });
+  });
+
+  it("schlägt Nickname aus Anzeigename mit Umlaut vor (#327)", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([]);
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Anzeigename"), {
+      target: { value: "Björn" },
+    });
+
+    await waitFor(() => {
+      expect((within(dialog).getByPlaceholderText("Spitzname") as HTMLInputElement).value).toBe("Bjoern");
     });
   });
 
@@ -490,6 +514,9 @@ describe("AdminPanel", () => {
 
     fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Anzeigename"), {
+      target: { value: "Björn" },
+    });
     fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
       target: { value: "Björn" },
     });
@@ -1240,7 +1267,7 @@ describe("AdminPanel", () => {
     const scoped = within(section);
     expect(scoped.getByRole("heading", { level: 3, name: /teilnehmer verwalten/i })).toBeInTheDocument();
     expect(scoped.getByRole("table", { name: /teilnehmerliste/i })).toBeInTheDocument();
-    expect(scoped.getByRole("columnheader", { name: /nickname/i })).toBeInTheDocument();
+    expect(scoped.getByRole("columnheader", { name: /name/i })).toBeInTheDocument();
     expect(within(panel).getByLabelText("Teilnehmer suchen")).toBeInTheDocument();
     expect(within(panel).getByLabelText("Neuer Teilnehmer")).toBeInTheDocument();
     expect(scoped.getByLabelText("Auswählen alice")).toBeInTheDocument();

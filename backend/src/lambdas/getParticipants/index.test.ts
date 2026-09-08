@@ -98,6 +98,51 @@ describe("getParticipants Lambda", () => {
     );
   });
 
+  test("filters by search over userId, email and displayName", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "admin" },
+        role: { S: "admin" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        name: { S: "Demo" },
+      },
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          displayName: { S: "Alice Wonder" },
+        },
+        { tenantId: { S: "default-tenant" }, userId: { S: "bob" }, email: { S: "bob@example.com" } },
+      ],
+    });
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { tenantId: { S: "default-tenant" }, userId: { S: "alice" }, role: { S: "participant" } },
+        { tenantId: { S: "default-tenant" }, userId: { S: "bob" }, role: { S: "admin" } },
+      ],
+    });
+
+    const result = await handler(
+      makeEvent({
+        queryStringParameters: { search: "wonder" },
+        requestContext: { authorizer: { principalId: "admin" } } as any,
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toHaveLength(1);
+    expect(body[0].userId).toBe("alice");
+  });
+
   test("filters by search over userId and email", async () => {
     mockSend.mockResolvedValueOnce({
       Item: {

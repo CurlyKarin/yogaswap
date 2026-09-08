@@ -263,10 +263,15 @@ export interface ParticipantProfile {
   tenantId: string;
   /** Stabile Mitglieds-ID im Tenant (#317). Fehlt bei Altbestand bis Backfill. */
   participantId?: string;
-  /** Anzeige-/Login-Spitzname im Studio (eindeutig pro Tenant, case-insensitive). */
+  /** Anzeige-/Login-Spitzname im Studio (eindeutig pro Tenant, case-insensitive). Operative Referenz. */
   userId: string;
   /** Kanonische Lookup-ID für case-insensitive Suchen. */
   userIdNormalized?: string;
+  /**
+   * Sichtbarer Name (#327). Unicode erlaubt; fehlt bei Legacy → UI zeigt `userId`.
+   * Nicht in Kurs-/Swap-Keys.
+   */
+  displayName?: string;
 
   /** Optional: Kontakt-E-Mail (kann nachgetragen/aktualisiert werden). */
   email?: string;

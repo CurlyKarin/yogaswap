@@ -74,10 +74,18 @@ describe('createParticipants Lambda', () => {
     process.env = OLD_ENV;
   });
 
-  const baseEvent = (body: any): APIGatewayProxyEvent =>
-    ({
-      body: JSON.stringify(body),
-    } as any);
+  const baseEvent = (body: any): APIGatewayProxyEvent => {
+    const nextBody =
+      body &&
+      typeof body === "object" &&
+      typeof body.nickname === "string" &&
+      !Object.prototype.hasOwnProperty.call(body, "displayName")
+        ? { ...body, displayName: body.nickname }
+        : body;
+    return {
+      body: JSON.stringify(nextBody),
+    } as any;
+  };
 
   test('returns 400 if request body is missing', async () => {
     const event = { body: undefined } as any;
@@ -596,6 +604,7 @@ describe('createParticipants Lambda', () => {
       body: {
         email: 'test@example.com',
         nickname: 'testuser',
+        displayName: 'Test User',
         role: 'participant',
       },
     } as any;
@@ -604,6 +613,30 @@ describe('createParticipants Lambda', () => {
 
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).success).toBe(true);
+  });
+
+  test('returns 400 if displayName is missing for new profile', async () => {
+    const rawEvent = {
+      body: JSON.stringify({ nickname: 'max', role: 'participant' }),
+    } as any;
+
+    const result = await handler(rawEvent);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/Anzeigenamen/i);
+  });
+
+  test('returns 400 if displayName is invalid', async () => {
+    const event = baseEvent({
+      nickname: 'max',
+      role: 'participant',
+      displayName: 'X',
+    });
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toBeTruthy();
   });
 
   test('uses default BASE_URL if not provided', async () => {

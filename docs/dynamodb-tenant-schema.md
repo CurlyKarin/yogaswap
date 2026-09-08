@@ -100,12 +100,15 @@ Siehe auch [course-enrollments.md](./course-enrollments.md) (#302 / #293).
 | tenantId | S | Hash (PK) | Tenant-ID |
 | userId | S | Range (SK) | Nickname (Login / operative Referenz; Regeln #326) |
 | participantId | S | – | Stabile UUID pro Tenant (#317) |
+| displayName | S | – | Optionaler Anzeigename (#327); UI-Fallback: `userId` |
 | authUserId | S | – | Cognito `sub` (optional, #324) |
 | … | | | weitere Profil-/Membership-Felder |
 
 **GSI_ParticipantId:** PK `tenantId`, SK `participantId` — Lookup ohne Nickname.
 
-**Nickname (#326):** ASCII `a-z` `A-Z` `0-9` `.` `-` `_`, Länge 3–32, kein `#`/Leerzeichen/Umlaute. Validierung: Shared `validateNickname()` (Backend + Admin-UI). Anzeigename mit Umlauten: [#327](https://github.com/CurlyKarin/yogaswap/issues/327). Case-insensitive eindeutig pro Tenant (`userIdNormalized`).
+**Nickname (#326):** ASCII `a-z` `A-Z` `0-9` `.` `-` `_`, Länge 3–32, kein `#`/Leerzeichen/Umlaute. Validierung: Shared `validateNickname()` (Backend + Admin-UI). Case-insensitive eindeutig pro Tenant (`userIdNormalized`).
+
+**Anzeigename (#327):** Optionales Profilfeld `displayName` (Unicode, Umlaute ok; 2–40 Zeichen, Buchstaben/Leerzeichen/`. - '`). Nur UI/Mails — **nicht** in Dynamo-Keys oder operativen Refs. Neu anlegen: Pflicht; Legacy ohne Feld: Fallback auf kanonischen `userId`. Shared: `validateDisplayName()`, `suggestNicknameFromDisplayName()`, `resolveParticipantDisplayLabel()`.
 
 Neue Mitglieder erhalten `participantId` (UUID) am Profil beim Anlegen; Backfill nur Profile/Memberships: `npm run backfill:participant-ids` (Ops bleiben Nicknames). UUID→Nickname in Ops: `npm run backfill:operational-nicknames`.
 
