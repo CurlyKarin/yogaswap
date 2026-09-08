@@ -51,6 +51,7 @@ export async function notifyParticipantsPlannedEndDate(
   for (const userId of recipients) {
     let email: string | undefined;
     let resolvedUserId: string | undefined;
+    let displayName: string | undefined;
     let status: "no_login" | "invited" | "active" | undefined;
     try {
       const lookup = await resolveParticipantEmail(
@@ -61,6 +62,7 @@ export async function notifyParticipantsPlannedEndDate(
       );
       email = lookup.email;
       resolvedUserId = lookup.resolvedUserId;
+      displayName = lookup.displayName;
       status = lookup.status;
     } catch (error) {
       result.mailSkippedNoProfileCount += 1;
@@ -87,6 +89,7 @@ export async function notifyParticipantsPlannedEndDate(
         ? buildPlannedEndDateClearedMail({
             locale: params.mailLocale,
             nickname: recipientName,
+            displayName,
             courseName: params.courseName,
             previousPlannedEndDateIso: params.plannedEndDateIso,
             loginUrl: params.loginUrl,
@@ -94,6 +97,7 @@ export async function notifyParticipantsPlannedEndDate(
         : buildPlannedEndDateMail({
             locale: params.mailLocale,
             nickname: recipientName,
+            displayName,
             courseName: params.courseName,
             plannedEndDateIso: params.plannedEndDateIso,
             loginUrl: params.loginUrl,

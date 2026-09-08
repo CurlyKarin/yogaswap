@@ -462,7 +462,7 @@ export default function AdminPanel({
       } else if (roleChanged) {
         setBulkInviteResult("Rolle aktualisiert.");
       } else if (displayNameChanged) {
-        setBulkInviteResult("Anzeigename aktualisiert.");
+        setBulkInviteResult("Spitzname aktualisiert.");
       }
       if (canEditRoles && original?.status === "active" && nextEmailText.length > 0) {
         const effectiveParticipant: ParticipantWithStatus = {
@@ -714,8 +714,8 @@ export default function AdminPanel({
     if (resolved.state === "active_conflict") {
       setCreateError(
         createSuggestedNickname
-          ? `Dieser Spitzname ist im Tenant bereits aktiv. Vorschlag: ${createSuggestedNickname}`
-          : "Dieser Spitzname ist im Tenant bereits aktiv.",
+          ? `Dieser Login-Name ist im Tenant bereits aktiv. Vorschlag: ${createSuggestedNickname}`
+          : "Dieser Login-Name ist im Tenant bereits aktiv.",
       );
       return;
     }
@@ -736,7 +736,7 @@ export default function AdminPanel({
       }
       displayNameCanonical = displayNameCheck.displayName;
     } else if (!isReactivationFlow) {
-      setCreateError("Bitte einen Anzeigenamen eingeben.");
+      setCreateError("Bitte einen Spitznamen eingeben.");
       return;
     } else if (resolved.match?.displayName?.trim()) {
       displayNameCanonical = resolved.match.displayName.trim();
@@ -773,7 +773,7 @@ export default function AdminPanel({
         role: canEditRoles ? createRole : "participant",
       });
       if (result.error === "Nickname already exists") {
-        setCreateError("Dieser Spitzname ist bereits vergeben.");
+        setCreateError("Dieser Login-Name ist bereits vergeben.");
         return;
       }
       if (!result.success) {
@@ -1039,7 +1039,7 @@ export default function AdminPanel({
         <div style={{ marginBottom: "0.5rem" }}>
           <input
             type="search"
-            placeholder="Suche (Name, Nickname oder E-Mail)"
+            placeholder="Suche (Name, Login-Name oder E-Mail)"
             aria-label="Teilnehmer suchen"
             value={participantsSearch}
             onChange={(e) => setParticipantsSearch(e.target.value)}
@@ -1318,14 +1318,14 @@ export default function AdminPanel({
             </div>
             <div className="modal-body">
             <p style={{ marginTop: 0, color: "#4b5563" }}>
-              Spitzname: <strong>{editingUserId}</strong>
+              Login-Name: <strong>{editingUserId}</strong>
             </p>
 
             <div className="dialog-stack">
               <input
                 type="text"
-                aria-label="Anzeigename"
-                placeholder="Anzeigename"
+                aria-label="Spitzname"
+                placeholder="Spitzname"
                 value={editingDisplayName}
                 onChange={(e) => setEditingDisplayName(e.target.value)}
                 disabled={editingSaving}
@@ -1425,8 +1425,8 @@ export default function AdminPanel({
             <div className="dialog-stack">
               <input
                 type="text"
-                aria-label="Anzeigename"
-                placeholder="Anzeigename"
+                aria-label="Spitzname"
+                placeholder="Spitzname"
                 ref={createDisplayNameInputRef}
                 value={createDisplayName}
                 onChange={(e) => {
@@ -1445,8 +1445,8 @@ export default function AdminPanel({
               />
               <input
                 type="text"
-                aria-label="Spitzname"
-                placeholder="Spitzname"
+                aria-label="Login-Name"
+                placeholder="Login-Name"
                 ref={createNicknameInputRef}
                 value={createNickname}
                 onChange={(e) => {
@@ -1552,7 +1552,7 @@ export default function AdminPanel({
               />
               {createNicknameCheckState === "too_short" && (
                 <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
-                  Nickname-Prüfung startet ab {NICKNAME_MIN_LENGTH} Zeichen.
+                  Login-Name-Prüfung startet ab {NICKNAME_MIN_LENGTH} Zeichen.
                 </p>
               )}
               {createNicknameCheckState === "exists_in_tenant" && (
@@ -1568,11 +1568,11 @@ export default function AdminPanel({
               {createActiveConflict && (
                 <div style={{ margin: "0.25rem 0 0", color: "#991b1b", fontSize: 12 }}>
                   <p style={{ margin: 0 }}>
-                    Dieser Spitzname ist im aktuellen Tenant bereits aktiv.
+                    Dieser Login-Name ist im aktuellen Tenant bereits aktiv.
                   </p>
                   {createSuggestedNickname && (
                     <p style={{ margin: "0.15rem 0 0" }}>
-                      Vorschlag fuer neuen Nickname: <strong>{createSuggestedNickname}</strong>
+                      Vorschlag fuer neuen Login-Namen: <strong>{createSuggestedNickname}</strong>
                       {" "}
                       <button
                         type="button"

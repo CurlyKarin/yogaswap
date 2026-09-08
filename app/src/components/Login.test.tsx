@@ -54,9 +54,9 @@ describe("Login", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByPlaceholderText("Spitzname")).toHaveValue("Luna");
+    expect(screen.getByPlaceholderText("Login-Name")).toHaveValue("Luna");
     expect(screen.getByPlaceholderText("Passwort")).toHaveValue("Hallo123!");
-    expect(screen.getByText(/Login-Name aus der Einladung/i)).toBeInTheDocument();
+    expect(screen.getByText(/Der Name aus der Einladung zum Einloggen/i)).toBeInTheDocument();
     expect(screen.getByText(/Demo:/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Login/i }));
@@ -90,7 +90,7 @@ describe("Login", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByPlaceholderText("Spitzname")).toHaveValue("");
+    expect(screen.getByPlaceholderText("Login-Name")).toHaveValue("");
     expect(screen.getByPlaceholderText("Passwort")).toHaveValue("");
     expect(screen.queryByText(/Demo:/i)).not.toBeInTheDocument();
   });
@@ -142,7 +142,7 @@ describe("Login", () => {
     );
     const page = container.querySelector(".login-wrap") as HTMLElement;
 
-    expect(within(page).getByPlaceholderText("Spitzname")).toHaveValue("alice");
+    expect(within(page).getByPlaceholderText("Login-Name")).toHaveValue("alice");
     expect(within(page).getByPlaceholderText("Passwort")).toHaveValue("NeuesPasswort123!");
     expect(within(page).queryByText(/Demo:/i)).not.toBeInTheDocument();
   });

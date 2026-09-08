@@ -64,7 +64,7 @@ describe("Invite", () => {
     await waitFor(() => {
       expect(within(panel).getByText(/Hallo/i)).toBeInTheDocument();
       expect(within(panel).getByText("Björn")).toBeInTheDocument();
-      expect(within(panel).getByText(/Dein Login-Name \(Spitzname\):/i)).toBeInTheDocument();
+      expect(within(panel).getByText(/Dein Login-Name:/i)).toBeInTheDocument();
       expect(within(panel).getByText("Bjoern")).toBeInTheDocument();
     });
   });
@@ -100,7 +100,7 @@ describe("Invite", () => {
     );
 
     await waitFor(() => {
-      expect(within(panel).getByText(/Dein Login-Name \(Spitzname\):/i)).toBeInTheDocument();
+      expect(within(panel).getByText(/Dein Login-Name:/i)).toBeInTheDocument();
       expect(mockedStartPasswordResetFromToken).toHaveBeenCalledWith({
         tenantId: "default-tenant",
         token: "t1",

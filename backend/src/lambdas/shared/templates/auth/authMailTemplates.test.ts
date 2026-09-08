@@ -53,7 +53,7 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain(
       "<strong>Beharmony</strong> hat dich zu YogaSwap eingeladen, einer Plattform zum Tauschen",
     );
-    expect(mail.html).toContain("Dein Login-Name (Spitzname) lautet <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
     expect(mail.html).toContain("Passwort fuer YogaSwap festlegen");
     expect(mail.html).not.toContain("Klicke hier");
     // nur ein HTML-Link (CTA), kein zweiter Footer-Link
@@ -71,8 +71,8 @@ describe("authMailTemplates", () => {
     });
 
     expect(mail.html).toContain("Willkommen Björn!");
-    expect(mail.html).toContain("Dein Login-Name (Spitzname) lautet <strong>Bjoern</strong>");
-    expect(mail.text).toContain('Dein Login-Name (Spitzname) lautet "Bjoern".');
+    expect(mail.html).toContain("Dein Login-Name lautet <strong>Bjoern</strong>");
+    expect(mail.text).toContain('Dein Login-Name lautet "Bjoern".');
   });
 
   test("buildInviteMail without studio name avoids double YogaSwap inviter", () => {
@@ -98,7 +98,7 @@ describe("authMailTemplates", () => {
     expect(mail.subject).toBe("Beharmony: Passwort zuruecksetzen");
     expect(mail.html).toContain("Auf YogaSwap wurde fuer Deinen Zugang bei <strong>Beharmony</strong>");
     expect(mail.html).toContain("das Passwort zurueckgesetzt");
-    expect(mail.html).toContain("Dein Login-Name (Spitzname) ist weiterhin <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Karin</strong>");
     expect(mail.text).toContain("https://example.com/recovery-token");
   });
 
@@ -128,7 +128,7 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain(
       "Auf YogaSwap wurde Dein Zugang fuer <strong>Beharmony</strong> wieder freigeschaltet",
     );
-    expect(mail.html).toContain("Dein Login-Name (Spitzname) lautet <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
   });
 
   test("buildInvitePreparationMail returns german fallback template", () => {
@@ -139,7 +139,7 @@ describe("authMailTemplates", () => {
 
     expect(mail.subject).toBe("YogaSwap: Einladung");
     expect(mail.html).toContain("Willkommen Karin");
-    expect(mail.html).toContain("Dein Login-Name (Spitzname) lautet <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
     expect(mail.html).toContain("wird vorbereitet");
   });
 
@@ -171,7 +171,7 @@ describe("authMailTemplates", () => {
     expect(mail.subject).toBe("Beharmony: E-Mail-Adresse aktualisiert");
     expect(mail.html).toContain("Auf YogaSwap wurde fuer Deinen Zugang bei <strong>Beharmony</strong>");
     expect(mail.html).toContain("karin.neu@example.com");
-    expect(mail.html).toContain("Dein Login-Name (Spitzname) ist weiterhin <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Karin</strong>");
   });
 
   test("buildEmailChangedOldAddressMail returns german security template", () => {
@@ -204,7 +204,7 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("Deine Rolle von");
     expect(mail.html).toContain("participant");
     expect(mail.html).toContain("instructor");
-    expect(mail.html).toContain("Dein Login-Name (Spitzname) ist weiterhin <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Karin</strong>");
   });
 
   test("unknown locale falls back to german for all builders", () => {

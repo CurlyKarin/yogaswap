@@ -72,17 +72,17 @@ export default function Login({ onLogin }: Props) {
       <h1>YogaSwap Login</h1>
       <form onSubmit={handleSubmit} className="todo-form">
         <input
-          aria-label="Spitzname"
+          aria-label="Login-Name"
           type="text"
           name="username"
-          placeholder="Spitzname"
+          placeholder="Login-Name"
           value={username}
           autoComplete="username"
           onChange={e => setUsername(e.target.value)}
           disabled={isLoading}
         />
         <p className="muted" style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
-          Login-Name aus der Einladung — nicht der Anzeigename.
+          Der Name aus der Einladung zum Einloggen.
         </p>
         <input
           aria-label="Passwort"

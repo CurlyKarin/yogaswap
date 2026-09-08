@@ -244,7 +244,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       </p>
       {(nicknameParam || usernameForReset) && (
         <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-          Dein Login-Name (Spitzname): <strong>{nicknameParam || usernameForReset}</strong>
+          Dein Login-Name: <strong>{nicknameParam || usernameForReset}</strong>
         </p>
       )}
       {nicknameFormatError && (

@@ -23,19 +23,19 @@ export function resolveAuthMailGreetingName(input: {
 }
 
 function loginNameLineHtml(nickname: string): string {
-  return `Dein Login-Name (Spitzname) lautet <strong>${nickname}</strong>.`;
+  return `Dein Login-Name lautet <strong>${nickname}</strong>.`;
 }
 
 function loginNameLineText(nickname: string): string {
-  return `Dein Login-Name (Spitzname) lautet "${nickname}".`;
+  return `Dein Login-Name lautet "${nickname}".`;
 }
 
 function loginNameStillHtml(nickname: string): string {
-  return `Dein Login-Name (Spitzname) ist weiterhin <strong>${nickname}</strong>.`;
+  return `Dein Login-Name ist weiterhin <strong>${nickname}</strong>.`;
 }
 
 function loginNameStillText(nickname: string): string {
-  return `Dein Login-Name (Spitzname) ist weiterhin "${nickname}".`;
+  return `Dein Login-Name ist weiterhin "${nickname}".`;
 }
 
 function hasNamedStudio(studio: string): boolean {
