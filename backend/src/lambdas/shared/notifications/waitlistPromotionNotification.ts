@@ -72,9 +72,10 @@ export async function notifyWaitlistPromotion(
     sesSourceEmail,
     tenantId,
     participantUserIds: [participantId],
-    buildMail: (nickname) => {
+    buildMail: (recipient) => {
       const mail = buildWaitlistPromotionMail({
-        nickname,
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
         courseName: course.name,
         dateIso: swap.toDate,
         time: course.time,

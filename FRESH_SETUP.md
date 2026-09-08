@@ -408,7 +408,7 @@ EOF
 ```
 
 `VITE_DEFAULT_TENANT_ID` legt fest, welcher Tenant im Frontend standardmäßig als `x-tenant-id` gesetzt wird (z. B. `beharmony`).
-`VITE_SHOW_DEMO_LOGIN=true` zeigt Luna-Vorbefüllung und Demo-Hinweis (#100; auch in staging).
+`VITE_SHOW_DEMO_LOGIN=true` zeigt Luna-Vorbefüllung und Demo-Hinweis (#100; nur Demo, nicht Staging/Prod).
 
 **3. Frontend neu bauen und vor dem Deploy prüfen:**
 ```bash
@@ -691,11 +691,11 @@ cat > app/.env.staging <<EOF
 VITE_COGNITO_USER_POOL_ID=<staging_pool_id>
 VITE_COGNITO_CLIENT_ID=<staging_client_id>
 VITE_DEFAULT_TENANT_ID=default-tenant
-VITE_SHOW_DEMO_LOGIN=true
+VITE_SHOW_DEMO_LOGIN=false
 EOF
 ```
 
-`.env.demo` (demo/default), `.env.staging` und `.env.prod` bleiben getrennt – `make deploy` wählt automatisch den richtigen Modus. Alle drei Dateien sind gitignored.
+`.env.demo` (demo/default), `.env.staging` und `.env.prod` bleiben getrennt – `make deploy` wählt automatisch den richtigen Modus. Alle drei Dateien sind gitignored. Luna-Vorbefüllung nur in `.env.demo` (`VITE_SHOW_DEMO_LOGIN=true`).
 
 > Migration (#253): Falls noch `app/.env.production` existiert → `mv .env.production .env.demo`
 

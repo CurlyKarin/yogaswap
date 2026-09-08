@@ -1,6 +1,18 @@
 import { buildSwapSuccessMail, buildWaitlistPromotionMail } from "./swapMailTemplates";
 
 describe("swapMailTemplates", () => {
+  test("buildSwapSuccessMail greets with displayName when set (#327)", () => {
+    const mail = buildSwapSuccessMail({
+      nickname: "Bjoern",
+      displayName: "Björn",
+      courseName: "Abend",
+      dateIso: "2026-06-20",
+      time: "18:00",
+    });
+    expect(mail.html).toContain("Hallo Björn,");
+    expect(mail.html).not.toContain("Hallo Bjoern,");
+  });
+
   test("buildSwapSuccessMail includes target term and login link", () => {
     const mail = buildSwapSuccessMail({
       nickname: "Luna",

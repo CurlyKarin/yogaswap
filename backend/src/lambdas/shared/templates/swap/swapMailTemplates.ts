@@ -1,4 +1,5 @@
 import { formatTermDateTimeDe } from "../course/courseMailTemplates";
+import { resolveOperationalMailGreeting } from "../mailGreeting";
 
 type MailTemplate = {
   subject: string;
@@ -7,6 +8,7 @@ type MailTemplate = {
 
 type TermMailInput = {
   nickname: string;
+  displayName?: string | null;
   courseName: string;
   dateIso: string;
   time: string;
@@ -23,10 +25,11 @@ function termDetails(courseName: string, dateIso: string, time: string): string 
 
 export function buildSwapSuccessMail(input: TermMailInput): MailTemplate {
   const details = termDetails(input.courseName, input.dateIso, input.time);
+  const greeting = resolveOperationalMailGreeting(input);
   return {
     subject: `Tausch bestätigt: ${input.courseName}`,
     html: `
-      <p>Hallo ${input.nickname},</p>
+      <p>Hallo ${greeting},</p>
       <p>dein Tausch ist bestätigt. Du bist jetzt für ${details} eingeplant.</p>
       <p>Im Kalender-Anhang findest du den Termin zum Importieren (optional).</p>
       ${loginHint(input.loginUrl)}
@@ -36,10 +39,11 @@ export function buildSwapSuccessMail(input: TermMailInput): MailTemplate {
 
 export function buildWaitlistPromotionMail(input: TermMailInput): MailTemplate {
   const details = termDetails(input.courseName, input.dateIso, input.time);
+  const greeting = resolveOperationalMailGreeting(input);
   return {
     subject: `Nachrücken: ${input.courseName}`,
     html: `
-      <p>Hallo ${input.nickname},</p>
+      <p>Hallo ${greeting},</p>
       <p>du bist von der Warteliste nachgerückt und bist jetzt für ${details} eingeplant.</p>
       <p>Im Kalender-Anhang findest du den Termin zum Importieren (optional).</p>
       ${loginHint(input.loginUrl)}

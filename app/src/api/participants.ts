@@ -5,6 +5,7 @@ import type { ParticipantProfile, ParticipantStatus, ParticipantSettings, UserRo
 export interface InviteUserRequest {
   email?: string;
   nickname: string;
+  displayName?: string;
   role: UserRole;
 }
 
@@ -23,6 +24,7 @@ export type ParticipantWithStatus = ParticipantProfile & { status: ParticipantSt
 
 export interface UpdateParticipantRequest {
   email?: string | null;
+  displayName?: string | null;
   role?: UserRole;
   forcePasswordResetOnEmailChange?: boolean;
   settings?: ParticipantSettings;
@@ -102,7 +104,10 @@ export async function getParticipants(
   throw new Error("Unexpected /participants response format");
 }
 
-export type ParticipantRosterEntry = Pick<ParticipantWithStatus, "userId" | "participantId" | "tenantId">;
+export type ParticipantRosterEntry = Pick<
+  ParticipantWithStatus,
+  "userId" | "participantId" | "tenantId" | "displayName"
+>;
 
 export async function getParticipantRoster(): Promise<ParticipantRosterEntry[]> {
   const response = await axios.get<ParticipantRosterEntry[]>("/participants", {

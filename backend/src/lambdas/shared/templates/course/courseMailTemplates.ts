@@ -1,8 +1,11 @@
+import { resolveOperationalMailGreeting } from "../mailGreeting";
+
 export type CourseMailLocale = "de";
 
 type PlannedEndDateMailInput = {
   locale?: string;
   nickname: string;
+  displayName?: string | null;
   courseName: string;
   plannedEndDateIso: string;
   loginUrl?: string;
@@ -72,6 +75,7 @@ export function formatTermDateTimeDe(isoDate: string, time: string): string {
 }
 
 export function buildPlannedEndDateMail(input: PlannedEndDateMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
   const locale = normalizeLocale(input.locale);
   const plannedEndLabel = formatIsoDateDe(input.plannedEndDateIso);
   const loginHint = input.loginUrl
@@ -82,7 +86,7 @@ export function buildPlannedEndDateMail(input: PlannedEndDateMailInput): MailTem
     return {
       subject: `Geplantes Kursende: ${input.courseName}`,
       html: `
-        <p>Hallo ${input.nickname},</p>
+        <p>Hallo ${greeting},</p>
         <p>für den Kurs <strong>${input.courseName}</strong> wurde ein geplantes Kursende festgelegt: <strong>${plannedEndLabel}</strong>.</p>
         <p>Termine nach diesem Datum entfallen für die Kursplanung. Offene Tauschanfragen solltest du vorher abschließen oder abbrechen.</p>
         ${loginHint}
@@ -99,6 +103,7 @@ export function buildPlannedEndDateMail(input: PlannedEndDateMailInput): MailTem
 type PlannedEndDateClearedMailInput = {
   locale?: string;
   nickname: string;
+  displayName?: string | null;
   courseName: string;
   previousPlannedEndDateIso: string;
   loginUrl?: string;
@@ -106,6 +111,7 @@ type PlannedEndDateClearedMailInput = {
 
 type CourseInfoMailInput = {
   nickname: string;
+  displayName?: string | null;
   courseName: string;
   weekday?: string;
   time?: string;
@@ -126,6 +132,7 @@ function formatCourseScheduleHint(weekday?: string, time?: string): string {
 }
 
 export function buildPlannedEndDateClearedMail(input: PlannedEndDateClearedMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
   const locale = normalizeLocale(input.locale);
   const previousEndLabel = formatIsoDateDe(input.previousPlannedEndDateIso);
   const loginHint = input.loginUrl
@@ -136,7 +143,7 @@ export function buildPlannedEndDateClearedMail(input: PlannedEndDateClearedMailI
     return {
       subject: `Kursende aufgehoben: ${input.courseName}`,
       html: `
-        <p>Hallo ${input.nickname},</p>
+        <p>Hallo ${greeting},</p>
         <p>für den Kurs <strong>${input.courseName}</strong> wurde das geplante Kursende vom <strong>${previousEndLabel}</strong> wieder aufgehoben.</p>
         <p>Der Kurs läuft damit wieder ohne festes Enddatum weiter (Termine gemäß Studio-Planungsfenster).</p>
         ${loginHint}
@@ -151,6 +158,7 @@ export function buildPlannedEndDateClearedMail(input: PlannedEndDateClearedMailI
 }
 
 export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
   const weekdayTime = formatCourseScheduleHint(input.weekday, input.time);
   const loginHint = input.loginUrl
     ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
@@ -163,7 +171,7 @@ export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTempl
   return {
     subject: `Kursbeitritt: ${input.courseName}`,
     html: `
-      <p>Hallo ${input.nickname},</p>
+      <p>Hallo ${greeting},</p>
       ${joinSentence}
       <p>Im YogaSwap-Portal kannst du Termine einsehen und Tauschvorgänge verwalten.</p>
       ${loginHint}
@@ -172,6 +180,7 @@ export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTempl
 }
 
 export function buildCourseActivatedMail(input: CourseInfoMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
   const weekdayTime = formatCourseScheduleHint(input.weekday, input.time);
   const loginHint = input.loginUrl
     ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
@@ -181,7 +190,7 @@ export function buildCourseActivatedMail(input: CourseInfoMailInput): MailTempla
   return {
     subject: `Kurs ist aktiv: ${input.courseName}`,
     html: `
-      <p>Hallo ${input.nickname},</p>
+      <p>Hallo ${greeting},</p>
       <p>der Kurs <strong>${input.courseName}</strong>${weekdayTime} ist jetzt aktiv.</p>
       ${firstTermHint}
       <p>Du kannst im YogaSwap-Portal Termine und Tauschvorgänge verwalten.</p>
@@ -192,6 +201,7 @@ export function buildCourseActivatedMail(input: CourseInfoMailInput): MailTempla
 
 type InstructorParticipantListMailInput = {
   nickname: string;
+  displayName?: string | null;
   courseName: string;
   addedParticipants: string[];
   removedParticipants: string[];
@@ -212,6 +222,7 @@ function formatParticipantWithDate(
 export function buildInstructorParticipantListChangedMail(
   input: InstructorParticipantListMailInput,
 ): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
   const addedFrom = input.addedFromByUser ?? {};
   const removedUntil = input.removedUntilByUser ?? {};
   const parts: string[] = [];
@@ -234,7 +245,7 @@ export function buildInstructorParticipantListChangedMail(
   return {
     subject: `Teilnehmerliste geändert: ${input.courseName}`,
     html: `
-      <p>Hallo ${input.nickname},</p>
+      <p>Hallo ${greeting},</p>
       <p>die Stamm-Teilnehmerliste für <strong>${input.courseName}</strong> wurde geändert:</p>
       ${parts.join("\n")}
       ${loginHint}

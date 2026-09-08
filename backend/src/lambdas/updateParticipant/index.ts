@@ -17,7 +17,7 @@ import type {
   ParticipantSettings,
   UserRole,
 } from "@yogaswap/shared";
-import { generateParticipantId } from "@yogaswap/shared";
+import { generateParticipantId, validateDisplayName } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { deriveParticipantStatus } from "../shared/participantStatus";
@@ -44,6 +44,7 @@ function generateOneTimeToken(bytes = 32) {
 
 type UpdateParticipantBody = {
   email?: string | null;
+  displayName?: string | null;
   settings?: ParticipantSettings;
   inviteSentAt?: string | null;
   inviteCompletedAt?: string | null;
@@ -437,6 +438,26 @@ export const handler = async (
           statusCode: 400,
           body: JSON.stringify({ error: "settings must be an object" }),
         };
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "displayName")) {
+      if (body.displayName == null || body.displayName === "") {
+        delete updated.displayName;
+      } else {
+        const displayNameCheck = validateDisplayName(
+          typeof body.displayName === "string" ? body.displayName : "",
+        );
+        if (!displayNameCheck.ok) {
+          return {
+            statusCode: 400,
+            body: JSON.stringify({
+              error: displayNameCheck.message,
+              code: displayNameCheck.code,
+            }),
+          };
+        }
+        updated.displayName = displayNameCheck.displayName;
       }
     }
 

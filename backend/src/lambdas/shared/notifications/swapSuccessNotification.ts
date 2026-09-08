@@ -81,9 +81,10 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
     sesSourceEmail,
     tenantId,
     participantUserIds: [participantId],
-    buildMail: (nickname) => {
+    buildMail: (recipient) => {
       const mail = buildSwapSuccessMail({
-        nickname,
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
         courseName: course.name,
         dateIso: swap.toDate,
         time: course.time,

@@ -32,14 +32,15 @@ export async function notifyCourseMembershipAdded(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: params.participantUserIds,
-    buildMail: (nickname) =>
+    buildMail: (recipient) =>
       buildCourseMembershipMail({
-        nickname,
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
         courseName: params.courseName,
         weekday: params.weekday,
         time: params.time,
         termDateIso:
-          params.termDateByUser?.[nickname.toLowerCase()] ?? params.termDateIso,
+          params.termDateByUser?.[recipient.nickname.toLowerCase()] ?? params.termDateIso,
         loginUrl,
       }),
   });
@@ -65,9 +66,10 @@ export async function notifyCourseActivated(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: params.participantUserIds,
-    buildMail: (nickname) =>
+    buildMail: (recipient) =>
       buildCourseActivatedMail({
-        nickname,
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
         courseName: params.courseName,
         weekday: params.weekday,
         time: params.time,
@@ -105,9 +107,10 @@ export async function notifyInstructorParticipantListChanged(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: params.instructorUserIds,
-    buildMail: (nickname) =>
+    buildMail: (recipient) =>
       buildInstructorParticipantListChangedMail({
-        nickname,
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
         courseName: params.courseName,
         addedParticipants: params.addedParticipants,
         removedParticipants: params.removedParticipants,

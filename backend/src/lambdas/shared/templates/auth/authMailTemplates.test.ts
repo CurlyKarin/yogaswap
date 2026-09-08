@@ -53,13 +53,26 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain(
       "<strong>Beharmony</strong> hat dich zu YogaSwap eingeladen, einer Plattform zum Tauschen",
     );
-    expect(mail.html).toContain("Dein Accountname auf YogaSwap ist <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
     expect(mail.html).toContain("Passwort fuer YogaSwap festlegen");
     expect(mail.html).not.toContain("Klicke hier");
     // nur ein HTML-Link (CTA), kein zweiter Footer-Link
     expect(mail.html.match(/<a href=/g)?.length).toBe(1);
     expect(mail.text).toContain("Passwort festlegen: https://example.com/invite-token");
     expect(mail.text).toContain("https://beharmony.app.yogaswap.de");
+  });
+
+  test("buildInviteMail greets with displayName and keeps nickname as login (#327)", () => {
+    const mail = buildInviteMail({
+      locale: "de",
+      nickname: "Bjoern",
+      displayName: "Björn",
+      link: "https://example.com/invite-token",
+    });
+
+    expect(mail.html).toContain("Willkommen Björn!");
+    expect(mail.html).toContain("Dein Login-Name lautet <strong>Bjoern</strong>");
+    expect(mail.text).toContain('Dein Login-Name lautet "Bjoern".');
   });
 
   test("buildInviteMail without studio name avoids double YogaSwap inviter", () => {
@@ -85,7 +98,7 @@ describe("authMailTemplates", () => {
     expect(mail.subject).toBe("Beharmony: Passwort zuruecksetzen");
     expect(mail.html).toContain("Auf YogaSwap wurde fuer Deinen Zugang bei <strong>Beharmony</strong>");
     expect(mail.html).toContain("das Passwort zurueckgesetzt");
-    expect(mail.html).toContain("Dein Accountname ist weiterhin <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Karin</strong>");
     expect(mail.text).toContain("https://example.com/recovery-token");
   });
 
@@ -115,7 +128,7 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain(
       "Auf YogaSwap wurde Dein Zugang fuer <strong>Beharmony</strong> wieder freigeschaltet",
     );
-    expect(mail.html).toContain("Dein Accountname auf YogaSwap ist <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
   });
 
   test("buildInvitePreparationMail returns german fallback template", () => {
@@ -126,7 +139,7 @@ describe("authMailTemplates", () => {
 
     expect(mail.subject).toBe("YogaSwap: Einladung");
     expect(mail.html).toContain("Willkommen Karin");
-    expect(mail.html).toContain("Dein Accountname auf YogaSwap ist <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
     expect(mail.html).toContain("wird vorbereitet");
   });
 
@@ -142,7 +155,7 @@ describe("authMailTemplates", () => {
       "Auf YogaSwap wurde Dein Zugang fuer <strong>Beharmony</strong> entfernt",
     );
     expect(mail.html).toContain(
-      "Dein Konto fuer den Account <strong>Karin</strong> ist nur deaktiviert",
+      "Dein Konto fuer den Login-Namen <strong>Karin</strong> ist nur deaktiviert",
     );
   });
 
@@ -158,7 +171,7 @@ describe("authMailTemplates", () => {
     expect(mail.subject).toBe("Beharmony: E-Mail-Adresse aktualisiert");
     expect(mail.html).toContain("Auf YogaSwap wurde fuer Deinen Zugang bei <strong>Beharmony</strong>");
     expect(mail.html).toContain("karin.neu@example.com");
-    expect(mail.html).toContain("Dein Accountname ist weiterhin <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Karin</strong>");
   });
 
   test("buildEmailChangedOldAddressMail returns german security template", () => {
@@ -191,7 +204,7 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("Deine Rolle von");
     expect(mail.html).toContain("participant");
     expect(mail.html).toContain("instructor");
-    expect(mail.html).toContain("Dein Accountname ist weiterhin <strong>Karin</strong>");
+    expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Karin</strong>");
   });
 
   test("unknown locale falls back to german for all builders", () => {

@@ -28,7 +28,7 @@ export default function ForgotPassword() {
     setInfo("");
     const user = username.trim();
     if (!user) {
-      setError("Bitte Spitzname eingeben.");
+      setError("Bitte Login-Name eingeben.");
       return;
     }
 
@@ -56,20 +56,24 @@ export default function ForgotPassword() {
       <h2>Passwort vergessen</h2>
       <p className="muted">
         Mit "Reset-Link anfordern" erhältst du eine E-Mail mit einem Link, über den du ein neues
-        Passwort setzen kannst.
+        Passwort setzen kannst. Nutze deinen Login-Namen aus der Einladung.
       </p>
 
       <form onSubmit={onSubmit} className="todo-form" autoComplete="on">
         <input
           type="text"
           name="username"
-          placeholder="Spitzname"
+          aria-label="Login-Name"
+          placeholder="Login-Name"
           value={username}
           autoComplete="username"
           onChange={(e) => setUsername(e.target.value)}
           disabled={loading}
           required
         />
+        <p className="muted" style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
+          Der Name aus der Einladung zum Einloggen.
+        </p>
 
         {info && (
           <p style={{ color: "#374151" }} role="status" aria-live="polite">

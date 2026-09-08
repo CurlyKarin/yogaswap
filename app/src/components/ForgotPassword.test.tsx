@@ -54,7 +54,7 @@ describe("ForgotPassword", () => {
 
     mockedRequestSelfPasswordReset.mockResolvedValue({ success: true, emailSent: true });
 
-    fireEvent.change(within(page).getByPlaceholderText("Spitzname"), {
+    fireEvent.change(within(page).getByPlaceholderText("Login-Name"), {
       target: { value: "alice" },
     });
     fireEvent.click(within(page).getByRole("button", { name: /Reset-Link anfordern/i }));
@@ -70,7 +70,7 @@ describe("ForgotPassword", () => {
     mockedRequestSelfPasswordReset.mockRejectedValue(new Error("TooManyRequestsException"));
     const { page } = renderWithRouter();
 
-    fireEvent.change(within(page).getByPlaceholderText("Spitzname"), {
+    fireEvent.change(within(page).getByPlaceholderText("Login-Name"), {
       target: { value: "alice" },
     });
     fireEvent.click(within(page).getByRole("button", { name: /Reset-Link anfordern/i }));

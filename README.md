@@ -572,7 +572,7 @@ cd ..
 
 **Hinweis:** Die Region ist bereits in der User Pool ID enthalten (z.B. `eu-central-1_XXXXXXXXX`) und muss nicht separat gesetzt werden.
 `VITE_DEFAULT_TENANT_ID` steuert den initialen Tenant-Header im Frontend (`x-tenant-id`), z. B. `beharmony`.
-`VITE_SHOW_DEMO_LOGIN=true` aktiviert Luna-Vorbefüllung (Demo + Staging; in Prod `false` / weglassen, #100).
+`VITE_SHOW_DEMO_LOGIN=true` aktiviert Luna-Vorbefüllung **nur für Demo** (in Staging/Prod `false` / weglassen, #100).
 
 ### Backend-Änderungen (Lambda-Funktionen)
 

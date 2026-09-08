@@ -28,9 +28,10 @@ export async function notifyStudioTermCancelled(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: params.participantUserIds,
-    buildMail: (nickname) =>
+    buildMail: (recipient) =>
       buildStudioTermCancelledMail({
-        nickname,
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
         courseName: params.courseName,
         dateIso: params.dateIso,
         time: params.time,
@@ -58,9 +59,10 @@ export async function notifyParticipantTermReleased(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: [params.userId],
-    buildMail: (nickname) =>
+    buildMail: (recipient) =>
       buildParticipantTermReleasedMail({
-        nickname,
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
         courseName: params.courseName,
         dateIso: params.dateIso,
         time: params.time,

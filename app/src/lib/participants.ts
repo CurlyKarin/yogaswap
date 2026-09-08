@@ -1,3 +1,4 @@
+import { resolveParticipantDisplayLabel } from "shared/displayName";
 import { Course, CourseDateOverride, CourseEnrollment, UserTenantMembership } from "shared/types";
 import { resolveEffectiveTermOccupancy } from "shared/courseEnrollment";
 import type { ParticipantActor } from "shared/participantActor";
@@ -62,9 +63,9 @@ export function buildProfileByRefMap<
 }
 
 export function participantDisplayName(
-  profile: Pick<ParticipantWithStatus, "userId">,
+  profile: Pick<ParticipantWithStatus, "userId" | "displayName">,
 ): string {
-  return profile.userId;
+  return resolveParticipantDisplayLabel(profile);
 }
 
 export function resolveActorFromMembership(
@@ -86,12 +87,12 @@ export function resolveActorFromMembership(
 }
 
 export function buildParticipantNameByRefMap(
-  roster: Array<Pick<ParticipantWithStatus, "userId" | "participantId">>,
+  roster: Array<Pick<ParticipantWithStatus, "userId" | "participantId" | "displayName">>,
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const entry of roster) {
-    const name = entry.userId;
-    map.set(name.toLowerCase(), name);
+    const name = resolveParticipantDisplayLabel(entry);
+    map.set(entry.userId.toLowerCase(), name);
     const participantId = entry.participantId?.trim();
     if (participantId) map.set(participantId.toLowerCase(), name);
   }

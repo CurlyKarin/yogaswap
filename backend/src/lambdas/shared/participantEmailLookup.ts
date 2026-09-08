@@ -12,6 +12,7 @@ export async function resolveParticipantEmail(
 ): Promise<{
   email?: string;
   resolvedUserId?: string;
+  displayName?: string;
   status?: "no_login" | "invited" | "active";
   lookupSource?: "exact" | "normalized";
 }> {
@@ -26,6 +27,7 @@ export async function resolveParticipantEmail(
     }),
   );
   const exactEmail = exactProfileResp.Item?.email?.S?.trim();
+  const exactDisplayName = exactProfileResp.Item?.displayName?.S?.trim() || undefined;
   const exactStatus = exactProfileResp.Item
     ? deriveParticipantStatus({
         authUserId: exactProfileResp.Item.authUserId?.S,
@@ -37,6 +39,7 @@ export async function resolveParticipantEmail(
     return {
       email: exactEmail,
       resolvedUserId: requestedUserId,
+      displayName: exactDisplayName,
       status: exactStatus,
       lookupSource: "exact",
     };
@@ -68,6 +71,7 @@ export async function resolveParticipantEmail(
   const normalizedItem = normalizedLookupResp.Items?.[0];
   const normalizedEmail = normalizedItem?.email?.S?.trim();
   const normalizedUserId = normalizedItem?.userId?.S?.trim();
+  const normalizedDisplayName = normalizedItem?.displayName?.S?.trim() || undefined;
   const normalizedStatus = normalizedItem
     ? deriveParticipantStatus({
         authUserId: normalizedItem.authUserId?.S,
@@ -79,6 +83,7 @@ export async function resolveParticipantEmail(
     return {
       email: normalizedEmail,
       resolvedUserId: normalizedUserId || requestedUserId,
+      displayName: normalizedDisplayName,
       status: normalizedStatus,
       lookupSource: "normalized",
     };

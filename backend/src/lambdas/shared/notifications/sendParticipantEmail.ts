@@ -116,6 +116,11 @@ function emptySummary(): MailDeliverySummary {
   };
 }
 
+export type ParticipantMailRecipient = {
+  nickname: string;
+  displayName?: string;
+};
+
 export async function sendMailToParticipantUserIds(
   client: DynamoDBClient,
   params: {
@@ -123,7 +128,11 @@ export async function sendMailToParticipantUserIds(
     sesSourceEmail?: string;
     tenantId: string;
     participantUserIds: string[];
-    buildMail: (recipientName: string) => { subject: string; html: string; attachment?: ParticipantMailAttachment };
+    buildMail: (recipient: ParticipantMailRecipient) => {
+      subject: string;
+      html: string;
+      attachment?: ParticipantMailAttachment;
+    };
   },
 ): Promise<MailDeliverySummary> {
   const summary = emptySummary();
@@ -136,6 +145,7 @@ export async function sendMailToParticipantUserIds(
   for (const userId of recipients) {
     let email: string | undefined;
     let resolvedUserId: string | undefined;
+    let displayName: string | undefined;
     let status: "no_login" | "invited" | "active" | undefined;
 
     try {
@@ -147,6 +157,7 @@ export async function sendMailToParticipantUserIds(
       );
       email = lookup.email;
       resolvedUserId = lookup.resolvedUserId;
+      displayName = lookup.displayName;
       status = lookup.status;
     } catch (error) {
       summary.mailSkippedNoProfileCount += 1;
@@ -163,8 +174,8 @@ export async function sendMailToParticipantUserIds(
       continue;
     }
 
-    const recipientName = (resolvedUserId || userId || "Teilnehmer").trim();
-    const mail = params.buildMail(recipientName);
+    const nickname = (resolvedUserId || userId || "Teilnehmer").trim();
+    const mail = params.buildMail({ nickname, displayName });
 
     try {
       await sendParticipantEmail({

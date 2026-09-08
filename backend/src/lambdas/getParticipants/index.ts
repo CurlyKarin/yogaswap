@@ -146,6 +146,7 @@ export const handler = async (
           tenantId: profile.tenantId,
           userId: profile.userId,
           participantId: profile.participantId,
+          displayName: profile.displayName,
         }));
       return {
         statusCode: 200,
@@ -173,7 +174,14 @@ export const handler = async (
         if (search) {
           const participantUserId = (p.userId || "").toLowerCase();
           const participantEmail = (p.email || "").toLowerCase();
-          if (!participantUserId.includes(search) && !participantEmail.includes(search)) return false;
+          const participantDisplay = (p.displayName || "").toLowerCase();
+          if (
+            !participantUserId.includes(search) &&
+            !participantEmail.includes(search) &&
+            !participantDisplay.includes(search)
+          ) {
+            return false;
+          }
         }
 
         if (statusFilter && p.status !== statusFilter) return false;
