@@ -80,3 +80,34 @@ export async function requestSelfPasswordReset(
   }
 }
 
+export interface ResolveLoginRequest {
+  nickname: string;
+}
+
+export interface ResolveLoginResponse {
+  cognitoUsername: string;
+  nickname: string;
+}
+
+/** Studio-Login-Name → Cognito Username (#324). Tenant via Host/x-tenant-id. */
+export async function resolveLogin(
+  req: ResolveLoginRequest,
+): Promise<ResolveLoginResponse> {
+  try {
+    const response = await axios.post<ResolveLoginResponse>(
+      "/auth/resolve-login",
+      req,
+    );
+    return response.data;
+  } catch (err: unknown) {
+    const messageFromResponse = readErrorMessageFromUnknownError(err);
+    if (messageFromResponse) {
+      throw new Error(messageFromResponse);
+    }
+    if (err instanceof Error) {
+      throw new Error(err.message || "Login failed");
+    }
+    throw new Error("Login failed");
+  }
+}
+

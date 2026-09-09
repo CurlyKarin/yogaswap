@@ -25,6 +25,8 @@ Ziel: **Klare Mandantentrennung**, ohne die Domänenlogik unnötig zu verkompliz
 - **User**  
   - Identität einer realen Person (einmalig im System).  
   - Ein User kann mehreren Tenants zugeordnet sein (z. B. Admin von zwei Studios).
+  - **Login (#324 Slice 1):** Cognito-Username ist **opaque** (UUID) und ≠ Studio-Login-Name (`userId` / Nickname). Login löst per Tenant den Cognito-Username auf (`POST /auth/resolve-login`). Bestehende Accounts: Username kann noch dem Nickname entsprechen (`cognitoUsername || userId`).
+  - **Verknüpfung:** Gleiche E-Mail im gemeinsamen Cognito-Pool → Profil/Membership im neuen Tenant verknüpfen (kein zweiter Pool-User). Bewusste „neue Person trotz gleicher E-Mail“ ist noch nicht in der Admin-UI.
 
 - **User–Tenant-Membership**  
   - Verknüpft `User` und `Tenant` mit einer Rolle und optionalen Rechten/Scopes.  
@@ -150,7 +152,7 @@ Die folgenden Erweiterungen sind in `shared/src/types.ts` umgesetzt (alle neuen 
 - **UserTenantMembership:** `userId`, `tenantId`, `role`, `canSeeAllCourses?`
 
 **Rollen:** Nur noch `admin` | `instructor` | `participant` (keine Rolle `trial`; Schnupper über `anonymousTrialCount`, Springer später als `participant` mit Settings).  
-**E-Mail:** Ist bewusst nicht eindeutig; mehrere User pro E-Mail sind erlaubt (Tests, verwaltete Teilnehmer).
+**E-Mail:** App-seitig nicht als Unique-Key; mehrere Profile können dieselbe Adresse haben. Im gemeinsamen Cognito-Pool verknüpft Slice 1 (#324) bei bekannter E-Mail standardmäßig denselben Pool-User (kein stiller Zweit-Account). Explizite Wahl „neue Person trotz gleicher E-Mail“ folgt später.
 
 ---
 

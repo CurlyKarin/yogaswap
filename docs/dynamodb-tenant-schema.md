@@ -101,12 +101,13 @@ Siehe auch [course-enrollments.md](./course-enrollments.md) (#302 / #293).
 | userId | S | Range (SK) | Nickname (Login / operative Referenz; Regeln #326) |
 | participantId | S | – | Stabile UUID pro Tenant (#317) |
 | displayName | S | – | Optionaler Anzeigename (#327); UI-Fallback: `userId` |
-| authUserId | S | – | Cognito `sub` (optional, #324) |
+| authUserId | S | – | Cognito `sub` (optional, #324); bei E-Mail-Link sofort gesetzt |
+| cognitoUsername | S | – | Cognito Pool-Username (#324); bei neuen Usern UUID, Legacy oft = `userId`. Login/Invite/Reset: `cognitoUsername \|\| userId` |
 | … | | | weitere Profil-/Membership-Felder |
 
 **GSI_ParticipantId:** PK `tenantId`, SK `participantId` — Lookup ohne Nickname.
 
-**Nickname (#326):** ASCII `a-z` `A-Z` `0-9` `.` `-` `_`, Länge 3–32, kein `#`/Leerzeichen/Umlaute. Validierung: Shared `validateNickname()` (Backend + Admin-UI). Case-insensitive eindeutig pro Tenant (`userIdNormalized`).
+**Nickname (#326):** ASCII `a-z` `A-Z` `0-9` `.` `-` `_`, Länge 3–32, kein `#`/Leerzeichen/Umlaute. Validierung: Shared `validateNickname()` (Backend + Admin-UI). Case-insensitive eindeutig pro Tenant (`userIdNormalized`). Studio-Login-Name ≠ Cognito-Username (außer Legacy).
 
 **Anzeigename (#327):** Optionales Profilfeld `displayName` (Unicode, Umlaute ok; 2–40 Zeichen, Buchstaben/Leerzeichen/`. - '`). Nur UI/Mails — **nicht** in Dynamo-Keys oder operativen Refs. Neu anlegen: Pflicht; Legacy ohne Feld: Fallback auf kanonischen `userId`. Shared: `validateDisplayName()`, `suggestNicknameFromDisplayName()`, `resolveParticipantDisplayLabel()`.
 

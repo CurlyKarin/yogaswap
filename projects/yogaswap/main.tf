@@ -470,7 +470,8 @@ locals {
             "cognito-idp:AdminAddUserToGroup",
             "cognito-idp:AdminSetUserPassword",
             "cognito-idp:AdminUpdateUserAttributes",
-            "cognito-idp:AdminGetUser"
+            "cognito-idp:AdminGetUser",
+            "cognito-idp:ListUsers"
           ]
           Resource = aws_cognito_user_pool.yogaswap.arn
         },
@@ -487,6 +488,18 @@ locals {
         SES_SOURCE_EMAIL  = local.ses_from_address # Display-Name + Adresse (Domain muss verifiziert sein)
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
+    },
+    "resolve_login" = {
+      name             = "resolve-login"
+      file_name        = "resolveLogin.zip"
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:Query"]
+      tables = {
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
     },
     "reset_participant_password" = {
       name             = "reset-participant-password"
@@ -640,6 +653,7 @@ locals {
     "POST /participants/{userId}/password-reset"   = "reset_participant_password"
     "POST /auth/password-reset/request"            = "request_self_password_reset"
     "POST /auth/password-reset/from-token"         = "start_password_reset_from_token"
+    "POST /auth/resolve-login"                     = "resolve_login"
     "PUT /participants/{userId}"                   = "update_participant"
     "DELETE /participants/{userId}"                = "delete_participant"
     "GET /tenant-context"                          = "get_tenant_context"

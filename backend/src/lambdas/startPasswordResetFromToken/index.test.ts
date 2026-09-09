@@ -300,5 +300,42 @@ describe("startPasswordResetFromToken Lambda", () => {
     expect(JSON.parse(result.body).success).toBe(true);
     expect(cognitoMockSend).toHaveBeenCalledTimes(1);
   });
+
+  test("AdminResetUserPassword uses opaque cognitoUsername from token (#324)", async () => {
+    const nowMs = Date.now();
+    const opaque = "11111111-2222-4333-8444-555555555555";
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        purpose: { S: "invite-activation" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: opaque },
+        userId: { S: "alice" },
+        tokenNonce: { S: "nonce-1" },
+      },
+    });
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        userId: { S: "alice" },
+        latestAuthTokenNonce: { S: "nonce-1" },
+      },
+    });
+    dynamoMockSend.mockResolvedValueOnce({});
+    cognitoMockSend.mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).username).toBe(opaque);
+    expect(cognitoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Username: opaque,
+      }),
+    );
+  });
 });
 

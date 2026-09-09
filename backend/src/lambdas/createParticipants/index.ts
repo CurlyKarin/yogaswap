@@ -4,7 +4,6 @@ import {
   CognitoIdentityProviderClient,
   AdminSetUserPasswordCommand,
   AdminUpdateUserAttributesCommand,
-  AdminGetUserCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
@@ -16,6 +15,11 @@ import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { buildInviteMail, buildReactivationMail, toSesAuthMessage } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { loadTenantName } from "../shared/tenantSettingsLoader";
+import {
+  findCognitoUserByEmail,
+  generateOpaqueCognitoUsername,
+  resolveCognitoUsernameAndSub,
+} from "../shared/cognitoUserIdentity";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
@@ -126,34 +130,6 @@ async function saveParticipantProfile(params: {
   return participantIdValue;
 }
 
-/** Cognito liefert den kanonischen Username + sub; beides kann von Dynamo (z. B. nach Altlasten) abweichen. */
-async function resolveCognitoUsernameAndSub(
-  userPoolId: string,
-  primaryUsername: string,
-  fallbackUsername: string,
-): Promise<{ username: string; sub?: string } | null> {
-  const candidates = [primaryUsername, fallbackUsername].filter(
-    (v, i, a) => v.trim() && a.indexOf(v) === i,
-  );
-  for (const candidate of candidates) {
-    try {
-      const resp = await cognito.send(
-        new AdminGetUserCommand({
-          UserPoolId: userPoolId,
-          Username: candidate,
-        }),
-      );
-      const canonical = resp.Username?.trim();
-      if (!canonical) continue;
-      const sub = resp.UserAttributes?.find((a) => a.Name === "sub")?.Value?.trim();
-      return { username: canonical, sub: sub || undefined };
-    } catch {
-      // nächster Kandidat (Groß-/Kleinschreibung, veralteter cognitoUsername in Dynamo)
-    }
-  }
-  return null;
-}
-
 export const handler = async (event: any) => {
   console.log('EVENT:', JSON.stringify(event));
   // Debug: Environment Variables ausgeben
@@ -244,10 +220,12 @@ export const handler = async (event: any) => {
 
   // "First entry wins": resolve canonical userId case-insensitively.
   let canonicalUserId = nicknameRaw;
-  let cognitoUsername = nicknameRaw;
+  /** Cognito pool Username — opaque for new users (#324); legacy may equal nickname. */
+  let cognitoUsername = "";
   let existingAuthUserId: string | undefined;
   let existingEmail: string | undefined;
   let existingProfileFound = false;
+  let existingStoredCognitoUsername: string | undefined;
   let participantId = generateParticipantId();
   if (process.env.PARTICIPANTS_TABLE) {
     try {
@@ -270,7 +248,8 @@ export const handler = async (event: any) => {
       if (lowerItem?.userId?.S) {
         existingProfileFound = true;
         canonicalUserId = lowerItem.userId.S;
-        cognitoUsername = lowerItem.cognitoUsername?.S || lowerItem.userId.S;
+        existingStoredCognitoUsername = lowerItem.cognitoUsername?.S?.trim() || undefined;
+        cognitoUsername = existingStoredCognitoUsername || "";
         existingAuthUserId = lowerItem.authUserId?.S;
         existingEmail = lowerItem.email?.S;
         if (lowerItem.participantId?.S?.trim()) participantId = lowerItem.participantId.S.trim();
@@ -291,7 +270,8 @@ export const handler = async (event: any) => {
         if (matched?.userId?.S) {
           existingProfileFound = true;
           canonicalUserId = matched.userId.S;
-          cognitoUsername = matched.cognitoUsername?.S || matched.userId.S;
+          existingStoredCognitoUsername = matched.cognitoUsername?.S?.trim() || undefined;
+          cognitoUsername = existingStoredCognitoUsername || "";
           existingAuthUserId = matched.authUserId?.S;
           existingEmail = matched.email?.S;
           if (matched.participantId?.S?.trim()) participantId = matched.participantId.S.trim();
@@ -430,33 +410,87 @@ export const handler = async (event: any) => {
   const rawPassword = generateSafeTempPassword(10) + "A1"; // ensure mix / length
 
   const userId = canonicalUserId;
+  const poolId = process.env.USER_POOL_ID!;
+
+  // #324: Link existing Cognito account by email (multi-studio), else opaque Username for new users.
+  let linkedExistingPoolUser = false;
+  let linkedAuthUserId: string | undefined;
+  const emailPoolUser = await findCognitoUserByEmail(cognito, poolId, emailNormalized);
+  if (emailPoolUser?.username) {
+    cognitoUsername = emailPoolUser.username;
+    linkedAuthUserId = emailPoolUser.sub;
+    linkedExistingPoolUser = true;
+    console.log(
+      `Linking existing Cognito user by email (${emailNormalized}) → username=${cognitoUsername}`,
+    );
+  } else if (existingStoredCognitoUsername) {
+    cognitoUsername = existingStoredCognitoUsername;
+  } else if (!cognitoUsername) {
+    // Legacy dual-path: profile without cognitoUsername may still have Username=nickname in pool.
+    const legacy = await resolveCognitoUsernameAndSub(cognito, poolId, userId, nicknameRaw);
+    if (legacy?.username) {
+      cognitoUsername = legacy.username;
+      linkedAuthUserId = legacy.sub;
+      linkedExistingPoolUser = true;
+    } else {
+      cognitoUsername = generateOpaqueCognitoUsername();
+    }
+  }
 
   let reactivated = false;
   try {
-    // 1. User erstellen
-    await cognito.send(new AdminCreateUserCommand({
-      UserPoolId: process.env.USER_POOL_ID!,
-      Username: cognitoUsername, // Nickname muss einzigartig sein
-      TemporaryPassword: rawPassword ,
-      UserAttributes: [
-        { Name: "email", Value: emailNormalized },
-        { Name: "email_verified", Value: "true" },
-        { Name: "nickname", Value: nicknameRaw },
-        { Name: "custom:role", Value: role }
-      ],
-      MessageAction: "SUPPRESS", // Keine automatische E-Mail
-    }));
+    if (linkedExistingPoolUser) {
+      // Ensure attributes match this tenant's login name; do not create a second pool user.
+      await cognito.send(
+        new AdminUpdateUserAttributesCommand({
+          UserPoolId: poolId,
+          Username: cognitoUsername,
+          UserAttributes: [
+            { Name: "email", Value: emailNormalized },
+            { Name: "email_verified", Value: "true" },
+            { Name: "nickname", Value: nicknameRaw },
+          ],
+        }),
+      );
+      if (linkedAuthUserId && emailPoolUser?.status === "CONFIRMED") {
+        // Already has a usable login → studio join without password reset.
+        reactivated = true;
+      } else {
+        await cognito.send(
+          new AdminSetUserPasswordCommand({
+            UserPoolId: poolId,
+            Username: cognitoUsername,
+            Password: rawPassword,
+            Permanent: true,
+          }),
+        );
+      }
+    } else {
+      // New Cognito user: opaque Username (#324), studio login name only as nickname attribute.
+      await cognito.send(
+        new AdminCreateUserCommand({
+          UserPoolId: poolId,
+          Username: cognitoUsername,
+          TemporaryPassword: rawPassword,
+          UserAttributes: [
+            { Name: "email", Value: emailNormalized },
+            { Name: "email_verified", Value: "true" },
+            { Name: "nickname", Value: nicknameRaw },
+            { Name: "custom:role", Value: role },
+          ],
+          MessageAction: "SUPPRESS",
+        }),
+      );
 
-    // Token-based invite flow relies on reset code endpoint (AdminResetUserPassword).
-    // For reliability, move newly created users to CONFIRMED with an internal password.
-    await cognito.send(
-      new AdminSetUserPasswordCommand({
-        UserPoolId: process.env.USER_POOL_ID!,
-        Username: cognitoUsername,
-        Password: rawPassword,
-        Permanent: true,
-      }),
-    );
+      await cognito.send(
+        new AdminSetUserPasswordCommand({
+          UserPoolId: poolId,
+          Username: cognitoUsername,
+          Password: rawPassword,
+          Permanent: true,
+        }),
+      );
+    }
   } catch (err: any) {
     // If user exists, re-prepare account for token-based reset link flow.
     if (err?.name === "UsernameExistsException") {
@@ -504,7 +538,7 @@ export const handler = async (event: any) => {
         try {
           await cognito.send(
             new AdminUpdateUserAttributesCommand({
-              UserPoolId: process.env.USER_POOL_ID!,
+              UserPoolId: poolId,
               Username: cognitoUsername,
               UserAttributes: [
                 { Name: "email", Value: emailNormalized },
@@ -513,11 +547,9 @@ export const handler = async (event: any) => {
               ],
             }),
           );
-          // Einige Cognito-Zustände (z. B. nach Altflows) erlauben kein AdminResetUserPassword.
-          // Durch ein permanentes Passwort wird der User wieder in einen reset-fähigen Zustand gebracht.
           await cognito.send(
             new AdminSetUserPasswordCommand({
-              UserPoolId: process.env.USER_POOL_ID!,
+              UserPoolId: poolId,
               Username: cognitoUsername,
               Password: rawPassword,
               Permanent: true,
@@ -530,16 +562,17 @@ export const handler = async (event: any) => {
       } else {
         console.log("Username exists; preparing account state for token-based reset.");
         try {
-          await cognito.send(new AdminSetUserPasswordCommand({
-            UserPoolId: process.env.USER_POOL_ID!,
-            Username: cognitoUsername,
-            Password: rawPassword,
-            Permanent: true,
-          }));
-          // Ensure reset code can be delivered to the currently entered invite email.
+          await cognito.send(
+            new AdminSetUserPasswordCommand({
+              UserPoolId: poolId,
+              Username: cognitoUsername,
+              Password: rawPassword,
+              Permanent: true,
+            }),
+          );
           await cognito.send(
             new AdminUpdateUserAttributesCommand({
-              UserPoolId: process.env.USER_POOL_ID!,
+              UserPoolId: poolId,
               Username: cognitoUsername,
               UserAttributes: [
                 { Name: "email", Value: emailNormalized },
@@ -554,7 +587,7 @@ export const handler = async (event: any) => {
         }
       }
     } else {
-      console.error("AdminCreateUser failed:", err);
+      console.error("AdminCreateUser/link failed:", err);
       return { statusCode: 500, body: JSON.stringify({ error: "Failed to create user" }) };
     }
   }
@@ -562,7 +595,7 @@ export const handler = async (event: any) => {
   // 2. Gruppe zuweisen
   try {
     await cognito.send(new AdminAddUserToGroupCommand({
-      UserPoolId: process.env.USER_POOL_ID!,
+      UserPoolId: poolId,
       Username: cognitoUsername,
       GroupName: role,
     }));
@@ -592,13 +625,13 @@ export const handler = async (event: any) => {
     // aber wir loggen es deutlich.
   }
 
-  // Cognito-Username mit Dynamo abgleichen (kanonischer Username). authUserId nur nach abgeschlossener
-  // Einladung im Client (updateParticipant), nicht hier – sonst „registriert“ ohne echtes Onboarding.
-  const poolId = process.env.USER_POOL_ID;
+  // Cognito-Username mit Dynamo abgleichen (kanonischer Username).
+  // Bei E-Mail-Link (#324) authUserId sofort setzen; sonst erst nach Invite-Abschluss im Client.
   if (poolId) {
-    const resolved = await resolveCognitoUsernameAndSub(poolId, cognitoUsername, userId);
+    const resolved = await resolveCognitoUsernameAndSub(cognito, poolId, cognitoUsername, userId);
     if (resolved) {
       cognitoUsername = resolved.username;
+      if (resolved.sub) linkedAuthUserId = linkedAuthUserId || resolved.sub;
       try {
         await saveParticipantProfile({
           tenantId,
@@ -606,6 +639,9 @@ export const handler = async (event: any) => {
           participantId,
           email: emailNormalized,
           cognitoUsername: resolved.username,
+          ...(linkedExistingPoolUser && linkedAuthUserId
+            ? { authUserId: linkedAuthUserId }
+            : {}),
           ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
         });
       } catch (syncErr) {
@@ -618,7 +654,7 @@ export const handler = async (event: any) => {
     }
   }
 
-  // Build link (nickname = Login; optional displayName for greeting #327)
+  // Build link (nickname query = Studio-Login-Name, not opaque Cognito Username #324)
   const baseUrl = resolveAppBaseUrlForTenant(tenantId);
   const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -628,7 +664,7 @@ export const handler = async (event: any) => {
 
   let oneTimeToken: string | undefined;
   let oneTimeTokenNonce: string | undefined;
-  let link = `${baseUrl}/invite?mode=invite_activation&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}${displayNameQuery}`;
+  let link = `${baseUrl}/invite?mode=invite_activation&nickname=${encodeURIComponent(userId)}&email=${encodeURIComponent(emailNormalized)}${displayNameQuery}`;
 
   // Token nur für "echte Einladung" (nicht für Reaktivierung ohne Passwortreset).
   if (!reactivated && tokensTable) {
@@ -658,7 +694,7 @@ export const handler = async (event: any) => {
     if (oneTimeToken) {
       link = `${baseUrl}/invite?mode=invite_activation&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(
         oneTimeToken,
-      )}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(emailNormalized)}${displayNameQuery}`;
+      )}&nickname=${encodeURIComponent(userId)}&email=${encodeURIComponent(emailNormalized)}${displayNameQuery}`;
     }
   }
 
@@ -724,6 +760,7 @@ export const handler = async (event: any) => {
       inviteSentAt,
       cognitoUsername,
       latestAuthTokenNonce: oneTimeTokenNonce,
+      ...(linkedExistingPoolUser && linkedAuthUserId ? { authUserId: linkedAuthUserId } : {}),
       ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
     });
   } catch (err: any) {
