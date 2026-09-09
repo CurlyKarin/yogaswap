@@ -225,10 +225,10 @@ export default function CourseMembersDialog({
   const addIntervalMember = (userId: string, validFrom = defaultAddFrom) => {
     if (saving || isInactive) return;
     if (rosterIds.has(userId.toLowerCase())) return;
-    const occupancyDate = validFrom <= refIso ? refIso : validFrom;
+    // #332: Kapazität nur am Startdatum des neuen Segments, nicht am Referenztermin.
     const occupancy = stemOnDate(
       [...workingEnrollments, { courseId: courseId ?? 0, participantId: userId, validFrom }],
-      occupancyDate,
+      validFrom,
     ).length;
     if (occupancy > maxCapacity) {
       setLocalError(`Maximal ${maxCapacity} Teilnehmer können zugeordnet werden.`);
@@ -284,15 +284,30 @@ export default function CourseMembersDialog({
     setWorkingEnrollments((prev) => {
       const relevant = pickRelevantEnrollmentForParticipant(prev, userId, refIso);
       if (!relevant) return prev;
+      if (field === "validFrom" && isEnrollmentOpen(relevant)) {
+        const projected = prev.map((entry) => {
+          if (
+            entry.participantId.toLowerCase() !== userId.toLowerCase() ||
+            entry.validFrom !== relevant.validFrom
+          ) {
+            return entry;
+          }
+          return { ...entry, validFrom: dateIso };
+        });
+        // #332: Verschieben von „kommt“ nur erlauben, wenn am neuen Start Platz ist.
+        if (stemOnDate(projected, dateIso).length > maxCapacity) {
+          setLocalError(`Maximal ${maxCapacity} Teilnehmer können zugeordnet werden.`);
+          return prev;
+        }
+        setLocalError(null);
+        return projected;
+      }
       return prev.map((entry) => {
         if (
           entry.participantId.toLowerCase() !== userId.toLowerCase() ||
           entry.validFrom !== relevant.validFrom
         ) {
           return entry;
-        }
-        if (field === "validFrom" && isEnrollmentOpen(entry)) {
-          return { ...entry, validFrom: dateIso };
         }
         if (field === "validUntil") {
           if (isPastEnrollmentEnd(entry.validUntil, refIso)) return entry;
@@ -316,7 +331,7 @@ export default function CourseMembersDialog({
       await onSaveParticipants(courseId, selectedParticipants);
       return;
     }
-    const participantsToSave = openRosterUserIds(workingEnrollments, refIso);
+    const participantsToSave = groups.dabei.map((row) => row.participantId);
     if (groups.dabei.length > maxCapacity) {
       setLocalError(`Maximal ${maxCapacity} Teilnehmer können zugeordnet werden.`);
       return;

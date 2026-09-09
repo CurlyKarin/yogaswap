@@ -178,6 +178,39 @@ describe("courseEnrollment", () => {
     );
   });
 
+  it("keeps upcoming open segments when participants cache is dabei-only (#332)", () => {
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: ["luna", "mia"],
+      nextParticipants: ["luna"],
+      existingEnrollments: [
+        { courseId: 1, participantId: "luna", validFrom: "2026-01-01" },
+        { courseId: 1, participantId: "mia", validFrom: "2026-05-01" },
+      ],
+      addValidFrom: "2026-04-01",
+      removeValidUntil: "2026-03-20",
+    });
+    expect(planned.closedParticipantIds).toEqual([]);
+    expect(planned.deletedParticipantIds).toEqual([]);
+    expect(planned.puts).toEqual([]);
+  });
+
+  it("still closes upcoming segments when explicitly removed (#332)", () => {
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: ["luna", "mia"],
+      nextParticipants: ["luna"],
+      existingEnrollments: [
+        { courseId: 1, participantId: "luna", validFrom: "2026-01-01" },
+        { courseId: 1, participantId: "mia", validFrom: "2026-05-01" },
+      ],
+      addValidFrom: "2026-04-01",
+      removeValidUntil: "2026-03-20",
+      removeValidUntilByParticipant: { mia: "2026-03-20" },
+    });
+    expect(planned.deletedParticipantIds).toEqual(["mia"]);
+  });
+
   it("planStemEnrollmentWrites rejoins with a new open segment", () => {
     const existing: CourseEnrollment[] = [
       {
@@ -259,6 +292,8 @@ describe("courseEnrollment", () => {
       existingEnrollments: existing,
       addValidFrom: "2099-01-06",
       removeValidUntil: "2026-08-17",
+      // Dialog drop of „kommt“ always sends an explicit remove (#332).
+      removeValidUntilByParticipant: { luna: "2026-08-17" },
     });
     expect(planned.puts).toEqual([]);
     expect(planned.deletedParticipantIds).toEqual(["luna"]);
@@ -266,7 +301,6 @@ describe("courseEnrollment", () => {
       expect.objectContaining({ participantId: "luna", validFrom: "2099-01-01" }),
     ]);
   });
-
   it("planStemEnrollmentWrites deletes an inverted until-before-from leftover", () => {
     const existing: CourseEnrollment[] = [
       { courseId: 1, participantId: "maja", validFrom: "2026-09-02", validUntil: "2026-08-17" },

@@ -425,10 +425,23 @@ export function planStemEnrollmentWrites(
     );
   }
 
-  const { added, removed } = diffParticipantLists(
+  const { added, removed: removedFromList } = diffParticipantLists(
     input.previousParticipants,
     input.nextParticipants,
   );
+
+  // #332: participants[] is stem at R (dabei) only. Upcoming ("kommt") live in
+  // CourseEnrollments / enrollmentChanges — do not close them just because they
+  // are absent from the flat cache. Explicit removeValidUntilByParticipant still closes/deletes.
+  const removed = removedFromList.filter((participantId) => {
+    const key = participantId.toLowerCase();
+    if (input.removeValidUntilByParticipant?.[key]) return true;
+    if (input.addValidFromByParticipant?.[key]) return false;
+    const open = findOpenEnrollmentForParticipant(working, participantId);
+    // "kommt" = open segment starts after the default add anchor (next open term R).
+    if (open && open.validFrom > input.addValidFrom) return false;
+    return true;
+  });
 
   const addParticipantIds = uniqueCaseInsensitive([
     ...added,

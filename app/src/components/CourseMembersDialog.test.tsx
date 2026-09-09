@@ -168,7 +168,7 @@ describe("CourseMembersDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
     expect(onSaveParticipants).toHaveBeenCalledWith(
       7,
-      ["bob"],
+      [],
       expect.arrayContaining([
         expect.objectContaining({ participantId: "alice", action: "remove", dateIso: "2020-01-06" }),
       ]),
@@ -235,6 +235,7 @@ describe("CourseMembersDialog", () => {
     expect(screen.getByLabelText("cara gültig bis")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    // Start = Referenztermin R → cara ist Dabei, nicht nur Kommt (#332 Cache = stemOn(R)).
     expect(onSaveParticipants).toHaveBeenCalledWith(
       7,
       expect.arrayContaining(["alice", "cara"]),
@@ -463,5 +464,70 @@ describe("CourseMembersDialog", () => {
     fireEvent.keyDown(listbox, { key: "ArrowDown" });
     fireEvent.keyDown(listbox, { key: " " });
     expect(screen.getByText(/maximal 1 teilnehmer/i)).toBeInTheDocument();
+  });
+
+  it("erlaubt Ersatz mit späterem Start obwohl Kurs am Referenztermin voll ist (#332)", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", participantId: "bob", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        maxCapacity={1}
+        courseDates={["2099-06-16", "2099-06-23", "2099-06-30"]}
+        courseTime="10:00"
+        enrollments={[
+          { courseId: 7, participantId: "alice", validFrom: "2026-01-01", validUntil: "2099-06-16" },
+        ]}
+        initialParticipants={["alice"]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    expect(await screen.findByText("Teilnehmer 1/1 · 1 endet")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Weitere Mitglieder" }));
+    await userEvent.selectOptions(screen.getByLabelText("bob gültig ab"), "2099-06-23");
+    expect(screen.getByText("Teilnehmer 1/1 · 1 endet · 1 kommt neu dazu")).toBeInTheDocument();
+    expect(screen.queryByText(/maximal 1 teilnehmer/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(
+      7,
+      ["alice"],
+      expect.arrayContaining([
+        expect.objectContaining({ participantId: "bob", action: "add", dateIso: "2099-06-23" }),
+      ]),
+    );
+  });
+
+  it("lehnt Add am inklusiven Endetag des Vorgängers ab (#332)", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "bob", participantId: "bob", status: "active", role: "participant", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="active"
+        maxCapacity={1}
+        courseDates={["2099-06-16", "2099-06-23", "2099-06-30"]}
+        courseTime="10:00"
+        enrollments={[
+          { courseId: 7, participantId: "alice", validFrom: "2026-01-01", validUntil: "2099-06-23" },
+        ]}
+        initialParticipants={["alice"]}
+      />,
+    );
+
+    expect(await screen.findByText(/Teilnehmer 1\/1/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Weitere Mitglieder" }));
+    await userEvent.selectOptions(screen.getByLabelText("bob gültig ab"), "2099-06-23");
+    expect(screen.getByText(/maximal 1 teilnehmer/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("bob gültig bis")).not.toBeInTheDocument();
   });
 });
