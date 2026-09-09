@@ -21,7 +21,7 @@ import {
   type EnrollmentChange,
   type DialogMemberRow,
 } from "shared/courseEnrollment";
-import type { CourseEnrollment, CourseStatus, TenantSettings } from "shared/types";
+import type { CourseEnrollment, CourseStatus, TenantSettings, UserRole } from "shared/types";
 import { formatIsoDateForDisplay } from "./courseDatesDialogUtils";
 import {
   diffEnrollmentChanges,
@@ -163,10 +163,7 @@ export default function CourseMembersDialog({
     };
   }, [open]);
 
-  const availableParticipants = useMemo(
-    () => participants.filter((entry) => (entry.role ?? "participant") === "participant"),
-    [participants],
-  );
+  const availableParticipants = participants;
 
   const groups = useMemo(
     () => classifyMembersForDialog(workingEnrollments, refIso),
@@ -420,6 +417,7 @@ export default function CourseMembersDialog({
           userId={profile?.userId ?? row.participantId}
           email={profile?.email}
           status={status}
+          roleLabel={elevatedStudioRoleLabel(profile?.role)}
           missing={!profile}
         />
         {kind === "kommt" ? (
@@ -604,7 +602,12 @@ export default function CourseMembersDialog({
                         }}
                         className="course-members-row-identity-wrap"
                       >
-                        <MemberIdentity userId={entry.userId} email={entry.email} status={status} />
+                        <MemberIdentity
+                          userId={entry.userId}
+                          email={entry.email}
+                          status={status}
+                          roleLabel={elevatedStudioRoleLabel(entry.role)}
+                        />
                       </span>
                       {checked && (
                         <span className="course-members-assigned" aria-label="zugeordnet">
@@ -644,6 +647,7 @@ export default function CourseMembersDialog({
                         userId={profile?.userId ?? row.participantId}
                         email={profile?.email}
                         status={getStatusPresentation(profile?.status)}
+                        roleLabel={elevatedStudioRoleLabel(profile?.role)}
                         missing={!profile}
                       />
                       <span className="course-members-row-meta">
@@ -687,7 +691,12 @@ export default function CourseMembersDialog({
                     const status = getStatusPresentation(entry.status);
                     return (
                       <div key={operationalRef || entry.participantId} className="course-members-row">
-                        <MemberIdentity userId={entry.userId} email={entry.email} status={status} />
+                        <MemberIdentity
+                          userId={entry.userId}
+                          email={entry.email}
+                          status={status}
+                          roleLabel={elevatedStudioRoleLabel(entry.role)}
+                        />
                         <label className="course-members-date">
                           ab
                           <select
@@ -758,15 +767,23 @@ export default function CourseMembersDialog({
   );
 }
 
+function elevatedStudioRoleLabel(role: UserRole | string | undefined | null): string | null {
+  if (role === "admin") return "Admin";
+  if (role === "instructor") return "Kursleitung";
+  return null;
+}
+
 function MemberIdentity({
   userId,
   email,
   status,
+  roleLabel = null,
   missing = false,
 }: {
   userId: string;
   email?: string | null;
   status: ParticipantStatusPresentation;
+  roleLabel?: string | null;
   missing?: boolean;
 }) {
   const subtitle = missing ? "nicht mehr vorhanden" : email?.trim() || null;
@@ -780,6 +797,11 @@ function MemberIdentity({
       />
       <span className="course-members-row-copy">
         <strong>{userId}</strong>
+        {roleLabel ? (
+          <span className="course-members-role-badge" aria-label={`Rolle ${roleLabel}`}>
+            {roleLabel}
+          </span>
+        ) : null}
         {subtitle ? (
           <span className="course-members-row-email" title={missing ? undefined : subtitle}>
             {subtitle}
