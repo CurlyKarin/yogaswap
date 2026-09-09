@@ -407,4 +407,61 @@ describe("CourseMembersDialog", () => {
       ]),
     );
   });
+
+  it("bietet Admin und Kursleitung zur Einplanung an und zeigt nur deren Rolle (#333)", async () => {
+    const onSaveParticipants = vi.fn();
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "alice", participantId: "alice", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "karin", participantId: "karin", status: "active", role: "admin", tenantId: "default-tenant" },
+      { userId: "mira", participantId: "mira", status: "active", role: "instructor", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="draft"
+        maxCapacity={2}
+        initialParticipants={[]}
+        onSaveParticipants={onSaveParticipants}
+      />,
+    );
+
+    expect(await screen.findByText("karin")).toBeInTheDocument();
+    expect(screen.getByText("mira")).toBeInTheDocument();
+    expect(screen.getByLabelText("Rolle Admin")).toHaveTextContent("Admin");
+    expect(screen.getByLabelText("Rolle Kursleitung")).toHaveTextContent("Kursleitung");
+    expect(screen.queryByLabelText(/Rolle Teilnehmer/i)).not.toBeInTheDocument();
+
+    const listbox = await screen.findByRole("listbox", { name: /teilnehmerliste/i });
+    listbox.focus();
+    // alice (0) -> karin (1)
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    fireEvent.keyDown(listbox, { key: " " });
+    expect(screen.getByText("Zugeordnet: 1 / 2")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /mitglieder speichern/i }));
+    expect(onSaveParticipants).toHaveBeenCalledWith(7, ["karin"]);
+  });
+
+  it("zählt Admin/Kursleitung gegen die Kapazität (#333)", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      { userId: "karin", participantId: "karin", status: "active", role: "admin", tenantId: "default-tenant" },
+      { userId: "mira", participantId: "mira", status: "active", role: "instructor", tenantId: "default-tenant" },
+    ]);
+    render(
+      <CourseMembersDialog
+        open
+        {...defaultProps}
+        courseStatus="draft"
+        maxCapacity={1}
+        initialParticipants={["karin"]}
+      />,
+    );
+
+    expect(await screen.findByText("Zugeordnet: 1 / 1")).toBeInTheDocument();
+    const listbox = await screen.findByRole("listbox", { name: /teilnehmerliste/i });
+    listbox.focus();
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    fireEvent.keyDown(listbox, { key: " " });
+    expect(screen.getByText(/maximal 1 teilnehmer/i)).toBeInTheDocument();
+  });
 });
