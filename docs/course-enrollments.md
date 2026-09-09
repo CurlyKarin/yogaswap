@@ -61,7 +61,7 @@ Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehend
    - Active: `validFrom` = nächster Kurstermin (sonst heute)  
    - Draft: `validFrom` = `seriesStartDate` / `visibleFrom` / Sentinel
 3. **Remove:** Segment schließen bzw. `validUntil` korrigieren (offenes oder bereits geschlossenes Segment, inklusiv). Default = letzter geschlossener Kurstermin (Cutoff/laufend/vergangen). Fallback ohne solchen Termin: heute.
-4. `course.participants[]` bleibt Cache der offenen Stamm-Liste (UI unverändert)
+4. `course.participants[]` bleibt Cache der **aktuellen** Stamm-Liste an R (`stemOn(R)` / Dabei); kommende Segmente stehen in CourseEnrollments (#332)
 5. Override-/Swap-Cleanup bei Active bleibt (zukünftige Termine)
 
 ## Mitglieder-Dialog (#305)
@@ -82,7 +82,7 @@ Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas` für den **angezeigten** Termin,
 - Kommt zählen nicht in `n`
 - Kopfzeile z. B. `Teilnehmer 6/6 · 2 enden · 2 kommen neu dazu` (ohne Daten)
 - Obere Liste immer offen; untere Liste (nicht dabei / ehemals) eingeklappt
-- Speichern (nur Draft/Active) sendet `participants[]` (Dabei + Kommt, Werte = `participantId`) und `enrollmentChanges[]` (`participantId`, `add`/`remove`, `dateIso`; Legacy `userId` wird vom Backend akzeptiert). Inactive: kein Speichern; `updateCourse` lehnt Mitglieder-Patches ab.
+- Speichern (nur Draft/Active) sendet `participants[]` (**Dabei** an R = `stemOn(R)`, Werte = `participantId`) und `enrollmentChanges[]` (`participantId`, `add`/`remove`, `dateIso`; Legacy `userId` wird vom Backend akzeptiert). **Kommt** zählen nicht in `participants[]` (#332 Kapazität), sondern nur über `enrollmentChanges`. Inactive: kein Speichern; `updateCourse` lehnt Mitglieder-Patches ab.
 - Remove mit letztem Termin (`validUntil < R`) nimmt die Person aus dem nächsten Termin (Ehemalige)
 - „endet“ = noch Stamm an R, aber `validUntil` gesetzt (letzter Termin = R oder später)
 - **Vergangenes Ende** (`validUntil < R`) ist in der unteren Liste nur Anzeige, nicht editierbar. Wiederaufnahme: neues **ab** nach dem letzten `validUntil` (neues Segment).
