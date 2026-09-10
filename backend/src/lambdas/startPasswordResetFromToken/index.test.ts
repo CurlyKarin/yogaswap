@@ -80,6 +80,7 @@ describe("startPasswordResetFromToken Lambda", () => {
 
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).username).toBe("Alice");
+    expect(JSON.parse(result.body).userId).toBe("alice");
     expect(cognitoMockSend).toHaveBeenCalledTimes(1);
   });
 
@@ -331,6 +332,7 @@ describe("startPasswordResetFromToken Lambda", () => {
 
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).username).toBe(opaque);
+    expect(JSON.parse(result.body).userId).toBe("alice");
     expect(cognitoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         Username: opaque,

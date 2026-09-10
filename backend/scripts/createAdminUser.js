@@ -2,7 +2,7 @@
 // Erstellt den ersten Admin-User in Cognito
 //
 // #324: Cognito-Username ist opaque (UUID). Der Nickname ist nur Attribut + Studio-Login-Name.
-//       Mehrere User können die gleiche E-Mail-Adresse haben; Link über E-Mail siehe createParticipants.
+//       Gleiche E-Mail darf mehrere Cognito-User haben (kein Auto-Link).
 //
 // Verwendung:
 //   node createAdminUser.js <userPoolId> <email> <nickname> [password]
@@ -16,7 +16,6 @@ const {
   AdminCreateUserCommand,
   AdminAddUserToGroupCommand,
   AdminSetUserPasswordCommand,
-  ListUsersCommand,
   randomUUID,
 } = (() => {
   const cognito = require("@aws-sdk/client-cognito-identity-provider");
@@ -54,93 +53,33 @@ function generateTempPassword(length = 12) {
   return pw + "A1";
 }
 
-async function findUsernameByEmail(poolId, emailAddr) {
-  try {
-    const escaped = String(emailAddr).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    const resp = await client.send(
-      new ListUsersCommand({
-        UserPoolId: poolId,
-        Filter: `email = "${escaped}"`,
-        Limit: 5,
-      }),
-    );
-    return resp.Users?.[0]?.Username || null;
-  } catch {
-    return null;
-  }
-}
-
 (async () => {
   try {
-    let username = await findUsernameByEmail(userPoolId, email);
-    let userExists = Boolean(username);
-    let tempPassword = null;
+    const username = randomUUID();
+    let tempPassword = password || generateTempPassword();
 
-    if (!username) {
-      username = randomUUID();
+    try {
+      await client.send(
+        new AdminCreateUserCommand({
+          UserPoolId: userPoolId,
+          Username: username,
+          UserAttributes: [
+            { Name: "email", Value: email },
+            { Name: "email_verified", Value: "true" },
+            { Name: "nickname", Value: nickname },
+            { Name: "custom:role", Value: "admin" },
+          ],
+          MessageAction: "SUPPRESS",
+          TemporaryPassword: tempPassword,
+        }),
+      );
+      console.log(`✅ User '${nickname}' erstellt (Cognito-Username: ${username})`);
+    } catch (err) {
+      console.error(`❌ AdminCreateUser fehlgeschlagen:`, err.message || err);
+      process.exit(1);
     }
 
-    if (!userExists) {
-      if (!password) {
-        tempPassword = generateTempPassword();
-      } else {
-        tempPassword = password;
-      }
-
-      try {
-        await client.send(
-          new AdminCreateUserCommand({
-            UserPoolId: userPoolId,
-            Username: username,
-            UserAttributes: [
-              { Name: "email", Value: email },
-              { Name: "email_verified", Value: "true" },
-              { Name: "nickname", Value: nickname },
-              { Name: "custom:role", Value: "admin" },
-            ],
-            MessageAction: "SUPPRESS",
-            TemporaryPassword: tempPassword,
-          }),
-        );
-        console.log(`✅ User '${nickname}' erstellt (Cognito-Username: ${username})`);
-
-        if (password) {
-          try {
-            await client.send(
-              new AdminSetUserPasswordCommand({
-                UserPoolId: userPoolId,
-                Username: username,
-                Password: password,
-                Permanent: true,
-              }),
-            );
-            console.log(
-              `✅ Passwort permanent gesetzt (keine Passwortänderung beim ersten Login erforderlich)`,
-            );
-          } catch (err) {
-            console.warn(`⚠️  Passwort konnte nicht permanent gesetzt werden: ${err.message}`);
-            console.warn(
-              `⚠️  User muss beim ersten Login das Passwort ändern. Temporäres Passwort: ${tempPassword}`,
-            );
-          }
-        } else {
-          console.log(
-            `⚠️  WICHTIG: Temporäres Passwort wurde generiert. User muss beim ersten Login das Passwort ändern.`,
-          );
-        }
-      } catch (err) {
-        if (err.name === "UsernameExistsException") {
-          console.log(`ℹ️  Cognito-Username existiert bereits`);
-          userExists = true;
-        } else {
-          throw err;
-        }
-      }
-    } else {
-      console.log(`ℹ️  Cognito-User mit E-Mail '${email}' existiert bereits (Username: ${username})`);
-    }
-
-    if (userExists && password) {
+    if (password) {
       try {
         await client.send(
           new AdminSetUserPasswordCommand({
@@ -150,10 +89,20 @@ async function findUsernameByEmail(poolId, emailAddr) {
             Permanent: true,
           }),
         );
-        console.log(`✅ Passwort für '${nickname}' gesetzt (permanent)`);
+        console.log(
+          `✅ Passwort permanent gesetzt (keine Passwortänderung beim ersten Login erforderlich)`,
+        );
+        tempPassword = null;
       } catch (err) {
-        console.warn(`⚠️  Passwort konnte nicht gesetzt werden: ${err.message}`);
+        console.warn(`⚠️  Passwort konnte nicht permanent gesetzt werden: ${err.message}`);
+        console.warn(
+          `⚠️  User muss beim ersten Login das Passwort ändern. Temporäres Passwort: ${tempPassword}`,
+        );
       }
+    } else {
+      console.log(
+        `⚠️  WICHTIG: Temporäres Passwort wurde generiert. User muss beim ersten Login das Passwort ändern.`,
+      );
     }
 
     try {
@@ -184,7 +133,7 @@ async function findUsernameByEmail(poolId, emailAddr) {
     console.log(`  Cognito-Username (intern): ${username}`);
     console.log(`  E-Mail: ${email}`);
     console.log(`  Speichere cognitoUsername=${username} am ParticipantProfile.`);
-    if (password) {
+    if (password && !tempPassword) {
       console.log(`  Passwort: ${password}`);
       console.log(`  ✅ Passwort ist permanent gesetzt - Du kannst dich direkt einloggen!`);
     } else if (tempPassword) {

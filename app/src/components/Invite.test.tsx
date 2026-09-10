@@ -24,6 +24,10 @@ vi.mock("../api/auth", () => ({
   startPasswordResetFromToken: vi.fn(),
 }));
 
+vi.mock("../api/participants", () => ({
+  updateParticipant: vi.fn().mockResolvedValue({}),
+}));
+
 const mockedSignIn = signIn as unknown as ReturnType<typeof vi.fn>;
 const mockedFetchAuthSession = fetchAuthSession as unknown as ReturnType<typeof vi.fn>;
 const mockedConfirmResetPassword = confirmResetPassword as unknown as ReturnType<typeof vi.fn>;
@@ -33,6 +37,8 @@ const mockedClearCognitoSession = clearCognitoSession as unknown as ReturnType<t
 const { startPasswordResetFromToken } = await import("../api/auth");
 const mockedStartPasswordResetFromToken =
   startPasswordResetFromToken as unknown as ReturnType<typeof vi.fn>;
+const { updateParticipant } = await import("../api/participants");
+const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
 
 function renderWithParams(search: string, onSuccess?: () => void) {
   const utils = render(
@@ -83,6 +89,7 @@ describe("Invite", () => {
     mockedStartPasswordResetFromToken.mockResolvedValue({
       success: true,
       username: "Alice",
+      userId: "Alice",
     });
 
     mockedConfirmResetPassword.mockResolvedValue(undefined);
@@ -93,6 +100,7 @@ describe("Invite", () => {
           payload: {
             nickname: "alice",
             email: "alice@example.com",
+            sub: "cognito-sub-alice",
             "custom:role": "participant",
           },
         },
@@ -139,10 +147,73 @@ describe("Invite", () => {
         password: "SicheresPasswort123!",
       });
       expect(mockedSaveCurrentUser).toHaveBeenCalledWith({
-        nickname: "alice",
+        nickname: "Alice",
         email: "alice@example.com",
         role: "participant",
       });
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("Alice", {
+        authUserId: "cognito-sub-alice",
+      });
+    });
+  });
+
+  it("verknüpft authUserId über Studio-Login-Name trotz opaque Cognito-Username (#324)", async () => {
+    const opaque = "11111111-2222-4333-8444-555555555555";
+    mockedStartPasswordResetFromToken.mockResolvedValue({
+      success: true,
+      username: opaque,
+      userId: "alice",
+    });
+    mockedConfirmResetPassword.mockResolvedValue(undefined);
+    mockedSignIn.mockResolvedValue({ nextStep: { signInStep: "DONE" } });
+    mockedFetchAuthSession.mockResolvedValue({
+      tokens: {
+        idToken: {
+          payload: {
+            nickname: "alice",
+            email: "alice@example.com",
+            sub: "sub-opaque",
+            "custom:role": "participant",
+          },
+        },
+      },
+    });
+
+    const { panel } = renderWithParams(
+      `?tenantId=default-tenant&token=t1&nickname=alice&email=alice@example.com&mode=invite_activation`,
+    );
+
+    await waitFor(() => {
+      expect(mockedStartPasswordResetFromToken).toHaveBeenCalled();
+    });
+
+    const hiddenUsername = panel.querySelector(
+      "input[name='username'][autocomplete='username']",
+    ) as HTMLInputElement | null;
+    expect(hiddenUsername?.value).toBe("alice");
+    expect(hiddenUsername?.value).not.toBe(opaque);
+
+    fireEvent.change(within(panel).getByPlaceholderText(/Code aus E-Mail/i), {
+      target: { value: "999999" },
+    });
+    fireEvent.change(within(panel).getByPlaceholderText(/Neues Passwort/i), {
+      target: { value: "NeuesPasswort1!" },
+    });
+    fireEvent.click(within(panel).getByRole("button", { name: /Zugang aktivieren/i }));
+
+    await waitFor(() => {
+      expect(mockedConfirmResetPassword).toHaveBeenCalledWith({
+        username: opaque,
+        confirmationCode: "999999",
+        newPassword: "NeuesPasswort1!",
+      });
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", {
+        authUserId: "sub-opaque",
+      });
+      expect(mockedUpdateParticipant).not.toHaveBeenCalledWith(
+        opaque,
+        expect.anything(),
+      );
     });
   });
 

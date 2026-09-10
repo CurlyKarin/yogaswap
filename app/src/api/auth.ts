@@ -8,6 +8,8 @@ export interface StartPasswordResetFromTokenRequest {
 export interface StartPasswordResetFromTokenResponse {
   success: boolean;
   username: string;
+  /** Studio-Login-Name (Dynamo userId); fehlt bei Legacy-Tokens ohne userId. */
+  userId?: string;
 }
 
 export interface RequestSelfPasswordResetRequest {

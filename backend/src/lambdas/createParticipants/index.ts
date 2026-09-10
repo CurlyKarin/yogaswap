@@ -16,7 +16,6 @@ import { buildInviteMail, buildReactivationMail, toSesAuthMessage } from "../sha
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { loadTenantName } from "../shared/tenantSettingsLoader";
 import {
-  findCognitoUserByEmail,
   generateOpaqueCognitoUsername,
   resolveCognitoUsernameAndSub,
 } from "../shared/cognitoUserIdentity";
@@ -412,25 +411,33 @@ export const handler = async (event: any) => {
   const userId = canonicalUserId;
   const poolId = process.env.USER_POOL_ID!;
 
-  // #324: Link existing Cognito account by email (multi-studio), else opaque Username for new users.
+  // #324: Opaque Cognito Username for new users. Same email may map to many pool users (testing).
+  // Auto-link by email is NOT default — explicit multi-studio link comes later (UI).
   let linkedExistingPoolUser = false;
   let linkedAuthUserId: string | undefined;
-  const emailPoolUser = await findCognitoUserByEmail(cognito, poolId, emailNormalized);
-  if (emailPoolUser?.username) {
-    cognitoUsername = emailPoolUser.username;
-    linkedAuthUserId = emailPoolUser.sub;
-    linkedExistingPoolUser = true;
-    console.log(
-      `Linking existing Cognito user by email (${emailNormalized}) → username=${cognitoUsername}`,
-    );
-  } else if (existingStoredCognitoUsername) {
+  let linkedPoolStatus: string | undefined;
+
+  if (existingStoredCognitoUsername) {
     cognitoUsername = existingStoredCognitoUsername;
+    linkedExistingPoolUser = true;
+    const stored = await resolveCognitoUsernameAndSub(
+      cognito,
+      poolId,
+      existingStoredCognitoUsername,
+      userId,
+    );
+    if (stored?.username) {
+      cognitoUsername = stored.username;
+      linkedAuthUserId = stored.sub;
+      linkedPoolStatus = stored.status;
+    }
   } else if (!cognitoUsername) {
     // Legacy dual-path: profile without cognitoUsername may still have Username=nickname in pool.
     const legacy = await resolveCognitoUsernameAndSub(cognito, poolId, userId, nicknameRaw);
     if (legacy?.username) {
       cognitoUsername = legacy.username;
       linkedAuthUserId = legacy.sub;
+      linkedPoolStatus = legacy.status;
       linkedExistingPoolUser = true;
     } else {
       cognitoUsername = generateOpaqueCognitoUsername();
@@ -440,7 +447,8 @@ export const handler = async (event: any) => {
   let reactivated = false;
   try {
     if (linkedExistingPoolUser) {
-      // Ensure attributes match this tenant's login name; do not create a second pool user.
+      // Bestehenden Pool-User nicht „umbenennen“: Cognito-nickname ist global im Pool.
+      // Studio-Login-Name lebt in Dynamo userId; Login über resolve-login (#324).
       await cognito.send(
         new AdminUpdateUserAttributesCommand({
           UserPoolId: poolId,
@@ -448,12 +456,11 @@ export const handler = async (event: any) => {
           UserAttributes: [
             { Name: "email", Value: emailNormalized },
             { Name: "email_verified", Value: "true" },
-            { Name: "nickname", Value: nicknameRaw },
           ],
         }),
       );
-      if (linkedAuthUserId && emailPoolUser?.status === "CONFIRMED") {
-        // Already has a usable login → studio join without password reset.
+      if (linkedAuthUserId && linkedPoolStatus === "CONFIRMED" && !existingProfileFound) {
+        // Selten: Cognito-User schon bestätigt, Profil im Tenant neu — ohne Passwort-Reset.
         reactivated = true;
       } else {
         await cognito.send(
@@ -543,7 +550,6 @@ export const handler = async (event: any) => {
               UserAttributes: [
                 { Name: "email", Value: emailNormalized },
                 { Name: "email_verified", Value: "true" },
-                { Name: "nickname", Value: nicknameRaw },
               ],
             }),
           );
@@ -577,7 +583,6 @@ export const handler = async (event: any) => {
               UserAttributes: [
                 { Name: "email", Value: emailNormalized },
                 { Name: "email_verified", Value: "true" },
-                { Name: "nickname", Value: nicknameRaw },
               ],
             }),
           );
@@ -626,7 +631,7 @@ export const handler = async (event: any) => {
   }
 
   // Cognito-Username mit Dynamo abgleichen (kanonischer Username).
-  // Bei E-Mail-Link (#324) authUserId sofort setzen; sonst erst nach Invite-Abschluss im Client.
+  // authUserId nur bei Multi-Studio-Reaktivierung sofort setzen; sonst nach Invite-Abschluss (#324).
   if (poolId) {
     const resolved = await resolveCognitoUsernameAndSub(cognito, poolId, cognitoUsername, userId);
     if (resolved) {
@@ -639,7 +644,7 @@ export const handler = async (event: any) => {
           participantId,
           email: emailNormalized,
           cognitoUsername: resolved.username,
-          ...(linkedExistingPoolUser && linkedAuthUserId
+          ...(linkedExistingPoolUser && linkedAuthUserId && reactivated
             ? { authUserId: linkedAuthUserId }
             : {}),
           ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
@@ -760,7 +765,9 @@ export const handler = async (event: any) => {
       inviteSentAt,
       cognitoUsername,
       latestAuthTokenNonce: oneTimeTokenNonce,
-      ...(linkedExistingPoolUser && linkedAuthUserId ? { authUserId: linkedAuthUserId } : {}),
+      ...(linkedExistingPoolUser && linkedAuthUserId && reactivated
+        ? { authUserId: linkedAuthUserId }
+        : {}),
       ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
     });
   } catch (err: any) {

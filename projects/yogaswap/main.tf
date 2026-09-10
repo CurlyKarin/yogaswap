@@ -470,8 +470,7 @@ locals {
             "cognito-idp:AdminAddUserToGroup",
             "cognito-idp:AdminSetUserPassword",
             "cognito-idp:AdminUpdateUserAttributes",
-            "cognito-idp:AdminGetUser",
-            "cognito-idp:ListUsers"
+            "cognito-idp:AdminGetUser"
           ]
           Resource = aws_cognito_user_pool.yogaswap.arn
         },
