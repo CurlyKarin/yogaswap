@@ -217,11 +217,11 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       }
 
       onSuccess?.();
+      // Nach Navigation kein setState mehr (sonst unhandled "window is not defined" in Vitest).
       navigate("/", { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg || "Passwort konnte nicht gesetzt werden.");
-    } finally {
       setLoading(false);
     }
   };
