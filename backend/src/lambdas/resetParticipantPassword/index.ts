@@ -112,8 +112,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     );
 
     const baseUrl = resolveAppBaseUrlForTenant(tenantId);
+    // nickname query = Studio-Login-Name; Cognito Username bleibt im Token (#324)
     const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(
-      cognitoUsername,
+      targetUserId,
     )}&email=${encodeURIComponent(email)}`;
     const studioName = await loadTenantName(
       dynamodb,

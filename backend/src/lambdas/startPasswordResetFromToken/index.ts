@@ -204,6 +204,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify({
         success: true,
         username: cognitoUsername,
+        // Studio-Login-Name for Dynamo/self-link; Amplify uses `username` (may be opaque #324)
+        ...(tokenUserId ? { userId: tokenUserId } : {}),
       }),
     };
   } catch (err: unknown) {

@@ -104,6 +104,8 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [usernameForReset, setUsernameForReset] = useState("");
+  /** Dynamo userId / Studio-Login-Name — nicht Cognito-Username (#324). */
+  const [studioUserId, setStudioUserId] = useState("");
 
   // Wir blockieren den Submit, bis ein eventuelles vorheriges signOut abgeschlossen ist.
   // Sonst kann Amplify bei signIn() -> UserAlreadyAuthenticatedException werfen.
@@ -123,6 +125,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       setError(null);
       setCodeSent(false);
       setUsernameForReset("");
+      setStudioUserId("");
       try {
         const resp = await startPasswordResetFromToken({
           token: tokenParam,
@@ -131,6 +134,8 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
         if (cancelled) return;
 
         setUsernameForReset(resp.username as string);
+        const fromToken = typeof resp.userId === "string" ? resp.userId.trim() : "";
+        setStudioUserId(fromToken || nicknameParam.trim());
         setCodeSent(true);
       } catch (err: unknown) {
         if (cancelled) return;
@@ -145,7 +150,7 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [tokenMode, authCleared, tokenParam, tenantIdParam]);
+  }, [tokenMode, authCleared, tokenParam, tenantIdParam, nicknameParam]);
 
   const handleSubmitTokenReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,8 +193,13 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
       const session = await fetchAuthSession();
       if (session.tokens?.idToken) {
         const payload = session.tokens.idToken.payload;
+        const canonicalNickname =
+          studioUserId.trim() ||
+          nicknameParam.trim() ||
+          (payload.nickname as string) ||
+          usernameForReset;
         const user: User = {
-          nickname: payload.nickname as string,
+          nickname: canonicalNickname,
           email: payload.email as string,
           role: (payload["custom:role"] as UserRole) || "participant",
         };
@@ -198,7 +208,8 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
         const sub = payload.sub as string | undefined;
         if (typeof sub === "string" && sub.trim()) {
           try {
-            await updateParticipant(usernameForReset, { authUserId: sub });
+            // Self-link braucht Studio-Login-Name (= Dynamo userId), nicht opaque Cognito-Username.
+            await updateParticipant(canonicalNickname, { authUserId: sub });
           } catch (err) {
             console.error("Failed to link participant authUserId", err);
           }
@@ -251,12 +262,12 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
         className="invite-form"
         aria-disabled={nicknameFormatError ? true : undefined}
       >
-        {/* Password managers need an explicit username field in reset flows. */}
+        {/* Password managers: Studio-Login-Name, nicht opaque Cognito-Username (#324). */}
         <input
           type="text"
           name="username"
           autoComplete="username"
-          value={usernameForReset || nicknameParam}
+          value={studioUserId || nicknameParam}
           readOnly
           tabIndex={-1}
           aria-hidden="true"

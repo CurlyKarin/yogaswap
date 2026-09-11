@@ -8,6 +8,8 @@ export interface StartPasswordResetFromTokenRequest {
 export interface StartPasswordResetFromTokenResponse {
   success: boolean;
   username: string;
+  /** Studio-Login-Name (Dynamo userId); fehlt bei Legacy-Tokens ohne userId. */
+  userId?: string;
 }
 
 export interface RequestSelfPasswordResetRequest {
@@ -77,6 +79,37 @@ export async function requestSelfPasswordReset(
       throw new Error(err.message || "Request failed");
     }
     throw new Error("Request failed");
+  }
+}
+
+export interface ResolveLoginRequest {
+  nickname: string;
+}
+
+export interface ResolveLoginResponse {
+  cognitoUsername: string;
+  nickname: string;
+}
+
+/** Studio-Login-Name → Cognito Username (#324). Tenant via Host/x-tenant-id. */
+export async function resolveLogin(
+  req: ResolveLoginRequest,
+): Promise<ResolveLoginResponse> {
+  try {
+    const response = await axios.post<ResolveLoginResponse>(
+      "/auth/resolve-login",
+      req,
+    );
+    return response.data;
+  } catch (err: unknown) {
+    const messageFromResponse = readErrorMessageFromUnknownError(err);
+    if (messageFromResponse) {
+      throw new Error(messageFromResponse);
+    }
+    if (err instanceof Error) {
+      throw new Error(err.message || "Login failed");
+    }
+    throw new Error("Login failed");
   }
 }
 

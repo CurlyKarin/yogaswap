@@ -3,6 +3,7 @@ import { signIn, fetchAuthSession } from "aws-amplify/auth";
 import { saveCurrentUser, loadCurrentUser } from "shared/lib/storage";
 import { useCallback, useState } from "react";
 import { User, UserRole } from "shared/types";
+import { resolveLogin } from "../api/auth";
 import { clearCognitoSession, isUserAlreadyAuthenticatedError } from "./cognitoSession";
 
 type AuthReturn = {
@@ -22,6 +23,22 @@ export const useCognitoAuth = (): AuthReturn => {
     setIsLoading(true);
     setError(null);
     try {
+      // Studio-Login-Name → Cognito Username (#324); Legacy: oft identisch.
+      let cognitoUsername = credentials.username.trim();
+      let studioNickname = cognitoUsername;
+      try {
+        const resolved = await resolveLogin({ nickname: cognitoUsername });
+        if (resolved.cognitoUsername?.trim()) {
+          cognitoUsername = resolved.cognitoUsername.trim();
+        }
+        if (resolved.nickname?.trim()) {
+          studioNickname = resolved.nickname.trim();
+        }
+      } catch {
+        setError("Login fehlgeschlagen");
+        return false;
+      }
+
       // Vor signIn immer Session clearen — sonst "There is already a signed in user."
       // (Amplify message enthält nicht den Exception-Namen; Catch allein war unzuverlässig.)
       await clearCognitoSession();
@@ -30,7 +47,7 @@ export const useCognitoAuth = (): AuthReturn => {
       let result;
       try {
         result = await signIn({
-          username: credentials.username,
+          username: cognitoUsername,
           password: credentials.password,
         });
       } catch (err: unknown) {
@@ -38,7 +55,7 @@ export const useCognitoAuth = (): AuthReturn => {
           await clearCognitoSession();
           setUser(null);
           result = await signIn({
-            username: credentials.username,
+            username: cognitoUsername,
             password: credentials.password,
           });
         } else {
@@ -59,7 +76,8 @@ export const useCognitoAuth = (): AuthReturn => {
       const payload = session.tokens?.idToken?.payload;
 
       const nextUser: User = {
-        nickname: payload?.nickname as string,
+        // Actor = Studio-Login-Name (Tenant), nicht opaque Cognito-Username / JWT-nickname anderer Studios.
+        nickname: studioNickname || (payload?.nickname as string) || credentials.username,
         email: payload?.email as string,
         role: (payload?.["custom:role"] as UserRole) || "participant",
       };

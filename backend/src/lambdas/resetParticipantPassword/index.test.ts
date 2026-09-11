@@ -121,5 +121,64 @@ describe("resetParticipantPassword Lambda", () => {
       }),
     );
   });
+
+  test("stores opaque cognitoUsername on token and login nickname in link (#324)", async () => {
+    const opaque = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    dynamoMockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          cognitoUsername: { S: opaque },
+        },
+      })
+      .mockResolvedValue({});
+    sesMockSend.mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-auth-tokens",
+        Item: expect.objectContaining({
+          cognitoUsername: { S: opaque },
+          userId: { S: "alice" },
+          purpose: { S: "admin-password-reset" },
+        }),
+      }),
+    );
+
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Message: expect.objectContaining({
+          Body: expect.objectContaining({
+            Html: expect.objectContaining({
+              Data: expect.stringMatching(/nickname=alice/),
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Message: expect.objectContaining({
+          Body: expect.objectContaining({
+            Html: expect.objectContaining({
+              Data: expect.not.stringMatching(new RegExp(`nickname=${opaque}`)),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
 });
 

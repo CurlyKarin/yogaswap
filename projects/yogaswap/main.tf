@@ -488,6 +488,18 @@ locals {
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
       }
     },
+    "resolve_login" = {
+      name             = "resolve-login"
+      file_name        = "resolveLogin.zip"
+      table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:Query"]
+      tables = {
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+    },
     "reset_participant_password" = {
       name             = "reset-participant-password"
       file_name        = "resetParticipantPassword.zip"
@@ -640,6 +652,7 @@ locals {
     "POST /participants/{userId}/password-reset"   = "reset_participant_password"
     "POST /auth/password-reset/request"            = "request_self_password_reset"
     "POST /auth/password-reset/from-token"         = "start_password_reset_from_token"
+    "POST /auth/resolve-login"                     = "resolve_login"
     "PUT /participants/{userId}"                   = "update_participant"
     "DELETE /participants/{userId}"                = "delete_participant"
     "GET /tenant-context"                          = "get_tenant_context"

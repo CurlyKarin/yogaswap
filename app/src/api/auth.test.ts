@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import axios from "axios";
-import { requestSelfPasswordReset, startPasswordResetFromToken } from "./auth";
+import { requestSelfPasswordReset, resolveLogin, startPasswordResetFromToken } from "./auth";
 
 vi.mock("axios");
 
@@ -69,3 +69,37 @@ describe("requestSelfPasswordReset", () => {
   });
 });
 
+describe("resolveLogin", () => {
+  beforeEach(() => {
+    vi.mocked(axios.post).mockReset();
+  });
+
+  it("ruft POST /auth/resolve-login mit nickname im Body auf (#324)", async () => {
+    vi.mocked(axios.post).mockResolvedValueOnce({
+      data: {
+        cognitoUsername: "11111111-2222-4333-8444-555555555555",
+        nickname: "Alice",
+      },
+    });
+
+    const result = await resolveLogin({ nickname: "alice" });
+
+    expect(axios.post).toHaveBeenCalledWith("/auth/resolve-login", {
+      nickname: "alice",
+    });
+    expect(result).toEqual({
+      cognitoUsername: "11111111-2222-4333-8444-555555555555",
+      nickname: "Alice",
+    });
+  });
+
+  it("wirft Error mit backend error-Message", async () => {
+    vi.mocked(axios.post).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: { error: "Login failed" } },
+      message: "Request failed with status code 404",
+    });
+
+    await expect(resolveLogin({ nickname: "ghost" })).rejects.toThrow(/Login failed/i);
+  });
+});

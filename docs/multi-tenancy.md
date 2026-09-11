@@ -25,6 +25,8 @@ Ziel: **Klare Mandantentrennung**, ohne die Domänenlogik unnötig zu verkompliz
 - **User**  
   - Identität einer realen Person (einmalig im System).  
   - Ein User kann mehreren Tenants zugeordnet sein (z. B. Admin von zwei Studios).
+  - **Login (#324 Slice 1):** Cognito-Username ist **opaque** (UUID) und ≠ Studio-Login-Name (`userId` / Nickname). Login löst per Tenant den Cognito-Username auf (`POST /auth/resolve-login`). Bestehende Accounts: Username kann noch dem Nickname entsprechen (`cognitoUsername || userId`).
+  - **E-Mail:** bewusst nicht eindeutig — mehrere Cognito-Accounts / Profile mit derselben Adresse sind erlaubt (Tests). Auto-Verknüpfung per E-Mail ist **nicht** Default; explizites Multi-Studio-Linking folgt später in der UI.
 
 - **User–Tenant-Membership**  
   - Verknüpft `User` und `Tenant` mit einer Rolle und optionalen Rechten/Scopes.  
@@ -150,7 +152,7 @@ Die folgenden Erweiterungen sind in `shared/src/types.ts` umgesetzt (alle neuen 
 - **UserTenantMembership:** `userId`, `tenantId`, `role`, `canSeeAllCourses?`
 
 **Rollen:** Nur noch `admin` | `instructor` | `participant` (keine Rolle `trial`; Schnupper über `anonymousTrialCount`, Springer später als `participant` mit Settings).  
-**E-Mail:** Ist bewusst nicht eindeutig; mehrere User pro E-Mail sind erlaubt (Tests, verwaltete Teilnehmer).
+**E-Mail:** Ist bewusst nicht eindeutig; mehrere User/Profile pro E-Mail sind erlaubt (Tests, verwaltete Teilnehmer). Cognito-Accounts werden deshalb **nicht** automatisch per E-Mail zusammengeführt (#324 Slice 1).
 
 ---
 

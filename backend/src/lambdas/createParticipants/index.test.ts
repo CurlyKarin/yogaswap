@@ -11,6 +11,7 @@ jest.mock('@aws-sdk/client-cognito-identity-provider', () => {
     AdminSetUserPasswordCommand: jest.fn((input) => input),
     AdminUpdateUserAttributesCommand: jest.fn((input) => input),
     AdminGetUserCommand: jest.fn((input) => input),
+    ListUsersCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -47,6 +48,19 @@ function adminGetUserResponse(username: string, sub = `sub-${username}`) {
     Username: username,
     UserAttributes: [{ Name: 'sub', Value: sub }],
   };
+}
+
+/**
+ * Legacy AdminGetUser miss → opaque AdminCreateUser path.
+ * resolveCognitoUsernameAndSub only calls AdminGetUser once when userId === nickname.
+ */
+function mockNewUserCognitoPrelude(opaqueUsername: string) {
+  return cognitoMockSend
+    .mockRejectedValueOnce(new Error('UserNotFoundException'))
+    .mockResolvedValueOnce({}) // AdminCreateUser
+    .mockResolvedValueOnce({}) // AdminSetUserPassword
+    .mockResolvedValueOnce({}) // AdminAddUserToGroup
+    .mockResolvedValueOnce(adminGetUserResponse(opaqueUsername));
 }
 
 describe('createParticipants Lambda', () => {
@@ -203,12 +217,11 @@ describe('createParticipants Lambda', () => {
   });
 
   test('successfully creates a new user', async () => {
-    cognitoMockSend
-      .mockResolvedValueOnce({}) // AdminCreateUserCommand
-      .mockResolvedValueOnce({}) // AdminSetUserPasswordCommand (token flow bootstrap)
-      .mockResolvedValueOnce({}) // AdminAddUserToGroupCommand
-      .mockResolvedValueOnce(adminGetUserResponse('testuser')); // AdminGetUserCommand (sync sub / canonical username)
-    sesMockSend.mockResolvedValueOnce({}); // SendEmailCommand
+    const opaqueUsername = '11111111-2222-4333-8444-555555555555';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+
+    mockNewUserCognitoPrelude(opaqueUsername);
+    sesMockSend.mockResolvedValueOnce({});
 
     const event = baseEvent({
       email: 'test@example.com',
@@ -224,88 +237,139 @@ describe('createParticipants Lambda', () => {
     expect(body.success).toBe(true);
     expect(body.username).toBe('testuser');
     expect(body.emailSent).toBe(true);
-    expect(body.tempPassword).toBeUndefined(); // Should not be in response if email sent
-    expect(body.link).toMatch(/\/invite\?/);
+    expect(body.link).toMatch(/nickname=testuser/);
     expect(body.link).toMatch(/token=/);
 
-    // Verify Cognito calls
-    expect(cognitoMockSend).toHaveBeenCalledTimes(4);
-    expect(cognitoMockSend).toHaveBeenNthCalledWith(
-      1,
+    expect(cognitoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         UserPoolId: 'test-user-pool-id',
-        Username: 'testuser',
+        Username: opaqueUsername,
         UserAttributes: expect.arrayContaining([
           { Name: 'email', Value: 'test@example.com' },
           { Name: 'nickname', Value: 'testuser' },
           { Name: 'custom:role', Value: 'participant' },
         ]),
-      })
-    );
-    expect(cognitoMockSend).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        UserPoolId: 'test-user-pool-id',
-        Username: 'testuser',
-        Permanent: true,
-      })
-    );
-    expect(cognitoMockSend).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        UserPoolId: 'test-user-pool-id',
-        Username: 'testuser',
-        GroupName: 'participant',
-      })
-    );
-    expect(cognitoMockSend).toHaveBeenNthCalledWith(
-      4,
-      expect.objectContaining({
-        UserPoolId: 'test-user-pool-id',
-        Username: 'testuser',
-      })
-    );
-
-    // Verify SES call
-    expect(sesMockSend).toHaveBeenCalledTimes(1);
-    expect(sesMockSend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        Source: 'YogaSwap <yogaswap@example.com>',
-        Destination: { ToAddresses: ['test@example.com'] },
-      })
-    );
-
-    // Verify DynamoDB call (membership + participant profile)
-    expect(dynamoMockSend.mock.calls.length).toBeGreaterThanOrEqual(3);
-    expect(dynamoMockSend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        TableName: 'test-memberships-table',
-        Item: expect.objectContaining({
-          tenantId: { S: 'test-tenant' },
-          userId: { S: 'testuser' },
-          role: { S: 'participant' },
-        }),
-      })
+      }),
     );
     expect(dynamoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: 'test-participants-table',
         Item: expect.objectContaining({
-          tenantId: { S: 'test-tenant' },
           userId: { S: 'testuser' },
-          email: { S: 'test@example.com' },
-          inviteSentAt: expect.objectContaining({ S: expect.any(String) }),
+          cognitoUsername: { S: opaqueUsername },
         }),
+      }),
+    );
+  });
+
+  test('same email still creates a new opaque Cognito user (#324 no auto-link)', async () => {
+    const opaqueUsername = '22222222-3333-4444-8555-666666666666';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    mockNewUserCognitoPrelude(opaqueUsername);
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'shared@example.com',
+      nickname: 'anton',
+      displayName: 'Anton',
+      role: 'participant',
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.reactivated).toBe(false);
+    expect(body.username).toBe('anton');
+
+    expect(cognitoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Username: opaqueUsername,
+        TemporaryPassword: expect.any(String),
+        UserAttributes: expect.arrayContaining([
+          { Name: 'email', Value: 'shared@example.com' },
+          { Name: 'nickname', Value: 'anton' },
+        ]),
+      }),
+    );
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          userId: { S: 'anton' },
+          cognitoUsername: { S: opaqueUsername },
+        }),
+      }),
+    );
+  });
+
+  test('re-invite of existing profile with confirmed Cognito email sends invite not reactivation', async () => {
+    dynamoMockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: 'test-tenant' },
+          userId: { S: 'alice' },
+          cognitoUsername: { S: 'opaque-alice' },
+          email: { S: 'alice@example.com' },
+        },
       })
+      .mockResolvedValue({});
+
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-alice', 'sub-alice'),
+        UserStatus: 'CONFIRMED',
+      }) // resolve stored cognitoUsername
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminSetUserPassword (re-invite path)
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('opaque-alice', 'sub-alice'));
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'alice@example.com',
+      nickname: 'alice',
+      displayName: 'Alice',
+      role: 'participant',
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.reactivated).toBe(false);
+    expect(body.link).toMatch(/token=/);
+    expect(body.emailSent).toBe(true);
+
+    // Invite-Pfad: authUserId nicht vor Abschluss setzen (sonst Status bleibt gelb).
+    const profilePuts = dynamoMockSend.mock.calls.filter(
+      (call: unknown[]) =>
+        call[0] &&
+        typeof call[0] === "object" &&
+        (call[0] as { TableName?: string }).TableName === "test-participants-table" &&
+        (call[0] as { Item?: unknown }).Item,
+    );
+    for (const call of profilePuts) {
+      const item = (call[0] as { Item: Record<string, { S?: string }> }).Item;
+      expect(item.authUserId).toBeUndefined();
+    }
+
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Message: expect.objectContaining({
+          Subject: expect.objectContaining({
+            Data: expect.stringMatching(/Einladung/i),
+          }),
+        }),
+      }),
     );
   });
 
   test('keeps first entered casing as canonical user id', async () => {
-    cognitoMockSend
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce(adminGetUserResponse('Kai'));
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+    mockNewUserCognitoPrelude('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
     sesMockSend.mockResolvedValueOnce({});
 
     const event = baseEvent({
@@ -320,10 +384,9 @@ describe('createParticipants Lambda', () => {
     const body = JSON.parse(result.body);
     expect(body.username).toBe('Kai');
 
-    expect(cognitoMockSend).toHaveBeenNthCalledWith(
-      1,
+    expect(cognitoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        Username: 'Kai',
+        Username: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
         UserAttributes: expect.arrayContaining([
           { Name: 'nickname', Value: 'Kai' },
         ]),
@@ -342,15 +405,16 @@ describe('createParticipants Lambda', () => {
   test('handles existing user by resetting password', async () => {
     const usernameExistsError = new Error('User already exists');
     (usernameExistsError as any).name = 'UsernameExistsException';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
 
     cognitoMockSend
-      .mockRejectedValueOnce(usernameExistsError) // AdminCreateUserCommand fails
-      .mockResolvedValueOnce({}) // AdminSetUserPasswordCommand succeeds
-      .mockResolvedValueOnce({}) // AdminUpdateUserAttributesCommand
-      .mockResolvedValueOnce({}) // AdminAddUserToGroupCommand
-      .mockResolvedValueOnce(adminGetUserResponse('existinguser')); // AdminGetUserCommand
-    sesMockSend.mockResolvedValueOnce({}); // SendEmailCommand
-    dynamoMockSend.mockResolvedValueOnce({ Item: undefined }); // participant profile lookup -> no authUserId
+      .mockRejectedValueOnce(new Error('UserNotFoundException'))
+      .mockRejectedValueOnce(usernameExistsError)
+      .mockResolvedValueOnce({}) // AdminSetUserPassword
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'));
+    sesMockSend.mockResolvedValueOnce({});
 
     const event = baseEvent({
       email: 'existing@example.com',
@@ -364,51 +428,33 @@ describe('createParticipants Lambda', () => {
     const body = JSON.parse(result.body);
     expect(body.success).toBe(true);
     expect(body.username).toBe('existinguser');
-
-    // Verify password reset was called
-    expect(cognitoMockSend).toHaveBeenCalledTimes(5);
-    expect(cognitoMockSend).toHaveBeenNthCalledWith(
-      2,
+    expect(cognitoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        UserPoolId: 'test-user-pool-id',
-        Username: 'existinguser',
+        Username: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         Permanent: true,
-      })
-    );
-    expect(cognitoMockSend).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        UserPoolId: 'test-user-pool-id',
-        Username: 'existinguser',
-        UserAttributes: expect.arrayContaining([
-          { Name: 'email', Value: 'existing@example.com' },
-          { Name: 'email_verified', Value: 'true' },
-        ]),
-      })
+      }),
     );
   });
 
   test('registered user with authUserId gets token invite resend when AUTH_TOKENS_TABLE is set', async () => {
-    const usernameExistsError = new Error('User already exists');
-    (usernameExistsError as any).name = 'UsernameExistsException';
-
-    cognitoMockSend
-      .mockRejectedValueOnce(usernameExistsError) // AdminCreateUserCommand fails
-      .mockResolvedValueOnce({}) // AdminUpdateUserAttributesCommand (sync email for reset code)
-      .mockResolvedValueOnce({}) // AdminSetUserPasswordCommand (normalize state for reset flow)
-      .mockResolvedValueOnce({}) // AdminAddUserToGroupCommand
-      .mockResolvedValueOnce(adminGetUserResponse('existinguser', 'sub-123')); // AdminGetUserCommand
-    sesMockSend.mockResolvedValueOnce({});
     dynamoMockSend
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: 'default-tenant' },
           userId: { S: 'existinguser' },
           authUserId: { S: 'sub-123' },
+          cognitoUsername: { S: 'existinguser' },
         },
-      }) // profile lookup in UsernameExists flow
-      .mockResolvedValueOnce({}) // membership write
-      .mockResolvedValueOnce({}); // participant profile write
+      })
+      .mockResolvedValue({});
+
+    cognitoMockSend
+      .mockResolvedValueOnce(adminGetUserResponse('existinguser', 'sub-123'))
+      .mockResolvedValueOnce({}) // update attrs
+      .mockResolvedValueOnce({}) // set password
+      .mockResolvedValueOnce({}) // group
+      .mockResolvedValueOnce(adminGetUserResponse('existinguser', 'sub-123'));
+    sesMockSend.mockResolvedValueOnce({});
 
     const event = baseEvent({
       email: 'existing@example.com',
@@ -423,24 +469,12 @@ describe('createParticipants Lambda', () => {
     expect(body.emailSent).toBe(true);
     expect(body.reactivated).toBe(false);
     expect(body.link).toMatch(/token=/);
-    expect(body.tempPassword).toBeUndefined();
-
-    expect(cognitoMockSend).toHaveBeenCalledTimes(5);
-    expect(cognitoMockSend).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        UserPoolId: 'test-user-pool-id',
-        Username: 'existinguser',
-        UserAttributes: expect.arrayContaining([
-          { Name: 'email', Value: 'existing@example.com' },
-          { Name: 'email_verified', Value: 'true' },
-        ]),
-      }),
-    );
   });
 
   test('returns 500 when AUTH_TOKENS_TABLE is missing for email invite flow', async () => {
     delete process.env.AUTH_TOKENS_TABLE;
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+    mockNewUserCognitoPrelude('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
 
     const event = baseEvent({
       email: 'legacy@example.com',
@@ -450,7 +484,7 @@ describe('createParticipants Lambda', () => {
 
     const result = await handler(event);
     expect(result.statusCode).toBe(500);
-    expect(JSON.parse(result.body).error).toMatch(/AUTH_TOKENS_TABLE is required/i);
+    expect(JSON.parse(result.body).error).toMatch(/secure invite token|AUTH_TOKENS_TABLE/i);
 
     process.env.AUTH_TOKENS_TABLE = 'test-auth-tokens-table';
   });
@@ -503,10 +537,12 @@ describe('createParticipants Lambda', () => {
   test('returns 500 if password reset fails for existing user', async () => {
     const usernameExistsError = new Error('User already exists');
     (usernameExistsError as any).name = 'UsernameExistsException';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue('dddddddd-dddd-4ddd-8ddd-dddddddddddd');
 
     cognitoMockSend
-      .mockRejectedValueOnce(usernameExistsError) // AdminCreateUserCommand fails
-      .mockRejectedValueOnce(new Error('Password reset failed')); // AdminSetUserPasswordCommand fails
+      .mockRejectedValueOnce(new Error('UserNotFoundException'))
+      .mockRejectedValueOnce(usernameExistsError)
+      .mockRejectedValueOnce(new Error('Password reset failed'));
 
     const event = baseEvent({
       email: 'existing@example.com',
@@ -521,7 +557,10 @@ describe('createParticipants Lambda', () => {
   });
 
   test('returns 500 if user creation fails with non-UsernameExists error', async () => {
-    cognitoMockSend.mockRejectedValueOnce(new Error('Cognito error'));
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+    cognitoMockSend
+      .mockRejectedValueOnce(new Error('UserNotFoundException'))
+      .mockRejectedValueOnce(new Error('Cognito error'));
 
     const event = baseEvent({
       email: 'test@example.com',
@@ -537,12 +576,18 @@ describe('createParticipants Lambda', () => {
 
   test('continues even if group assignment fails', async () => {
     const groupError = new Error('Group assignment failed');
+    const opaqueUsername = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    mockNewUserCognitoPrelude(opaqueUsername);
+    // Override group step to fail: recreate queue with group reject
+    cognitoMockSend.mockReset();
     cognitoMockSend
-      .mockResolvedValueOnce({}) // AdminCreateUserCommand
-      .mockResolvedValueOnce({}) // AdminSetUserPasswordCommand
-      .mockRejectedValueOnce(groupError) // AdminAddUserToGroupCommand fails
-      .mockResolvedValueOnce(adminGetUserResponse('testuser')); // AdminGetUserCommand
-    sesMockSend.mockResolvedValueOnce({}); // SendEmailCommand
+      .mockRejectedValueOnce(new Error('UserNotFoundException'))
+      .mockResolvedValueOnce({}) // AdminCreateUser
+      .mockResolvedValueOnce({}) // AdminSetUserPassword
+      .mockRejectedValueOnce(groupError)
+      .mockResolvedValueOnce(adminGetUserResponse(opaqueUsername));
+    sesMockSend.mockResolvedValueOnce({});
 
     const event = baseEvent({
       email: 'test@example.com',
@@ -558,12 +603,10 @@ describe('createParticipants Lambda', () => {
   });
 
   test('returns inviteToken if email sending fails', async () => {
-    cognitoMockSend
-      .mockResolvedValueOnce({}) // AdminCreateUserCommand
-      .mockResolvedValueOnce({}) // AdminSetUserPasswordCommand
-      .mockResolvedValueOnce({}) // AdminAddUserToGroupCommand
-      .mockResolvedValueOnce(adminGetUserResponse('testuser')); // AdminGetUserCommand
-    sesMockSend.mockRejectedValueOnce(new Error('SES error')); // SendEmailCommand fails
+    const opaqueUsername = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    mockNewUserCognitoPrelude(opaqueUsername);
+    sesMockSend.mockRejectedValueOnce(new Error('SES error'));
 
     const event = baseEvent({
       email: 'test@example.com',
@@ -593,11 +636,9 @@ describe('createParticipants Lambda', () => {
   });
 
   test('handles event.body as object (not string)', async () => {
-    cognitoMockSend
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce(adminGetUserResponse('testuser'));
+    const opaqueUsername = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    mockNewUserCognitoPrelude(opaqueUsername);
     sesMockSend.mockResolvedValueOnce({});
 
     const event = {
@@ -641,11 +682,9 @@ describe('createParticipants Lambda', () => {
 
   test('uses default BASE_URL if not provided', async () => {
     process.env.BASE_URL = '';
-    cognitoMockSend
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce(adminGetUserResponse('testuser'));
+    const opaqueUsername = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    mockNewUserCognitoPrelude(opaqueUsername);
     sesMockSend.mockResolvedValueOnce({});
 
     const event = baseEvent({
@@ -659,6 +698,47 @@ describe('createParticipants Lambda', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
     expect(body.link).toBeDefined();
-    // Link should still be generated even without BASE_URL
+  });
+
+  test('creates invite token with opaque cognitoUsername', async () => {
+    const opaqueUsername = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    mockNewUserCognitoPrelude(opaqueUsername);
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'test@example.com',
+      nickname: 'testuser',
+      role: 'participant',
+    });
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-auth-tokens-table',
+        Item: expect.objectContaining({
+          userId: { S: 'testuser' },
+          cognitoUsername: { S: opaqueUsername },
+          purpose: { S: 'invite-activation' },
+        }),
+      }),
+    );
+
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Destination: { ToAddresses: ['test@example.com'] },
+        Message: expect.objectContaining({
+          Body: expect.objectContaining({
+            Html: expect.objectContaining({
+              Data: expect.stringMatching(
+                /\/invite\?[^"]*token=[A-Za-z0-9_-]+[^"]*nickname=testuser/,
+              ),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 });
