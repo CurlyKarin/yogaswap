@@ -839,8 +839,23 @@ export default function AdminPanel({
         if (identityOverride) {
           setCreateIdentityDecision(identityOverride);
         }
+        const linkedCandidate =
+          effectiveIdentityDecision.type === "link"
+            ? createIdentityCandidates.find(
+                (c) => c.cognitoUsername === effectiveIdentityDecision.cognitoUsername,
+              )
+            : undefined;
+        // Same studio: keep existing login name; otherwise Cognito nickname (#342).
+        const inviteNickname =
+          effectiveIdentityDecision.type === "link"
+            ? (
+                linkedCandidate?.tenantUserId?.trim() ||
+                linkedCandidate?.nickname?.trim() ||
+                nicknameValue
+              )
+            : nicknameValue;
         const result = await inviteUser({
-          nickname: nicknameValue,
+          nickname: inviteNickname,
           email: emailValue,
           ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
           role: canEditRoles ? createRole : "participant",
@@ -990,9 +1005,25 @@ export default function AdminPanel({
             ? { forceNew: true as const }
             : {};
 
+      const identityDecision = options?.identityDecision;
+      const linkedCandidate =
+        identityDecision?.type === "link"
+          ? inviteIdentityCandidates.find(
+              (c) => c.cognitoUsername === identityDecision.cognitoUsername,
+            )
+          : undefined;
+      const inviteNickname =
+        identityDecision?.type === "link"
+          ? (
+              linkedCandidate?.tenantUserId?.trim() ||
+              linkedCandidate?.nickname?.trim() ||
+              userId
+            )
+          : userId;
+
       const result = await inviteUser({
         email: p.email,
-        nickname: userId,
+        nickname: inviteNickname,
         role: effectiveRole,
         ...identityInviteFlags,
       });
@@ -1785,9 +1816,16 @@ export default function AdminPanel({
                   <p style={{ margin: "0 0 0.5rem", fontSize: 13, fontWeight: 600 }}>
                     Zu dieser E-Mail gibt es bereits Login-Konten. Bitte wählen:
                   </p>
+                  <p style={{ margin: "0 0 0.5rem", fontSize: 12, color: "#4b5563" }}>
+                    Verknüpfen behält den bestehenden Login-Namen im Studio (keine zweite Person).
+                  </p>
                   <div className="dialog-stack" style={{ gap: "0.35rem" }}>
                     {createIdentityCandidates.map((c) => {
-                      const labelNick = c.nickname?.trim() || "(ohne Login-Name im Pool)";
+                      const labelNick =
+                        c.tenantUserId?.trim() ||
+                        c.nickname?.trim() ||
+                        "(ohne Login-Name im Pool)";
+                      const sameStudio = !!c.tenantUserId?.trim();
                       return (
                         <label
                           key={c.cognitoUsername}
@@ -1808,7 +1846,10 @@ export default function AdminPanel({
                           />
                           <span>
                             <strong>{labelNick}</strong>
-                            {c.nicknameMatch ? " · empfohlen (passender Login-Name)" : ""}
+                            {sameStudio ? " · bereits in diesem Studio" : ""}
+                            {c.nicknameMatch && !sameStudio
+                              ? " · empfohlen (passender Login-Name)"
+                              : ""}
                             {c.poolStatus ? ` · ${c.poolStatus}` : ""}
                           </span>
                         </label>
@@ -1904,7 +1945,11 @@ export default function AdminPanel({
               </p>
               <div className="dialog-stack" style={{ gap: "0.35rem" }}>
                 {inviteIdentityCandidates.map((c) => {
-                  const labelNick = c.nickname?.trim() || "(ohne Login-Name im Pool)";
+                  const labelNick =
+                    c.tenantUserId?.trim() ||
+                    c.nickname?.trim() ||
+                    "(ohne Login-Name im Pool)";
+                  const sameStudio = !!c.tenantUserId?.trim();
                   return (
                     <label
                       key={c.cognitoUsername}
@@ -1924,7 +1969,10 @@ export default function AdminPanel({
                       />
                       <span>
                         <strong>{labelNick}</strong>
-                        {c.nicknameMatch ? " · empfohlen (passender Login-Name)" : ""}
+                        {sameStudio ? " · bereits in diesem Studio" : ""}
+                        {c.nicknameMatch && !sameStudio
+                          ? " · empfohlen (passender Login-Name)"
+                          : ""}
                         {c.poolStatus ? ` · ${c.poolStatus}` : ""}
                       </span>
                     </label>

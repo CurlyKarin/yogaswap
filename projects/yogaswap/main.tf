@@ -492,11 +492,12 @@ locals {
     "list_identity_candidates" = {
       name             = "list-identity-candidates"
       file_name        = "listIdentityCandidates.zip"
-      table_arns       = [module.memberships_table.table_arn, module.tenants_table.table_arn]
-      dynamodb_actions = ["dynamodb:GetItem"]
+      table_arns       = [module.memberships_table.table_arn, module.tenants_table.table_arn, module.participants_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:Query"]
       tables = {
-        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
-        "TENANTS_TABLE"     = module.tenants_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []

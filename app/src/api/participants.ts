@@ -31,6 +31,8 @@ export type IdentityCandidate = {
   nickname?: string;
   poolStatus?: string;
   nicknameMatch?: boolean;
+  /** Existing login name in this studio when already linked (#342). */
+  tenantUserId?: string;
 };
 
 export type IdentityCandidatesResponse = {

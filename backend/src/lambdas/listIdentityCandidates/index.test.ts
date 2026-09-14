@@ -15,6 +15,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
   return {
     DynamoDBClient: jest.fn(() => ({ send: mockSend })),
     GetItemCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
     mockSend,
   };
 });
@@ -33,6 +34,7 @@ describe("listIdentityCandidates", () => {
       USER_POOL_ID: "pool",
       MEMBERSHIPS_TABLE: "memberships",
       TENANTS_TABLE: "tenants",
+      PARTICIPANTS_TABLE: "participants",
     };
     cognitoMockSend.mockReset();
     dynamoMockSend.mockReset();
@@ -46,7 +48,8 @@ describe("listIdentityCandidates", () => {
       })
       .mockResolvedValueOnce({
         Item: { tenantId: { S: "default-tenant" } },
-      });
+      })
+      .mockResolvedValueOnce({ Items: [] }); // participants by cognitoUsername
   });
 
   afterAll(() => {

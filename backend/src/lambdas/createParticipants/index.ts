@@ -28,10 +28,119 @@ const dynamodb = dynamoClient;
 const DEFAULT_TENANT_ID = "default-tenant";
 const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 
+type ParticipantProfileFields = {
+  userId: string;
+  authUserId?: string;
+  cognitoUsername?: string;
+  email?: string;
+  participantId?: string;
+  displayName?: string;
+  inviteCompletedAt?: string;
+  inviteSentAt?: string;
+};
+
 function getTenantId(event: any): string {
   // Behandle baseEvent-Mock (event.headers ist in tests teils undefined, daher Fallback prüfen)
   const headers = event.headers || {};
   return headers['x-tenant-id'] || headers['X-Tenant-ID'] || DEFAULT_TENANT_ID;
+}
+
+function mapParticipantItem(
+  item:
+    | {
+        userId?: { S?: string };
+        authUserId?: { S?: string };
+        cognitoUsername?: { S?: string };
+        email?: { S?: string };
+        participantId?: { S?: string };
+        displayName?: { S?: string };
+        inviteCompletedAt?: { S?: string };
+        inviteSentAt?: { S?: string };
+      }
+    | undefined,
+): ParticipantProfileFields | null {
+  if (!item) return null;
+  const userId = item.userId?.S?.trim();
+  if (!userId) return null;
+  return {
+    userId,
+    authUserId: item.authUserId?.S?.trim() || undefined,
+    cognitoUsername: item.cognitoUsername?.S?.trim() || undefined,
+    email: item.email?.S?.trim() || undefined,
+    participantId: item.participantId?.S?.trim() || undefined,
+    displayName: item.displayName?.S?.trim() || undefined,
+    inviteCompletedAt: item.inviteCompletedAt?.S?.trim() || undefined,
+    inviteSentAt: item.inviteSentAt?.S?.trim() || undefined,
+  };
+}
+
+/** Same-studio link: find existing profile by cognitoUsername (#342). */
+async function findParticipantByCognitoUsername(
+  tenantId: string,
+  cognitoUsername: string,
+): Promise<ParticipantProfileFields | null> {
+  const table = process.env.PARTICIPANTS_TABLE;
+  const username = cognitoUsername.trim();
+  if (!table || !username) return null;
+  try {
+    const resp = await dynamodb.send(
+      new QueryCommand({
+        TableName: table,
+        KeyConditionExpression: "tenantId = :tenantId",
+        FilterExpression: "cognitoUsername = :cognitoUsername",
+        ExpressionAttributeValues: {
+          ":tenantId": { S: tenantId },
+          ":cognitoUsername": { S: username },
+        },
+        Limit: 25,
+      }),
+    );
+    for (const item of resp.Items ?? []) {
+      const mapped = mapParticipantItem(item as Parameters<typeof mapParticipantItem>[0]);
+      if (mapped) return mapped;
+    }
+  } catch (err) {
+    console.warn("findParticipantByCognitoUsername failed:", err);
+  }
+  return null;
+}
+
+async function findParticipantByNickname(
+  tenantId: string,
+  nickname: string,
+): Promise<ParticipantProfileFields | null> {
+  const table = process.env.PARTICIPANTS_TABLE;
+  const nicknameCheck = validateNickname(nickname);
+  if (!table || !nicknameCheck.ok) return null;
+  const normalized = nicknameCheck.nickname.toLowerCase();
+  try {
+    const exact = await dynamodb.send(
+      new GetItemCommand({
+        TableName: table,
+        Key: { tenantId: { S: tenantId }, userId: { S: normalized } },
+        ConsistentRead: true,
+      }),
+    );
+    const fromExact = mapParticipantItem(exact.Item as any);
+    if (fromExact) return fromExact;
+
+    const queryResp = await dynamodb.send(
+      new QueryCommand({
+        TableName: table,
+        IndexName: PARTICIPANTS_NORMALIZED_INDEX,
+        KeyConditionExpression: "tenantId = :tenantId AND userIdNormalized = :userIdNormalized",
+        ExpressionAttributeValues: {
+          ":tenantId": { S: tenantId },
+          ":userIdNormalized": { S: normalized },
+        },
+        Limit: 1,
+      }),
+    );
+    return mapParticipantItem(queryResp.Items?.[0] as any);
+  } catch (err) {
+    console.warn("findParticipantByNickname failed:", err);
+    return null;
+  }
 }
 
 function generateSafeTempPassword(length = 10) {
@@ -247,6 +356,8 @@ export const handler = async (event: any) => {
   let cognitoUsername = "";
   let existingAuthUserId: string | undefined;
   let existingEmail: string | undefined;
+  let existingInviteCompletedAt: string | undefined;
+  let existingInviteSentAt: string | undefined;
   let existingProfileFound = false;
   let existingStoredCognitoUsername: string | undefined;
   let participantId = generateParticipantId();
@@ -266,6 +377,8 @@ export const handler = async (event: any) => {
             cognitoUsername?: { S?: string };
             email?: { S?: string };
             participantId?: { S?: string };
+            inviteCompletedAt?: { S?: string };
+            inviteSentAt?: { S?: string };
           }
         | undefined;
       if (lowerItem?.userId?.S) {
@@ -275,6 +388,8 @@ export const handler = async (event: any) => {
         cognitoUsername = existingStoredCognitoUsername || "";
         existingAuthUserId = lowerItem.authUserId?.S;
         existingEmail = lowerItem.email?.S;
+        existingInviteCompletedAt = lowerItem.inviteCompletedAt?.S?.trim() || undefined;
+        existingInviteSentAt = lowerItem.inviteSentAt?.S?.trim() || undefined;
         if (lowerItem.participantId?.S?.trim()) participantId = lowerItem.participantId.S.trim();
       } else {
         const queryResp = await dynamodb.send(
@@ -297,6 +412,8 @@ export const handler = async (event: any) => {
           cognitoUsername = existingStoredCognitoUsername || "";
           existingAuthUserId = matched.authUserId?.S;
           existingEmail = matched.email?.S;
+          existingInviteCompletedAt = matched.inviteCompletedAt?.S?.trim() || undefined;
+          existingInviteSentAt = matched.inviteSentAt?.S?.trim() || undefined;
           if (matched.participantId?.S?.trim()) participantId = matched.participantId.S.trim();
         }
       }
@@ -432,7 +549,6 @@ export const handler = async (event: any) => {
   // Internal bootstrap password to move Cognito users into a reset-code-capable state.
   const rawPassword = generateSafeTempPassword(10) + "A1"; // ensure mix / length
 
-  const userId = canonicalUserId;
   const poolId = process.env.USER_POOL_ID!;
 
   // #324/#342: Opaque Cognito Username for new users. Same email may map to many pool users.
@@ -448,7 +564,7 @@ export const handler = async (event: any) => {
       cognito,
       poolId,
       existingStoredCognitoUsername,
-      userId,
+      canonicalUserId,
     );
     if (stored?.username) {
       cognitoUsername = stored.username;
@@ -497,13 +613,68 @@ export const handler = async (event: any) => {
     linkedAuthUserId = resolvedLink.sub;
     linkedPoolStatus = resolvedLink.status;
     linkedExistingPoolUser = true;
+
+    // Same studio: reuse existing participant row; do not invent a second userId (#342).
+    const poolNickname =
+      emailMatches.find((c) => c.cognitoUsername === resolvedLink.username)?.nickname?.trim() ||
+      "";
+    const existingLinked =
+      (await findParticipantByCognitoUsername(tenantId, resolvedLink.username)) ||
+      (poolNickname ? await findParticipantByNickname(tenantId, poolNickname) : null);
+
+    if (existingLinked) {
+      existingProfileFound = true;
+      canonicalUserId = existingLinked.userId;
+      existingStoredCognitoUsername =
+        existingLinked.cognitoUsername || resolvedLink.username;
+      existingAuthUserId = existingLinked.authUserId || linkedAuthUserId;
+      existingEmail = existingLinked.email || existingEmail;
+      existingInviteCompletedAt =
+        existingLinked.inviteCompletedAt || existingInviteCompletedAt;
+      existingInviteSentAt = existingLinked.inviteSentAt || existingInviteSentAt;
+      if (existingLinked.participantId) participantId = existingLinked.participantId;
+    } else if (poolNickname) {
+      const poolNickCheck = validateNickname(poolNickname);
+      if (poolNickCheck.ok) {
+        // First membership in this tenant: studio login = Cognito nickname, not form nickname.
+        canonicalUserId = poolNickCheck.nickname;
+        existingStoredCognitoUsername = undefined;
+        existingAuthUserId = undefined;
+        existingProfileFound = false;
+        participantId = generateParticipantId();
+      }
+    }
+
+    if (actorRole === "instructor" && process.env.MEMBERSHIPS_TABLE) {
+      try {
+        const targetMembership = await dynamodb.send(
+          new GetItemCommand({
+            TableName: process.env.MEMBERSHIPS_TABLE,
+            Key: {
+              tenantId: { S: tenantId },
+              userId: { S: canonicalUserId },
+            },
+            ConsistentRead: true,
+          }),
+        );
+        const targetRole = targetMembership.Item?.role?.S;
+        if (targetRole && targetRole !== "participant") {
+          return {
+            statusCode: 403,
+            body: JSON.stringify({ error: "Instructors can only invite participant accounts" }),
+          };
+        }
+      } catch (authErr) {
+        console.warn("Could not resolve target membership after linkExisting:", authErr);
+      }
+    }
   } else if (!cognitoUsername) {
     if (forceNewIdentity) {
       // Explicit new person despite same email (#342) — skip legacy Username=nickname reuse.
       cognitoUsername = generateOpaqueCognitoUsername();
     } else {
       // Legacy dual-path: profile without cognitoUsername may still have Username=nickname in pool.
-      const legacy = await resolveCognitoUsernameAndSub(cognito, poolId, userId, nicknameRaw);
+      const legacy = await resolveCognitoUsernameAndSub(cognito, poolId, canonicalUserId, nicknameRaw);
       if (legacy?.username) {
         cognitoUsername = legacy.username;
         linkedAuthUserId = legacy.sub;
@@ -514,6 +685,9 @@ export const handler = async (event: any) => {
       }
     }
   }
+
+  // After linkExisting may have rebound canonicalUserId to the existing studio login (#342).
+  const userId = canonicalUserId;
 
   let reactivated = false;
   try {
@@ -530,8 +704,18 @@ export const handler = async (event: any) => {
           ],
         }),
       );
-      if (linkedAuthUserId && linkedPoolStatus === "CONFIRMED" && !existingProfileFound) {
-        // Selten: Cognito-User schon bestätigt, Profil im Tenant neu — ohne Passwort-Reset.
+      // Reactivation: confirmed Cognito user, either new to this studio OR already active here.
+      // Still-invited (auth + inviteSentAt, no inviteCompletedAt) keeps invite/password path.
+      const alreadyActiveInStudio =
+        existingProfileFound &&
+        !!existingAuthUserId &&
+        (!!existingInviteCompletedAt || !existingInviteSentAt);
+      if (
+        linkedAuthUserId &&
+        linkedPoolStatus === "CONFIRMED" &&
+        (!existingProfileFound || alreadyActiveInStudio)
+      ) {
+        // Do not reset password / send invite-registration mail (#342).
         reactivated = true;
       } else {
         await cognito.send(
