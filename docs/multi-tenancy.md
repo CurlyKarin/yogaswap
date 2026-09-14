@@ -152,7 +152,7 @@ Die folgenden Erweiterungen sind in `shared/src/types.ts` umgesetzt (alle neuen 
 - **UserTenantMembership:** `userId`, `tenantId`, `role`, `canSeeAllCourses?`
 
 **Rollen:** Nur noch `admin` | `instructor` | `participant` (keine Rolle `trial`; Schnupper über `anonymousTrialCount`, Springer später als `participant` mit Settings).  
-**E-Mail:** Ist bewusst nicht eindeutig; mehrere User/Profile pro E-Mail sind erlaubt (Tests, verwaltete Teilnehmer). Cognito-Accounts werden deshalb **nicht** automatisch per E-Mail zusammengeführt (#324 Slice 1).
+**E-Mail:** Ist bewusst nicht eindeutig; mehrere User/Profile pro E-Mail sind erlaubt (Tests, verwaltete Teilnehmer). Cognito-Accounts werden deshalb **nicht** automatisch per E-Mail zusammengeführt (#324 Slice 1). Explizite Admin-Wahl „verknüpfen vs. neue Person“: #342 (`GET /participants/identity-candidates`, Flags `linkExisting` / `forceNew` bei `POST /participants`). Treffer mit passendem Cognito-`nickname` werden in der Kandidatenliste bevorzugt.
 
 ---
 

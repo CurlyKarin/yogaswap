@@ -470,7 +470,8 @@ locals {
             "cognito-idp:AdminAddUserToGroup",
             "cognito-idp:AdminSetUserPassword",
             "cognito-idp:AdminUpdateUserAttributes",
-            "cognito-idp:AdminGetUser"
+            "cognito-idp:AdminGetUser",
+            "cognito-idp:ListUsers"
           ]
           Resource = aws_cognito_user_pool.yogaswap.arn
         },
@@ -486,6 +487,30 @@ locals {
         TENANT_BASE_HOST  = local.tenant_base_host
         SES_SOURCE_EMAIL  = local.ses_from_address # Display-Name + Adresse (Domain muss verifiziert sein)
         AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
+      }
+    },
+    "list_identity_candidates" = {
+      name             = "list-identity-candidates"
+      file_name        = "listIdentityCandidates.zip"
+      table_arns       = [module.memberships_table.table_arn, module.tenants_table.table_arn]
+      dynamodb_actions = ["dynamodb:GetItem"]
+      tables = {
+        "MEMBERSHIPS_TABLE" = module.memberships_table.table_name
+        "TENANTS_TABLE"     = module.tenants_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+      additional_policies = [
+        {
+          Effect = "Allow"
+          Action = [
+            "cognito-idp:ListUsers"
+          ]
+          Resource = aws_cognito_user_pool.yogaswap.arn
+        }
+      ]
+      environment = {
+        USER_POOL_ID = aws_cognito_user_pool.yogaswap.id
       }
     },
     "resolve_login" = {
@@ -648,6 +673,7 @@ locals {
     "POST /courses/{courseId}/dates/{date}/cancel" = "cancel_course_date"
     "DELETE /courses/{courseId}"                   = "delete_course"
     "GET /participants"                            = "get_participants"
+    "GET /participants/identity-candidates"        = "list_identity_candidates"
     "POST /participants"                           = "create_participants"
     "POST /participants/{userId}/password-reset"   = "reset_participant_password"
     "POST /auth/password-reset/request"            = "request_self_password_reset"
@@ -675,6 +701,7 @@ module "yogaswap_api" {
   ]
   protected_routes = [
     "GET /participants",
+    "GET /participants/identity-candidates",
     "PUT /participants/{userId}",
     "DELETE /participants/{userId}",
     "POST /participants",

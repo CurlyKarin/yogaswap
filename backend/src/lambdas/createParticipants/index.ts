@@ -17,6 +17,7 @@ import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { loadTenantName } from "../shared/tenantSettingsLoader";
 import {
   generateOpaqueCognitoUsername,
+  listCognitoUsersByEmail,
   resolveCognitoUsernameAndSub,
 } from "../shared/cognitoUserIdentity";
 
@@ -142,7 +143,30 @@ export const handler = async (event: any) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing request body" }) };
   }
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
-  const { email, nickname, role, displayName } = body ?? {};
+  const { email, nickname, role, displayName, linkExisting, forceNew } = body ?? {};
+  const forceNewIdentity = forceNew === true;
+  const linkCognitoUsername =
+    linkExisting &&
+    typeof linkExisting === "object" &&
+    typeof (linkExisting as { cognitoUsername?: unknown }).cognitoUsername === "string"
+      ? (linkExisting as { cognitoUsername: string }).cognitoUsername.trim()
+      : "";
+  const linkAuthUserId =
+    linkExisting &&
+    typeof linkExisting === "object" &&
+    typeof (linkExisting as { authUserId?: unknown }).authUserId === "string"
+      ? (linkExisting as { authUserId: string }).authUserId.trim()
+      : "";
+  const hasExplicitLink = !!(linkCognitoUsername || linkAuthUserId);
+  if (forceNewIdentity && hasExplicitLink) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: "linkExisting and forceNew cannot be combined",
+        code: "identity_conflict",
+      }),
+    };
+  }
   const tenantId = getTenantId(event);
   const { userId: actorUserId } = getTenantContext(event as any);
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
@@ -411,8 +435,8 @@ export const handler = async (event: any) => {
   const userId = canonicalUserId;
   const poolId = process.env.USER_POOL_ID!;
 
-  // #324: Opaque Cognito Username for new users. Same email may map to many pool users (testing).
-  // Auto-link by email is NOT default — explicit multi-studio link comes later (UI).
+  // #324/#342: Opaque Cognito Username for new users. Same email may map to many pool users.
+  // Auto-link by email is NOT default — only explicit linkExisting (or existing tenant profile / legacy).
   let linkedExistingPoolUser = false;
   let linkedAuthUserId: string | undefined;
   let linkedPoolStatus: string | undefined;
@@ -431,16 +455,63 @@ export const handler = async (event: any) => {
       linkedAuthUserId = stored.sub;
       linkedPoolStatus = stored.status;
     }
+  } else if (hasExplicitLink) {
+    let resolvedLink =
+      linkCognitoUsername
+        ? await resolveCognitoUsernameAndSub(cognito, poolId, linkCognitoUsername, linkCognitoUsername)
+        : null;
+    const emailMatches = await listCognitoUsersByEmail(cognito, poolId, emailNormalized);
+    if (!resolvedLink && linkAuthUserId) {
+      const match = emailMatches.find((c) => c.authUserId === linkAuthUserId);
+      if (match) {
+        resolvedLink = await resolveCognitoUsernameAndSub(
+          cognito,
+          poolId,
+          match.cognitoUsername,
+          match.cognitoUsername,
+        );
+      }
+    }
+    if (!resolvedLink?.username) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: "linkExisting Cognito user not found",
+          code: "link_not_found",
+        }),
+      };
+    }
+    const linkedInEmailSet = emailMatches.some(
+      (c) => c.cognitoUsername === resolvedLink!.username,
+    );
+    if (!linkedInEmailSet) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: "linkExisting email does not match request email",
+          code: "link_email_mismatch",
+        }),
+      };
+    }
+    cognitoUsername = resolvedLink.username;
+    linkedAuthUserId = resolvedLink.sub;
+    linkedPoolStatus = resolvedLink.status;
+    linkedExistingPoolUser = true;
   } else if (!cognitoUsername) {
-    // Legacy dual-path: profile without cognitoUsername may still have Username=nickname in pool.
-    const legacy = await resolveCognitoUsernameAndSub(cognito, poolId, userId, nicknameRaw);
-    if (legacy?.username) {
-      cognitoUsername = legacy.username;
-      linkedAuthUserId = legacy.sub;
-      linkedPoolStatus = legacy.status;
-      linkedExistingPoolUser = true;
-    } else {
+    if (forceNewIdentity) {
+      // Explicit new person despite same email (#342) — skip legacy Username=nickname reuse.
       cognitoUsername = generateOpaqueCognitoUsername();
+    } else {
+      // Legacy dual-path: profile without cognitoUsername may still have Username=nickname in pool.
+      const legacy = await resolveCognitoUsernameAndSub(cognito, poolId, userId, nicknameRaw);
+      if (legacy?.username) {
+        cognitoUsername = legacy.username;
+        linkedAuthUserId = legacy.sub;
+        linkedPoolStatus = legacy.status;
+        linkedExistingPoolUser = true;
+      } else {
+        cognitoUsername = generateOpaqueCognitoUsername();
+      }
     }
   }
 

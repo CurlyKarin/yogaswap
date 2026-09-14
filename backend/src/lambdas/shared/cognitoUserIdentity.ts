@@ -11,6 +11,17 @@ export type CognitoUserRef = {
   status?: string;
 };
 
+/** Pool identity candidate for explicit Admin link vs new (#342). */
+export type CognitoIdentityCandidate = {
+  cognitoUsername: string;
+  authUserId?: string;
+  email?: string;
+  nickname?: string;
+  poolStatus?: string;
+  /** True when Cognito nickname matches the requested studio login name (case-insensitive). */
+  nicknameMatch?: boolean;
+};
+
 /** Opaque Cognito Username (#324) — not the studio login name. */
 export function generateOpaqueCognitoUsername(): string {
   return randomUUID();
@@ -20,36 +31,100 @@ export function escapeCognitoListFilterValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-/** Find a pool user by email attribute (first match). */
-export async function findCognitoUserByEmail(
+function attrValue(
+  attrs: { Name?: string; Value?: string }[] | undefined,
+  name: string,
+): string | undefined {
+  const value = attrs?.find((a) => a.Name === name)?.Value?.trim();
+  return value || undefined;
+}
+
+function mapListUserToCandidate(user: {
+  Username?: string;
+  UserStatus?: string;
+  Attributes?: { Name?: string; Value?: string }[];
+}): CognitoIdentityCandidate | null {
+  const username = user.Username?.trim();
+  if (!username) return null;
+  return {
+    cognitoUsername: username,
+    authUserId: attrValue(user.Attributes, "sub"),
+    email: attrValue(user.Attributes, "email"),
+    nickname: attrValue(user.Attributes, "nickname"),
+    poolStatus: user.UserStatus,
+  };
+}
+
+/**
+ * Prefer Cognito users whose nickname matches the studio login name (#342).
+ * Stable secondary order: nickname, then cognitoUsername.
+ */
+export function sortIdentityCandidatesByNicknamePreference(
+  candidates: CognitoIdentityCandidate[],
+  nickname?: string,
+): CognitoIdentityCandidate[] {
+  const nick = nickname?.trim().toLowerCase() ?? "";
+  return [...candidates]
+    .map((c) => ({
+      ...c,
+      nicknameMatch:
+        nick.length > 0 && (c.nickname?.trim().toLowerCase() ?? "") === nick,
+    }))
+    .sort((a, b) => {
+      if (a.nicknameMatch !== b.nicknameMatch) {
+        return a.nicknameMatch ? -1 : 1;
+      }
+      const nickCmp = (a.nickname ?? "").localeCompare(b.nickname ?? "", undefined, {
+        sensitivity: "base",
+      });
+      if (nickCmp !== 0) return nickCmp;
+      return a.cognitoUsername.localeCompare(b.cognitoUsername);
+    });
+}
+
+/** List pool users by email attribute (all matches in the page; typically few). */
+export async function listCognitoUsersByEmail(
   client: CognitoIdentityProviderClient,
   userPoolId: string,
   email: string,
-): Promise<CognitoUserRef | null> {
+): Promise<CognitoIdentityCandidate[]> {
   const trimmed = email.trim();
-  if (!trimmed) return null;
+  if (!trimmed) return [];
   const filter = `email = "${escapeCognitoListFilterValue(trimmed)}"`;
   try {
     const resp = await client.send(
       new ListUsersCommand({
         UserPoolId: userPoolId,
         Filter: filter,
-        Limit: 5,
+        Limit: 20,
       }),
     );
-    const user = resp.Users?.[0];
-    const username = user?.Username?.trim();
-    if (!user || !username) return null;
-    const sub = user.Attributes?.find((a) => a.Name === "sub")?.Value?.trim();
-    return {
-      username,
-      sub: sub || undefined,
-      status: user.UserStatus,
-    };
+    const out: CognitoIdentityCandidate[] = [];
+    for (const user of resp.Users ?? []) {
+      const mapped = mapListUserToCandidate(user);
+      if (mapped) out.push(mapped);
+    }
+    return out;
   } catch (err) {
-    console.warn("findCognitoUserByEmail failed:", err);
-    return null;
+    console.warn("listCognitoUsersByEmail failed:", err);
+    return [];
   }
+}
+
+/** Find a pool user by email attribute (first match). */
+export async function findCognitoUserByEmail(
+  client: CognitoIdentityProviderClient,
+  userPoolId: string,
+  email: string,
+): Promise<CognitoUserRef | null> {
+  const users = await listCognitoUsersByEmail(client, userPoolId, email);
+  const user = users[0];
+  if (!user) return null;
+  return {
+    username: user.cognitoUsername,
+    sub: user.authUserId,
+    status: user.poolStatus,
+  };
 }
 
 /** Cognito liefert den kanonischen Username + sub; beides kann von Dynamo abweichen. */

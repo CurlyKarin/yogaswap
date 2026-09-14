@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Mail, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   deleteParticipant,
+  getIdentityCandidates,
   getParticipants,
   inviteUser,
   resetParticipantPassword,
   updateParticipant,
+  type IdentityCandidate,
   type ParticipantWithStatus,
 } from "../api/participants";
 import type { Tenant, UserRole } from "shared/types";
@@ -45,6 +47,10 @@ type CreateNicknameCheckState =
   | "active_conflict"
   | "exists_in_tenant";
 
+type IdentityDecision =
+  | { type: "new" }
+  | { type: "link"; cognitoUsername: string };
+
 export default function AdminPanel({
   canEditRoles = false,
   tenant = null,
@@ -83,6 +89,22 @@ export default function AdminPanel({
   const [createMatchedParticipant, setCreateMatchedParticipant] =
     useState<ParticipantWithStatus | null>(null);
   const [createLastResolvedNickname, setCreateLastResolvedNickname] = useState<string | null>(null);
+  const [createIdentityCandidates, setCreateIdentityCandidates] = useState<IdentityCandidate[]>(
+    [],
+  );
+  const [createIdentityDecision, setCreateIdentityDecision] = useState<IdentityDecision | null>(
+    null,
+  );
+  const [createIdentitySelectedUsername, setCreateIdentitySelectedUsername] = useState<string>("");
+  const [createIdentityStep, setCreateIdentityStep] = useState(false);
+
+  const [inviteIdentityTarget, setInviteIdentityTarget] = useState<ParticipantWithStatus | null>(
+    null,
+  );
+  const [inviteIdentityCandidates, setInviteIdentityCandidates] = useState<IdentityCandidate[]>(
+    [],
+  );
+  const [inviteIdentitySelectedUsername, setInviteIdentitySelectedUsername] = useState("");
 
   const [inviteSendingByUserId, setInviteSendingByUserId] = useState<Record<string, boolean>>(
     {},
@@ -539,6 +561,10 @@ export default function AdminPanel({
     setCreateEmail("");
     setCreateEmailAutoFilled(false);
     setCreateLastResolvedNickname(null);
+    setCreateIdentityCandidates([]);
+    setCreateIdentityDecision(null);
+    setCreateIdentitySelectedUsername("");
+    setCreateIdentityStep(false);
   };
 
   const syncNicknameFromDisplayName = (displayNameValue: string, force = false) => {
@@ -566,6 +592,17 @@ export default function AdminPanel({
     setCreateNicknameCheckState("idle");
     setCreateMatchedParticipant(null);
     setCreateLastResolvedNickname(null);
+    setCreateIdentityCandidates([]);
+    setCreateIdentityDecision(null);
+    setCreateIdentitySelectedUsername("");
+    setCreateIdentityStep(false);
+  };
+
+  const clearCreateIdentityChoice = () => {
+    setCreateIdentityCandidates([]);
+    setCreateIdentityDecision(null);
+    setCreateIdentitySelectedUsername("");
+    setCreateIdentityStep(false);
   };
   useEffect(() => {
     if (editingUserId) {
@@ -695,7 +732,7 @@ export default function AdminPanel({
     fallbackTarget?.focus();
   };
 
-  const saveCreate = async () => {
+  const saveCreate = async (identityOverride?: IdentityDecision) => {
     const nicknameCheck = validateNickname(createNickname);
     if (!nicknameCheck.ok) {
       if (nicknameCheck.code === "too_short") {
@@ -752,6 +789,8 @@ export default function AdminPanel({
       return;
     }
 
+    const effectiveIdentityDecision = identityOverride ?? createIdentityDecision;
+
     setCreateSaving(true);
     setCreateError("");
     try {
@@ -763,6 +802,73 @@ export default function AdminPanel({
 
       if (shouldPreUpdateEmailForReactivation) {
         await updateParticipant(reactivationUserId, { email: emailValue });
+      }
+
+      // #342: Bei E-Mail und Pool-Treffern explizit verknüpfen vs. neue Person wählen.
+      if (emailValue.length > 0 && !isReactivationFlow && !effectiveIdentityDecision) {
+        try {
+          const candidates = await getIdentityCandidates({
+            email: emailValue,
+            nickname: nicknameValue,
+          });
+          if (candidates.length > 0) {
+            setCreateIdentityCandidates(candidates);
+            setCreateIdentitySelectedUsername(
+              candidates.find((c) => c.nicknameMatch)?.cognitoUsername ||
+                candidates[0]?.cognitoUsername ||
+                "",
+            );
+            setCreateIdentityStep(true);
+            setCreateSaving(false);
+            return;
+          }
+        } catch (identityErr) {
+          console.warn("Identity candidate lookup failed; continuing without link choice", identityErr);
+        }
+      }
+
+      const identityInviteFlags =
+        effectiveIdentityDecision?.type === "link"
+          ? { linkExisting: { cognitoUsername: effectiveIdentityDecision.cognitoUsername } }
+          : effectiveIdentityDecision?.type === "new"
+            ? { forceNew: true as const }
+            : {};
+
+      // Mit Identity-Entscheidung: Invite inkl. E-Mail (Cognito). Sonst #67: erst ohne E-Mail anlegen.
+      if (effectiveIdentityDecision && emailValue.length > 0) {
+        if (identityOverride) {
+          setCreateIdentityDecision(identityOverride);
+        }
+        const result = await inviteUser({
+          nickname: nicknameValue,
+          email: emailValue,
+          ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
+          role: canEditRoles ? createRole : "participant",
+          ...identityInviteFlags,
+        });
+        if (result.error === "Nickname already exists") {
+          setCreateError("Dieser Login-Name ist bereits vergeben.");
+          return;
+        }
+        if (!result.success) {
+          setCreateError(result.error || "Teilnehmer konnte nicht angelegt werden.");
+          return;
+        }
+        if (result.reactivated) {
+          setBulkInviteResult(
+            result.emailSent
+              ? `Bestehendes Konto verknüpft. Info-Mail gesendet an ${emailValue}.`
+              : "Bestehendes Konto verknüpft, aber E-Mail konnte nicht versendet werden.",
+          );
+        } else if (result.emailSent) {
+          setBulkInviteResult(`Einladung gesendet an ${emailValue}.`);
+        } else {
+          setBulkInviteResult("Einladung angestoßen, aber E-Mail konnte nicht versendet werden.");
+        }
+        setCreateOpen(false);
+        clearCreateIdentityChoice();
+        await refreshParticipants();
+        return;
       }
 
       // #67: Teilnehmer anlegen ohne Einladung (kein Cognito/SES).
@@ -816,7 +922,9 @@ export default function AdminPanel({
         setBulkInviteResult("Einladung angestoßen, aber E-Mail konnte nicht versendet werden.");
       }
 
+
       setCreateOpen(false);
+      clearCreateIdentityChoice();
       await refreshParticipants();
     } catch (err) {
       console.error("Failed to create participant", err);
@@ -828,7 +936,11 @@ export default function AdminPanel({
 
   const sendInviteForParticipant = async (
     p: ParticipantWithStatus,
-    options?: { refreshAfter?: boolean },
+    options?: {
+      refreshAfter?: boolean;
+      identityDecision?: IdentityDecision;
+      skipIdentityCheck?: boolean;
+    },
   ) => {
     if (!p.email) return;
     if (!canEditRoles && !canTrainerManageTarget(p)) return;
@@ -843,10 +955,46 @@ export default function AdminPanel({
     setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
     setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
     try {
+      // Already linked (authUserId) or explicit skip: no identity choice needed.
+      const needsIdentityChoice =
+        !options?.skipIdentityCheck &&
+        !options?.identityDecision &&
+        !p.authUserId?.trim() &&
+        p.status !== "active";
+
+      if (needsIdentityChoice) {
+        try {
+          const candidates = await getIdentityCandidates({
+            email: p.email,
+            nickname: userId,
+          });
+          if (candidates.length > 0) {
+            setInviteIdentityTarget(p);
+            setInviteIdentityCandidates(candidates);
+            setInviteIdentitySelectedUsername(
+              candidates.find((c) => c.nicknameMatch)?.cognitoUsername ||
+                candidates[0]?.cognitoUsername ||
+                "",
+            );
+            return { ok: false as const, pendingIdentity: true as const };
+          }
+        } catch (identityErr) {
+          console.warn("Identity candidate lookup failed on invite", identityErr);
+        }
+      }
+
+      const identityInviteFlags =
+        options?.identityDecision?.type === "link"
+          ? { linkExisting: { cognitoUsername: options.identityDecision.cognitoUsername } }
+          : options?.identityDecision?.type === "new"
+            ? { forceNew: true as const }
+            : {};
+
       const result = await inviteUser({
         email: p.email,
         nickname: userId,
         role: effectiveRole,
+        ...identityInviteFlags,
       });
 
       if (result.error) {
@@ -967,7 +1115,11 @@ export default function AdminPanel({
         if (!p || !isInviteEligible(p)) continue;
 
         // Pro User UI-Feedback beibehalten, aber Refresh erst am Ende.
-        const res = await sendInviteForParticipant(p, { refreshAfter: false });
+        // Bulk: keine Identity-Wahl-Unterbrechung (#342 gilt für Einzel-Invite/Create).
+        const res = await sendInviteForParticipant(p, {
+          refreshAfter: false,
+          skipIdentityCheck: true,
+        });
         if (res?.ok) ok += 1;
         else failed += 1;
       }
@@ -1546,6 +1698,8 @@ export default function AdminPanel({
                   if (!createEmailEditable) return;
                   setCreateEmail(e.target.value);
                   setCreateEmailAutoFilled(false);
+                  clearCreateIdentityChoice();
+                  setCreateError("");
                 }}
                 disabled={createSaving || !createEmailEditable}
                 className="dialog-field"
@@ -1618,6 +1772,77 @@ export default function AdminPanel({
                 />
               )}
 
+              {createIdentityStep && createIdentityCandidates.length > 0 && (
+                <div
+                  style={{
+                    marginTop: "0.35rem",
+                    padding: "0.65rem 0.75rem",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 6,
+                    background: "#f9fafb",
+                  }}
+                >
+                  <p style={{ margin: "0 0 0.5rem", fontSize: 13, fontWeight: 600 }}>
+                    Zu dieser E-Mail gibt es bereits Login-Konten. Bitte wählen:
+                  </p>
+                  <div className="dialog-stack" style={{ gap: "0.35rem" }}>
+                    {createIdentityCandidates.map((c) => {
+                      const labelNick = c.nickname?.trim() || "(ohne Login-Name im Pool)";
+                      return (
+                        <label
+                          key={c.cognitoUsername}
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "flex-start",
+                            fontSize: 13,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="create-identity-candidate"
+                            checked={createIdentitySelectedUsername === c.cognitoUsername}
+                            onChange={() => setCreateIdentitySelectedUsername(c.cognitoUsername)}
+                            disabled={createSaving}
+                          />
+                          <span>
+                            <strong>{labelNick}</strong>
+                            {c.nicknameMatch ? " · empfohlen (passender Login-Name)" : ""}
+                            {c.poolStatus ? ` · ${c.poolStatus}` : ""}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="dialog-actions" style={{ marginTop: "0.65rem" }}>
+                    <button
+                      type="button"
+                      className="modal-action-btn"
+                      disabled={createSaving || !createIdentitySelectedUsername}
+                      onClick={() => {
+                        void saveCreate({
+                          type: "link",
+                          cognitoUsername: createIdentitySelectedUsername,
+                        });
+                      }}
+                    >
+                      Konto verknüpfen
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary modal-action-btn"
+                      disabled={createSaving}
+                      onClick={() => {
+                        void saveCreate({ type: "new" });
+                      }}
+                    >
+                      Neue Person anlegen
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}
             </div>
 
@@ -1626,26 +1851,131 @@ export default function AdminPanel({
                 type="button"
                 className="modal-action-btn"
                 ref={createCancelButtonRef}
-                onClick={() => setCreateOpen(false)}
+                onClick={() => {
+                  if (createIdentityStep) {
+                    clearCreateIdentityChoice();
+                    return;
+                  }
+                  setCreateOpen(false);
+                }}
                 disabled={createSaving}
               >
-                Abbrechen
+                {createIdentityStep ? "Zurück" : "Abbrechen"}
               </button>
-              <button
-                type="button"
-                className="btn-primary modal-action-btn"
-                onClick={saveCreate}
-                disabled={createSaving || createActiveConflict || createNicknameCheckState === "exists_in_tenant"}
-              >
-                {createSaving
-                  ? createReactivationUserId
-                    ? "Reaktiviere..."
-                    : "Lege an..."
-                  : createReactivationUserId
-                    ? "Reaktivieren"
-                    : "Anlegen"}
-              </button>
+              {!createIdentityStep && (
+                <button
+                  type="button"
+                  className="btn-primary modal-action-btn"
+                  onClick={() => {
+                    void saveCreate();
+                  }}
+                  disabled={createSaving || createActiveConflict || createNicknameCheckState === "exists_in_tenant"}
+                >
+                  {createSaving
+                    ? createReactivationUserId
+                      ? "Reaktiviere..."
+                      : "Lege an..."
+                    : createReactivationUserId
+                      ? "Reaktivieren"
+                      : "Anlegen"}
+                </button>
+              )}
             </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inviteIdentityTarget && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Konto verknüpfen oder neue Person"
+        >
+          <div className="modal modal-compact">
+            <div className="modal-header">
+              <h4>Bestehendes Konto?</h4>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginTop: 0, fontSize: 13, color: "#4b5563" }}>
+                Zur E-Mail von <strong>{participantDisplayName(inviteIdentityTarget)}</strong> gibt
+                es bereits Login-Konten. Passende Login-Namen stehen oben.
+              </p>
+              <div className="dialog-stack" style={{ gap: "0.35rem" }}>
+                {inviteIdentityCandidates.map((c) => {
+                  const labelNick = c.nickname?.trim() || "(ohne Login-Name im Pool)";
+                  return (
+                    <label
+                      key={c.cognitoUsername}
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "flex-start",
+                        fontSize: 13,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="invite-identity-candidate"
+                        checked={inviteIdentitySelectedUsername === c.cognitoUsername}
+                        onChange={() => setInviteIdentitySelectedUsername(c.cognitoUsername)}
+                      />
+                      <span>
+                        <strong>{labelNick}</strong>
+                        {c.nicknameMatch ? " · empfohlen (passender Login-Name)" : ""}
+                        {c.poolStatus ? ` · ${c.poolStatus}` : ""}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="modal-actions dialog-actions" style={{ marginTop: "0.75rem" }}>
+                <button
+                  type="button"
+                  className="modal-action-btn"
+                  onClick={() => {
+                    setInviteIdentityTarget(null);
+                    setInviteIdentityCandidates([]);
+                    setInviteIdentitySelectedUsername("");
+                  }}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className="modal-action-btn"
+                  disabled={!inviteIdentitySelectedUsername}
+                  onClick={() => {
+                    const target = inviteIdentityTarget;
+                    const username = inviteIdentitySelectedUsername;
+                    setInviteIdentityTarget(null);
+                    setInviteIdentityCandidates([]);
+                    setInviteIdentitySelectedUsername("");
+                    void sendInviteForParticipant(target, {
+                      identityDecision: { type: "link", cognitoUsername: username },
+                    });
+                  }}
+                >
+                  Konto verknüpfen
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary modal-action-btn"
+                  onClick={() => {
+                    const target = inviteIdentityTarget;
+                    setInviteIdentityTarget(null);
+                    setInviteIdentityCandidates([]);
+                    setInviteIdentitySelectedUsername("");
+                    void sendInviteForParticipant(target, {
+                      identityDecision: { type: "new" },
+                    });
+                  }}
+                >
+                  Neue Person
+                </button>
+              </div>
             </div>
           </div>
         </div>

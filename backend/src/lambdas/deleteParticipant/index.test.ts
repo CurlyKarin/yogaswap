@@ -135,6 +135,8 @@ describe("deleteParticipant Lambda", () => {
         Item: {
           tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
+          participantId: { S: "31903206-7ce6-4886-9b95-2030705ca6ba" },
+          displayName: { S: "Alice Example" },
           authUserId: { S: "sub-123" },
           email: { S: "alice@example.com" },
         },
@@ -161,6 +163,11 @@ describe("deleteParticipant Lambda", () => {
     // No scan and no profile delete in this case.
     expect(mockSend).toHaveBeenCalled();
     expect(sesMockSend).toHaveBeenCalledTimes(1);
+    const mailArg = sesMockSend.mock.calls[0][0];
+    const html = mailArg?.Message?.Body?.Html?.Data || "";
+    expect(html).toContain("Hallo Alice Example!");
+    expect(html).toContain("Login-Namen <strong>alice</strong>");
+    expect(html).not.toContain("31903206-7ce6-4886-9b95-2030705ca6ba");
   });
 
   test("deletes only membership when user still has membership in another tenant", async () => {

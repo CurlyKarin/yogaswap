@@ -2,6 +2,7 @@ import {
   escapeCognitoListFilterValue,
   effectiveCognitoUsername,
   generateOpaqueCognitoUsername,
+  sortIdentityCandidatesByNicknamePreference,
 } from "./cognitoUserIdentity";
 
 describe("cognitoUserIdentity", () => {
@@ -22,5 +23,19 @@ describe("cognitoUserIdentity", () => {
     expect(effectiveCognitoUsername(undefined, "Luna")).toBe("Luna");
     expect(effectiveCognitoUsername("  ", "Luna")).toBe("Luna");
     expect(effectiveCognitoUsername("opaque-id", "Luna")).toBe("opaque-id");
+  });
+
+  it("sorts nickname matches first (#342)", () => {
+    const sorted = sortIdentityCandidatesByNicknamePreference(
+      [
+        { cognitoUsername: "u1", nickname: "other" },
+        { cognitoUsername: "u2", nickname: "Luna" },
+        { cognitoUsername: "u3", nickname: "luna" },
+      ],
+      "luna",
+    );
+    expect(sorted.map((c) => c.cognitoUsername)).toEqual(["u2", "u3", "u1"]);
+    expect(sorted[0].nicknameMatch).toBe(true);
+    expect(sorted[2].nicknameMatch).toBe(false);
   });
 });

@@ -7,6 +7,10 @@ export interface InviteUserRequest {
   nickname: string;
   displayName?: string;
   role: UserRole;
+  /** Explicit multi-studio / same-email link (#342). */
+  linkExisting?: { cognitoUsername?: string; authUserId?: string };
+  /** Force a new Cognito user even if the email already exists (#342). */
+  forceNew?: boolean;
 }
 
 export interface InviteUserResponse {
@@ -19,6 +23,19 @@ export interface InviteUserResponse {
   username?: string;
   link?: string;
 }
+
+export type IdentityCandidate = {
+  cognitoUsername: string;
+  authUserId?: string;
+  email?: string;
+  nickname?: string;
+  poolStatus?: string;
+  nicknameMatch?: boolean;
+};
+
+export type IdentityCandidatesResponse = {
+  candidates: IdentityCandidate[];
+};
 
 export type ParticipantWithStatus = ParticipantProfile & { status: ParticipantStatus; role?: UserRole };
 
@@ -75,6 +92,22 @@ export async function inviteUser(data: InviteUserRequest): Promise<InviteUserRes
       return { error: genericBackendError || "Request failed" };
     }
   }
+}
+
+export async function getIdentityCandidates(params: {
+  email: string;
+  nickname?: string;
+}): Promise<IdentityCandidate[]> {
+  const response = await axios.get<IdentityCandidatesResponse>(
+    "/participants/identity-candidates",
+    {
+      params: {
+        email: params.email.trim(),
+        ...(params.nickname?.trim() ? { nickname: params.nickname.trim() } : {}),
+      },
+    },
+  );
+  return Array.isArray(response.data?.candidates) ? response.data.candidates : [];
 }
 
 export async function getParticipants(
