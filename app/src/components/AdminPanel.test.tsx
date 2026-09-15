@@ -418,7 +418,7 @@ describe("AdminPanel", () => {
     });
   });
 
-  it("legt einen Teilnehmer über + Neu an (Spitzname + Login-Name, E-Mail optional)", async () => {
+  it("legt einen Teilnehmer über + Neu an (Displayname + Login-Name, E-Mail optional)", async () => {
     mockedGetParticipants.mockResolvedValue([]);
 
     mockedInviteUser.mockResolvedValueOnce({
@@ -441,7 +441,7 @@ describe("AdminPanel", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
 
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
-    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
       target: { value: "Alice" },
     });
     await waitFor(() => {
@@ -467,7 +467,57 @@ describe("AdminPanel", () => {
     });
   });
 
-  it("schlägt Login-Name aus Spitzname mit Umlaut vor (#327)", async () => {
+  it("erlaubt Anlegen nur mit Login-Name (Displayname optional)", async () => {
+    mockedGetParticipants.mockResolvedValue([]);
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: false,
+      username: "kaja2",
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+
+    expect(within(dialog).getByText(/Login-Name/i).textContent).toMatch(/\*/);
+    fireEvent.change(within(dialog).getByPlaceholderText("Login-Name"), {
+      target: { value: "kaja2" },
+    });
+    fireEvent.blur(within(dialog).getByPlaceholderText("Login-Name"));
+    await waitFor(() => {
+      expect((within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Anlegen$/i }));
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        nickname: "kaja2",
+        role: "participant",
+      });
+    });
+  });
+
+  it("meldet fehlenden Login-Namen, nicht Displayname", async () => {
+    mockedGetParticipants.mockResolvedValue([]);
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Anlegen$/i }));
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/Bitte einen Login-Namen eingeben/i)).toBeInTheDocument();
+    });
+    expect(mockedInviteUser).not.toHaveBeenCalled();
+  });
+
+  it("schlägt Login-Name aus Displayname mit Umlaut vor (#327)", async () => {
     mockedGetParticipants.mockResolvedValueOnce([]);
     const { container } = render(<AdminPanel />);
     const panel = container.querySelector("div");
@@ -475,7 +525,7 @@ describe("AdminPanel", () => {
 
     fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
-    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
       target: { value: "Björn" },
     });
 
@@ -514,7 +564,7 @@ describe("AdminPanel", () => {
 
     fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
-    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
       target: { value: "Björn" },
     });
     fireEvent.change(within(dialog).getByPlaceholderText("Login-Name"), {

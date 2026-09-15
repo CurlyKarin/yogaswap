@@ -838,15 +838,26 @@ describe('createParticipants Lambda', () => {
     expect(JSON.parse(result.body).success).toBe(true);
   });
 
-  test('returns 400 if displayName is missing for new profile', async () => {
+  test('allows creating a new profile without displayName', async () => {
+    const opaqueUsername = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    mockNewUserCognitoPrelude(opaqueUsername);
+    sesMockSend.mockResolvedValueOnce({});
+
     const rawEvent = {
-      body: JSON.stringify({ nickname: 'max', role: 'participant' }),
+      body: JSON.stringify({
+        nickname: 'max',
+        role: 'participant',
+        email: 'max@example.com',
+      }),
+      headers: { 'x-tenant-id': 'test-tenant' },
     } as any;
 
     const result = await handler(rawEvent);
 
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toMatch(/Anzeigenamen/i);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).success).toBe(true);
+    expect(JSON.parse(result.body).username).toBe('max');
   });
 
   test('returns 400 if displayName is invalid', async () => {

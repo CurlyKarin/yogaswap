@@ -484,7 +484,7 @@ export default function AdminPanel({
       } else if (roleChanged) {
         setBulkInviteResult("Rolle aktualisiert.");
       } else if (displayNameChanged) {
-        setBulkInviteResult("Spitzname aktualisiert.");
+        setBulkInviteResult("Displayname aktualisiert.");
       }
       if (canEditRoles && original?.status === "active" && nextEmailText.length > 0) {
         const effectiveParticipant: ParticipantWithStatus = {
@@ -740,7 +740,11 @@ export default function AdminPanel({
       } else if (nicknameCheck.code !== "empty") {
         setCreateNicknameCheckState("invalid");
       }
-      setCreateError(nicknameCheck.message);
+      setCreateError(
+        nicknameCheck.code === "empty"
+          ? "Bitte einen Login-Namen eingeben."
+          : nicknameCheck.message,
+      );
       return;
     }
     const nicknameValue = nicknameCheck.nickname;
@@ -772,10 +776,7 @@ export default function AdminPanel({
         return;
       }
       displayNameCanonical = displayNameCheck.displayName;
-    } else if (!isReactivationFlow) {
-      setCreateError("Bitte einen Spitznamen eingeben.");
-      return;
-    } else if (resolved.match?.displayName?.trim()) {
+    } else if (isReactivationFlow && resolved.match?.displayName?.trim()) {
       displayNameCanonical = resolved.match.displayName.trim();
     }
 
@@ -1505,15 +1506,17 @@ export default function AdminPanel({
             </p>
 
             <div className="dialog-stack">
-              <input
-                type="text"
-                aria-label="Spitzname"
-                placeholder="Spitzname"
-                value={editingDisplayName}
-                onChange={(e) => setEditingDisplayName(e.target.value)}
-                disabled={editingSaving}
-                className="dialog-field"
-              />
+              <label className="dialog-field">
+                <span className="dialog-field-label">Displayname</span>
+                <input
+                  type="text"
+                  aria-label="Displayname"
+                  placeholder="Displayname"
+                  value={editingDisplayName}
+                  onChange={(e) => setEditingDisplayName(e.target.value)}
+                  disabled={editingSaving}
+                />
+              </label>
               <input
                 type="email"
                 aria-label="E-Mail"
@@ -1606,49 +1609,63 @@ export default function AdminPanel({
             </div>
             <div className="modal-body">
             <div className="dialog-stack">
-              <input
-                type="text"
-                aria-label="Spitzname"
-                placeholder="Spitzname"
-                ref={createDisplayNameInputRef}
-                value={createDisplayName}
-                onChange={(e) => {
-                  const nextDisplayName = e.target.value;
-                  setCreateDisplayName(nextDisplayName);
-                  setCreateError("");
-                  syncNicknameFromDisplayName(nextDisplayName);
-                }}
-                onBlur={() => {
-                  if (createNickname.trim().length >= NICKNAME_MIN_LENGTH) {
+              <label className="dialog-field">
+                <span className="dialog-field-label">Displayname</span>
+                <input
+                  type="text"
+                  aria-label="Displayname"
+                  placeholder="Displayname"
+                  ref={createDisplayNameInputRef}
+                  value={createDisplayName}
+                  onChange={(e) => {
+                    const nextDisplayName = e.target.value;
+                    setCreateDisplayName(nextDisplayName);
+                    setCreateError("");
+                    syncNicknameFromDisplayName(nextDisplayName);
+                  }}
+                  onBlur={() => {
+                    if (createNickname.trim().length >= NICKNAME_MIN_LENGTH) {
+                      void resolveCreateNicknameContext(createNickname);
+                    }
+                  }}
+                  disabled={createSaving}
+                />
+              </label>
+              <label className="dialog-field">
+                <span className="dialog-field-label">
+                  Login-Name{" "}
+                  <span aria-hidden="true" title="Pflichtfeld">
+                    *
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  aria-label="Login-Name"
+                  aria-required="true"
+                  placeholder="Login-Name"
+                  ref={createNicknameInputRef}
+                  value={createNickname}
+                  onChange={(e) => {
+                    const nextNickname = e.target.value;
+                    setCreateNickname(nextNickname);
+                    setCreateNicknameManual(true);
+                    resetCreateNicknameResolution();
+                    setCreateError("");
+                  }}
+                  onKeyDown={(event) => {
+                    void handleCreateNicknameKeyDown(event);
+                  }}
+                  onBlur={() => {
                     void resolveCreateNicknameContext(createNickname);
+                  }}
+                  disabled={createSaving}
+                  required
+                  aria-invalid={
+                    createNicknameCheckState === "invalid" ||
+                    createNicknameCheckState === "too_short"
                   }
-                }}
-                disabled={createSaving}
-                className="dialog-field"
-              />
-              <input
-                type="text"
-                aria-label="Login-Name"
-                placeholder="Login-Name"
-                ref={createNicknameInputRef}
-                value={createNickname}
-                onChange={(e) => {
-                  const nextNickname = e.target.value;
-                  setCreateNickname(nextNickname);
-                  setCreateNicknameManual(true);
-                  resetCreateNicknameResolution();
-                  setCreateError("");
-                }}
-                onKeyDown={(event) => {
-                  void handleCreateNicknameKeyDown(event);
-                }}
-                onBlur={() => {
-                  void resolveCreateNicknameContext(createNickname);
-                }}
-                disabled={createSaving}
-                className="dialog-field"
-                aria-invalid={createNicknameCheckState === "invalid" || createNicknameCheckState === "too_short"}
-              />
+                />
+              </label>
 
               {createIsReactivation && (
                 <>

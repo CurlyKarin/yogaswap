@@ -422,16 +422,6 @@ export const handler = async (event: any) => {
     }
   }
 
-  if (!existingProfileFound && !displayNameCanonical) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({
-        error: "Bitte einen Anzeigenamen eingeben.",
-        code: "empty",
-      }),
-    };
-  }
-
   if (actorRole === "instructor" && process.env.MEMBERSHIPS_TABLE) {
     try {
       const targetMembership = await dynamodb.send(
