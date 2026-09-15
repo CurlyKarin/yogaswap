@@ -11,6 +11,11 @@ export interface InviteUserRequest {
   linkExisting?: { cognitoUsername?: string; authUserId?: string };
   /** Force a new Cognito user even if the email already exists (#342). */
   forceNew?: boolean;
+  /**
+   * When false: create/link without SES (and without invite token).
+   * Admin Create always uses false; Invite actions omit this (default true).
+   */
+  sendEmail?: boolean;
 }
 
 export interface InviteUserResponse {

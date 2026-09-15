@@ -456,6 +456,125 @@ describe('createParticipants Lambda', () => {
     );
   });
 
+  test('sendEmail:false stores email without Cognito/SES (Create dialog, #345)', async () => {
+    const event = baseEvent({
+      email: 'quiet@example.com',
+      nickname: 'quietuser',
+      displayName: 'Quiet User',
+      role: 'participant',
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.username).toBe('quietuser');
+    expect(body.emailSent).toBe(false);
+    expect(body.warning).toMatch(/Ohne Benachrichtigung/i);
+
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(sesMockSend).not.toHaveBeenCalled();
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          userId: { S: 'quietuser' },
+          email: { S: 'quiet@example.com' },
+        }),
+      }),
+    );
+    // No invite token when quiet.
+    expect(dynamoMockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-auth-tokens-table',
+      }),
+    );
+  });
+
+  test('sendEmail:false with linkExisting attaches Cognito without SES (#345)', async () => {
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-existing', 'sub-existing'),
+        UserStatus: 'CONFIRMED',
+      })
+      .mockResolvedValueOnce({
+        Users: [
+          {
+            Username: 'opaque-existing',
+            UserStatus: 'CONFIRMED',
+            Attributes: [
+              { Name: 'sub', Value: 'sub-existing' },
+              { Name: 'email', Value: 'shared@example.com' },
+              { Name: 'nickname', Value: 'alice' },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('opaque-existing', 'sub-existing'));
+
+    const event = baseEvent({
+      email: 'shared@example.com',
+      nickname: 'anton',
+      displayName: 'Anton',
+      role: 'participant',
+      linkExisting: { cognitoUsername: 'opaque-existing' },
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.emailSent).toBe(false);
+    expect(body.reactivated).toBe(true);
+    expect(body.username).toBe('alice');
+    expect(sesMockSend).not.toHaveBeenCalled();
+    expect(dynamoMockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-auth-tokens-table',
+      }),
+    );
+  });
+
+  test('sendEmail:false with forceNew creates Cognito without SES (#345)', async () => {
+    const opaqueUsername = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    cognitoMockSend
+      .mockResolvedValueOnce({}) // AdminCreateUser (no legacy AdminGetUser)
+      .mockResolvedValueOnce({}) // AdminSetUserPassword
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse(opaqueUsername));
+
+    const event = baseEvent({
+      email: 'newperson@example.com',
+      nickname: 'newperson',
+      displayName: 'New Person',
+      role: 'participant',
+      forceNew: true,
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.emailSent).toBe(false);
+    expect(body.username).toBe('newperson');
+    expect(sesMockSend).not.toHaveBeenCalled();
+    expect(cognitoMockSend).toHaveBeenCalled();
+    expect(dynamoMockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-auth-tokens-table',
+      }),
+    );
+  });
+
   test('forceNew skips legacy nickname Cognito reuse (#342)', async () => {
     const opaqueUsername = '33333333-4444-4555-8666-777777777777';
     jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);

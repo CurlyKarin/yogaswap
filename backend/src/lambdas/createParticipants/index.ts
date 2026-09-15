@@ -252,8 +252,10 @@ export const handler = async (event: any) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing request body" }) };
   }
   const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
-  const { email, nickname, role, displayName, linkExisting, forceNew } = body ?? {};
+  const { email, nickname, role, displayName, linkExisting, forceNew, sendEmail } = body ?? {};
   const forceNewIdentity = forceNew === true;
+  /** Default true for invite/list flows; Create dialog passes false (#345). */
+  const shouldSendEmail = sendEmail !== false;
   const linkCognitoUsername =
     linkExisting &&
     typeof linkExisting === "object" &&
@@ -446,8 +448,8 @@ export const handler = async (event: any) => {
     }
   }
 
-  // Security hardening (#94): For all email invite/reset flows we require token-table mode.
-  if (hasEmail && !tokensTable) {
+  // Security hardening (#94): token table required only when we actually send invite/reset mail.
+  if (hasEmail && shouldSendEmail && !tokensTable) {
     return {
       statusCode: 500,
       body: JSON.stringify({
@@ -456,8 +458,9 @@ export const handler = async (event: any) => {
     };
   }
 
-  // Email optional: if missing/empty, skip Cognito and SES and only write membership to DynamoDB.
-  if (!hasEmail) {
+  // Quiet create (no mail): Dynamo only — store email, skip Cognito until explicit invite (#345).
+  // Exceptions: linkExisting attaches Cognito; forceNew creates a new pool user — both without SES.
+  if ((!hasEmail || !shouldSendEmail) && !hasExplicitLink && !forceNewIdentity) {
     const reactivated = !!existingAuthUserId;
     let emailSent = false;
     try {
@@ -474,7 +477,7 @@ export const handler = async (event: any) => {
           }),
         );
         console.log(
-          `Membership saved in DynamoDB (no email): user=${canonicalUserId}, tenant=${tenantId}, role=${role}`,
+          `Membership saved in DynamoDB (quiet/no-cognito): user=${canonicalUserId}, tenant=${tenantId}, role=${role}`,
         );
       } else {
         console.warn(
@@ -486,12 +489,12 @@ export const handler = async (event: any) => {
         tenantId,
         userId: canonicalUserId,
         participantId,
+        ...(hasEmail ? { email: emailNormalized } : {}),
         ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
       });
 
-      // If an already registered user is reactivated without passing email in request,
-      // use the existing profile email to notify about reactivation.
-      if (reactivated && existingEmail?.trim()) {
+      // Reactivation info mail only when explicitly allowed.
+      if (shouldSendEmail && reactivated && existingEmail?.trim()) {
         const baseUrl = resolveAppBaseUrlForTenant(tenantId);
         const sesSourceEmail = resolveSesSourceEmail();
         const reactivationMail = buildReactivationMail({
@@ -530,9 +533,26 @@ export const handler = async (event: any) => {
         username: canonicalUserId,
         emailSent,
         reactivated,
-        warning:
-          "E-Mail fehlt – Cognito/SES übersprungen. Teilnehmer wurde nur in DynamoDB angelegt.",
+        ...(shouldSendEmail && !hasEmail
+          ? {
+              warning:
+                "E-Mail fehlt – Cognito/SES übersprungen. Teilnehmer wurde nur in DynamoDB angelegt.",
+            }
+          : !shouldSendEmail
+            ? {
+                warning:
+                  "Ohne Benachrichtigung angelegt. Cognito/Einladung erst bei explizitem Einladen.",
+              }
+            : {}),
       }),
+    };
+  }
+
+  if (!hasEmail) {
+    // Unreachable: handled above. Keep TypeScript narrowing for email branch.
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Missing email" }),
     };
   }
 
@@ -695,7 +715,7 @@ export const handler = async (event: any) => {
         }),
       );
       // Reactivation: confirmed Cognito user, either new to this studio OR already active here.
-      // Still-invited (auth + inviteSentAt, no inviteCompletedAt) keeps invite/password path.
+      // Still-invited (auth + inviteSentAt, no inviteCompletedAt) keeps invite/password path when mailing.
       const alreadyActiveInStudio =
         existingProfileFound &&
         !!existingAuthUserId &&
@@ -707,7 +727,7 @@ export const handler = async (event: any) => {
       ) {
         // Do not reset password / send invite-registration mail (#342).
         reactivated = true;
-      } else {
+      } else if (shouldSendEmail) {
         await cognito.send(
           new AdminSetUserPasswordCommand({
             UserPoolId: poolId,
@@ -717,6 +737,7 @@ export const handler = async (event: any) => {
           }),
         );
       }
+      // Quiet link of non-active: attach Cognito only; password/invite later (#345).
     } else {
       // New Cognito user: opaque Username (#324), studio login name only as nickname attribute.
       await cognito.send(
@@ -902,6 +923,24 @@ export const handler = async (event: any) => {
         `AdminGetUser failed for invite user: tried cognitoUsername=${cognitoUsername}, userId=${userId}`,
       );
     }
+  }
+
+  // Quiet link/create: Cognito attached or created, no token / no SES (#345 Create never mails).
+  if (!shouldSendEmail) {
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        success: true,
+        username: userId,
+        emailSent: false,
+        reactivated,
+        warning: reactivated
+          ? "Verknüpft und reaktiviert – keine E-Mail versendet."
+          : hasExplicitLink
+            ? "Verknüpft ohne Benachrichtigung. Einladung später explizit senden."
+            : "Ohne Benachrichtigung angelegt. Einladung später explizit senden.",
+      }),
+    };
   }
 
   // Build link (nickname query = Studio-Login-Name, not opaque Cognito Username #324)

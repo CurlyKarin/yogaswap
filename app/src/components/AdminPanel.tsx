@@ -835,7 +835,7 @@ export default function AdminPanel({
             ? { forceNew: true as const }
             : {};
 
-      // Mit Identity-Entscheidung: Invite inkl. E-Mail (Cognito). Sonst #67: erst ohne E-Mail anlegen.
+      // Mit Identity-Entscheidung: verknüpfen/neu anlegen ohne SES (#345).
       if (effectiveIdentityDecision && emailValue.length > 0) {
         if (identityOverride) {
           setCreateIdentityDecision(identityOverride);
@@ -860,6 +860,7 @@ export default function AdminPanel({
           email: emailValue,
           ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
           role: canEditRoles ? createRole : "participant",
+          sendEmail: false,
           ...identityInviteFlags,
         });
         if (result.error === "Nickname already exists") {
@@ -872,14 +873,12 @@ export default function AdminPanel({
         }
         if (result.reactivated) {
           setBulkInviteResult(
-            result.emailSent
-              ? `Bestehendes Konto verknüpft. Info-Mail gesendet an ${emailValue}.`
-              : "Bestehendes Konto verknüpft, aber E-Mail konnte nicht versendet werden.",
+            `Bestehendes Konto verknüpft (${emailValue}). Einladung später über „Einladen“.`,
           );
-        } else if (result.emailSent) {
-          setBulkInviteResult(`Einladung gesendet an ${emailValue}.`);
         } else {
-          setBulkInviteResult("Einladung angestoßen, aber E-Mail konnte nicht versendet werden.");
+          setBulkInviteResult(
+            `Teilnehmer verknüpft/angelegt (${emailValue}). Einladung später über „Einladen“.`,
+          );
         }
         setCreateOpen(false);
         clearCreateIdentityChoice();
@@ -887,12 +886,13 @@ export default function AdminPanel({
         return;
       }
 
-      // #67: Teilnehmer anlegen ohne Einladung (kein Cognito/SES).
-      // Wir legen zunächst ohne E-Mail an, speichern E-Mail (falls vorhanden) danach separat im Profil.
+      // #67/#345: Anlegen ohne SES. E-Mail darf mitgegeben werden (Profil), Cognito erst bei Link/Einladen.
       const result = await inviteUser({
         nickname: nicknameValue,
+        ...(emailValue.length > 0 ? { email: emailValue } : {}),
         ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
         role: canEditRoles ? createRole : "participant",
+        sendEmail: false,
       });
       if (result.error === "Nickname already exists") {
         setCreateError("Dieser Login-Name ist bereits vergeben.");
@@ -905,37 +905,30 @@ export default function AdminPanel({
 
       if (
         emailValue.length > 0 &&
-        (!result.reactivated || (canEditRoles && createOverwriteEmailOnReactivate)) &&
+        result.reactivated &&
+        canEditRoles &&
+        createOverwriteEmailOnReactivate &&
         !shouldPreUpdateEmailForReactivation
       ) {
         await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
-      } else if (emailValue.length > 0 && result.reactivated && (!canEditRoles || !createOverwriteEmailOnReactivate)) {
-        setBulkInviteResult(
-          "Reaktivierung: bestehende E-Mail bleibt unverändert.",
-        );
+      } else if (
+        emailValue.length > 0 &&
+        result.reactivated &&
+        (!canEditRoles || !createOverwriteEmailOnReactivate)
+      ) {
+        setBulkInviteResult("Reaktivierung: bestehende E-Mail bleibt unverändert.");
       }
 
-      const effectiveEmail = emailValue || createEmail;
       if (result.reactivated) {
-        const reactivationNotificationTarget =
-          canEditRoles && createOverwriteEmailOnReactivate && emailValue
-            ? emailValue
-            : "bestehende Profil-E-Mail";
-        if (result.emailSent) {
-          setBulkInviteResult(
-            `Reaktivierung: Info-Mail gesendet an ${reactivationNotificationTarget}.`,
-          );
-        } else {
-          setBulkInviteResult("Reaktivierung erfolgt, aber E-Mail konnte nicht versendet werden.");
-        }
-      } else if (result.emailSent) {
         setBulkInviteResult(
-          effectiveEmail
-            ? `Einladung gesendet an ${effectiveEmail}.`
-            : "Einladung wurde gesendet.",
+          "Reaktiviert ohne E-Mail. Einladung/Info später über „Einladen“.",
         );
-      } else if (effectiveEmail) {
-        setBulkInviteResult("Einladung angestoßen, aber E-Mail konnte nicht versendet werden.");
+      } else if (emailValue) {
+        setBulkInviteResult(
+          `Teilnehmer angelegt (${emailValue}). Einladung später über „Einladen“.`,
+        );
+      } else {
+        setBulkInviteResult("Teilnehmer angelegt (ohne E-Mail).");
       }
 
 
@@ -1729,9 +1722,7 @@ export default function AdminPanel({
                     </p>
                   )}
                   <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                    {createOverwriteEmailOnReactivate && createEmail.trim()
-                      ? `Mail geht an: ${createEmail.trim()}`
-                      : "Mail geht an: bestehende Profil-E-Mail"}
+                    Beim Anlegen wird keine E-Mail versendet. Einladung später über „Einladen“.
                   </p>
                 </>
               )}
@@ -1752,6 +1743,11 @@ export default function AdminPanel({
                 disabled={createSaving || !createEmailEditable}
                 className="dialog-field"
               />
+              {createNicknameCheckState === "new" && createEmail.trim().length > 0 && (
+                <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                  E-Mail wird gespeichert; Einladung erst bei „Einladen“.
+                </p>
+              )}
               {createNicknameCheckState === "too_short" && (
                 <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
                   Login-Name-Prüfung startet ab {NICKNAME_MIN_LENGTH} Zeichen.
