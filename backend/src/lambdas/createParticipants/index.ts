@@ -7,7 +7,12 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { GetItemCommand, PutItemCommand, QueryCommand, type AttributeValue } from "@aws-sdk/client-dynamodb";
-import { generateParticipantId, validateDisplayName, validateNickname } from "@yogaswap/shared";
+import {
+  generateParticipantId,
+  getParticipantStatus,
+  validateDisplayName,
+  validateNickname,
+} from "@yogaswap/shared";
 import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
@@ -140,6 +145,65 @@ async function findParticipantByNickname(
   } catch (err) {
     console.warn("findParticipantByNickname failed:", err);
     return null;
+  }
+}
+
+async function hasTenantMembership(tenantId: string, userId: string): Promise<boolean> {
+  if (!process.env.MEMBERSHIPS_TABLE || !userId.trim()) return false;
+  try {
+    const resp = await dynamodb.send(
+      new GetItemCommand({
+        TableName: process.env.MEMBERSHIPS_TABLE,
+        Key: {
+          tenantId: { S: tenantId },
+          userId: { S: userId },
+        },
+        ConsistentRead: true,
+      }),
+    );
+    return !!resp.Item?.role?.S;
+  } catch (err) {
+    console.warn("hasTenantMembership failed:", err);
+    return false;
+  }
+}
+
+/** Current studio member — must not be re-linked as another person (#342). */
+function isCurrentStudioMember(hasMembership: boolean): boolean {
+  return hasMembership;
+}
+
+async function trySendReactivationMail(params: {
+  toEmail: string;
+  nickname: string;
+  displayName?: string;
+  tenantId: string;
+  studioName?: string;
+  mailLocale: string;
+}): Promise<boolean> {
+  const to = params.toEmail.trim();
+  if (!to) return false;
+  const baseUrl = resolveAppBaseUrlForTenant(params.tenantId);
+  const reactivationMail = buildReactivationMail({
+    locale: params.mailLocale,
+    nickname: params.nickname,
+    displayName: params.displayName,
+    loginUrl: baseUrl,
+    studioName: params.studioName,
+    studioUrl: baseUrl,
+  });
+  try {
+    await ses.send(
+      new SendEmailCommand({
+        Source: resolveSesSourceEmail(),
+        Destination: { ToAddresses: [to] },
+        Message: toSesAuthMessage(reactivationMail),
+      }),
+    );
+    return true;
+  } catch (mailErr: any) {
+    console.warn("SES reactivation email warning:", mailErr?.message || mailErr);
+    return false;
   }
 }
 
@@ -493,30 +557,17 @@ export const handler = async (event: any) => {
         ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
       });
 
-      // Reactivation info mail only when explicitly allowed.
-      if (shouldSendEmail && reactivated && existingEmail?.trim()) {
-        const baseUrl = resolveAppBaseUrlForTenant(tenantId);
-        const sesSourceEmail = resolveSesSourceEmail();
-        const reactivationMail = buildReactivationMail({
-          locale: mailLocale,
+      // Reactivation info mail: also when Create uses sendEmail:false (Fall 1, #345).
+      const mailTo = (hasEmail ? emailNormalized : existingEmail)?.trim();
+      if (reactivated && mailTo) {
+        emailSent = await trySendReactivationMail({
+          toEmail: mailTo,
           nickname: nicknameRaw,
           displayName: displayNameCanonical,
-          loginUrl: baseUrl,
+          tenantId,
           studioName,
-          studioUrl: baseUrl,
+          mailLocale,
         });
-        try {
-          await ses.send(
-            new SendEmailCommand({
-              Source: sesSourceEmail,
-              Destination: { ToAddresses: [existingEmail.trim()] },
-              Message: toSesAuthMessage(reactivationMail),
-            }),
-          );
-          emailSent = true;
-        } catch (mailErr: any) {
-          console.warn("SES reactivation email warning:", mailErr?.message || mailErr);
-        }
       }
     } catch (err: any) {
       console.error("Failed to save membership in DynamoDB:", err);
@@ -533,17 +584,22 @@ export const handler = async (event: any) => {
         username: canonicalUserId,
         emailSent,
         reactivated,
-        ...(shouldSendEmail && !hasEmail
+        ...(shouldSendEmail && !hasEmail && !emailSent
           ? {
               warning:
                 "E-Mail fehlt – Cognito/SES übersprungen. Teilnehmer wurde nur in DynamoDB angelegt.",
             }
-          : !shouldSendEmail
+          : !shouldSendEmail && !reactivated
             ? {
                 warning:
                   "Ohne Benachrichtigung angelegt. Cognito/Einladung erst bei explizitem Einladen.",
               }
-            : {}),
+            : !shouldSendEmail && reactivated && !emailSent
+              ? {
+                  warning:
+                    "Reaktiviert, aber Info-Mail konnte nicht versendet werden.",
+                }
+              : {}),
       }),
     };
   }
@@ -566,6 +622,8 @@ export const handler = async (event: any) => {
   let linkedExistingPoolUser = false;
   let linkedAuthUserId: string | undefined;
   let linkedPoolStatus: string | undefined;
+  /** Orphaned/same-studio profile reused via link — info mail even when sendEmail:false. */
+  let sameStudioReactivation = false;
 
   if (existingStoredCognitoUsername) {
     cognitoUsername = existingStoredCognitoUsername;
@@ -633,6 +691,25 @@ export const handler = async (event: any) => {
       (poolNickname ? await findParticipantByNickname(tenantId, poolNickname) : null);
 
     if (existingLinked) {
+      const linkedHasMembership = await hasTenantMembership(tenantId, existingLinked.userId);
+      if (isCurrentStudioMember(linkedHasMembership)) {
+        const status = getParticipantStatus(existingLinked);
+        const statusHint =
+          status === "invited"
+            ? "bereits eingeladen"
+            : status === "active"
+              ? "bereits registriert"
+              : "bereits Mitglied";
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: `Dieses Konto ist als „${existingLinked.userId}“ ${statusHint} in diesem Studio.`,
+            code: "already_in_tenant",
+            tenantUserId: existingLinked.userId,
+            tenantStatus: status,
+          }),
+        };
+      }
       existingProfileFound = true;
       canonicalUserId = existingLinked.userId;
       existingStoredCognitoUsername =
@@ -643,6 +720,7 @@ export const handler = async (event: any) => {
         existingLinked.inviteCompletedAt || existingInviteCompletedAt;
       existingInviteSentAt = existingLinked.inviteSentAt || existingInviteSentAt;
       if (existingLinked.participantId) participantId = existingLinked.participantId;
+      sameStudioReactivation = true;
     } else if (poolNickname) {
       const poolNickCheck = validateNickname(poolNickname);
       if (poolNickCheck.ok) {
@@ -925,20 +1003,38 @@ export const handler = async (event: any) => {
     }
   }
 
-  // Quiet link/create: Cognito attached or created, no token / no SES (#345 Create never mails).
+  // Quiet link/create: no invite token / no invite SES (#345).
+  // Exception: same-studio reactivation still gets info mail (Fall 1/2), not cross-studio (Fall 3).
   if (!shouldSendEmail) {
+    let emailSent = false;
+    const shouldMailReactivation = reactivated && sameStudioReactivation;
+    if (shouldMailReactivation) {
+      const mailTo = (emailNormalized || existingEmail || "").trim();
+      emailSent = await trySendReactivationMail({
+        toEmail: mailTo,
+        nickname: userId,
+        displayName: displayNameCanonical,
+        tenantId,
+        studioName,
+        mailLocale,
+      });
+    }
     return {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
         username: userId,
-        emailSent: false,
+        emailSent,
         reactivated,
-        warning: reactivated
-          ? "Verknüpft und reaktiviert – keine E-Mail versendet."
-          : hasExplicitLink
-            ? "Verknüpft ohne Benachrichtigung. Einladung später explizit senden."
-            : "Ohne Benachrichtigung angelegt. Einladung später explizit senden.",
+        ...(emailSent
+          ? {}
+          : {
+              warning: shouldMailReactivation
+                ? "Reaktiviert, aber Info-Mail konnte nicht versendet werden."
+                : hasExplicitLink
+                  ? "Verknüpft ohne Benachrichtigung. Einladung später explizit senden."
+                  : "Ohne Benachrichtigung angelegt. Einladung später explizit senden.",
+            }),
       }),
     };
   }

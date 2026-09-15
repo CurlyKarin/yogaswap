@@ -38,6 +38,10 @@ export type IdentityCandidate = {
   nicknameMatch?: boolean;
   /** Existing login name in this studio when already linked (#342). */
   tenantUserId?: string;
+  /** Derived studio status when tenantUserId is set. */
+  tenantStatus?: ParticipantStatus;
+  /** Active member under tenantUserId — show but do not allow link (#342). */
+  linkBlocked?: boolean;
 };
 
 export type IdentityCandidatesResponse = {

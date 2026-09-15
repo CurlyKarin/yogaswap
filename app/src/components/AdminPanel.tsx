@@ -33,6 +33,23 @@ function getRoleLabel(role: UserRole | undefined): string {
   return ROLE_LABELS_DE[role] ?? role;
 }
 
+/** Hint next to identity candidate (same-studio vs reactivation vs blocked). */
+function identityCandidateStudioHint(c: IdentityCandidate): string {
+  if (c.linkBlocked) {
+    if (c.tenantStatus === "invited") {
+      return " · bereits eingeladen in diesem Studio (nicht verknüpfbar)";
+    }
+    if (c.tenantStatus === "active") {
+      return " · bereits registriert in diesem Studio (nicht verknüpfbar)";
+    }
+    return " · bereits Mitglied in diesem Studio (nicht verknüpfbar)";
+  }
+  if (c.tenantUserId?.trim()) {
+    return " · früher in diesem Studio (Reaktivierung)";
+  }
+  return "";
+}
+
 type AdminPanelProps = {
   canEditRoles?: boolean;
   tenant?: Tenant | null;
@@ -814,11 +831,11 @@ export default function AdminPanel({
           });
           if (candidates.length > 0) {
             setCreateIdentityCandidates(candidates);
-            setCreateIdentitySelectedUsername(
-              candidates.find((c) => c.nicknameMatch)?.cognitoUsername ||
-                candidates[0]?.cognitoUsername ||
-                "",
-            );
+            const preferred =
+              candidates.find((c) => !c.linkBlocked && c.nicknameMatch)?.cognitoUsername ||
+              candidates.find((c) => !c.linkBlocked)?.cognitoUsername ||
+              "";
+            setCreateIdentitySelectedUsername(preferred);
             setCreateIdentityStep(true);
             setCreateSaving(false);
             return;
@@ -873,7 +890,9 @@ export default function AdminPanel({
         }
         if (result.reactivated) {
           setBulkInviteResult(
-            `Bestehendes Konto verknüpft (${emailValue}). Einladung später über „Einladen“.`,
+            result.emailSent
+              ? `Reaktiviert. Info-Mail gesendet an ${emailValue}.`
+              : `Konto verknüpft/reaktiviert (${emailValue}), aber Info-Mail konnte nicht versendet werden.`,
           );
         } else {
           setBulkInviteResult(
@@ -921,7 +940,9 @@ export default function AdminPanel({
 
       if (result.reactivated) {
         setBulkInviteResult(
-          "Reaktiviert ohne E-Mail. Einladung/Info später über „Einladen“.",
+          result.emailSent
+            ? "Reaktiviert. Info-Mail wurde gesendet."
+            : "Reaktiviert, aber Info-Mail konnte nicht versendet werden.",
         );
       } else if (emailValue) {
         setBulkInviteResult(
@@ -981,8 +1002,8 @@ export default function AdminPanel({
             setInviteIdentityTarget(p);
             setInviteIdentityCandidates(candidates);
             setInviteIdentitySelectedUsername(
-              candidates.find((c) => c.nicknameMatch)?.cognitoUsername ||
-                candidates[0]?.cognitoUsername ||
+              candidates.find((c) => !c.linkBlocked && c.nicknameMatch)?.cognitoUsername ||
+                candidates.find((c) => !c.linkBlocked)?.cognitoUsername ||
                 "",
             );
             return { ok: false as const, pendingIdentity: true as const };
@@ -1838,7 +1859,7 @@ export default function AdminPanel({
                         c.tenantUserId?.trim() ||
                         c.nickname?.trim() ||
                         "(ohne Login-Name im Pool)";
-                      const sameStudio = !!c.tenantUserId?.trim();
+                      const blocked = !!c.linkBlocked;
                       return (
                         <label
                           key={c.cognitoUsername}
@@ -1847,7 +1868,8 @@ export default function AdminPanel({
                             gap: 8,
                             alignItems: "flex-start",
                             fontSize: 13,
-                            cursor: "pointer",
+                            cursor: blocked || createSaving ? "not-allowed" : "pointer",
+                            opacity: blocked ? 0.65 : 1,
                           }}
                         >
                           <input
@@ -1855,12 +1877,12 @@ export default function AdminPanel({
                             name="create-identity-candidate"
                             checked={createIdentitySelectedUsername === c.cognitoUsername}
                             onChange={() => setCreateIdentitySelectedUsername(c.cognitoUsername)}
-                            disabled={createSaving}
+                            disabled={createSaving || blocked}
                           />
                           <span>
                             <strong>{labelNick}</strong>
-                            {sameStudio ? " · bereits in diesem Studio" : ""}
-                            {c.nicknameMatch && !sameStudio
+                            {identityCandidateStudioHint(c)}
+                            {c.nicknameMatch && !c.tenantUserId?.trim() && !blocked
                               ? " · empfohlen (passender Login-Name)"
                               : ""}
                             {c.poolStatus ? ` · ${c.poolStatus}` : ""}
@@ -1873,7 +1895,14 @@ export default function AdminPanel({
                     <button
                       type="button"
                       className="modal-action-btn"
-                      disabled={createSaving || !createIdentitySelectedUsername}
+                      disabled={
+                        createSaving ||
+                        !createIdentitySelectedUsername ||
+                        !!createIdentityCandidates.find(
+                          (c) =>
+                            c.cognitoUsername === createIdentitySelectedUsername && c.linkBlocked,
+                        )
+                      }
                       onClick={() => {
                         void saveCreate({
                           type: "link",
@@ -1962,7 +1991,7 @@ export default function AdminPanel({
                     c.tenantUserId?.trim() ||
                     c.nickname?.trim() ||
                     "(ohne Login-Name im Pool)";
-                  const sameStudio = !!c.tenantUserId?.trim();
+                  const blocked = !!c.linkBlocked;
                   return (
                     <label
                       key={c.cognitoUsername}
@@ -1971,7 +2000,8 @@ export default function AdminPanel({
                         gap: 8,
                         alignItems: "flex-start",
                         fontSize: 13,
-                        cursor: "pointer",
+                        cursor: blocked ? "not-allowed" : "pointer",
+                        opacity: blocked ? 0.65 : 1,
                       }}
                     >
                       <input
@@ -1979,11 +2009,12 @@ export default function AdminPanel({
                         name="invite-identity-candidate"
                         checked={inviteIdentitySelectedUsername === c.cognitoUsername}
                         onChange={() => setInviteIdentitySelectedUsername(c.cognitoUsername)}
+                        disabled={blocked}
                       />
                       <span>
                         <strong>{labelNick}</strong>
-                        {sameStudio ? " · bereits in diesem Studio" : ""}
-                        {c.nicknameMatch && !sameStudio
+                        {identityCandidateStudioHint(c)}
+                        {c.nicknameMatch && !c.tenantUserId?.trim() && !blocked
                           ? " · empfohlen (passender Login-Name)"
                           : ""}
                         {c.poolStatus ? ` · ${c.poolStatus}` : ""}
@@ -2007,7 +2038,13 @@ export default function AdminPanel({
                 <button
                   type="button"
                   className="modal-action-btn"
-                  disabled={!inviteIdentitySelectedUsername}
+                  disabled={
+                    !inviteIdentitySelectedUsername ||
+                    !!inviteIdentityCandidates.find(
+                      (c) =>
+                        c.cognitoUsername === inviteIdentitySelectedUsername && c.linkBlocked,
+                    )
+                  }
                   onClick={() => {
                     const target = inviteIdentityTarget;
                     const username = inviteIdentitySelectedUsername;

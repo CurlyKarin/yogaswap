@@ -1,6 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
-import { QueryCommand } from "@aws-sdk/client-dynamodb";
+import { GetItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { getParticipantStatus, type ParticipantStatus } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import {
@@ -13,18 +14,23 @@ import { getTenantContext } from "../shared/tenantContext";
 const cognito = new CognitoIdentityProviderClient({});
 const dynamodb = dynamoClient;
 
-type EnrichedCandidate = CognitoIdentityCandidate & {
-  /** Existing studio login name in this tenant, if already linked (#342). */
-  tenantUserId?: string;
+type TenantLinkMeta = {
+  tenantUserId: string;
+  tenantStatus: ParticipantStatus;
+  /** Current studio member (any status) — must not be linked as another person (#342). */
+  linkBlocked: boolean;
 };
 
-async function tenantUserIdsByCognitoUsername(
+type EnrichedCandidate = CognitoIdentityCandidate & Partial<TenantLinkMeta>;
+
+async function tenantLinkMetaByCognitoUsername(
   tenantId: string,
   participantsTable: string,
+  membershipsTable: string | undefined,
   cognitoUsernames: string[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, TenantLinkMeta>> {
   const wanted = new Set(cognitoUsernames.map((u) => u.trim()).filter(Boolean));
-  const out = new Map<string, string>();
+  const out = new Map<string, TenantLinkMeta>();
   if (wanted.size === 0) return out;
   try {
     const resp = await dynamodb.send(
@@ -39,12 +45,40 @@ async function tenantUserIdsByCognitoUsername(
     for (const item of resp.Items ?? []) {
       const cognitoUsername = item.cognitoUsername?.S?.trim();
       const userId = item.userId?.S?.trim();
-      if (cognitoUsername && userId && wanted.has(cognitoUsername) && !out.has(cognitoUsername)) {
-        out.set(cognitoUsername, userId);
+      if (!cognitoUsername || !userId || !wanted.has(cognitoUsername) || out.has(cognitoUsername)) {
+        continue;
       }
+      const tenantStatus = getParticipantStatus({
+        authUserId: item.authUserId?.S,
+        inviteSentAt: item.inviteSentAt?.S,
+        inviteCompletedAt: item.inviteCompletedAt?.S,
+      });
+      let hasMembership = false;
+      if (membershipsTable) {
+        try {
+          const membership = await dynamodb.send(
+            new GetItemCommand({
+              TableName: membershipsTable,
+              Key: {
+                tenantId: { S: tenantId },
+                userId: { S: userId },
+              },
+            }),
+          );
+          hasMembership = !!membership.Item?.role?.S;
+        } catch (memErr) {
+          console.warn("tenant membership lookup failed:", memErr);
+        }
+      }
+      out.set(cognitoUsername, {
+        tenantUserId: userId,
+        tenantStatus,
+        // Invited or registered: still in studio — not a reactivation candidate.
+        linkBlocked: hasMembership,
+      });
     }
   } catch (err) {
-    console.warn("tenantUserIdsByCognitoUsername failed:", err);
+    console.warn("tenantLinkMetaByCognitoUsername failed:", err);
   }
   return out;
 }
@@ -102,20 +136,19 @@ export const handler = async (
   const raw = await listCognitoUsersByEmail(cognito, userPoolId, email);
   const sorted = sortIdentityCandidatesByNicknamePreference(raw, nickname);
 
-  let tenantByCognito = new Map<string, string>();
+  let tenantMeta = new Map<string, TenantLinkMeta>();
   if (participantsTable) {
-    tenantByCognito = await tenantUserIdsByCognitoUsername(
+    tenantMeta = await tenantLinkMetaByCognitoUsername(
       tenantId,
       participantsTable,
+      membershipsTable,
       sorted.map((c) => c.cognitoUsername),
     );
   }
 
   const candidates: EnrichedCandidate[] = sorted.map((c) => ({
     ...c,
-    ...(tenantByCognito.get(c.cognitoUsername)
-      ? { tenantUserId: tenantByCognito.get(c.cognitoUsername) }
-      : {}),
+    ...(tenantMeta.get(c.cognitoUsername) ?? {}),
   }));
 
   return {

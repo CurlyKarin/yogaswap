@@ -651,7 +651,7 @@ describe("AdminPanel", () => {
       });
       expect(mockedUpdateParticipant).not.toHaveBeenCalled();
       expect(
-        within(panel).getByText(/Reaktiviert ohne E-Mail\. Einladung\/Info später über „Einladen“\./i),
+        within(panel).getByText(/Reaktiviert, aber Info-Mail konnte nicht versendet werden\./i),
       ).toBeInTheDocument();
     });
   });
@@ -668,7 +668,7 @@ describe("AdminPanel", () => {
     ]);
     mockedInviteUser.mockResolvedValueOnce({
       success: true,
-      emailSent: false,
+      emailSent: true,
       reactivated: true,
       username: "alice",
     });
@@ -741,7 +741,7 @@ describe("AdminPanel", () => {
         sendEmail: false,
       });
       expect(
-        within(panel).getByText(/Reaktiviert ohne E-Mail\. Einladung\/Info später über „Einladen“\./i),
+        within(panel).getByText(/Reaktiviert\. Info-Mail wurde gesendet\./i),
       ).toBeInTheDocument();
     });
   });

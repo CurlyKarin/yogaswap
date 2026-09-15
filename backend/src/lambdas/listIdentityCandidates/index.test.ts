@@ -97,6 +97,113 @@ describe("listIdentityCandidates", () => {
     expect(body.candidates[1].nicknameMatch).toBe(false);
   });
 
+  test("marks current same-studio members as linkBlocked (#342)", async () => {
+    dynamoMockSend.mockReset();
+    dynamoMockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" } },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            userId: { S: "mutter" },
+            cognitoUsername: { S: "opaque-mutter" },
+            authUserId: { S: "sub-mutter" },
+            inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "mutter" },
+          role: { S: "participant" },
+        },
+      });
+
+    cognitoMockSend.mockResolvedValueOnce({
+      Users: [
+        {
+          Username: "opaque-mutter",
+          UserStatus: "CONFIRMED",
+          Attributes: [
+            { Name: "sub", Value: "sub-mutter" },
+            { Name: "email", Value: "shared@example.com" },
+            { Name: "nickname", Value: "mutter" },
+          ],
+        },
+      ],
+    });
+
+    const res = await handler(event({ email: "shared@example.com", nickname: "tochter" }));
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.candidates[0].tenantUserId).toBe("mutter");
+    expect(body.candidates[0].tenantStatus).toBe("active");
+    expect(body.candidates[0].linkBlocked).toBe(true);
+  });
+
+  test("marks invited same-studio members as linkBlocked (#342)", async () => {
+    dynamoMockSend.mockReset();
+    dynamoMockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" } },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            userId: { S: "ida" },
+            cognitoUsername: { S: "opaque-ida" },
+            inviteSentAt: { S: "2026-03-01T00:00:00.000Z" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "ida" },
+          role: { S: "participant" },
+        },
+      });
+
+    cognitoMockSend.mockResolvedValueOnce({
+      Users: [
+        {
+          Username: "opaque-ida",
+          UserStatus: "FORCE_CHANGE_PASSWORD",
+          Attributes: [
+            { Name: "sub", Value: "sub-ida" },
+            { Name: "email", Value: "ida@example.com" },
+            { Name: "nickname", Value: "Ida" },
+          ],
+        },
+      ],
+    });
+
+    const res = await handler(event({ email: "ida@example.com", nickname: "other" }));
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.candidates[0].tenantUserId).toBe("ida");
+    expect(body.candidates[0].tenantStatus).toBe("invited");
+    expect(body.candidates[0].linkBlocked).toBe(true);
+  });
+
   test("rejects missing email", async () => {
     const res = await handler(event({ nickname: "luna" }));
     expect(res.statusCode).toBe(400);
