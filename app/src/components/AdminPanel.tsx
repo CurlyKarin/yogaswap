@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Mail, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   deleteParticipant,
+  getIdentityCandidates,
   getParticipants,
   inviteUser,
   resetParticipantPassword,
   updateParticipant,
+  type IdentityCandidate,
   type ParticipantWithStatus,
 } from "../api/participants";
 import type { Tenant, UserRole } from "shared/types";
@@ -26,9 +28,57 @@ const ROLE_LABELS_DE: Record<UserRole, string> = {
 };
 const ROLE_OPTIONS: UserRole[] = ["participant", "instructor", "admin"];
 
+type BulkResultTone = "info" | "success" | "warning" | "error";
+
+function bulkResultTone(message: string): BulkResultTone {
+  const text = message.trim();
+  if (!text) return "info";
+  // Partial success: action ok, notification failed → warning, not error.
+  if (/verknüpft|reaktiviert|angelegt|gespeichert|entfernt/i.test(text) && /konnte nicht/i.test(text)) {
+    return "warning";
+  }
+  if (/nicht möglich|einzeln einladen/i.test(text)) {
+    return "warning";
+  }
+  if (/fehlgeschlagen|fehler/i.test(text) || (/konnte nicht/i.test(text) && !/info-mail|e-mail/i.test(text))) {
+    return "error";
+  }
+  if (/gesendet|angelegt|reaktiviert|verknüpft|aktualisiert|gespeichert|entfernt/i.test(text)) {
+    return "success";
+  }
+  return "info";
+}
+
+const BULK_RESULT_BANNER: Record<
+  BulkResultTone,
+  { background: string; border: string; color: string }
+> = {
+  info: { background: "#eff6ff", border: "#93c5fd", color: "#1e3a8a" },
+  success: { background: "#ecfdf5", border: "#6ee7b7", color: "#065f46" },
+  warning: { background: "#fffbeb", border: "#fbbf24", color: "#92400e" },
+  error: { background: "#fef2f2", border: "#f87171", color: "#991b1b" },
+};
+
 function getRoleLabel(role: UserRole | undefined): string {
   if (!role) return "-";
   return ROLE_LABELS_DE[role] ?? role;
+}
+
+/** Hint next to identity candidate (same-studio vs reactivation vs blocked). */
+function identityCandidateStudioHint(c: IdentityCandidate): string {
+  if (c.linkBlocked) {
+    if (c.tenantStatus === "invited") {
+      return " · bereits eingeladen in diesem Studio (nicht verknüpfbar)";
+    }
+    if (c.tenantStatus === "active") {
+      return " · bereits registriert in diesem Studio (nicht verknüpfbar)";
+    }
+    return " · bereits Mitglied in diesem Studio (nicht verknüpfbar)";
+  }
+  if (c.tenantUserId?.trim()) {
+    return " · früher in diesem Studio (Reaktivierung)";
+  }
+  return "";
 }
 
 type AdminPanelProps = {
@@ -44,6 +94,10 @@ type CreateNicknameCheckState =
   | "reactivation"
   | "active_conflict"
   | "exists_in_tenant";
+
+type IdentityDecision =
+  | { type: "new" }
+  | { type: "link"; cognitoUsername: string };
 
 export default function AdminPanel({
   canEditRoles = false,
@@ -83,6 +137,22 @@ export default function AdminPanel({
   const [createMatchedParticipant, setCreateMatchedParticipant] =
     useState<ParticipantWithStatus | null>(null);
   const [createLastResolvedNickname, setCreateLastResolvedNickname] = useState<string | null>(null);
+  const [createIdentityCandidates, setCreateIdentityCandidates] = useState<IdentityCandidate[]>(
+    [],
+  );
+  const [createIdentityDecision, setCreateIdentityDecision] = useState<IdentityDecision | null>(
+    null,
+  );
+  const [createIdentitySelectedUsername, setCreateIdentitySelectedUsername] = useState<string>("");
+  const [createIdentityStep, setCreateIdentityStep] = useState(false);
+
+  const [inviteIdentityTarget, setInviteIdentityTarget] = useState<ParticipantWithStatus | null>(
+    null,
+  );
+  const [inviteIdentityCandidates, setInviteIdentityCandidates] = useState<IdentityCandidate[]>(
+    [],
+  );
+  const [inviteIdentitySelectedUsername, setInviteIdentitySelectedUsername] = useState("");
 
   const [inviteSendingByUserId, setInviteSendingByUserId] = useState<Record<string, boolean>>(
     {},
@@ -462,7 +532,7 @@ export default function AdminPanel({
       } else if (roleChanged) {
         setBulkInviteResult("Rolle aktualisiert.");
       } else if (displayNameChanged) {
-        setBulkInviteResult("Spitzname aktualisiert.");
+        setBulkInviteResult("Displayname aktualisiert.");
       }
       if (canEditRoles && original?.status === "active" && nextEmailText.length > 0) {
         const effectiveParticipant: ParticipantWithStatus = {
@@ -539,6 +609,10 @@ export default function AdminPanel({
     setCreateEmail("");
     setCreateEmailAutoFilled(false);
     setCreateLastResolvedNickname(null);
+    setCreateIdentityCandidates([]);
+    setCreateIdentityDecision(null);
+    setCreateIdentitySelectedUsername("");
+    setCreateIdentityStep(false);
   };
 
   const syncNicknameFromDisplayName = (displayNameValue: string, force = false) => {
@@ -566,6 +640,17 @@ export default function AdminPanel({
     setCreateNicknameCheckState("idle");
     setCreateMatchedParticipant(null);
     setCreateLastResolvedNickname(null);
+    setCreateIdentityCandidates([]);
+    setCreateIdentityDecision(null);
+    setCreateIdentitySelectedUsername("");
+    setCreateIdentityStep(false);
+  };
+
+  const clearCreateIdentityChoice = () => {
+    setCreateIdentityCandidates([]);
+    setCreateIdentityDecision(null);
+    setCreateIdentitySelectedUsername("");
+    setCreateIdentityStep(false);
   };
   useEffect(() => {
     if (editingUserId) {
@@ -695,7 +780,7 @@ export default function AdminPanel({
     fallbackTarget?.focus();
   };
 
-  const saveCreate = async () => {
+  const saveCreate = async (identityOverride?: IdentityDecision) => {
     const nicknameCheck = validateNickname(createNickname);
     if (!nicknameCheck.ok) {
       if (nicknameCheck.code === "too_short") {
@@ -703,7 +788,11 @@ export default function AdminPanel({
       } else if (nicknameCheck.code !== "empty") {
         setCreateNicknameCheckState("invalid");
       }
-      setCreateError(nicknameCheck.message);
+      setCreateError(
+        nicknameCheck.code === "empty"
+          ? "Bitte einen Login-Namen eingeben."
+          : nicknameCheck.message,
+      );
       return;
     }
     const nicknameValue = nicknameCheck.nickname;
@@ -735,10 +824,7 @@ export default function AdminPanel({
         return;
       }
       displayNameCanonical = displayNameCheck.displayName;
-    } else if (!isReactivationFlow) {
-      setCreateError("Bitte einen Spitznamen eingeben.");
-      return;
-    } else if (resolved.match?.displayName?.trim()) {
+    } else if (isReactivationFlow && resolved.match?.displayName?.trim()) {
       displayNameCanonical = resolved.match.displayName.trim();
     }
 
@@ -751,6 +837,8 @@ export default function AdminPanel({
       setCreateError("Bitte eine gültige E-Mail-Adresse eingeben (oder leer lassen).");
       return;
     }
+
+    const effectiveIdentityDecision = identityOverride ?? createIdentityDecision;
 
     setCreateSaving(true);
     setCreateError("");
@@ -765,12 +853,100 @@ export default function AdminPanel({
         await updateParticipant(reactivationUserId, { email: emailValue });
       }
 
-      // #67: Teilnehmer anlegen ohne Einladung (kein Cognito/SES).
-      // Wir legen zunächst ohne E-Mail an, speichern E-Mail (falls vorhanden) danach separat im Profil.
+      // #342: Bei E-Mail und Pool-Treffern explizit verknüpfen vs. neue Person wählen.
+      if (emailValue.length > 0 && !isReactivationFlow && !effectiveIdentityDecision) {
+        try {
+          const candidates = await getIdentityCandidates({
+            email: emailValue,
+            nickname: nicknameValue,
+          });
+          if (candidates.length > 0) {
+            setCreateIdentityCandidates(candidates);
+            // No auto-select of a pool account; admin must choose link or new.
+            setCreateIdentitySelectedUsername("");
+            setCreateIdentityStep(true);
+            setCreateSaving(false);
+            return;
+          }
+        } catch (identityErr) {
+          console.warn("Identity candidate lookup failed; continuing without link choice", identityErr);
+        }
+      }
+
+      const identityInviteFlags =
+        effectiveIdentityDecision?.type === "link"
+          ? { linkExisting: { cognitoUsername: effectiveIdentityDecision.cognitoUsername } }
+          : effectiveIdentityDecision?.type === "new"
+            ? { forceNew: true as const }
+            : {};
+
+      // Mit Identity-Entscheidung: verknüpfen/neu anlegen ohne SES (#345).
+      if (effectiveIdentityDecision && emailValue.length > 0) {
+        if (identityOverride) {
+          setCreateIdentityDecision(identityOverride);
+        }
+        const linkedCandidate =
+          effectiveIdentityDecision.type === "link"
+            ? createIdentityCandidates.find(
+                (c) => c.cognitoUsername === effectiveIdentityDecision.cognitoUsername,
+              )
+            : undefined;
+        // Same studio: keep existing login name; otherwise Cognito nickname (#342).
+        const inviteNickname =
+          effectiveIdentityDecision.type === "link"
+            ? (
+                linkedCandidate?.tenantUserId?.trim() ||
+                linkedCandidate?.nickname?.trim() ||
+                nicknameValue
+              )
+            : nicknameValue;
+        const result = await inviteUser({
+          nickname: inviteNickname,
+          email: emailValue,
+          ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
+          role: canEditRoles ? createRole : "participant",
+          sendEmail: false,
+          ...identityInviteFlags,
+        });
+        if (result.error === "Nickname already exists") {
+          setCreateError("Dieser Login-Name ist bereits vergeben.");
+          return;
+        }
+        if (!result.success) {
+          setCreateError(result.error || "Teilnehmer konnte nicht angelegt werden.");
+          return;
+        }
+        if (result.reactivated) {
+          if (result.emailSent) {
+            setBulkInviteResult(`Zugang freigeschaltet. Info-Mail gesendet an ${emailValue}.`);
+          } else if (result.emailAttempted) {
+            setBulkInviteResult(
+              `Zugang freigeschaltet (${emailValue}). Info-Mail konnte nicht versendet werden — bitte SES/Empfänger prüfen.`,
+            );
+          } else {
+            setBulkInviteResult(
+              result.warning?.trim() ||
+                `Konto verknüpft (${emailValue}). Keine Info-Mail — Einladung später über „Einladen“.`,
+            );
+          }
+        } else {
+          setBulkInviteResult(
+            `Teilnehmer verknüpft/angelegt (${emailValue}). Einladung später über „Einladen“.`,
+          );
+        }
+        setCreateOpen(false);
+        clearCreateIdentityChoice();
+        await refreshParticipants();
+        return;
+      }
+
+      // #67/#345: Anlegen ohne SES. E-Mail darf mitgegeben werden (Profil), Cognito erst bei Link/Einladen.
       const result = await inviteUser({
         nickname: nicknameValue,
+        ...(emailValue.length > 0 ? { email: emailValue } : {}),
         ...(displayNameCanonical ? { displayName: displayNameCanonical } : {}),
         role: canEditRoles ? createRole : "participant",
+        sendEmail: false,
       });
       if (result.error === "Nickname already exists") {
         setCreateError("Dieser Login-Name ist bereits vergeben.");
@@ -783,40 +959,39 @@ export default function AdminPanel({
 
       if (
         emailValue.length > 0 &&
-        (!result.reactivated || (canEditRoles && createOverwriteEmailOnReactivate)) &&
+        result.reactivated &&
+        canEditRoles &&
+        createOverwriteEmailOnReactivate &&
         !shouldPreUpdateEmailForReactivation
       ) {
         await updateParticipant(result.username ?? nicknameValue.toLowerCase(), { email: emailValue });
-      } else if (emailValue.length > 0 && result.reactivated && (!canEditRoles || !createOverwriteEmailOnReactivate)) {
-        setBulkInviteResult(
-          "Reaktivierung: bestehende E-Mail bleibt unverändert.",
-        );
+      } else if (
+        emailValue.length > 0 &&
+        result.reactivated &&
+        (!canEditRoles || !createOverwriteEmailOnReactivate)
+      ) {
+        setBulkInviteResult("Reaktivierung: bestehende E-Mail bleibt unverändert.");
       }
 
-      const effectiveEmail = emailValue || createEmail;
       if (result.reactivated) {
-        const reactivationNotificationTarget =
-          canEditRoles && createOverwriteEmailOnReactivate && emailValue
-            ? emailValue
-            : "bestehende Profil-E-Mail";
-        if (result.emailSent) {
-          setBulkInviteResult(
-            `Reaktivierung: Info-Mail gesendet an ${reactivationNotificationTarget}.`,
-          );
-        } else {
-          setBulkInviteResult("Reaktivierung erfolgt, aber E-Mail konnte nicht versendet werden.");
-        }
-      } else if (result.emailSent) {
         setBulkInviteResult(
-          effectiveEmail
-            ? `Einladung gesendet an ${effectiveEmail}.`
-            : "Einladung wurde gesendet.",
+          result.emailSent
+            ? "Zugang freigeschaltet. Info-Mail wurde gesendet."
+            : result.emailAttempted
+              ? "Zugang freigeschaltet, aber Info-Mail konnte nicht versendet werden."
+              : "Zugang freigeschaltet. Keine Info-Mail — Einladung später über „Einladen“.",
         );
-      } else if (effectiveEmail) {
-        setBulkInviteResult("Einladung angestoßen, aber E-Mail konnte nicht versendet werden.");
+      } else if (emailValue) {
+        setBulkInviteResult(
+          `Teilnehmer angelegt (${emailValue}). Einladung später über „Einladen“.`,
+        );
+      } else {
+        setBulkInviteResult("Teilnehmer angelegt (ohne E-Mail).");
       }
+
 
       setCreateOpen(false);
+      clearCreateIdentityChoice();
       await refreshParticipants();
     } catch (err) {
       console.error("Failed to create participant", err);
@@ -828,7 +1003,11 @@ export default function AdminPanel({
 
   const sendInviteForParticipant = async (
     p: ParticipantWithStatus,
-    options?: { refreshAfter?: boolean },
+    options?: {
+      refreshAfter?: boolean;
+      identityDecision?: IdentityDecision;
+      skipIdentityCheck?: boolean;
+    },
   ) => {
     if (!p.email) return;
     if (!canEditRoles && !canTrainerManageTarget(p)) return;
@@ -843,10 +1022,62 @@ export default function AdminPanel({
     setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
     setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
     try {
+      // Already linked, already invited (resend), or explicit skip: no identity choice.
+      const needsIdentityChoice =
+        !options?.skipIdentityCheck &&
+        !options?.identityDecision &&
+        !p.authUserId?.trim() &&
+        p.status !== "active" &&
+        p.status !== "invited";
+
+      if (needsIdentityChoice) {
+        try {
+          const candidates = await getIdentityCandidates({
+            email: p.email,
+            nickname: userId,
+          });
+          const selectable = candidates.filter((c) => !c.linkBlocked);
+          // Only blocked rows (e.g. self already in studio) → treat like plain invite/resend.
+          if (selectable.length > 0) {
+            setInviteIdentityTarget(p);
+            setInviteIdentityCandidates(candidates);
+            // No auto-select: avoid pre-picking an unrelated pool account.
+            setInviteIdentitySelectedUsername("");
+            return { ok: false as const, pendingIdentity: true as const };
+          }
+        } catch (identityErr) {
+          console.warn("Identity candidate lookup failed on invite", identityErr);
+        }
+      }
+
+      const identityInviteFlags =
+        options?.identityDecision?.type === "link"
+          ? { linkExisting: { cognitoUsername: options.identityDecision.cognitoUsername } }
+          : options?.identityDecision?.type === "new"
+            ? { forceNew: true as const }
+            : {};
+
+      const identityDecision = options?.identityDecision;
+      const linkedCandidate =
+        identityDecision?.type === "link"
+          ? inviteIdentityCandidates.find(
+              (c) => c.cognitoUsername === identityDecision.cognitoUsername,
+            )
+          : undefined;
+      const inviteNickname =
+        identityDecision?.type === "link"
+          ? (
+              linkedCandidate?.tenantUserId?.trim() ||
+              linkedCandidate?.nickname?.trim() ||
+              userId
+            )
+          : userId;
+
       const result = await inviteUser({
         email: p.email,
-        nickname: userId,
+        nickname: inviteNickname,
         role: effectiveRole,
+        ...identityInviteFlags,
       });
 
       if (result.error) {
@@ -962,20 +1193,55 @@ export default function AdminPanel({
 
     try {
       const byId = new Map(safeParticipants.map((p) => [p.userId, p]));
+
+      // Variante 1 (#342): Sammel-Einladung nur ohne Identity-Wahl.
+      const needsIdentityChoice: string[] = [];
+      for (const userId of selectedEligibleUserIds) {
+        const p = byId.get(userId);
+        if (!p || !isInviteEligible(p) || !p.email?.trim()) continue;
+        if (p.authUserId?.trim() || p.status === "active" || p.status === "invited") continue;
+        try {
+          const candidates = await getIdentityCandidates({
+            email: p.email,
+            nickname: userId,
+          });
+          if (candidates.some((c) => !c.linkBlocked)) needsIdentityChoice.push(userId);
+        } catch (identityErr) {
+          console.warn("Bulk identity preflight failed for", userId, identityErr);
+        }
+      }
+      if (needsIdentityChoice.length > 0) {
+        const names = needsIdentityChoice.join(", ");
+        setBulkInviteResult(
+          needsIdentityChoice.length === 1
+            ? `Sammel-Einladung nicht möglich: für ${names} gibt es bereits Login-Konten zur gleichen E-Mail. Bitte einzeln einladen und verknüpfen oder neue Person wählen.`
+            : `Sammel-Einladung nicht möglich: für ${names} gibt es bereits Login-Konten zur gleichen E-Mail. Bitte diese Personen einzeln einladen.`,
+        );
+        return;
+      }
+
       for (const userId of selectedEligibleUserIds) {
         const p = byId.get(userId);
         if (!p || !isInviteEligible(p)) continue;
 
         // Pro User UI-Feedback beibehalten, aber Refresh erst am Ende.
-        const res = await sendInviteForParticipant(p, { refreshAfter: false });
+        // Identity bereits im Preflight geprüft.
+        const res = await sendInviteForParticipant(p, {
+          refreshAfter: false,
+          skipIdentityCheck: true,
+        });
         if (res?.ok) ok += 1;
         else failed += 1;
       }
     } finally {
       await refreshParticipants();
       setBulkInviteSending(false);
-      setBulkInviteResult(
-        failed > 0 ? `${ok} Einladung(en) gesendet, ${failed} fehlgeschlagen.` : `${ok} Einladung(en) gesendet.`,
+      setBulkInviteResult((prev) =>
+        prev.trim()
+          ? prev
+          : failed > 0
+            ? `${ok} Einladung(en) gesendet, ${failed} fehlgeschlagen.`
+            : `${ok} Einladung(en) gesendet.`,
       );
     }
   };
@@ -1011,6 +1277,9 @@ export default function AdminPanel({
       setDeleteRunningByUserId((prev) => ({ ...prev, [userId]: false }));
     }
   };
+
+  const bulkTone = bulkInviteResult ? bulkResultTone(bulkInviteResult) : null;
+  const bulkBanner = bulkTone ? BULK_RESULT_BANNER[bulkTone] : null;
   
   return (
     <>
@@ -1067,12 +1336,27 @@ export default function AdminPanel({
           >
             {bulkInviteSending ? "Sende..." : `Ausgewählte einladen (${selectedEligibleUserIds.length})`}
           </button>
-          {bulkInviteResult && (
-            <span style={{ color: "#374151", fontSize: 12 }} role="status" aria-live="polite">
-              {bulkInviteResult}
-            </span>
-          )}
         </div>
+
+        {bulkInviteResult && bulkBanner && bulkTone && (
+          <p
+            role={bulkTone === "error" || bulkTone === "warning" ? "alert" : "status"}
+            aria-live="assertive"
+            style={{
+              margin: "0 0 0.75rem",
+              padding: "0.65rem 0.85rem",
+              borderRadius: 6,
+              border: `1px solid ${bulkBanner.border}`,
+              background: bulkBanner.background,
+              color: bulkBanner.color,
+              fontSize: 14,
+              fontWeight: 600,
+              lineHeight: 1.4,
+            }}
+          >
+            {bulkInviteResult}
+          </p>
+        )}
 
         {participantsError && (
           <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }} role="alert">
@@ -1322,15 +1606,17 @@ export default function AdminPanel({
             </p>
 
             <div className="dialog-stack">
-              <input
-                type="text"
-                aria-label="Spitzname"
-                placeholder="Spitzname"
-                value={editingDisplayName}
-                onChange={(e) => setEditingDisplayName(e.target.value)}
-                disabled={editingSaving}
-                className="dialog-field"
-              />
+              <label className="dialog-field">
+                <span className="dialog-field-label">Displayname</span>
+                <input
+                  type="text"
+                  aria-label="Displayname"
+                  placeholder="Displayname"
+                  value={editingDisplayName}
+                  onChange={(e) => setEditingDisplayName(e.target.value)}
+                  disabled={editingSaving}
+                />
+              </label>
               <input
                 type="email"
                 aria-label="E-Mail"
@@ -1423,49 +1709,63 @@ export default function AdminPanel({
             </div>
             <div className="modal-body">
             <div className="dialog-stack">
-              <input
-                type="text"
-                aria-label="Spitzname"
-                placeholder="Spitzname"
-                ref={createDisplayNameInputRef}
-                value={createDisplayName}
-                onChange={(e) => {
-                  const nextDisplayName = e.target.value;
-                  setCreateDisplayName(nextDisplayName);
-                  setCreateError("");
-                  syncNicknameFromDisplayName(nextDisplayName);
-                }}
-                onBlur={() => {
-                  if (createNickname.trim().length >= NICKNAME_MIN_LENGTH) {
+              <label className="dialog-field">
+                <span className="dialog-field-label">Displayname</span>
+                <input
+                  type="text"
+                  aria-label="Displayname"
+                  placeholder="Displayname"
+                  ref={createDisplayNameInputRef}
+                  value={createDisplayName}
+                  onChange={(e) => {
+                    const nextDisplayName = e.target.value;
+                    setCreateDisplayName(nextDisplayName);
+                    setCreateError("");
+                    syncNicknameFromDisplayName(nextDisplayName);
+                  }}
+                  onBlur={() => {
+                    if (createNickname.trim().length >= NICKNAME_MIN_LENGTH) {
+                      void resolveCreateNicknameContext(createNickname);
+                    }
+                  }}
+                  disabled={createSaving}
+                />
+              </label>
+              <label className="dialog-field">
+                <span className="dialog-field-label">
+                  Login-Name{" "}
+                  <span aria-hidden="true" title="Pflichtfeld">
+                    *
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  aria-label="Login-Name"
+                  aria-required="true"
+                  placeholder="Login-Name"
+                  ref={createNicknameInputRef}
+                  value={createNickname}
+                  onChange={(e) => {
+                    const nextNickname = e.target.value;
+                    setCreateNickname(nextNickname);
+                    setCreateNicknameManual(true);
+                    resetCreateNicknameResolution();
+                    setCreateError("");
+                  }}
+                  onKeyDown={(event) => {
+                    void handleCreateNicknameKeyDown(event);
+                  }}
+                  onBlur={() => {
                     void resolveCreateNicknameContext(createNickname);
+                  }}
+                  disabled={createSaving}
+                  required
+                  aria-invalid={
+                    createNicknameCheckState === "invalid" ||
+                    createNicknameCheckState === "too_short"
                   }
-                }}
-                disabled={createSaving}
-                className="dialog-field"
-              />
-              <input
-                type="text"
-                aria-label="Login-Name"
-                placeholder="Login-Name"
-                ref={createNicknameInputRef}
-                value={createNickname}
-                onChange={(e) => {
-                  const nextNickname = e.target.value;
-                  setCreateNickname(nextNickname);
-                  setCreateNicknameManual(true);
-                  resetCreateNicknameResolution();
-                  setCreateError("");
-                }}
-                onKeyDown={(event) => {
-                  void handleCreateNicknameKeyDown(event);
-                }}
-                onBlur={() => {
-                  void resolveCreateNicknameContext(createNickname);
-                }}
-                disabled={createSaving}
-                className="dialog-field"
-                aria-invalid={createNicknameCheckState === "invalid" || createNicknameCheckState === "too_short"}
-              />
+                />
+              </label>
 
               {createIsReactivation && (
                 <>
@@ -1503,15 +1803,15 @@ export default function AdminPanel({
                           disabled={createSaving}
                           style={{ accentColor: "#2563eb" }}
                         />
-                        E-Mail fuer Reaktivierung bearbeiten
+                        E-Mail aendern
                         <strong style={{ color: createOverwriteEmailOnReactivate ? "#166534" : "#6b7280" }}>
                           {createOverwriteEmailOnReactivate ? "(aktiv)" : "(inaktiv)"}
                         </strong>
                       </label>
                       <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
                         {createOverwriteEmailOnReactivate
-                          ? "Bearbeitung aktiv: E-Mail-Feld ist freigegeben."
-                          : "Bearbeitung inaktiv: E-Mail-Feld bleibt gesperrt."}
+                          ? "E-Mail-Adresse aendern ist aktiv: Feld ist freigegeben."
+                          : "E-Mail-Adresse aendern ist inaktiv: Feld bleibt gesperrt."}
                       </p>
                       <p
                         role="status"
@@ -1519,8 +1819,8 @@ export default function AdminPanel({
                         style={{ margin: 0, fontSize: 11, color: "#6b7280" }}
                       >
                         {createOverwriteEmailOnReactivate
-                          ? "Status: E-Mail-Bearbeitung aktiviert."
-                          : "Status: E-Mail-Bearbeitung deaktiviert."}
+                          ? "Status: E-Mail-Adresse aendern aktiviert."
+                          : "Status: E-Mail-Adresse aendern deaktiviert."}
                       </p>
                     </>
                   ) : (
@@ -1529,9 +1829,7 @@ export default function AdminPanel({
                     </p>
                   )}
                   <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                    {createOverwriteEmailOnReactivate && createEmail.trim()
-                      ? `Mail geht an: ${createEmail.trim()}`
-                      : "Mail geht an: bestehende Profil-E-Mail"}
+                    Bei Reaktivierung wird eine Info-Mail an die hinterlegte Adresse gesendet.
                   </p>
                 </>
               )}
@@ -1546,10 +1844,17 @@ export default function AdminPanel({
                   if (!createEmailEditable) return;
                   setCreateEmail(e.target.value);
                   setCreateEmailAutoFilled(false);
+                  clearCreateIdentityChoice();
+                  setCreateError("");
                 }}
                 disabled={createSaving || !createEmailEditable}
                 className="dialog-field"
               />
+              {createNicknameCheckState === "new" && createEmail.trim().length > 0 && (
+                <p style={{ margin: "0.25rem 0 0", color: "#4b5563", fontSize: 12 }}>
+                  E-Mail wird gespeichert; Einladung erst bei „Einladen“.
+                </p>
+              )}
               {createNicknameCheckState === "too_short" && (
                 <p style={{ margin: "0.25rem 0 0", color: "#92400e", fontSize: 12 }}>
                   Login-Name-Prüfung startet ab {NICKNAME_MIN_LENGTH} Zeichen.
@@ -1618,6 +1923,95 @@ export default function AdminPanel({
                 />
               )}
 
+              {createIdentityStep && createIdentityCandidates.length > 0 && (
+                <div
+                  style={{
+                    marginTop: "0.35rem",
+                    padding: "0.65rem 0.75rem",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 6,
+                    background: "#f9fafb",
+                  }}
+                >
+                  <p style={{ margin: "0 0 0.5rem", fontSize: 13, fontWeight: 600 }}>
+                    Zu dieser E-Mail gibt es bereits Login-Konten. Bitte wählen:
+                  </p>
+                  <p style={{ margin: "0 0 0.5rem", fontSize: 12, color: "#4b5563" }}>
+                    Verknüpfen behält den bestehenden Login-Namen im Studio (keine zweite Person).
+                  </p>
+                  <div className="dialog-stack" style={{ gap: "0.35rem" }}>
+                    {createIdentityCandidates.map((c) => {
+                      const labelNick =
+                        c.tenantUserId?.trim() ||
+                        c.nickname?.trim() ||
+                        "(ohne Login-Name im Pool)";
+                      const blocked = !!c.linkBlocked;
+                      return (
+                        <label
+                          key={c.cognitoUsername}
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "flex-start",
+                            fontSize: 13,
+                            cursor: blocked || createSaving ? "not-allowed" : "pointer",
+                            opacity: blocked ? 0.65 : 1,
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="create-identity-candidate"
+                            checked={createIdentitySelectedUsername === c.cognitoUsername}
+                            onChange={() => setCreateIdentitySelectedUsername(c.cognitoUsername)}
+                            disabled={createSaving || blocked}
+                          />
+                          <span>
+                            <strong>{labelNick}</strong>
+                            {identityCandidateStudioHint(c)}
+                            {c.poolStatus ? ` · ${c.poolStatus}` : ""}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div
+                    className="modal-actions dialog-actions"
+                    style={{ marginTop: "0.65rem" }}
+                  >
+                    <button
+                      type="button"
+                      className="modal-action-btn"
+                      disabled={
+                        createSaving ||
+                        !createIdentitySelectedUsername ||
+                        !!createIdentityCandidates.find(
+                          (c) =>
+                            c.cognitoUsername === createIdentitySelectedUsername && c.linkBlocked,
+                        )
+                      }
+                      onClick={() => {
+                        void saveCreate({
+                          type: "link",
+                          cognitoUsername: createIdentitySelectedUsername,
+                        });
+                      }}
+                    >
+                      Konto verknüpfen
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary modal-action-btn"
+                      disabled={createSaving}
+                      onClick={() => {
+                        void saveCreate({ type: "new" });
+                      }}
+                    >
+                      Neue Person anlegen
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {createError && <p style={{ color: "crimson", margin: 0 }}>{createError}</p>}
             </div>
 
@@ -1626,26 +2020,144 @@ export default function AdminPanel({
                 type="button"
                 className="modal-action-btn"
                 ref={createCancelButtonRef}
-                onClick={() => setCreateOpen(false)}
+                onClick={() => {
+                  if (createIdentityStep) {
+                    clearCreateIdentityChoice();
+                    return;
+                  }
+                  setCreateOpen(false);
+                }}
                 disabled={createSaving}
               >
-                Abbrechen
+                {createIdentityStep ? "Zurück" : "Abbrechen"}
               </button>
-              <button
-                type="button"
-                className="btn-primary modal-action-btn"
-                onClick={saveCreate}
-                disabled={createSaving || createActiveConflict || createNicknameCheckState === "exists_in_tenant"}
-              >
-                {createSaving
-                  ? createReactivationUserId
-                    ? "Reaktiviere..."
-                    : "Lege an..."
-                  : createReactivationUserId
-                    ? "Reaktivieren"
-                    : "Anlegen"}
-              </button>
+              {!createIdentityStep && (
+                <button
+                  type="button"
+                  className="btn-primary modal-action-btn"
+                  onClick={() => {
+                    void saveCreate();
+                  }}
+                  disabled={createSaving || createActiveConflict || createNicknameCheckState === "exists_in_tenant"}
+                >
+                  {createSaving
+                    ? createReactivationUserId
+                      ? "Reaktiviere..."
+                      : "Lege an..."
+                    : createReactivationUserId
+                      ? "Reaktivieren"
+                      : "Anlegen"}
+                </button>
+              )}
             </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inviteIdentityTarget && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Konto verknüpfen oder neue Person"
+        >
+          <div className="modal modal-compact">
+            <div className="modal-header">
+              <h4>Bestehendes Konto?</h4>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginTop: 0, fontSize: 13, color: "#4b5563" }}>
+                Zur E-Mail von <strong>{participantDisplayName(inviteIdentityTarget)}</strong> gibt
+                es bereits Login-Konten. Bitte wählen, ob verknüpft oder eine neue Person angelegt
+                werden soll.
+              </p>
+              <div className="dialog-stack" style={{ gap: "0.35rem" }}>
+                {inviteIdentityCandidates.map((c) => {
+                  const labelNick =
+                    c.tenantUserId?.trim() ||
+                    c.nickname?.trim() ||
+                    "(ohne Login-Name im Pool)";
+                  const blocked = !!c.linkBlocked;
+                  return (
+                    <label
+                      key={c.cognitoUsername}
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "flex-start",
+                        fontSize: 13,
+                        cursor: blocked ? "not-allowed" : "pointer",
+                        opacity: blocked ? 0.65 : 1,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="invite-identity-candidate"
+                        checked={inviteIdentitySelectedUsername === c.cognitoUsername}
+                        onChange={() => setInviteIdentitySelectedUsername(c.cognitoUsername)}
+                        disabled={blocked}
+                      />
+                      <span>
+                        <strong>{labelNick}</strong>
+                        {identityCandidateStudioHint(c)}
+                        {c.poolStatus ? ` · ${c.poolStatus}` : ""}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="modal-actions dialog-actions" style={{ marginTop: "0.75rem" }}>
+                <button
+                  type="button"
+                  className="modal-action-btn"
+                  onClick={() => {
+                    setInviteIdentityTarget(null);
+                    setInviteIdentityCandidates([]);
+                    setInviteIdentitySelectedUsername("");
+                  }}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className="modal-action-btn"
+                  disabled={
+                    !inviteIdentitySelectedUsername ||
+                    !!inviteIdentityCandidates.find(
+                      (c) =>
+                        c.cognitoUsername === inviteIdentitySelectedUsername && c.linkBlocked,
+                    )
+                  }
+                  onClick={() => {
+                    const target = inviteIdentityTarget;
+                    const username = inviteIdentitySelectedUsername;
+                    setInviteIdentityTarget(null);
+                    setInviteIdentityCandidates([]);
+                    setInviteIdentitySelectedUsername("");
+                    void sendInviteForParticipant(target, {
+                      identityDecision: { type: "link", cognitoUsername: username },
+                    });
+                  }}
+                >
+                  Konto verknüpfen
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary modal-action-btn"
+                  onClick={() => {
+                    const target = inviteIdentityTarget;
+                    setInviteIdentityTarget(null);
+                    setInviteIdentityCandidates([]);
+                    setInviteIdentitySelectedUsername("");
+                    void sendInviteForParticipant(target, {
+                      identityDecision: { type: "new" },
+                    });
+                  }}
+                >
+                  Neue Person
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -152,7 +152,7 @@ Die folgenden Erweiterungen sind in `shared/src/types.ts` umgesetzt (alle neuen 
 - **UserTenantMembership:** `userId`, `tenantId`, `role`, `canSeeAllCourses?`
 
 **Rollen:** Nur noch `admin` | `instructor` | `participant` (keine Rolle `trial`; Schnupper über `anonymousTrialCount`, Springer später als `participant` mit Settings).  
-**E-Mail:** Ist bewusst nicht eindeutig; mehrere User/Profile pro E-Mail sind erlaubt (Tests, verwaltete Teilnehmer). Cognito-Accounts werden deshalb **nicht** automatisch per E-Mail zusammengeführt (#324 Slice 1).
+**E-Mail:** Ist bewusst nicht eindeutig; mehrere User/Profile pro E-Mail sind erlaubt (Tests, verwaltete Teilnehmer). Cognito-Accounts werden deshalb **nicht** automatisch per E-Mail zusammengeführt (#324 Slice 1). Explizite Admin-Wahl „verknüpfen vs. neue Person“: #342 (`GET /participants/identity-candidates`, Flags `linkExisting` / `forceNew` bei `POST /participants`). **Verknüpfen im selben Studio** nutzt den bestehenden Login-Namen/`userId` (keine zweite Participant-Zeile); in einem anderen Studio kann der Login-Name abweichen. Bereits **Mitglieder** im Studio (registriert oder eingeladen) mit gleicher E-Mail sind in der Auswahl sichtbar, aber nicht verknüpfbar (`linkBlocked` / `already_in_tenant`) — stattdessen „Neue Person“. **Create-Dialog** setzt `sendEmail: false`; **Info-Mail** („Zugang freigeschaltet“) geht trotzdem bei Nickname-**Reaktivierung** und bei **Verknüpfung** eines bestätigten Kontos (nicht aktiv im Studio). Neu anlegen ohne Verknüpfung / ohne E-Mail: keine Mail, später Sammel-**Einladen**. **Erneutes Einladen** (`status=invited`) überspringt den Identity-Dialog. Sammel-Einladung bricht ab, wenn Identity-Wahl nötig wäre.
 
 ---
 

@@ -7,6 +7,15 @@ export interface InviteUserRequest {
   nickname: string;
   displayName?: string;
   role: UserRole;
+  /** Explicit multi-studio / same-email link (#342). */
+  linkExisting?: { cognitoUsername?: string; authUserId?: string };
+  /** Force a new Cognito user even if the email already exists (#342). */
+  forceNew?: boolean;
+  /**
+   * When false: create/link without SES (and without invite token).
+   * Admin Create always uses false; Invite actions omit this (default true).
+   */
+  sendEmail?: boolean;
 }
 
 export interface InviteUserResponse {
@@ -15,10 +24,31 @@ export interface InviteUserResponse {
   tempPassword?: string;  // Temporäres Passwort (nur wenn E-Mail nicht versendet wurde)
   warning?: string;       // Warnung, z.B. wenn E-Mail nicht versendet werden konnte
   emailSent?: boolean;    // Ob E-Mail erfolgreich versendet wurde
+  /** True when backend attempted SES (vs. intentionally skipped). */
+  emailAttempted?: boolean;
   reactivated?: boolean;  // Ob ein bestehender Login nur reaktiviert wurde (ohne Passwort-Reset)
   username?: string;
   link?: string;
 }
+
+export type IdentityCandidate = {
+  cognitoUsername: string;
+  authUserId?: string;
+  email?: string;
+  nickname?: string;
+  poolStatus?: string;
+  nicknameMatch?: boolean;
+  /** Existing login name in this studio when already linked (#342). */
+  tenantUserId?: string;
+  /** Derived studio status when tenantUserId is set. */
+  tenantStatus?: ParticipantStatus;
+  /** Active member under tenantUserId — show but do not allow link (#342). */
+  linkBlocked?: boolean;
+};
+
+export type IdentityCandidatesResponse = {
+  candidates: IdentityCandidate[];
+};
 
 export type ParticipantWithStatus = ParticipantProfile & { status: ParticipantStatus; role?: UserRole };
 
@@ -75,6 +105,22 @@ export async function inviteUser(data: InviteUserRequest): Promise<InviteUserRes
       return { error: genericBackendError || "Request failed" };
     }
   }
+}
+
+export async function getIdentityCandidates(params: {
+  email: string;
+  nickname?: string;
+}): Promise<IdentityCandidate[]> {
+  const response = await axios.get<IdentityCandidatesResponse>(
+    "/participants/identity-candidates",
+    {
+      params: {
+        email: params.email.trim(),
+        ...(params.nickname?.trim() ? { nickname: params.nickname.trim() } : {}),
+      },
+    },
+  );
+  return Array.isArray(response.data?.candidates) ? response.data.candidates : [];
 }
 
 export async function getParticipants(

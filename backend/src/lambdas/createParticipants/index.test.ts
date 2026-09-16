@@ -304,6 +304,487 @@ describe('createParticipants Lambda', () => {
     );
   });
 
+  test('linkExisting uses Cognito nickname when no studio profile yet (#342)', async () => {
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-existing', 'sub-existing'),
+        UserStatus: 'CONFIRMED',
+      })
+      .mockResolvedValueOnce({
+        Users: [
+          {
+            Username: 'opaque-existing',
+            UserStatus: 'CONFIRMED',
+            Attributes: [
+              { Name: 'sub', Value: 'sub-existing' },
+              { Name: 'email', Value: 'shared@example.com' },
+              { Name: 'nickname', Value: 'alice' },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('opaque-existing', 'sub-existing'));
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'shared@example.com',
+      nickname: 'anton',
+      displayName: 'Anton',
+      role: 'participant',
+      linkExisting: { cognitoUsername: 'opaque-existing' },
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.reactivated).toBe(true);
+    // First membership in tenant → Cognito nickname, not form nickname.
+    expect(body.username).toBe('alice');
+
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          userId: { S: 'alice' },
+          cognitoUsername: { S: 'opaque-existing' },
+          authUserId: { S: 'sub-existing' },
+        }),
+      }),
+    );
+  });
+
+  test('linkExisting reuses same-studio profile and ignores form nickname (#342)', async () => {
+    dynamoMockSend.mockImplementation((input: any) => {
+      const table = input?.TableName;
+      if (table === 'test-participants-table' && input?.Key?.userId?.S === 'anton') {
+        return Promise.resolve({});
+      }
+      if (
+        table === 'test-participants-table' &&
+        input?.IndexName === 'GSI_UserIdNormalized' &&
+        input?.ExpressionAttributeValues?.[":userIdNormalized"]?.S === 'anton'
+      ) {
+        return Promise.resolve({ Items: [] });
+      }
+      if (
+        table === 'test-participants-table' &&
+        input?.FilterExpression?.includes('cognitoUsername')
+      ) {
+        return Promise.resolve({
+          Items: [
+            {
+              tenantId: { S: 'test-tenant' },
+              userId: { S: 'alice' },
+              cognitoUsername: { S: 'opaque-existing' },
+              participantId: { S: 'pid-alice' },
+              email: { S: 'shared@example.com' },
+              authUserId: { S: 'sub-existing' },
+              inviteCompletedAt: { S: '2026-01-01T00:00:00.000Z' },
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-existing', 'sub-existing'),
+        UserStatus: 'CONFIRMED',
+      })
+      .mockResolvedValueOnce({
+        Users: [
+          {
+            Username: 'opaque-existing',
+            UserStatus: 'CONFIRMED',
+            Attributes: [
+              { Name: 'sub', Value: 'sub-existing' },
+              { Name: 'email', Value: 'shared@example.com' },
+              { Name: 'nickname', Value: 'alice' },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('opaque-existing', 'sub-existing'));
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'shared@example.com',
+      nickname: 'anton',
+      displayName: 'Anton Display',
+      role: 'participant',
+      linkExisting: { cognitoUsername: 'opaque-existing' },
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.username).toBe('alice');
+    // Already-active same-studio profile → reactivation mail, no password reset.
+    expect(body.reactivated).toBe(true);
+    expect(cognitoMockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        Password: expect.any(String),
+        Username: 'opaque-existing',
+      }),
+    );
+
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          userId: { S: 'alice' },
+          cognitoUsername: { S: 'opaque-existing' },
+          participantId: { S: 'pid-alice' },
+        }),
+      }),
+    );
+    expect(dynamoMockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          userId: { S: 'anton' },
+        }),
+      }),
+    );
+  });
+
+  test('sendEmail:false stores email without Cognito/SES (Create dialog, #345)', async () => {
+    const event = baseEvent({
+      email: 'quiet@example.com',
+      nickname: 'quietuser',
+      displayName: 'Quiet User',
+      role: 'participant',
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.username).toBe('quietuser');
+    expect(body.emailSent).toBe(false);
+    expect(body.warning).toMatch(/Ohne Benachrichtigung/i);
+
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(sesMockSend).not.toHaveBeenCalled();
+    expect(dynamoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-participants-table',
+        Item: expect.objectContaining({
+          userId: { S: 'quietuser' },
+          email: { S: 'quiet@example.com' },
+        }),
+      }),
+    );
+    // No invite token when quiet.
+    expect(dynamoMockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-auth-tokens-table',
+      }),
+    );
+  });
+
+  test('sendEmail:false with linkExisting sends access info mail (#342)', async () => {
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-existing', 'sub-existing'),
+        UserStatus: 'CONFIRMED',
+      })
+      .mockResolvedValueOnce({
+        Users: [
+          {
+            Username: 'opaque-existing',
+            UserStatus: 'CONFIRMED',
+            Attributes: [
+              { Name: 'sub', Value: 'sub-existing' },
+              { Name: 'email', Value: 'shared@example.com' },
+              { Name: 'nickname', Value: 'alice' },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('opaque-existing', 'sub-existing'));
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'shared@example.com',
+      nickname: 'anton',
+      displayName: 'Anton',
+      role: 'participant',
+      linkExisting: { cognitoUsername: 'opaque-existing' },
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.emailSent).toBe(true);
+    expect(body.emailAttempted).toBe(true);
+    expect(body.reactivated).toBe(true);
+    expect(body.username).toBe('alice');
+    // Link of CONFIRMED account ≈ reactivation → info mail on Create.
+    expect(sesMockSend).toHaveBeenCalled();
+    expect(dynamoMockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-auth-tokens-table',
+      }),
+    );
+  });
+
+  test('sendEmail:false same-studio orphan link sends reactivation mail (Fall 2)', async () => {
+    dynamoMockSend.mockImplementation((input: any) => {
+      const table = input?.TableName;
+      if (
+        table === 'test-participants-table' &&
+        input?.FilterExpression?.includes('cognitoUsername')
+      ) {
+        return Promise.resolve({
+          Items: [
+            {
+              tenantId: { S: 'test-tenant' },
+              userId: { S: 'alice' },
+              cognitoUsername: { S: 'opaque-existing' },
+              participantId: { S: 'pid-alice' },
+              email: { S: 'shared@example.com' },
+              authUserId: { S: 'sub-existing' },
+              inviteCompletedAt: { S: '2026-01-01T00:00:00.000Z' },
+            },
+          ],
+        });
+      }
+      // Orphaned: no membership row.
+      if (table === 'test-memberships-table' && input?.Key?.userId?.S === 'alice') {
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-existing', 'sub-existing'),
+        UserStatus: 'CONFIRMED',
+      })
+      .mockResolvedValueOnce({
+        Users: [
+          {
+            Username: 'opaque-existing',
+            UserStatus: 'CONFIRMED',
+            Attributes: [
+              { Name: 'sub', Value: 'sub-existing' },
+              { Name: 'email', Value: 'shared@example.com' },
+              { Name: 'nickname', Value: 'alice' },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('opaque-existing', 'sub-existing'));
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'shared@example.com',
+      nickname: 'anton',
+      displayName: 'Anton',
+      role: 'participant',
+      linkExisting: { cognitoUsername: 'opaque-existing' },
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.username).toBe('alice');
+    expect(body.reactivated).toBe(true);
+    expect(body.emailSent).toBe(true);
+    expect(sesMockSend).toHaveBeenCalled();
+  });
+
+  test('linkExisting rejects already-active same-studio member (Fall 4)', async () => {
+    dynamoMockSend.mockImplementation((input: any) => {
+      const table = input?.TableName;
+      if (
+        table === 'test-participants-table' &&
+        input?.FilterExpression?.includes('cognitoUsername')
+      ) {
+        return Promise.resolve({
+          Items: [
+            {
+              tenantId: { S: 'test-tenant' },
+              userId: { S: 'mutter' },
+              cognitoUsername: { S: 'opaque-existing' },
+              participantId: { S: 'pid-mutter' },
+              email: { S: 'shared@example.com' },
+              authUserId: { S: 'sub-existing' },
+              inviteCompletedAt: { S: '2026-01-01T00:00:00.000Z' },
+            },
+          ],
+        });
+      }
+      if (table === 'test-memberships-table' && input?.Key?.userId?.S === 'mutter') {
+        return Promise.resolve({
+          Item: {
+            tenantId: { S: 'test-tenant' },
+            userId: { S: 'mutter' },
+            role: { S: 'participant' },
+          },
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-existing', 'sub-existing'),
+        UserStatus: 'CONFIRMED',
+      })
+      .mockResolvedValueOnce({
+        Users: [
+          {
+            Username: 'opaque-existing',
+            UserStatus: 'CONFIRMED',
+            Attributes: [
+              { Name: 'sub', Value: 'sub-existing' },
+              { Name: 'email', Value: 'shared@example.com' },
+              { Name: 'nickname', Value: 'mutter' },
+            ],
+          },
+        ],
+      });
+
+    const event = baseEvent({
+      email: 'shared@example.com',
+      nickname: 'tochter',
+      displayName: 'Tochter',
+      role: 'participant',
+      linkExisting: { cognitoUsername: 'opaque-existing' },
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(409);
+    const body = JSON.parse(result.body);
+    expect(body.code).toBe('already_in_tenant');
+    expect(body.tenantUserId).toBe('mutter');
+    expect(sesMockSend).not.toHaveBeenCalled();
+  });
+
+  test('sendEmail:false nickname reactivation still sends info mail (Fall 1)', async () => {
+    dynamoMockSend.mockImplementation((input: any) => {
+      if (
+        input?.TableName === 'test-participants-table' &&
+        input?.Key?.userId?.S === 'alice'
+      ) {
+        return Promise.resolve({
+          Item: {
+            tenantId: { S: 'test-tenant' },
+            userId: { S: 'alice' },
+            participantId: { S: 'pid-alice' },
+            email: { S: 'alice@example.com' },
+            authUserId: { S: 'sub-alice' },
+            inviteCompletedAt: { S: '2026-01-01T00:00:00.000Z' },
+          },
+        });
+      }
+      return Promise.resolve({});
+    });
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      nickname: 'alice',
+      role: 'participant',
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.reactivated).toBe(true);
+    expect(body.emailSent).toBe(true);
+    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(sesMockSend).toHaveBeenCalled();
+  });
+
+  test('sendEmail:false with forceNew creates Cognito without SES (#345)', async () => {
+    const opaqueUsername = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    cognitoMockSend
+      .mockResolvedValueOnce({}) // AdminCreateUser (no legacy AdminGetUser)
+      .mockResolvedValueOnce({}) // AdminSetUserPassword
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse(opaqueUsername));
+
+    const event = baseEvent({
+      email: 'newperson@example.com',
+      nickname: 'newperson',
+      displayName: 'New Person',
+      role: 'participant',
+      forceNew: true,
+      sendEmail: false,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.emailSent).toBe(false);
+    expect(body.username).toBe('newperson');
+    expect(sesMockSend).not.toHaveBeenCalled();
+    expect(cognitoMockSend).toHaveBeenCalled();
+    expect(dynamoMockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-auth-tokens-table',
+      }),
+    );
+  });
+
+  test('forceNew skips legacy nickname Cognito reuse (#342)', async () => {
+    const opaqueUsername = '33333333-4444-4555-8666-777777777777';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    cognitoMockSend
+      .mockResolvedValueOnce({}) // AdminCreateUser (no legacy AdminGetUser)
+      .mockResolvedValueOnce({}) // AdminSetUserPassword
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse(opaqueUsername));
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'shared@example.com',
+      nickname: 'legacyname',
+      displayName: 'Legacy',
+      role: 'participant',
+      forceNew: true,
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).username).toBe('legacyname');
+    expect(cognitoMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Username: opaqueUsername,
+        TemporaryPassword: expect.any(String),
+      }),
+    );
+  });
+
   test('re-invite of existing profile with confirmed Cognito email sends invite not reactivation', async () => {
     dynamoMockSend
       .mockResolvedValueOnce({
@@ -656,15 +1137,26 @@ describe('createParticipants Lambda', () => {
     expect(JSON.parse(result.body).success).toBe(true);
   });
 
-  test('returns 400 if displayName is missing for new profile', async () => {
+  test('allows creating a new profile without displayName', async () => {
+    const opaqueUsername = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
+    mockNewUserCognitoPrelude(opaqueUsername);
+    sesMockSend.mockResolvedValueOnce({});
+
     const rawEvent = {
-      body: JSON.stringify({ nickname: 'max', role: 'participant' }),
+      body: JSON.stringify({
+        nickname: 'max',
+        role: 'participant',
+        email: 'max@example.com',
+      }),
+      headers: { 'x-tenant-id': 'test-tenant' },
     } as any;
 
     const result = await handler(rawEvent);
 
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toMatch(/Anzeigenamen/i);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).success).toBe(true);
+    expect(JSON.parse(result.body).username).toBe('max');
   });
 
   test('returns 400 if displayName is invalid', async () => {

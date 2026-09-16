@@ -4,6 +4,7 @@ import React from "react";
 import AdminPanel from "./AdminPanel";
 import {
   deleteParticipant,
+  getIdentityCandidates,
   getParticipants,
   inviteUser,
   resetParticipantPassword,
@@ -14,6 +15,7 @@ vi.mock("../api/participants", () => ({
   inviteUser: vi.fn(),
   resetParticipantPassword: vi.fn(),
   getParticipants: vi.fn(),
+  getIdentityCandidates: vi.fn(),
   updateParticipant: vi.fn(),
   deleteParticipant: vi.fn(),
 }));
@@ -21,6 +23,7 @@ vi.mock("../api/participants", () => ({
 const mockedInviteUser = inviteUser as unknown as ReturnType<typeof vi.fn>;
 const mockedResetParticipantPassword = resetParticipantPassword as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
+const mockedGetIdentityCandidates = getIdentityCandidates as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
 const mockedDeleteParticipant = deleteParticipant as unknown as ReturnType<typeof vi.fn>;
 
@@ -28,6 +31,7 @@ describe("AdminPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedGetParticipants.mockResolvedValue([]);
+    mockedGetIdentityCandidates.mockResolvedValue([]);
   });
 
 
@@ -273,6 +277,73 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("überspringt Identity-Dialog bei erneuter Einladung (status invited)", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "sabine",
+          participantId: "sabine",
+          role: "participant",
+          email: "shared@example.com",
+          status: "invited",
+          inviteSentAt: "2026-03-01T10:00:00.000Z",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "sabine",
+          participantId: "sabine",
+          role: "participant",
+          email: "shared@example.com",
+          status: "invited",
+          inviteSentAt: "2026-03-01T10:00:00.000Z",
+        },
+      ]);
+    mockedGetIdentityCandidates.mockResolvedValueOnce([
+      {
+        cognitoUsername: "opaque-sabine",
+        nickname: "Sabine",
+        tenantUserId: "sabine",
+        tenantStatus: "invited",
+        linkBlocked: true,
+        poolStatus: "CONFIRMED",
+      },
+      {
+        cognitoUsername: "opaque-sara",
+        nickname: "Sara",
+        poolStatus: "CONFIRMED",
+      },
+    ]);
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByLabelText("Erneut einladen sabine")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Erneut einladen sabine"));
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        email: "shared@example.com",
+        nickname: "sabine",
+        role: "participant",
+      });
+    });
+    expect(mockedGetIdentityCandidates).not.toHaveBeenCalled();
+    expect(
+      within(panel).queryByRole("dialog", { name: /Konto verknüpfen oder neue Person/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("setzt Passwort für registrierten Teilnehmer aus der Verwaltung zurück", async () => {
     mockedGetParticipants
       .mockResolvedValueOnce([
@@ -418,7 +489,59 @@ describe("AdminPanel", () => {
     });
   });
 
-  it("legt einen Teilnehmer über + Neu an (Spitzname + Login-Name, E-Mail optional)", async () => {
+  it("bricht Sammel-Einladung ab wenn Identity-Wahl nötig ist (#342)", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        participantId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+      {
+        tenantId: "default-tenant",
+        userId: "bob",
+        participantId: "bob",
+        role: "participant",
+        email: "bob@example.com",
+        status: "no_login",
+      },
+    ]);
+    mockedGetIdentityCandidates.mockImplementation(async (params: { email: string }) => {
+      if (params.email === "alice@example.com") {
+        return [
+          {
+            cognitoUsername: "opaque-alice",
+            nickname: "alice",
+            email: "alice@example.com",
+          },
+        ];
+      }
+      return [];
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Auswählen alice"));
+    fireEvent.click(within(panel).getByLabelText("Auswählen bob"));
+    fireEvent.click(within(panel).getByRole("button", { name: /Ausgewählte einladen/i }));
+
+    await waitFor(() => {
+      expect(
+        within(panel).getByText(/Sammel-Einladung nicht möglich: für alice/i),
+      ).toBeInTheDocument();
+    });
+    expect(mockedInviteUser).not.toHaveBeenCalled();
+  });
+
+  it("legt einen Teilnehmer über + Neu an (Displayname + Login-Name, E-Mail optional)", async () => {
     mockedGetParticipants.mockResolvedValue([]);
 
     mockedInviteUser.mockResolvedValueOnce({
@@ -441,7 +564,7 @@ describe("AdminPanel", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
 
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
-    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
       target: { value: "Alice" },
     });
     await waitFor(() => {
@@ -461,13 +584,66 @@ describe("AdminPanel", () => {
       expect(mockedInviteUser).toHaveBeenCalledWith({
         nickname: "Alice",
         displayName: "Alice",
+        email: "alice@example.com",
         role: "participant",
+        sendEmail: false,
       });
-      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", { email: "alice@example.com" });
+      expect(mockedUpdateParticipant).not.toHaveBeenCalled();
     });
   });
 
-  it("schlägt Login-Name aus Spitzname mit Umlaut vor (#327)", async () => {
+  it("erlaubt Anlegen nur mit Login-Name (Displayname optional)", async () => {
+    mockedGetParticipants.mockResolvedValue([]);
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: false,
+      username: "kaja2",
+    });
+
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+
+    expect(within(dialog).getByText(/Login-Name/i).textContent).toMatch(/\*/);
+    fireEvent.change(within(dialog).getByPlaceholderText("Login-Name"), {
+      target: { value: "kaja2" },
+    });
+    fireEvent.blur(within(dialog).getByPlaceholderText("Login-Name"));
+    await waitFor(() => {
+      expect((within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Anlegen$/i }));
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        nickname: "kaja2",
+        role: "participant",
+        sendEmail: false,
+      });
+    });
+  });
+
+  it("meldet fehlenden Login-Namen, nicht Displayname", async () => {
+    mockedGetParticipants.mockResolvedValue([]);
+    const { container } = render(<AdminPanel />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Anlegen$/i }));
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/Bitte einen Login-Namen eingeben/i)).toBeInTheDocument();
+    });
+    expect(mockedInviteUser).not.toHaveBeenCalled();
+  });
+
+  it("schlägt Login-Name aus Displayname mit Umlaut vor (#327)", async () => {
     mockedGetParticipants.mockResolvedValueOnce([]);
     const { container } = render(<AdminPanel />);
     const panel = container.querySelector("div");
@@ -475,7 +651,7 @@ describe("AdminPanel", () => {
 
     fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
-    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
       target: { value: "Björn" },
     });
 
@@ -514,7 +690,7 @@ describe("AdminPanel", () => {
 
     fireEvent.click(within(panel).getByRole("button", { name: "Neuer Teilnehmer" }));
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer anlegen/i });
-    fireEvent.change(within(dialog).getByPlaceholderText("Spitzname"), {
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
       target: { value: "Björn" },
     });
     fireEvent.change(within(dialog).getByPlaceholderText("Login-Name"), {
@@ -565,7 +741,8 @@ describe("AdminPanel", () => {
     ]);
     mockedInviteUser.mockResolvedValueOnce({
       success: true,
-      emailSent: true,
+      emailSent: false,
+      emailAttempted: true,
       reactivated: true,
       username: "alice",
     });
@@ -590,10 +767,15 @@ describe("AdminPanel", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^(Reaktivieren|Anlegen)$/i }));
 
     await waitFor(() => {
-      expect(mockedInviteUser).toHaveBeenCalledWith({ nickname: "alice", role: "participant" });
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        nickname: "alice",
+        email: "alice@example.com",
+        role: "participant",
+        sendEmail: false,
+      });
       expect(mockedUpdateParticipant).not.toHaveBeenCalled();
       expect(
-        within(panel).getByText(/Reaktivierung: Info-Mail gesendet an bestehende Profil-E-Mail\./i),
+        within(panel).getByText(/Zugang freigeschaltet, aber Info-Mail konnte nicht versendet werden\./i),
       ).toBeInTheDocument();
     });
   });
@@ -643,17 +825,19 @@ describe("AdminPanel", () => {
     });
     fireEvent.click(
       within(dialog).getByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }),
     );
     fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
       target: { value: "alice.new@example.com" },
     });
-    expect(within(dialog).getByText(/Mail geht an: alice\.new@example\.com/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/Bei Reaktivierung wird eine Info-Mail an die hinterlegte Adresse gesendet/i),
+    ).toBeInTheDocument();
 
     fireEvent.click(
       within(dialog).getByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }),
     );
     expect((within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement).disabled).toBe(true);
@@ -661,7 +845,7 @@ describe("AdminPanel", () => {
 
     fireEvent.click(
       within(dialog).getByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }),
     );
     fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
@@ -671,15 +855,17 @@ describe("AdminPanel", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^(Reaktivieren|Anlegen)$/i }));
 
     await waitFor(() => {
-      expect(mockedInviteUser).toHaveBeenCalledWith({
-        nickname: "alice",
-        role: "participant",
-      });
       expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", {
         email: "alice.new@example.com",
       });
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        nickname: "alice",
+        email: "alice.new@example.com",
+        role: "participant",
+        sendEmail: false,
+      });
       expect(
-        within(panel).getByText(/Reaktivierung: Info-Mail gesendet an alice\.new@example\.com\./i),
+        within(panel).getByText(/Zugang freigeschaltet\. Info-Mail wurde gesendet\./i),
       ).toBeInTheDocument();
     });
   });
@@ -708,7 +894,7 @@ describe("AdminPanel", () => {
 
     await waitFor(() => {
       expect(document.activeElement).toBe(
-        within(dialog).getByRole("checkbox", { name: /E-Mail fuer Reaktivierung bearbeiten/i }),
+        within(dialog).getByRole("checkbox", { name: /E-Mail aendern/i }),
       );
     });
   });
@@ -738,7 +924,7 @@ describe("AdminPanel", () => {
     let reactivationCheckbox: HTMLInputElement;
     await waitFor(() => {
       reactivationCheckbox = within(dialog).getByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }) as HTMLInputElement;
       expect(reactivationCheckbox.checked).toBe(false);
       expect(emailInput.disabled).toBe(true);
@@ -796,7 +982,7 @@ describe("AdminPanel", () => {
     expect(emailInput.value).toBe("alice@example.com");
     expect(
       within(dialog).queryByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }),
     ).not.toBeInTheDocument();
   });
@@ -935,7 +1121,7 @@ describe("AdminPanel", () => {
         within(dialog).queryByText(/Reaktivierung erkannt fuer bestehenden Teilnehmer/i),
       ).not.toBeInTheDocument();
       expect(
-        within(dialog).queryByRole("checkbox", { name: /E-Mail fuer Reaktivierung bearbeiten/i }),
+        within(dialog).queryByRole("checkbox", { name: /E-Mail aendern/i }),
       ).not.toBeInTheDocument();
       expect(within(dialog).getByRole("button", { name: /^Anlegen$/i })).toBeDisabled();
     });
