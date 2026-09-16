@@ -4,6 +4,7 @@ import React from "react";
 import AdminPanel from "./AdminPanel";
 import {
   deleteParticipant,
+  getIdentityCandidates,
   getParticipants,
   inviteUser,
   resetParticipantPassword,
@@ -14,6 +15,7 @@ vi.mock("../api/participants", () => ({
   inviteUser: vi.fn(),
   resetParticipantPassword: vi.fn(),
   getParticipants: vi.fn(),
+  getIdentityCandidates: vi.fn(),
   updateParticipant: vi.fn(),
   deleteParticipant: vi.fn(),
 }));
@@ -21,6 +23,7 @@ vi.mock("../api/participants", () => ({
 const mockedInviteUser = inviteUser as unknown as ReturnType<typeof vi.fn>;
 const mockedResetParticipantPassword = resetParticipantPassword as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
+const mockedGetIdentityCandidates = getIdentityCandidates as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
 const mockedDeleteParticipant = deleteParticipant as unknown as ReturnType<typeof vi.fn>;
 
@@ -28,6 +31,7 @@ describe("AdminPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedGetParticipants.mockResolvedValue([]);
+    mockedGetIdentityCandidates.mockResolvedValue([]);
   });
 
 
@@ -416,6 +420,58 @@ describe("AdminPanel", () => {
       // Refresh am Ende (kann in Test-Umgebung öfter aufgerufen werden)
       expect(mockedGetParticipants.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
+  });
+
+  it("bricht Sammel-Einladung ab wenn Identity-Wahl nötig ist (#342)", async () => {
+    mockedGetParticipants.mockResolvedValue([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        participantId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "no_login",
+      },
+      {
+        tenantId: "default-tenant",
+        userId: "bob",
+        participantId: "bob",
+        role: "participant",
+        email: "bob@example.com",
+        status: "no_login",
+      },
+    ]);
+    mockedGetIdentityCandidates.mockImplementation(async (params: { email: string }) => {
+      if (params.email === "alice@example.com") {
+        return [
+          {
+            cognitoUsername: "opaque-alice",
+            nickname: "alice",
+            email: "alice@example.com",
+          },
+        ];
+      }
+      return [];
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Auswählen alice"));
+    fireEvent.click(within(panel).getByLabelText("Auswählen bob"));
+    fireEvent.click(within(panel).getByRole("button", { name: /Ausgewählte einladen/i }));
+
+    await waitFor(() => {
+      expect(
+        within(panel).getByText(/Sammel-Einladung nicht möglich: für alice/i),
+      ).toBeInTheDocument();
+    });
+    expect(mockedInviteUser).not.toHaveBeenCalled();
   });
 
   it("legt einen Teilnehmer über + Neu an (Displayname + Login-Name, E-Mail optional)", async () => {

@@ -28,6 +28,33 @@ const ROLE_LABELS_DE: Record<UserRole, string> = {
 };
 const ROLE_OPTIONS: UserRole[] = ["participant", "instructor", "admin"];
 
+type BulkResultTone = "info" | "success" | "warning" | "error";
+
+function bulkResultTone(message: string): BulkResultTone {
+  const text = message.trim();
+  if (!text) return "info";
+  if (
+    /nicht möglich|fehlgeschlagen|konnte nicht|fehler/i.test(text) ||
+    /aber .+ konnte nicht/i.test(text)
+  ) {
+    return /nicht möglich|einzeln einladen/i.test(text) ? "warning" : "error";
+  }
+  if (/gesendet|angelegt|reaktiviert|verknüpft|aktualisiert|gespeichert/i.test(text)) {
+    return "success";
+  }
+  return "info";
+}
+
+const BULK_RESULT_BANNER: Record<
+  BulkResultTone,
+  { background: string; border: string; color: string }
+> = {
+  info: { background: "#eff6ff", border: "#93c5fd", color: "#1e3a8a" },
+  success: { background: "#ecfdf5", border: "#6ee7b7", color: "#065f46" },
+  warning: { background: "#fffbeb", border: "#fbbf24", color: "#92400e" },
+  error: { background: "#fef2f2", border: "#f87171", color: "#991b1b" },
+};
+
 function getRoleLabel(role: UserRole | undefined): string {
   if (!role) return "-";
   return ROLE_LABELS_DE[role] ?? role;
@@ -1156,12 +1183,39 @@ export default function AdminPanel({
 
     try {
       const byId = new Map(safeParticipants.map((p) => [p.userId, p]));
+
+      // Variante 1 (#342): Sammel-Einladung nur ohne Identity-Wahl.
+      const needsIdentityChoice: string[] = [];
+      for (const userId of selectedEligibleUserIds) {
+        const p = byId.get(userId);
+        if (!p || !isInviteEligible(p) || !p.email?.trim()) continue;
+        if (p.authUserId?.trim() || p.status === "active") continue;
+        try {
+          const candidates = await getIdentityCandidates({
+            email: p.email,
+            nickname: userId,
+          });
+          if (candidates.length > 0) needsIdentityChoice.push(userId);
+        } catch (identityErr) {
+          console.warn("Bulk identity preflight failed for", userId, identityErr);
+        }
+      }
+      if (needsIdentityChoice.length > 0) {
+        const names = needsIdentityChoice.join(", ");
+        setBulkInviteResult(
+          needsIdentityChoice.length === 1
+            ? `Sammel-Einladung nicht möglich: für ${names} gibt es bereits Login-Konten zur gleichen E-Mail. Bitte einzeln einladen und verknüpfen oder neue Person wählen.`
+            : `Sammel-Einladung nicht möglich: für ${names} gibt es bereits Login-Konten zur gleichen E-Mail. Bitte diese Personen einzeln einladen.`,
+        );
+        return;
+      }
+
       for (const userId of selectedEligibleUserIds) {
         const p = byId.get(userId);
         if (!p || !isInviteEligible(p)) continue;
 
         // Pro User UI-Feedback beibehalten, aber Refresh erst am Ende.
-        // Bulk: keine Identity-Wahl-Unterbrechung (#342 gilt für Einzel-Invite/Create).
+        // Identity bereits im Preflight geprüft.
         const res = await sendInviteForParticipant(p, {
           refreshAfter: false,
           skipIdentityCheck: true,
@@ -1172,8 +1226,12 @@ export default function AdminPanel({
     } finally {
       await refreshParticipants();
       setBulkInviteSending(false);
-      setBulkInviteResult(
-        failed > 0 ? `${ok} Einladung(en) gesendet, ${failed} fehlgeschlagen.` : `${ok} Einladung(en) gesendet.`,
+      setBulkInviteResult((prev) =>
+        prev.trim()
+          ? prev
+          : failed > 0
+            ? `${ok} Einladung(en) gesendet, ${failed} fehlgeschlagen.`
+            : `${ok} Einladung(en) gesendet.`,
       );
     }
   };
@@ -1209,6 +1267,9 @@ export default function AdminPanel({
       setDeleteRunningByUserId((prev) => ({ ...prev, [userId]: false }));
     }
   };
+
+  const bulkTone = bulkInviteResult ? bulkResultTone(bulkInviteResult) : null;
+  const bulkBanner = bulkTone ? BULK_RESULT_BANNER[bulkTone] : null;
   
   return (
     <>
@@ -1265,12 +1326,27 @@ export default function AdminPanel({
           >
             {bulkInviteSending ? "Sende..." : `Ausgewählte einladen (${selectedEligibleUserIds.length})`}
           </button>
-          {bulkInviteResult && (
-            <span style={{ color: "#374151", fontSize: 12 }} role="status" aria-live="polite">
-              {bulkInviteResult}
-            </span>
-          )}
         </div>
+
+        {bulkInviteResult && bulkBanner && bulkTone && (
+          <p
+            role={bulkTone === "error" || bulkTone === "warning" ? "alert" : "status"}
+            aria-live="assertive"
+            style={{
+              margin: "0 0 0.75rem",
+              padding: "0.65rem 0.85rem",
+              borderRadius: 6,
+              border: `1px solid ${bulkBanner.border}`,
+              background: bulkBanner.background,
+              color: bulkBanner.color,
+              fontSize: 14,
+              fontWeight: 600,
+              lineHeight: 1.4,
+            }}
+          >
+            {bulkInviteResult}
+          </p>
+        )}
 
         {participantsError && (
           <p style={{ margin: "0.5rem 0", color: "red", whiteSpace: "pre-line" }} role="alert">
