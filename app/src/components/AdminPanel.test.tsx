@@ -277,6 +277,73 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("überspringt Identity-Dialog bei erneuter Einladung (status invited)", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "sabine",
+          participantId: "sabine",
+          role: "participant",
+          email: "shared@example.com",
+          status: "invited",
+          inviteSentAt: "2026-03-01T10:00:00.000Z",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "sabine",
+          participantId: "sabine",
+          role: "participant",
+          email: "shared@example.com",
+          status: "invited",
+          inviteSentAt: "2026-03-01T10:00:00.000Z",
+        },
+      ]);
+    mockedGetIdentityCandidates.mockResolvedValueOnce([
+      {
+        cognitoUsername: "opaque-sabine",
+        nickname: "Sabine",
+        tenantUserId: "sabine",
+        tenantStatus: "invited",
+        linkBlocked: true,
+        poolStatus: "CONFIRMED",
+      },
+      {
+        cognitoUsername: "opaque-sara",
+        nickname: "Sara",
+        poolStatus: "CONFIRMED",
+      },
+    ]);
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByLabelText("Erneut einladen sabine")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Erneut einladen sabine"));
+
+    await waitFor(() => {
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        email: "shared@example.com",
+        nickname: "sabine",
+        role: "participant",
+      });
+    });
+    expect(mockedGetIdentityCandidates).not.toHaveBeenCalled();
+    expect(
+      within(panel).queryByRole("dialog", { name: /Konto verknüpfen oder neue Person/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("setzt Passwort für registrierten Teilnehmer aus der Verwaltung zurück", async () => {
     mockedGetParticipants
       .mockResolvedValueOnce([
@@ -675,6 +742,7 @@ describe("AdminPanel", () => {
     mockedInviteUser.mockResolvedValueOnce({
       success: true,
       emailSent: false,
+      emailAttempted: true,
       reactivated: true,
       username: "alice",
     });
@@ -707,7 +775,7 @@ describe("AdminPanel", () => {
       });
       expect(mockedUpdateParticipant).not.toHaveBeenCalled();
       expect(
-        within(panel).getByText(/Reaktiviert, aber Info-Mail konnte nicht versendet werden\./i),
+        within(panel).getByText(/Zugang freigeschaltet, aber Info-Mail konnte nicht versendet werden\./i),
       ).toBeInTheDocument();
     });
   });
@@ -757,19 +825,19 @@ describe("AdminPanel", () => {
     });
     fireEvent.click(
       within(dialog).getByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }),
     );
     fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
       target: { value: "alice.new@example.com" },
     });
     expect(
-      within(dialog).getByText(/Beim Anlegen wird keine E-Mail versendet/i),
+      within(dialog).getByText(/Bei Reaktivierung wird eine Info-Mail an die hinterlegte Adresse gesendet/i),
     ).toBeInTheDocument();
 
     fireEvent.click(
       within(dialog).getByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }),
     );
     expect((within(dialog).getByPlaceholderText("E-Mail") as HTMLInputElement).disabled).toBe(true);
@@ -777,7 +845,7 @@ describe("AdminPanel", () => {
 
     fireEvent.click(
       within(dialog).getByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }),
     );
     fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
@@ -797,7 +865,7 @@ describe("AdminPanel", () => {
         sendEmail: false,
       });
       expect(
-        within(panel).getByText(/Reaktiviert\. Info-Mail wurde gesendet\./i),
+        within(panel).getByText(/Zugang freigeschaltet\. Info-Mail wurde gesendet\./i),
       ).toBeInTheDocument();
     });
   });
@@ -826,7 +894,7 @@ describe("AdminPanel", () => {
 
     await waitFor(() => {
       expect(document.activeElement).toBe(
-        within(dialog).getByRole("checkbox", { name: /E-Mail fuer Reaktivierung bearbeiten/i }),
+        within(dialog).getByRole("checkbox", { name: /E-Mail aendern/i }),
       );
     });
   });
@@ -856,7 +924,7 @@ describe("AdminPanel", () => {
     let reactivationCheckbox: HTMLInputElement;
     await waitFor(() => {
       reactivationCheckbox = within(dialog).getByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }) as HTMLInputElement;
       expect(reactivationCheckbox.checked).toBe(false);
       expect(emailInput.disabled).toBe(true);
@@ -914,7 +982,7 @@ describe("AdminPanel", () => {
     expect(emailInput.value).toBe("alice@example.com");
     expect(
       within(dialog).queryByRole("checkbox", {
-        name: /E-Mail fuer Reaktivierung bearbeiten/i,
+        name: /E-Mail aendern/i,
       }),
     ).not.toBeInTheDocument();
   });
@@ -1053,7 +1121,7 @@ describe("AdminPanel", () => {
         within(dialog).queryByText(/Reaktivierung erkannt fuer bestehenden Teilnehmer/i),
       ).not.toBeInTheDocument();
       expect(
-        within(dialog).queryByRole("checkbox", { name: /E-Mail fuer Reaktivierung bearbeiten/i }),
+        within(dialog).queryByRole("checkbox", { name: /E-Mail aendern/i }),
       ).not.toBeInTheDocument();
       expect(within(dialog).getByRole("button", { name: /^Anlegen$/i })).toBeDisabled();
     });

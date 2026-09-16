@@ -493,7 +493,7 @@ describe('createParticipants Lambda', () => {
     );
   });
 
-  test('sendEmail:false with linkExisting attaches Cognito without SES (#345)', async () => {
+  test('sendEmail:false with linkExisting sends access info mail (#342)', async () => {
     cognitoMockSend
       .mockResolvedValueOnce({
         ...adminGetUserResponse('opaque-existing', 'sub-existing'),
@@ -515,6 +515,7 @@ describe('createParticipants Lambda', () => {
       .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
       .mockResolvedValueOnce({}) // AdminAddUserToGroup
       .mockResolvedValueOnce(adminGetUserResponse('opaque-existing', 'sub-existing'));
+    sesMockSend.mockResolvedValueOnce({});
 
     const event = baseEvent({
       email: 'shared@example.com',
@@ -530,11 +531,12 @@ describe('createParticipants Lambda', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
     expect(body.success).toBe(true);
-    expect(body.emailSent).toBe(false);
+    expect(body.emailSent).toBe(true);
+    expect(body.emailAttempted).toBe(true);
     expect(body.reactivated).toBe(true);
     expect(body.username).toBe('alice');
-    // Cross-studio first membership: no info mail on Create (Fall 3).
-    expect(sesMockSend).not.toHaveBeenCalled();
+    // Link of CONFIRMED account ≈ reactivation → info mail on Create.
+    expect(sesMockSend).toHaveBeenCalled();
     expect(dynamoMockSend).not.toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: 'test-auth-tokens-table',

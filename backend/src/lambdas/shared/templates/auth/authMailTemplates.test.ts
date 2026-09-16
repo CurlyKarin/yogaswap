@@ -116,7 +116,7 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("YogaSwap ist eine Plattform");
   });
 
-  test("buildReactivationMail uses YogaSwap/studio access wording", () => {
+  test("buildReactivationMail uses open access wording (link or reactivation)", () => {
     const mail = buildReactivationMail({
       locale: "de",
       nickname: "Karin",
@@ -124,11 +124,12 @@ describe("authMailTemplates", () => {
       studioName: "Beharmony",
     });
 
-    expect(mail.subject).toBe("Beharmony: Reaktivierung");
+    expect(mail.subject).toBe("Beharmony: Zugang freigeschaltet");
     expect(mail.html).toContain(
-      "Auf YogaSwap wurde Dein Zugang fuer <strong>Beharmony</strong> wieder freigeschaltet",
+      "Auf YogaSwap wurde Dein Zugang fuer <strong>Beharmony</strong> freigeschaltet",
     );
     expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
+    expect(mail.html).toContain("bestehenden Passwort anmelden");
   });
 
   test("buildInvitePreparationMail returns german fallback template", () => {
@@ -232,8 +233,8 @@ describe("authMailTemplates", () => {
     expect(invite.html).toContain("eingeladen");
     expect(recovery.subject).toBe("YogaSwap: Passwort zuruecksetzen");
     expect(recovery.html).toContain("Passwort zurueckgesetzt");
-    expect(reactivation.subject).toBe("YogaSwap: Reaktivierung");
-    expect(reactivation.html).toContain("wieder freigeschaltet");
+    expect(reactivation.subject).toBe("YogaSwap: Zugang freigeschaltet");
+    expect(reactivation.html).toContain("Zugang freigeschaltet");
     expect(preparation.subject).toBe("YogaSwap: Einladung");
     expect(preparation.html).toContain("wird vorbereitet");
   });

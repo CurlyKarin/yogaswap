@@ -24,6 +24,8 @@ export interface InviteUserResponse {
   tempPassword?: string;  // Temporäres Passwort (nur wenn E-Mail nicht versendet wurde)
   warning?: string;       // Warnung, z.B. wenn E-Mail nicht versendet werden konnte
   emailSent?: boolean;    // Ob E-Mail erfolgreich versendet wurde
+  /** True when backend attempted SES (vs. intentionally skipped). */
+  emailAttempted?: boolean;
   reactivated?: boolean;  // Ob ein bestehender Login nur reaktiviert wurde (ohne Passwort-Reset)
   username?: string;
   link?: string;

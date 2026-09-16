@@ -33,13 +33,17 @@ type BulkResultTone = "info" | "success" | "warning" | "error";
 function bulkResultTone(message: string): BulkResultTone {
   const text = message.trim();
   if (!text) return "info";
-  if (
-    /nicht möglich|fehlgeschlagen|konnte nicht|fehler/i.test(text) ||
-    /aber .+ konnte nicht/i.test(text)
-  ) {
-    return /nicht möglich|einzeln einladen/i.test(text) ? "warning" : "error";
+  // Partial success: action ok, notification failed → warning, not error.
+  if (/verknüpft|reaktiviert|angelegt|gespeichert|entfernt/i.test(text) && /konnte nicht/i.test(text)) {
+    return "warning";
   }
-  if (/gesendet|angelegt|reaktiviert|verknüpft|aktualisiert|gespeichert/i.test(text)) {
+  if (/nicht möglich|einzeln einladen/i.test(text)) {
+    return "warning";
+  }
+  if (/fehlgeschlagen|fehler/i.test(text) || (/konnte nicht/i.test(text) && !/info-mail|e-mail/i.test(text))) {
+    return "error";
+  }
+  if (/gesendet|angelegt|reaktiviert|verknüpft|aktualisiert|gespeichert|entfernt/i.test(text)) {
     return "success";
   }
   return "info";
@@ -858,11 +862,8 @@ export default function AdminPanel({
           });
           if (candidates.length > 0) {
             setCreateIdentityCandidates(candidates);
-            const preferred =
-              candidates.find((c) => !c.linkBlocked && c.nicknameMatch)?.cognitoUsername ||
-              candidates.find((c) => !c.linkBlocked)?.cognitoUsername ||
-              "";
-            setCreateIdentitySelectedUsername(preferred);
+            // No auto-select of a pool account; admin must choose link or new.
+            setCreateIdentitySelectedUsername("");
             setCreateIdentityStep(true);
             setCreateSaving(false);
             return;
@@ -916,11 +917,18 @@ export default function AdminPanel({
           return;
         }
         if (result.reactivated) {
-          setBulkInviteResult(
-            result.emailSent
-              ? `Reaktiviert. Info-Mail gesendet an ${emailValue}.`
-              : `Konto verknüpft/reaktiviert (${emailValue}), aber Info-Mail konnte nicht versendet werden.`,
-          );
+          if (result.emailSent) {
+            setBulkInviteResult(`Zugang freigeschaltet. Info-Mail gesendet an ${emailValue}.`);
+          } else if (result.emailAttempted) {
+            setBulkInviteResult(
+              `Zugang freigeschaltet (${emailValue}). Info-Mail konnte nicht versendet werden — bitte SES/Empfänger prüfen.`,
+            );
+          } else {
+            setBulkInviteResult(
+              result.warning?.trim() ||
+                `Konto verknüpft (${emailValue}). Keine Info-Mail — Einladung später über „Einladen“.`,
+            );
+          }
         } else {
           setBulkInviteResult(
             `Teilnehmer verknüpft/angelegt (${emailValue}). Einladung später über „Einladen“.`,
@@ -968,8 +976,10 @@ export default function AdminPanel({
       if (result.reactivated) {
         setBulkInviteResult(
           result.emailSent
-            ? "Reaktiviert. Info-Mail wurde gesendet."
-            : "Reaktiviert, aber Info-Mail konnte nicht versendet werden.",
+            ? "Zugang freigeschaltet. Info-Mail wurde gesendet."
+            : result.emailAttempted
+              ? "Zugang freigeschaltet, aber Info-Mail konnte nicht versendet werden."
+              : "Zugang freigeschaltet. Keine Info-Mail — Einladung später über „Einladen“.",
         );
       } else if (emailValue) {
         setBulkInviteResult(
@@ -1012,12 +1022,13 @@ export default function AdminPanel({
     setInviteSendingByUserId((prev) => ({ ...prev, [userId]: true }));
     setInviteResultByUserId((prev) => ({ ...prev, [userId]: "" }));
     try {
-      // Already linked (authUserId) or explicit skip: no identity choice needed.
+      // Already linked, already invited (resend), or explicit skip: no identity choice.
       const needsIdentityChoice =
         !options?.skipIdentityCheck &&
         !options?.identityDecision &&
         !p.authUserId?.trim() &&
-        p.status !== "active";
+        p.status !== "active" &&
+        p.status !== "invited";
 
       if (needsIdentityChoice) {
         try {
@@ -1025,14 +1036,13 @@ export default function AdminPanel({
             email: p.email,
             nickname: userId,
           });
-          if (candidates.length > 0) {
+          const selectable = candidates.filter((c) => !c.linkBlocked);
+          // Only blocked rows (e.g. self already in studio) → treat like plain invite/resend.
+          if (selectable.length > 0) {
             setInviteIdentityTarget(p);
             setInviteIdentityCandidates(candidates);
-            setInviteIdentitySelectedUsername(
-              candidates.find((c) => !c.linkBlocked && c.nicknameMatch)?.cognitoUsername ||
-                candidates.find((c) => !c.linkBlocked)?.cognitoUsername ||
-                "",
-            );
+            // No auto-select: avoid pre-picking an unrelated pool account.
+            setInviteIdentitySelectedUsername("");
             return { ok: false as const, pendingIdentity: true as const };
           }
         } catch (identityErr) {
@@ -1189,13 +1199,13 @@ export default function AdminPanel({
       for (const userId of selectedEligibleUserIds) {
         const p = byId.get(userId);
         if (!p || !isInviteEligible(p) || !p.email?.trim()) continue;
-        if (p.authUserId?.trim() || p.status === "active") continue;
+        if (p.authUserId?.trim() || p.status === "active" || p.status === "invited") continue;
         try {
           const candidates = await getIdentityCandidates({
             email: p.email,
             nickname: userId,
           });
-          if (candidates.length > 0) needsIdentityChoice.push(userId);
+          if (candidates.some((c) => !c.linkBlocked)) needsIdentityChoice.push(userId);
         } catch (identityErr) {
           console.warn("Bulk identity preflight failed for", userId, identityErr);
         }
@@ -1793,15 +1803,15 @@ export default function AdminPanel({
                           disabled={createSaving}
                           style={{ accentColor: "#2563eb" }}
                         />
-                        E-Mail fuer Reaktivierung bearbeiten
+                        E-Mail aendern
                         <strong style={{ color: createOverwriteEmailOnReactivate ? "#166534" : "#6b7280" }}>
                           {createOverwriteEmailOnReactivate ? "(aktiv)" : "(inaktiv)"}
                         </strong>
                       </label>
                       <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
                         {createOverwriteEmailOnReactivate
-                          ? "Bearbeitung aktiv: E-Mail-Feld ist freigegeben."
-                          : "Bearbeitung inaktiv: E-Mail-Feld bleibt gesperrt."}
+                          ? "E-Mail-Adresse aendern ist aktiv: Feld ist freigegeben."
+                          : "E-Mail-Adresse aendern ist inaktiv: Feld bleibt gesperrt."}
                       </p>
                       <p
                         role="status"
@@ -1809,8 +1819,8 @@ export default function AdminPanel({
                         style={{ margin: 0, fontSize: 11, color: "#6b7280" }}
                       >
                         {createOverwriteEmailOnReactivate
-                          ? "Status: E-Mail-Bearbeitung aktiviert."
-                          : "Status: E-Mail-Bearbeitung deaktiviert."}
+                          ? "Status: E-Mail-Adresse aendern aktiviert."
+                          : "Status: E-Mail-Adresse aendern deaktiviert."}
                       </p>
                     </>
                   ) : (
@@ -1819,7 +1829,7 @@ export default function AdminPanel({
                     </p>
                   )}
                   <p style={{ margin: "0.1rem 0 0", color: "#4b5563", fontSize: 12 }}>
-                    Beim Anlegen wird keine E-Mail versendet. Einladung später über „Einladen“.
+                    Bei Reaktivierung wird eine Info-Mail an die hinterlegte Adresse gesendet.
                   </p>
                 </>
               )}
@@ -1958,16 +1968,16 @@ export default function AdminPanel({
                           <span>
                             <strong>{labelNick}</strong>
                             {identityCandidateStudioHint(c)}
-                            {c.nicknameMatch && !c.tenantUserId?.trim() && !blocked
-                              ? " · empfohlen (passender Login-Name)"
-                              : ""}
                             {c.poolStatus ? ` · ${c.poolStatus}` : ""}
                           </span>
                         </label>
                       );
                     })}
                   </div>
-                  <div className="dialog-actions" style={{ marginTop: "0.65rem" }}>
+                  <div
+                    className="modal-actions dialog-actions"
+                    style={{ marginTop: "0.65rem" }}
+                  >
                     <button
                       type="button"
                       className="modal-action-btn"
@@ -2059,7 +2069,8 @@ export default function AdminPanel({
             <div className="modal-body">
               <p style={{ marginTop: 0, fontSize: 13, color: "#4b5563" }}>
                 Zur E-Mail von <strong>{participantDisplayName(inviteIdentityTarget)}</strong> gibt
-                es bereits Login-Konten. Passende Login-Namen stehen oben.
+                es bereits Login-Konten. Bitte wählen, ob verknüpft oder eine neue Person angelegt
+                werden soll.
               </p>
               <div className="dialog-stack" style={{ gap: "0.35rem" }}>
                 {inviteIdentityCandidates.map((c) => {
@@ -2090,9 +2101,6 @@ export default function AdminPanel({
                       <span>
                         <strong>{labelNick}</strong>
                         {identityCandidateStudioHint(c)}
-                        {c.nicknameMatch && !c.tenantUserId?.trim() && !blocked
-                          ? " · empfohlen (passender Login-Name)"
-                          : ""}
                         {c.poolStatus ? ` · ${c.poolStatus}` : ""}
                       </span>
                     </label>

@@ -88,22 +88,27 @@ async function findParticipantByCognitoUsername(
   const username = cognitoUsername.trim();
   if (!table || !username) return null;
   try {
-    const resp = await dynamodb.send(
-      new QueryCommand({
-        TableName: table,
-        KeyConditionExpression: "tenantId = :tenantId",
-        FilterExpression: "cognitoUsername = :cognitoUsername",
-        ExpressionAttributeValues: {
-          ":tenantId": { S: tenantId },
-          ":cognitoUsername": { S: username },
-        },
-        Limit: 25,
-      }),
-    );
-    for (const item of resp.Items ?? []) {
-      const mapped = mapParticipantItem(item as Parameters<typeof mapParticipantItem>[0]);
-      if (mapped) return mapped;
-    }
+    // Important: DynamoDB applies Limit before FilterExpression — never Limit a filtered query.
+    let exclusiveStartKey: Record<string, AttributeValue> | undefined;
+    do {
+      const resp = await dynamodb.send(
+        new QueryCommand({
+          TableName: table,
+          KeyConditionExpression: "tenantId = :tenantId",
+          FilterExpression: "cognitoUsername = :cognitoUsername",
+          ExpressionAttributeValues: {
+            ":tenantId": { S: tenantId },
+            ":cognitoUsername": { S: username },
+          },
+          ExclusiveStartKey: exclusiveStartKey,
+        }),
+      );
+      for (const item of resp.Items ?? []) {
+        const mapped = mapParticipantItem(item as Parameters<typeof mapParticipantItem>[0]);
+        if (mapped) return mapped;
+      }
+      exclusiveStartKey = resp.LastEvaluatedKey as Record<string, AttributeValue> | undefined;
+    } while (exclusiveStartKey);
   } catch (err) {
     console.warn("findParticipantByCognitoUsername failed:", err);
   }
@@ -117,17 +122,21 @@ async function findParticipantByNickname(
   const table = process.env.PARTICIPANTS_TABLE;
   const nicknameCheck = validateNickname(nickname);
   if (!table || !nicknameCheck.ok) return null;
-  const normalized = nicknameCheck.nickname.toLowerCase();
+  const nicknameRaw = nicknameCheck.nickname;
+  const normalized = nicknameRaw.toLowerCase();
   try {
-    const exact = await dynamodb.send(
-      new GetItemCommand({
-        TableName: table,
-        Key: { tenantId: { S: tenantId }, userId: { S: normalized } },
-        ConsistentRead: true,
-      }),
-    );
-    const fromExact = mapParticipantItem(exact.Item as any);
-    if (fromExact) return fromExact;
+    // Prefer exact key (preserves first-entered casing), then lowercase, then GSI.
+    for (const key of Array.from(new Set([nicknameRaw, normalized]))) {
+      const exact = await dynamodb.send(
+        new GetItemCommand({
+          TableName: table,
+          Key: { tenantId: { S: tenantId }, userId: { S: key } },
+          ConsistentRead: true,
+        }),
+      );
+      const fromExact = mapParticipantItem(exact.Item as any);
+      if (fromExact) return fromExact;
+    }
 
     const queryResp = await dynamodb.send(
       new QueryCommand({
@@ -527,6 +536,7 @@ export const handler = async (event: any) => {
   if ((!hasEmail || !shouldSendEmail) && !hasExplicitLink && !forceNewIdentity) {
     const reactivated = !!existingAuthUserId;
     let emailSent = false;
+    let emailAttempted = false;
     try {
       if (process.env.MEMBERSHIPS_TABLE) {
         await dynamodb.send(
@@ -560,6 +570,7 @@ export const handler = async (event: any) => {
       // Reactivation info mail: also when Create uses sendEmail:false (Fall 1, #345).
       const mailTo = (hasEmail ? emailNormalized : existingEmail)?.trim();
       if (reactivated && mailTo) {
+        emailAttempted = true;
         emailSent = await trySendReactivationMail({
           toEmail: mailTo,
           nickname: nicknameRaw,
@@ -583,6 +594,7 @@ export const handler = async (event: any) => {
         success: true,
         username: canonicalUserId,
         emailSent,
+        emailAttempted,
         reactivated,
         ...(shouldSendEmail && !hasEmail && !emailSent
           ? {
@@ -594,7 +606,7 @@ export const handler = async (event: any) => {
                 warning:
                   "Ohne Benachrichtigung angelegt. Cognito/Einladung erst bei explizitem Einladen.",
               }
-            : !shouldSendEmail && reactivated && !emailSent
+            : !shouldSendEmail && reactivated && emailAttempted && !emailSent
               ? {
                   warning:
                     "Reaktiviert, aber Info-Mail konnte nicht versendet werden.",
@@ -1004,11 +1016,15 @@ export const handler = async (event: any) => {
   }
 
   // Quiet link/create: no invite token / no invite SES (#345).
-  // Exception: same-studio reactivation still gets info mail (Fall 1/2), not cross-studio (Fall 3).
+  // Info-Mail when reactivated via nickname OR linkExisting (link ≈ reactivation).
+  // New profile / forceNew / non-reactivated link: no mail — invite later.
   if (!shouldSendEmail) {
     let emailSent = false;
-    const shouldMailReactivation = reactivated && sameStudioReactivation;
+    let emailAttempted = false;
+    const shouldMailReactivation =
+      reactivated && (sameStudioReactivation || hasExplicitLink);
     if (shouldMailReactivation) {
+      emailAttempted = true;
       const mailTo = (emailNormalized || existingEmail || "").trim();
       emailSent = await trySendReactivationMail({
         toEmail: mailTo,
@@ -1018,6 +1034,11 @@ export const handler = async (event: any) => {
         studioName,
         mailLocale,
       });
+      if (!emailSent) {
+        console.warn(
+          `Quiet reactivation/link: SES info mail not sent (to=${mailTo || "<empty>"}, userId=${userId})`,
+        );
+      }
     }
     return {
       statusCode: 200,
@@ -1025,12 +1046,13 @@ export const handler = async (event: any) => {
         success: true,
         username: userId,
         emailSent,
+        emailAttempted,
         reactivated,
         ...(emailSent
           ? {}
           : {
-              warning: shouldMailReactivation
-                ? "Reaktiviert, aber Info-Mail konnte nicht versendet werden."
+              warning: emailAttempted
+                ? "Zugang freigeschaltet, aber Info-Mail konnte nicht versendet werden."
                 : hasExplicitLink
                   ? "Verknüpft ohne Benachrichtigung. Einladung später explizit senden."
                   : "Ohne Benachrichtigung angelegt. Einladung später explizit senden.",

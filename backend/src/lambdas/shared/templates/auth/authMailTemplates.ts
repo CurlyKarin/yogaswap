@@ -269,25 +269,25 @@ export function buildReactivationMail(input: ReactivationMailInput): MailTemplat
   const studio = resolveStudioDisplayName(input.studioName);
   const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
-    return { subject: `${studio}: Reaktivierung`, html: "", text: "" };
+    return { subject: `${studio}: Zugang freigeschaltet`, html: "", text: "" };
   }
 
   const accessHtml = hasNamedStudio(studio)
-    ? `Auf YogaSwap wurde Dein Zugang fuer <strong>${studio}</strong> wieder freigeschaltet.`
-    : "Auf YogaSwap wurde Dein Zugang wieder freigeschaltet.";
+    ? `Auf YogaSwap wurde Dein Zugang fuer <strong>${studio}</strong> freigeschaltet.`
+    : "Auf YogaSwap wurde Dein Zugang freigeschaltet.";
   const accessText = hasNamedStudio(studio)
-    ? `Auf YogaSwap wurde Dein Zugang fuer "${studio}" wieder freigeschaltet.`
-    : "Auf YogaSwap wurde Dein Zugang wieder freigeschaltet.";
+    ? `Auf YogaSwap wurde Dein Zugang fuer "${studio}" freigeschaltet.`
+    : "Auf YogaSwap wurde Dein Zugang freigeschaltet.";
 
   return composeMail({
-    subject: `${studio}: Reaktivierung`,
+    subject: `${studio}: Zugang freigeschaltet`,
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>${accessHtml}</p>
         <p>${loginNameLineHtml(input.nickname)}</p>
-        <p>Du kannst Dich mit Deinem bestehenden Passwort wieder anmelden.</p>
+        <p>Du kannst Dich mit Deinem bestehenden Passwort anmelden.</p>
         <p><a href="${input.loginUrl}">Zur YogaSwap-Anmeldung</a></p>
       `,
     textBody: [
@@ -296,7 +296,7 @@ export function buildReactivationMail(input: ReactivationMailInput): MailTemplat
       accessText,
       loginNameLineText(input.nickname),
       "",
-      "Du kannst Dich mit Deinem bestehenden Passwort wieder anmelden.",
+      "Du kannst Dich mit Deinem bestehenden Passwort anmelden.",
       `Anmeldung: ${input.loginUrl}`,
     ].join("\n"),
   });
