@@ -7,6 +7,7 @@ import {
   buildInvitePreparationMail,
   buildRecoveryMail,
   buildReactivationMail,
+  buildDisplayNameChangedMail,
   buildRoleChangedMail,
   buildStudioAccessRemovedMail,
   resolveStudioDisplayName,
@@ -206,6 +207,27 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("participant");
     expect(mail.html).toContain("instructor");
     expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Karin</strong>");
+  });
+
+  test("buildDisplayNameChangedMail returns german display-name template (#345)", () => {
+    const mail = buildDisplayNameChangedMail({
+      locale: "de",
+      nickname: "Kaja2",
+      displayName: "Kaja",
+      oldDisplayName: "Kaja",
+      newDisplayName: "Kaja2",
+      loginUrl: "https://app.yogaswap.de",
+      studioName: "Beharmony",
+    });
+
+    expect(mail.subject).toBe("Beharmony: Anzeigename aktualisiert");
+    expect(mail.html).toContain("Hallo Kaja!");
+    expect(mail.html).toContain("Dein Anzeigename von");
+    expect(mail.html).toContain("<strong>Kaja</strong>");
+    expect(mail.html).toContain("<strong>Kaja2</strong>");
+    expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Kaja2</strong>");
+    expect(mail.html).toContain("melde Dich bitte bei Deinem Studio");
+    expect(mail.text).toContain('Anzeigename von "Kaja" -> "Kaja2"');
   });
 
   test("unknown locale falls back to german for all builders", () => {

@@ -861,5 +861,138 @@ describe("updateParticipant Lambda", () => {
 
     expect(result.statusCode).toBe(403);
   });
+
+  test("sends display-name-change mail for active participant (#345)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          displayName: { S: "Alice" },
+          authUserId: { S: "sub-123" },
+          participantId: { S: "11111111-2222-4333-8444-555555555555" },
+        },
+      })
+      .mockResolvedValueOnce({}) // participants PutItem
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }); // studio name for display-name mail
+    sesMockSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        body: JSON.stringify({ displayName: "Kaja2" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.displayName).toBe("Kaja2");
+    expect(body.displayNameChanged).toBe(true);
+    expect(body.displayNameChangedEmailSent).toBe(true);
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Destination: { ToAddresses: ["alice@example.com"] },
+        Message: expect.objectContaining({
+          Subject: expect.objectContaining({ Data: expect.stringContaining("Anzeigename aktualisiert") }),
+        }),
+      }),
+    );
+  });
+
+  test("skips display-name-change mail when value unchanged (#345)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          displayName: { S: "Kaja2" },
+          authUserId: { S: "sub-123" },
+        },
+      })
+      .mockResolvedValueOnce({}); // PutItem
+
+    const result = await handler(
+      makeEvent({
+        body: JSON.stringify({ displayName: "  Kaja2  " }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.displayNameChanged).toBe(false);
+    expect(body.displayNameChangedEmailSent).toBe(false);
+    expect(sesMockSend).not.toHaveBeenCalled();
+  });
+
+  test("skips display-name-change mail for invited participant (#345)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "admin" },
+          role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          displayName: { S: "Alice" },
+          inviteSentAt: { S: "2026-03-01T10:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({}); // PutItem
+
+    const result = await handler(
+      makeEvent({
+        body: JSON.stringify({ displayName: "Kaja2" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.displayNameChanged).toBe(true);
+    expect(body.displayNameChangedEmailSent).toBe(false);
+    expect(sesMockSend).not.toHaveBeenCalled();
+  });
 });
 

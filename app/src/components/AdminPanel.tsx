@@ -531,6 +531,8 @@ export default function AdminPanel({
         setBulkInviteResult("Rolle aktualisiert. Nutzer wurde über die Änderung informiert.");
       } else if (roleChanged) {
         setBulkInviteResult("Rolle aktualisiert.");
+      } else if (displayNameChanged && original?.status === "active" && nextEmailText.length > 0) {
+        setBulkInviteResult("Displayname aktualisiert. Nutzer wurde über die Änderung informiert.");
       } else if (displayNameChanged) {
         setBulkInviteResult("Displayname aktualisiert.");
       }
@@ -563,6 +565,9 @@ export default function AdminPanel({
           email: nextEmailText,
           role: canEditRoles ? editingRole : original.role,
           status: "invited",
+          ...(displayNameChanged
+            ? { displayName: nextDisplayName ?? undefined }
+            : {}),
         };
         await sendInviteForParticipant(effectiveParticipant, { refreshAfter: false });
       }
@@ -591,6 +596,15 @@ export default function AdminPanel({
     editingDisplayNameChanged ||
     editingRoleChanged ||
     (editingCanSendReset && editingForcePasswordResetOnEmailChange);
+  /** Label „Speichern und Senden“ only when this save is expected to trigger SES (#345). */
+  const editingWillSendMail =
+    editingSendsInvite ||
+    (editingOriginal?.status === "active" &&
+      editingEmailTrimmed.length > 0 &&
+      (editingEmailChanged || editingDisplayNameChanged || editingRoleChanged)) ||
+    (editingCanSendReset &&
+      editingForcePasswordResetOnEmailChange &&
+      editingEmailTrimmed.length > 0);
   const createIsReactivation = createNicknameCheckState === "reactivation";
   const createCanUnlockReactivationEmail = canEditRoles && createIsReactivation;
   const createEmailEditable =
@@ -1076,6 +1090,7 @@ export default function AdminPanel({
       const result = await inviteUser({
         email: p.email,
         nickname: inviteNickname,
+        ...(p.displayName?.trim() ? { displayName: p.displayName.trim() } : {}),
         role: effectiveRole,
         ...identityInviteFlags,
       });
@@ -1670,7 +1685,7 @@ export default function AdminPanel({
               >
                 {editingSaving
                   ? "Speichere..."
-                  : editingSendsInvite || (canEditRoles && editingOriginal?.status === "active")
+                  : editingWillSendMail
                     ? "Speichern und Senden"
                     : "Speichern"}
               </button>

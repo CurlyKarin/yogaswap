@@ -10,9 +10,18 @@ import {
 } from "shared/displayName";
 import { validateNickname } from "shared/nickname";
 
-describe("validateDisplayName (#327)", () => {
-  it("accepts names with umlauts and punctuation", () => {
-    for (const value of ["Björn", "Anna Müller", "Anna-Lena", "O'Brien", "Dr. Müller", "Kai"]) {
+describe("validateDisplayName (#327 / #345)", () => {
+  it("accepts names with umlauts, punctuation, and digits", () => {
+    for (const value of [
+      "Björn",
+      "Anna Müller",
+      "Anna-Lena",
+      "O'Brien",
+      "Dr. Müller",
+      "Kai",
+      "Kaja2",
+      "Anna 2",
+    ]) {
       const result = validateDisplayName(value);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.displayName).toBe(value.trim());
@@ -32,7 +41,7 @@ describe("validateDisplayName (#327)", () => {
     expect(validateDisplayName(long)).toMatchObject({ ok: false, code: "too_long" });
   });
 
-  it("rejects # and digits-only-style invalid content", () => {
+  it("rejects # and digits-only content", () => {
     expect(validateDisplayName("Max#1")).toMatchObject({ ok: false, code: "invalid_chars" });
     expect(validateDisplayName("...")).toMatchObject({ ok: false, code: "invalid_chars" });
     expect(validateDisplayName("123")).toMatchObject({ ok: false, code: "invalid_chars" });
@@ -40,11 +49,12 @@ describe("validateDisplayName (#327)", () => {
 
   it("isValidDisplayName mirrors ok", () => {
     expect(isValidDisplayName("Kai")).toBe(true);
+    expect(isValidDisplayName("Kaja2")).toBe(true);
     expect(isValidDisplayName("#")).toBe(false);
   });
 });
 
-describe("suggestNicknameFromDisplayName (#327)", () => {
+describe("suggestNicknameFromDisplayName (#327 / #345)", () => {
   it("transliterates German umlauts", () => {
     expect(suggestNicknameFromDisplayName("Björn")).toBe("Bjoern");
     expect(suggestNicknameFromDisplayName("Anna Müller")).toBe("Anna.Mueller");
@@ -52,8 +62,15 @@ describe("suggestNicknameFromDisplayName (#327)", () => {
     expect(suggestNicknameFromDisplayName("Kai")).toBe("Kai");
   });
 
+  it("keeps digits from display names in nickname suggestions", () => {
+    expect(suggestNicknameFromDisplayName("Kaja2")).toBe("Kaja2");
+    expect(suggestNicknameFromDisplayName("Anna 2")).toBe("Anna.2");
+    expect(validateNickname(suggestNicknameFromDisplayName("Kaja2")).ok).toBe(true);
+    expect(validateNickname(suggestNicknameFromDisplayName("Anna 2")).ok).toBe(true);
+  });
+
   it("produces nicknames that pass #326 validation", () => {
-    for (const value of ["Björn", "Anna Müller", "Dr. Müller", "Kai", "Großer"]) {
+    for (const value of ["Björn", "Anna Müller", "Dr. Müller", "Kai", "Großer", "Kaja2", "Anna 2"]) {
       const suggestion = suggestNicknameFromDisplayName(value);
       expect(validateNickname(suggestion).ok).toBe(true);
       expect(isUsableNicknameSuggestion(suggestion)).toBe(true);

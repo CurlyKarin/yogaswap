@@ -109,7 +109,7 @@ Siehe auch [course-enrollments.md](./course-enrollments.md) (#302 / #293).
 
 **Nickname (#326):** ASCII `a-z` `A-Z` `0-9` `.` `-` `_`, Länge 3–32, kein `#`/Leerzeichen/Umlaute. Validierung: Shared `validateNickname()` (Backend + Admin-UI). Case-insensitive eindeutig pro Tenant (`userIdNormalized`). Studio-Login-Name ≠ Cognito-Username (außer Legacy).
 
-**Anzeigename (#327):** Optionales Profilfeld `displayName` (Unicode, Umlaute ok; 2–40 Zeichen, Buchstaben/Leerzeichen/`. - '`). Nur UI/Mails — **nicht** in Dynamo-Keys oder operativen Refs. Neu anlegen: Pflicht; Legacy ohne Feld: Fallback auf kanonischen `userId`. Shared: `validateDisplayName()`, `suggestNicknameFromDisplayName()`, `resolveParticipantDisplayLabel()`.
+**Anzeigename (#327 / #345):** Optionales Profilfeld `displayName` (Unicode, Umlaute ok; 2–40 Zeichen, Buchstaben/Ziffern/Leerzeichen/`. - '`). Nur UI/Mails — **nicht** in Dynamo-Keys oder operativen Refs. Neu anlegen: optional; Legacy ohne Feld: Fallback auf kanonischen `userId`. Shared: `validateDisplayName()`, `suggestNicknameFromDisplayName()`, `resolveParticipantDisplayLabel()`. Bei Änderung an registrierten Profilen: Info-Mail (`buildDisplayNameChangedMail`, #345).
 
 Neue Mitglieder erhalten `participantId` (UUID) am Profil beim Anlegen; Backfill nur Profile/Memberships: `npm run backfill:participant-ids` (Ops bleiben Nicknames). UUID→Nickname in Ops: `npm run backfill:operational-nicknames`.
 

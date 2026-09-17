@@ -848,6 +848,57 @@ describe('createParticipants Lambda', () => {
     );
   });
 
+  test('re-invite without displayName in body greets from profile displayName (#345)', async () => {
+    dynamoMockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: 'test-tenant' },
+          userId: { S: 'sabine' },
+          cognitoUsername: { S: 'opaque-sabine' },
+          email: { S: 'sabine@example.com' },
+          displayName: { S: 'Sabine 1' },
+          inviteSentAt: { S: '2026-03-01T10:00:00.000Z' },
+        },
+      })
+      .mockResolvedValue({});
+
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-sabine', 'sub-sabine'),
+        UserStatus: 'FORCE_CHANGE_PASSWORD',
+      })
+      .mockResolvedValueOnce({}) // AdminSetUserPassword
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('opaque-sabine', 'sub-sabine'));
+    sesMockSend.mockResolvedValueOnce({});
+
+    // Raw body: no displayName — must not use baseEvent auto-fill.
+    const event = {
+      body: JSON.stringify({
+        email: 'sabine@example.com',
+        nickname: 'sabine',
+        role: 'participant',
+      }),
+      headers: { 'x-tenant-id': 'test-tenant' },
+    } as any;
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).emailSent).toBe(true);
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Message: expect.objectContaining({
+          Body: expect.objectContaining({
+            Html: expect.objectContaining({
+              Data: expect.stringContaining('Willkommen Sabine 1!'),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   test('keeps first entered casing as canonical user id', async () => {
     jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
     mockNewUserCognitoPrelude('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');

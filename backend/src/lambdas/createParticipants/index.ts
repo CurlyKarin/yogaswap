@@ -433,6 +433,7 @@ export const handler = async (event: any) => {
   let existingEmail: string | undefined;
   let existingInviteCompletedAt: string | undefined;
   let existingInviteSentAt: string | undefined;
+  let existingDisplayName: string | undefined;
   let existingProfileFound = false;
   let existingStoredCognitoUsername: string | undefined;
   let participantId = generateParticipantId();
@@ -454,6 +455,7 @@ export const handler = async (event: any) => {
             participantId?: { S?: string };
             inviteCompletedAt?: { S?: string };
             inviteSentAt?: { S?: string };
+            displayName?: { S?: string };
           }
         | undefined;
       if (lowerItem?.userId?.S) {
@@ -465,6 +467,7 @@ export const handler = async (event: any) => {
         existingEmail = lowerItem.email?.S;
         existingInviteCompletedAt = lowerItem.inviteCompletedAt?.S?.trim() || undefined;
         existingInviteSentAt = lowerItem.inviteSentAt?.S?.trim() || undefined;
+        existingDisplayName = lowerItem.displayName?.S?.trim() || undefined;
         if (lowerItem.participantId?.S?.trim()) participantId = lowerItem.participantId.S.trim();
       } else {
         const queryResp = await dynamodb.send(
@@ -489,12 +492,18 @@ export const handler = async (event: any) => {
           existingEmail = matched.email?.S;
           existingInviteCompletedAt = matched.inviteCompletedAt?.S?.trim() || undefined;
           existingInviteSentAt = matched.inviteSentAt?.S?.trim() || undefined;
+          existingDisplayName = matched.displayName?.S?.trim() || undefined;
           if (matched.participantId?.S?.trim()) participantId = matched.participantId.S.trim();
         }
       }
     } catch (lookupErr) {
       console.warn("Failed canonical participant lookup, fallback to raw nickname", lookupErr);
     }
+  }
+
+  // Re-invite / list invite without displayName in body: greet from stored profile (#345).
+  if (!displayNameCanonical && existingDisplayName) {
+    displayNameCanonical = existingDisplayName;
   }
 
   if (actorRole === "instructor" && process.env.MEMBERSHIPS_TABLE) {
