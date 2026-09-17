@@ -188,6 +188,15 @@ type RoleChangedMailInput = StudioMailFields & {
   newRole: string;
 };
 
+type DisplayNameChangedMailInput = StudioMailFields & {
+  nickname: string;
+  /** Greeting: previous visible name before the change. */
+  displayName?: string | null;
+  loginUrl: string;
+  oldDisplayName: string;
+  newDisplayName: string;
+};
+
 export function buildInviteMail(input: InviteMailInput): MailTemplate {
   const locale = normalizeLocale(input.locale);
   const studio = resolveStudioDisplayName(input.studioName);
@@ -472,6 +481,39 @@ export function buildRoleChangedMail(input: RoleChangedMailInput): MailTemplate 
       `Auf YogaSwap wurde ${forStudioAccessText(studio)} Deine Rolle von "${input.oldRole}" -> "${input.newRole}" geaendert.`,
       loginNameStillText(input.nickname),
       "",
+      `Anmeldung: ${input.loginUrl}`,
+    ].join("\n"),
+  });
+}
+
+/** Info-Mail when studio changes a registered member's display name (#345). */
+export function buildDisplayNameChangedMail(input: DisplayNameChangedMailInput): MailTemplate {
+  const locale = normalizeLocale(input.locale);
+  const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
+  if (locale !== "de") {
+    return { subject: `${studio}: Anzeigename aktualisiert`, html: "", text: "" };
+  }
+
+  return composeMail({
+    subject: `${studio}: Anzeigename aktualisiert`,
+    studioName: studio,
+    studioUrl: input.studioUrl ?? input.loginUrl,
+    htmlBody: `
+        <h2>Hallo ${greeting}!</h2>
+        <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} Dein Anzeigename von
+        <strong>${input.oldDisplayName}</strong> &rarr; <strong>${input.newDisplayName}</strong> geaendert.</p>
+        <p>${loginNameStillHtml(input.nickname)}</p>
+        <p>Falls Du Rueckfragen oder einen anderen Vorschlag hast, melde Dich bitte bei Deinem Studio.</p>
+        <p><a href="${input.loginUrl}">Zur YogaSwap-Anmeldung</a></p>
+      `,
+    textBody: [
+      `Hallo ${greeting}!`,
+      "",
+      `Auf YogaSwap wurde ${forStudioAccessText(studio)} Dein Anzeigename von "${input.oldDisplayName}" -> "${input.newDisplayName}" geaendert.`,
+      loginNameStillText(input.nickname),
+      "",
+      "Falls Du Rueckfragen oder einen anderen Vorschlag hast, melde Dich bitte bei Deinem Studio.",
       `Anmeldung: ${input.loginUrl}`,
     ].join("\n"),
   });

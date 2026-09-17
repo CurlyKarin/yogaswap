@@ -1168,6 +1168,104 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("zeigt Speichern und Senden bei Displayname-Änderung fuer registrierte Person (#345)", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        participantId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        displayName: "Alice",
+        status: "active",
+        authUserId: "sub-alice",
+      },
+    ]);
+    mockedUpdateParticipant.mockResolvedValueOnce({
+      tenantId: "default-tenant",
+      userId: "alice",
+      participantId: "alice",
+      role: "participant",
+      email: "alice@example.com",
+      displayName: "Kaja2",
+      status: "active",
+      displayNameChanged: true,
+      displayNameChangedEmailSent: true,
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByLabelText("Bearbeiten alice")).toBeInTheDocument();
+    });
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
+      target: { value: "Kaja2" },
+    });
+    expect(within(dialog).getByRole("button", { name: /^Speichern und Senden$/i })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Speichern und Senden$/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", {
+        email: "alice@example.com",
+        displayName: "Kaja2",
+        role: "participant",
+      });
+      expect(
+        within(panel).getByText(/Displayname aktualisiert\. Nutzer wurde über die Änderung informiert\./i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("zeigt nur Speichern bei Displayname-Änderung ohne Info-Mail (#345)", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        participantId: "alice",
+        role: "participant",
+        displayName: "Alice",
+        status: "no_login",
+      },
+    ]);
+    mockedUpdateParticipant.mockResolvedValueOnce({
+      tenantId: "default-tenant",
+      userId: "alice",
+      participantId: "alice",
+      role: "participant",
+      displayName: "Kaja2",
+      status: "no_login",
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByLabelText("Bearbeiten alice")).toBeInTheDocument();
+    });
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten alice"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
+      target: { value: "Kaja2" },
+    });
+    expect(within(dialog).getByRole("button", { name: /^Speichern$/i })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^Speichern und Senden$/i })).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Speichern$/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", {
+        email: null,
+        displayName: "Kaja2",
+        role: "participant",
+      });
+      expect(within(panel).getByText(/^Displayname aktualisiert\.$/i)).toBeInTheDocument();
+    });
+  });
+
   it("Trainer darf E-Mail für eingeladenen Teilnehmer korrigieren", async () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {

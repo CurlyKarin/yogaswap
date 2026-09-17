@@ -22,11 +22,12 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 
 | Ereignis | Lambda | Empfänger | Template / Inhalt | Voraussetzungen / Skip |
 |----------|--------|-----------|-------------------|------------------------|
-| **Einladung (neu)** | `createParticipants` | Teilnehmer (E-Mail aus Request) | `buildInviteMail` (Betreff/Body inkl. Studio-Name, #268) | E-Mail im Request; `AUTH_TOKENS_TABLE`; SES-Fehler blockiert Anlage nicht; Create-Dialog setzt `sendEmail: false` (kein SES, #345) |
+| **Einladung (neu)** | `createParticipants` | Teilnehmer (E-Mail aus Request) | `buildInviteMail` (Betreff/Body inkl. Studio-Name, #268) | E-Mail im Request; `AUTH_TOKENS_TABLE`; SES-Fehler blockiert Anlage nicht; Create-Dialog setzt `sendEmail: false` (kein SES, #342) |
 | **Zugang freigeschaltet** | `createParticipants` | Bestehende Profile / Verknüpfung | `buildReactivationMail` | Nickname-Reaktivierung oder Link eines bestätigten Kontos (auch bei `sendEmail: false`) |
 | **Passwort-Reset (Admin)** | `resetParticipantPassword`, `updateParticipant` | Zielprofil | `buildRecoveryMail` | Admin-Aktion; aktives Profil mit E-Mail |
 | **Passwort-Reset (Self-Service)** | `requestSelfPasswordReset` | Bekannter Nickname | `buildRecoveryMail` | Generische 200-Antwort bei unbekanntem User (Enumeration-Schutz) |
 | **E-Mail-Adresse geändert** | `updateParticipant` | Neue + ggf. alte Adresse | `buildEmailChangedNewAddressMail`, `buildEmailChangedOldAddressMail` | Nur bei aktivem Login-Status |
+| **Anzeigename geändert** | `updateParticipant` | Zielprofil | `buildDisplayNameChangedMail` | Nur bei aktivem Login-Status und tatsächlicher Änderung (#345) |
 | **Rolle geändert** | `updateParticipant` | Zielprofil | `buildRoleChangedMail` | Membership-Update mit Rollenwechsel |
 | **Studio-Zugang entfernt** | `deleteParticipant` | Zielprofil | `buildStudioAccessRemovedMail` | Nur wenn `inviteCompletedAt` gesetzt (Login-Historie) |
 | **Termin absgesagt (Studio)** | `cancelCourseDate` | Gebuchte, getauschte, Wartelisten- und abgemeldete TN am Termin | `buildStudioTermCancelledMail` (Datum + Uhrzeit, `de-DE`) | Skip: `invited`, kein Profil; kein ICS |

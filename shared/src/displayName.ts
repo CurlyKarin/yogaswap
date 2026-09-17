@@ -9,8 +9,8 @@ import {
 export const DISPLAY_NAME_MIN_LENGTH = 2;
 export const DISPLAY_NAME_MAX_LENGTH = 40;
 
-/** Letters (incl. Umlaute), spaces, `.`, `-`, `'`. */
-const DISPLAY_NAME_PATTERN = /^[\p{L} .'-]+$/u;
+/** Letters (incl. Umlaute), digits, spaces, `.`, `-`, `'`. */
+const DISPLAY_NAME_PATTERN = /^[\p{L}\p{N} .'-]+$/u;
 const HAS_LETTER = /\p{L}/u;
 const CONTROL_OR_HASH = /[\u0000-\u001f\u007f#]/u;
 
@@ -29,7 +29,7 @@ const MESSAGES: Record<DisplayNameValidationCode, string> = {
   too_short: `Bitte mindestens ${DISPLAY_NAME_MIN_LENGTH} Zeichen für den Anzeigenamen eingeben.`,
   too_long: `Anzeigename darf höchstens ${DISPLAY_NAME_MAX_LENGTH} Zeichen lang sein.`,
   invalid_chars:
-    "Anzeigename darf Buchstaben (inkl. Umlaute), Leerzeichen sowie . - ' enthalten (kein #).",
+    "Anzeigename darf Buchstaben (inkl. Umlaute), Ziffern, Leerzeichen sowie . - ' enthalten (kein #).",
 };
 
 export function displayNameValidationMessage(code: DisplayNameValidationCode): string {

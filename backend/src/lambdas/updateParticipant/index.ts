@@ -24,6 +24,7 @@ import { deriveParticipantStatus } from "../shared/participantStatus";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import {
+  buildDisplayNameChangedMail,
   buildEmailChangedNewAddressMail,
   buildEmailChangedOldAddressMail,
   buildRecoveryMail,
@@ -265,8 +266,11 @@ export const handler = async (
     let passwordResetEmailSent = false;
     let roleChanged = false;
     let roleChangedEmailSent = false;
+    let displayNameChanged = false;
+    let displayNameChangedEmailSent = false;
     let previousRole: UserRole | undefined;
     let nextRoleForMail: UserRole | undefined;
+    const previousDisplayName = (existing.displayName ?? "").trim();
     const updated: ParticipantProfile = {
       ...existing,
       tenantId,
@@ -459,6 +463,8 @@ export const handler = async (
         }
         updated.displayName = displayNameCheck.displayName;
       }
+      const nextDisplayName = (updated.displayName ?? "").trim();
+      displayNameChanged = previousDisplayName !== nextDisplayName;
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "inviteSentAt")) {
@@ -549,6 +555,36 @@ export const handler = async (
       }
     }
 
+    if (displayNameChanged && existingStatus === "active" && updated.email) {
+      const baseUrl = resolveAppBaseUrlForTenant(tenantId);
+      const sesSourceEmail = resolveSesSourceEmail();
+      const mailLocale = process.env.MAIL_LOCALE || "de";
+      const nextDisplayLabel = (updated.displayName ?? "").trim() || targetUserId;
+      const previousDisplayLabel = previousDisplayName || targetUserId;
+      try {
+        const displayNameChangedMail = buildDisplayNameChangedMail({
+          locale: mailLocale,
+          nickname: targetUserId,
+          displayName: previousDisplayName || undefined,
+          loginUrl: baseUrl,
+          oldDisplayName: previousDisplayLabel,
+          newDisplayName: nextDisplayLabel,
+          studioName: await getStudioName(),
+          studioUrl: baseUrl,
+        });
+        await ses.send(
+          new SendEmailCommand({
+            Source: sesSourceEmail,
+            Destination: { ToAddresses: [updated.email] },
+            Message: toSesAuthMessage(displayNameChangedMail),
+          }),
+        );
+        displayNameChangedEmailSent = true;
+      } catch (mailErr) {
+        console.warn("Failed to send display-name-change notification mail:", mailErr);
+      }
+    }
+
     await client.send(
       new PutItemCommand({
         TableName: tableName,
@@ -565,6 +601,8 @@ export const handler = async (
         passwordResetEmailSent,
         roleChanged,
         roleChangedEmailSent,
+        displayNameChanged,
+        displayNameChangedEmailSent,
       }),
     };
   } catch (error) {
