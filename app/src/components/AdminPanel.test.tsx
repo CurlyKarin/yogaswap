@@ -1313,6 +1313,61 @@ describe("AdminPanel", () => {
     });
   });
 
+  it("sendet Re-Invite mit aktualisiertem Displayname (#345)", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "sabine",
+        participantId: "sabine",
+        role: "participant",
+        email: "sabine@example.com",
+        displayName: "Sabine",
+        status: "invited",
+      },
+    ]);
+    mockedUpdateParticipant.mockResolvedValueOnce({
+      tenantId: "default-tenant",
+      userId: "sabine",
+      participantId: "sabine",
+      role: "participant",
+      email: "sabine@example.com",
+      displayName: "Sabine 1",
+      status: "invited",
+    });
+    mockedInviteUser.mockResolvedValueOnce({
+      success: true,
+      emailSent: true,
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByLabelText("Bearbeiten sabine")).toBeInTheDocument();
+    });
+    fireEvent.click(within(panel).getByLabelText("Bearbeiten sabine"));
+    const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer E-Mail bearbeiten/i });
+    fireEvent.change(within(dialog).getByPlaceholderText("Displayname"), {
+      target: { value: "Sabine 1" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Speichern und Senden$/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateParticipant).toHaveBeenCalledWith("sabine", {
+        email: "sabine@example.com",
+        displayName: "Sabine 1",
+        role: "participant",
+      });
+      expect(mockedInviteUser).toHaveBeenCalledWith({
+        email: "sabine@example.com",
+        nickname: "sabine",
+        displayName: "Sabine 1",
+        role: "participant",
+      });
+    });
+  });
+
   it("Trainer kann Admins/Trainer nicht bearbeiten oder einladen", async () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {

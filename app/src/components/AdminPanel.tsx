@@ -565,6 +565,9 @@ export default function AdminPanel({
           email: nextEmailText,
           role: canEditRoles ? editingRole : original.role,
           status: "invited",
+          ...(displayNameChanged
+            ? { displayName: nextDisplayName ?? undefined }
+            : {}),
         };
         await sendInviteForParticipant(effectiveParticipant, { refreshAfter: false });
       }
@@ -1087,6 +1090,7 @@ export default function AdminPanel({
       const result = await inviteUser({
         email: p.email,
         nickname: inviteNickname,
+        ...(p.displayName?.trim() ? { displayName: p.displayName.trim() } : {}),
         role: effectiveRole,
         ...identityInviteFlags,
       });
