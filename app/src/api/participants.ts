@@ -181,7 +181,10 @@ export interface DeleteParticipantResponse {
   membershipDeleted: boolean;
   profileDeleted: boolean;
   notificationEmail?: string;
+  /** True when SES was attempted (registered exit or invite withdrawn). */
+  notificationEmailAttempted?: boolean;
   notificationEmailSent?: boolean;
+  authTokensInvalidated?: number;
 }
 
 export type StudioExitBlockers = {

@@ -20,6 +20,7 @@ import {
   collectStudioExitBlockers,
   hasStudioExitBlockers,
 } from "../shared/studioExitBlockers";
+import { invalidateAuthTokensForUser } from "../shared/invalidateAuthTokens";
 
 const client = dynamoClient;
 const ses = new SESClient({});
@@ -34,6 +35,7 @@ export const handler = async (
   const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
   const swapsTable = process.env.SWAPS_TABLE;
   const overridesTable = process.env.OVERRIDES_TABLE;
+  const authTokensTable = process.env.AUTH_TOKENS_TABLE;
 
   if (
     !participantsTable ||
@@ -185,8 +187,27 @@ export const handler = async (
     let profileDeleted = false;
     const hasAuthUserId = !!profile?.authUserId;
     const hasRegistrationHistory = !!profile?.authUserId || !!profile?.inviteCompletedAt;
+    const hadInviteSent = !!profile?.inviteSentAt?.trim();
+    const inviteWithdrawn = !hasRegistrationHistory && hadInviteSent;
+    const shouldNotifyRemoval =
+      !!profile?.email?.trim() && (hasRegistrationHistory || hadInviteSent);
     const notificationEmail = profile?.email?.trim() || "";
+    let notificationEmailAttempted = false;
     let notificationEmailSent = false;
+    let authTokensInvalidated = 0;
+
+    if (authTokensTable) {
+      try {
+        authTokensInvalidated = await invalidateAuthTokensForUser({
+          client,
+          authTokensTable,
+          tenantId,
+          userId,
+        });
+      } catch (tokenErr) {
+        console.warn("deleteParticipant token invalidation failed:", tokenErr);
+      }
+    }
 
     if (profile && !hasAuthUserId) {
       const membershipsByUser = await client.send(
@@ -215,9 +236,8 @@ export const handler = async (
       }
     }
 
-    // Optional notification email only for participants with login history.
-    // Never-registered invited/no-login users are removed quietly to avoid confusing mails.
-    if (profile?.email && hasRegistrationHistory) {
+    if (shouldNotifyRemoval && profile?.email) {
+      notificationEmailAttempted = true;
       const sesSourceEmail = resolveSesSourceEmail();
       const mailLocale = process.env.MAIL_LOCALE || "de";
       const studioName = await loadTenantName(client, tenantsTable, tenantId);
@@ -228,6 +248,7 @@ export const handler = async (
         displayName: profile.displayName,
         studioName,
         studioUrl: resolveAppBaseUrlForTenant(tenantId),
+        ...(inviteWithdrawn ? { inviteWithdrawn: true } : {}),
       });
       try {
         await ses.send(
@@ -250,8 +271,10 @@ export const handler = async (
         success: true,
         membershipDeleted: true,
         profileDeleted,
-        notificationEmail: notificationEmail || undefined,
+        notificationEmail: notificationEmailAttempted ? notificationEmail || undefined : undefined,
+        notificationEmailAttempted,
         notificationEmailSent,
+        authTokensInvalidated,
       }),
     };
   } catch (error) {

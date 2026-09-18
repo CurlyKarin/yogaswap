@@ -1,6 +1,7 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { handler } from "./index";
 import { collectStudioExitBlockers } from "../shared/studioExitBlockers";
+import { invalidateAuthTokensForUser } from "../shared/invalidateAuthTokens";
 
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
@@ -35,8 +36,15 @@ jest.mock("../shared/studioExitBlockers", () => {
   };
 });
 
+jest.mock("../shared/invalidateAuthTokens", () => ({
+  invalidateAuthTokensForUser: jest.fn().mockResolvedValue(0),
+}));
+
 const mockedCollectBlockers = collectStudioExitBlockers as jest.MockedFunction<
   typeof collectStudioExitBlockers
+>;
+const mockedInvalidateTokens = invalidateAuthTokensForUser as jest.MockedFunction<
+  typeof invalidateAuthTokensForUser
 >;
 
 const emptyBlockers = {
@@ -60,12 +68,15 @@ describe("deleteParticipant Lambda", () => {
       COURSE_ENROLLMENTS_TABLE: "test-enrollments",
       SWAPS_TABLE: "test-swaps",
       OVERRIDES_TABLE: "test-overrides",
+      AUTH_TOKENS_TABLE: "test-auth-tokens",
       SES_SOURCE_EMAIL: "yogaswap@example.com",
     };
     mockSend.mockReset();
     sesMockSend.mockReset();
     mockedCollectBlockers.mockReset();
     mockedCollectBlockers.mockResolvedValue(emptyBlockers);
+    mockedInvalidateTokens.mockReset();
+    mockedInvalidateTokens.mockResolvedValue(0);
   });
 
   afterAll(() => {
@@ -131,10 +142,18 @@ describe("deleteParticipant Lambda", () => {
       success: true,
       membershipDeleted: true,
       profileDeleted: true,
-      notificationEmail: "alice@example.com",
+      notificationEmailAttempted: false,
       notificationEmailSent: false,
+      authTokensInvalidated: 0,
     });
     expect(sesMockSend).not.toHaveBeenCalled();
+    expect(mockedInvalidateTokens).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authTokensTable: "test-auth-tokens",
+        tenantId: "default-tenant",
+        userId: "alice",
+      }),
+    );
   });
 
   test("returns 409 when studio exit is blocked by future enrollment", async () => {
@@ -223,14 +242,61 @@ describe("deleteParticipant Lambda", () => {
       membershipDeleted: true,
       profileDeleted: false,
       notificationEmail: "alice@example.com",
+      notificationEmailAttempted: true,
       notificationEmailSent: true,
+      authTokensInvalidated: 0,
     });
     expect(sesMockSend).toHaveBeenCalledTimes(1);
     const mailArg = sesMockSend.mock.calls[0][0];
     const html = mailArg?.Message?.Body?.Html?.Data || "";
     expect(html).toContain("Hallo Alice Example!");
     expect(html).toContain("Login-Namen <strong>alice</strong>");
+    expect(html).toContain("Zugang fuer <strong>Demo</strong> entfernt");
+    expect(html).not.toContain("Einladung");
     expect(html).not.toContain("31903206-7ce6-4886-9b95-2030705ca6ba");
+  });
+
+  test("invited-only delete sends invite-withdrawn mail and reports token invalidation", async () => {
+    mockedInvalidateTokens.mockResolvedValueOnce(2);
+    authMocks()
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          displayName: { S: "Alice Example" },
+          email: { S: "alice@example.com" },
+          inviteSentAt: { S: "2026-09-01T12:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({}) // membership delete
+      .mockResolvedValueOnce({ Items: [] }) // courses query
+      .mockResolvedValueOnce({ Count: 0, Items: [] }) // no remaining memberships
+      .mockResolvedValueOnce({}) // participant delete
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }); // studio name
+    sesMockSend.mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body)).toEqual({
+      success: true,
+      membershipDeleted: true,
+      profileDeleted: true,
+      notificationEmail: "alice@example.com",
+      notificationEmailAttempted: true,
+      notificationEmailSent: true,
+      authTokensInvalidated: 2,
+    });
+    expect(mockedInvalidateTokens).toHaveBeenCalled();
+    const mailArg = sesMockSend.mock.calls[0][0];
+    const html = mailArg?.Message?.Body?.Html?.Data || "";
+    expect(mailArg?.Message?.Subject?.Data).toContain("Einladung zurueckgezogen");
+    expect(html).toContain("Einladung zu YogaSwap");
+    expect(html).toContain("zurueckgezogen");
   });
 
   test("deletes only membership when user still has membership in another tenant", async () => {
@@ -252,7 +318,9 @@ describe("deleteParticipant Lambda", () => {
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).profileDeleted).toBe(false);
     expect(JSON.parse(result.body).notificationEmail).toBeUndefined();
+    expect(JSON.parse(result.body).notificationEmailAttempted).toBe(false);
     expect(JSON.parse(result.body).notificationEmailSent).toBe(false);
+    expect(JSON.parse(result.body).authTokensInvalidated).toBe(0);
   });
 
   test("returns 403 when actor cannot manage participants", async () => {

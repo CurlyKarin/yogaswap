@@ -29,7 +29,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 | **E-Mail-Adresse geändert** | `updateParticipant` | Neue + ggf. alte Adresse | `buildEmailChangedNewAddressMail`, `buildEmailChangedOldAddressMail` | Nur bei aktivem Login-Status |
 | **Anzeigename geändert** | `updateParticipant` | Zielprofil | `buildDisplayNameChangedMail` | Nur bei aktivem Login-Status und tatsächlicher Änderung (#345) |
 | **Rolle geändert** | `updateParticipant` | Zielprofil | `buildRoleChangedMail` | Membership-Update mit Rollenwechsel |
-| **Studio-Zugang entfernt** | `deleteParticipant` | Zielprofil | `buildStudioAccessRemovedMail` | Nur wenn `inviteCompletedAt` gesetzt (Login-Historie) |
+| **Studio-Zugang entfernt** | `deleteParticipant` | Zielprofil | `buildStudioAccessRemovedMail` | Bei Login-Historie (`authUserId` / `inviteCompletedAt`) oder zurückgezogener Einladung (`inviteSentAt`, ohne Registrierung); parallel ungenutzte Auth-Tokens als `usedAt` markieren |
 | **Termin absgesagt (Studio)** | `cancelCourseDate` | Gebuchte, getauschte, Wartelisten- und abgemeldete TN am Termin | `buildStudioTermCancelledMail` (Datum + Uhrzeit, `de-DE`) | Skip: `invited`, kein Profil; kein ICS |
 | **Terminabsage Studio-Report** | `cancelCourseDate` | `STUDIO_NOTIFICATION_EMAILS` (Infra-Env, CSV) | Inline-HTML Report | Optional; Fehler nur als Warning |
 | **Geplantes Kursende gesetzt** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateMail` | Rollkurs `active` mit TN; Skip: `invited`, kein Profil |

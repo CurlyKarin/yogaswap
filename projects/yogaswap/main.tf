@@ -435,8 +435,9 @@ locals {
         module.course_enrollments_table.table_arn,
         module.swaps_table.table_arn,
         module.course_overrides_table.table_arn,
+        module.auth_tokens_table.table_arn,
       ]
-      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:Scan", "dynamodb:Query", "dynamodb:PutItem"]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:Scan", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem"]
       tables = {
         "PARTICIPANTS_TABLE"       = module.participants_table.table_name
         "MEMBERSHIPS_TABLE"        = module.memberships_table.table_name
@@ -445,6 +446,7 @@ locals {
         "COURSE_ENROLLMENTS_TABLE" = module.course_enrollments_table.table_name
         "SWAPS_TABLE"              = module.swaps_table.table_name
         "OVERRIDES_TABLE"          = module.course_overrides_table.table_name
+        "AUTH_TOKENS_TABLE"        = module.auth_tokens_table.table_name
       }
       s3_actions   = []
       s3_resources = []

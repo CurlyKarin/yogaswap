@@ -1316,7 +1316,7 @@ export default function AdminPanel({
           ? `Teilnehmer "${userId}" entfernt (inkl. Profil-Cleanup).`
           : `Teilnehmer "${userId}" aus diesem Studio entfernt.`,
       );
-      if (result.notificationEmail) {
+      if (result.notificationEmailAttempted && result.notificationEmail) {
         setBulkInviteResult((prev) =>
           `${prev} ${
             result.notificationEmailSent
@@ -2250,7 +2250,9 @@ export default function AdminPanel({
             <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
               {deleteTargetHasLoginHistory
                 ? "Dieser Zugang wird nur aus diesem Studio entfernt. Das Profil bleibt erhalten und es wird eine Info-Mail versendet."
-                : "Dieser Nutzer hat sich noch nicht registriert. Der Eintrag wird (falls keine weitere Studio-Zuordnung existiert) vollständig entfernt, ohne Info-Mail."}
+                : deleteTarget.status === "invited"
+                  ? "Die Einladung wird zurückgezogen. Der Eintrag wird (falls keine weitere Studio-Zuordnung existiert) vollständig entfernt und es wird eine Info-Mail versendet. Offene Einladungslinks werden ungültig."
+                  : "Dieser Nutzer hat sich noch nicht registriert. Der Eintrag wird (falls keine weitere Studio-Zuordnung existiert) vollständig entfernt, ohne Info-Mail."}
             </p>
             {deleteExitCheckLoading && (
               <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
