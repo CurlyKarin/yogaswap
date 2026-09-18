@@ -25,6 +25,7 @@ import {
   listCognitoUsersByEmail,
   resolveCognitoUsernameAndSub,
 } from "../shared/cognitoUserIdentity";
+import { resolveAuthTokenTtlSeconds } from "../shared/authTokenTtl";
 
 const cognito = new CognitoIdentityProviderClient({});
 const ses = new SESClient({});
@@ -1072,7 +1073,7 @@ export const handler = async (event: any) => {
 
   // Build link (nickname query = Studio-Login-Name, not opaque Cognito Username #324)
   const baseUrl = resolveAppBaseUrlForTenant(tenantId);
-  const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
+  const tokenTtlSeconds = resolveAuthTokenTtlSeconds("invite-activation");
   const nowSeconds = Math.floor(Date.now() / 1000);
   const displayNameQuery = displayNameCanonical
     ? `&displayName=${encodeURIComponent(displayNameCanonical)}`

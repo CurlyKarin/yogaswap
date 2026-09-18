@@ -27,6 +27,8 @@ Inhaltliche und operative Abnahme der Cognito-Code-Mails (und zugehöriger App-A
 | Passwort-Reset Admin/Self (Link) | App SES | `YogaSwap <noreply@yogaswap.de>` | `YogaSwap Passwort zuruecksetzen` |
 | **Bestaetigungscode** | Cognito + Custom Message | `YogaSwap <noreply@yogaswap.de>` | `YogaSwap Bestaetigungscode` |
 
+**TTL:** Invite-App-Token (erste Mail mit Link) default **7 Tage** (`AUTH_INVITE_TOKEN_TTL_SECONDS`). Reset-/Recovery-App-Token default **1 Stunde**. Cognito-Bestätigungscode: eigene Cognito-Frist (kurz).
+
 Code-Mail-Body muss den **ersetzten Code** enthalten (Cognito ersetzt `{####}`).
 
 ---

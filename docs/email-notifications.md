@@ -22,7 +22,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 
 | Ereignis | Lambda | Empfänger | Template / Inhalt | Voraussetzungen / Skip |
 |----------|--------|-----------|-------------------|------------------------|
-| **Einladung (neu)** | `createParticipants` | Teilnehmer (E-Mail aus Request) | `buildInviteMail` (Betreff/Body inkl. Studio-Name, #268) | E-Mail im Request; `AUTH_TOKENS_TABLE`; SES-Fehler blockiert Anlage nicht; Create-Dialog setzt `sendEmail: false` (kein SES, #342) |
+| **Einladung (neu)** | `createParticipants` | Teilnehmer (E-Mail aus Request) | `buildInviteMail` (Betreff/Body inkl. Studio-Name, #268) | E-Mail im Request; `AUTH_TOKENS_TABLE`; Invite-App-Token TTL default **7 Tage** (`AUTH_INVITE_TOKEN_TTL_SECONDS`); SES-Fehler blockiert Anlage nicht; Create-Dialog setzt `sendEmail: false` (kein SES, #342) |
 | **Zugang freigeschaltet** | `createParticipants` | Bestehende Profile / Verknüpfung | `buildReactivationMail` | Nickname-Reaktivierung oder Link eines bestätigten Kontos (auch bei `sendEmail: false`) |
 | **Passwort-Reset (Admin)** | `resetParticipantPassword`, `updateParticipant` | Zielprofil | `buildRecoveryMail` | Admin-Aktion; aktives Profil mit E-Mail |
 | **Passwort-Reset (Self-Service)** | `requestSelfPasswordReset` | Bekannter Nickname | `buildRecoveryMail` | Generische 200-Antwort bei unbekanntem User (Enumeration-Schutz) |

@@ -33,6 +33,7 @@ import {
 } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { loadTenantName } from "../shared/tenantSettingsLoader";
+import { resolveAuthTokenTtlSeconds } from "../shared/authTokenTtl";
 
 const client = dynamoClient;
 const cognito = new CognitoIdentityProviderClient({});
@@ -375,7 +376,7 @@ export const handler = async (
                 };
               }
 
-              const tokenTtlSeconds = Number(process.env.AUTH_TOKEN_TTL_SECONDS || "3600");
+              const tokenTtlSeconds = resolveAuthTokenTtlSeconds("admin-password-reset");
               const nowSeconds = Math.floor(Date.now() / 1000);
               const oneTimeToken = generateOneTimeToken();
               await client.send(
