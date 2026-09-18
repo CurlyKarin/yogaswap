@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { handler } from "./index";
+import { collectStudioExitBlockers } from "../shared/studioExitBlockers";
 
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
@@ -26,6 +27,25 @@ jest.mock("@aws-sdk/client-ses", () => {
 });
 const { sesMockSend } = jest.requireMock("@aws-sdk/client-ses");
 
+jest.mock("../shared/studioExitBlockers", () => {
+  const actual = jest.requireActual("../shared/studioExitBlockers");
+  return {
+    ...actual,
+    collectStudioExitBlockers: jest.fn(),
+  };
+});
+
+const mockedCollectBlockers = collectStudioExitBlockers as jest.MockedFunction<
+  typeof collectStudioExitBlockers
+>;
+
+const emptyBlockers = {
+  asOf: "2026-09-18",
+  courses: [] as [],
+  swaps: [] as [],
+  waitlist: [] as [],
+};
+
 describe("deleteParticipant Lambda", () => {
   const OLD_ENV = process.env;
 
@@ -37,10 +57,15 @@ describe("deleteParticipant Lambda", () => {
       MEMBERSHIPS_TABLE: "test-memberships",
       TENANTS_TABLE: "test-tenants",
       COURSES_TABLE: "test-courses",
+      COURSE_ENROLLMENTS_TABLE: "test-enrollments",
+      SWAPS_TABLE: "test-swaps",
+      OVERRIDES_TABLE: "test-overrides",
       SES_SOURCE_EMAIL: "yogaswap@example.com",
     };
     mockSend.mockReset();
     sesMockSend.mockReset();
+    mockedCollectBlockers.mockReset();
+    mockedCollectBlockers.mockResolvedValue(emptyBlockers);
   });
 
   afterAll(() => {
@@ -55,7 +80,7 @@ describe("deleteParticipant Lambda", () => {
       ...overrides,
     } as any);
 
-  test("deletes membership and profile for no-login participant without sending notification mail", async () => {
+  const authMocks = () =>
     mockSend
       .mockResolvedValueOnce({
         Item: {
@@ -76,7 +101,10 @@ describe("deleteParticipant Lambda", () => {
           userId: { S: "admin" },
           role: { S: "admin" },
         },
-      }) // actor role check
+      }); // actor role check
+
+  test("deletes membership and profile for no-login participant without sending notification mail", async () => {
+    authMocks()
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: "default-tenant" },
@@ -109,28 +137,65 @@ describe("deleteParticipant Lambda", () => {
     expect(sesMockSend).not.toHaveBeenCalled();
   });
 
+  test("returns 409 when studio exit is blocked by future enrollment", async () => {
+    authMocks().mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "alice" },
+      },
+    });
+    mockedCollectBlockers.mockResolvedValueOnce({
+      asOf: "2026-09-18",
+      courses: [{ courseId: 1, courseName: "Yoga", reason: "enrollment" }],
+      swaps: [],
+      waitlist: [],
+    });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(409);
+    const body = JSON.parse(result.body);
+    expect(body.code).toBe("studio_exit_blocked");
+    expect(body.courses).toEqual([
+      { courseId: 1, courseName: "Yoga", reason: "enrollment" },
+    ]);
+    expect(sesMockSend).not.toHaveBeenCalled();
+  });
+
+  test("check=1 returns blockers without deleting", async () => {
+    authMocks().mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "alice" },
+      },
+    });
+    mockedCollectBlockers.mockResolvedValueOnce({
+      asOf: "2026-09-18",
+      courses: [],
+      swaps: [
+        {
+          fromDate: "2026-09-20",
+          fromCourseId: 1,
+          toDate: "2026-09-22",
+          toCourseId: 2,
+          status: "pending",
+        },
+      ],
+      waitlist: [],
+    });
+
+    const result = await handler(
+      makeEvent({ queryStringParameters: { check: "1" } }),
+    );
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.blocked).toBe(true);
+    expect(body.swaps).toHaveLength(1);
+    const { DeleteItemCommand } = jest.requireMock("@aws-sdk/client-dynamodb");
+    expect(DeleteItemCommand).not.toHaveBeenCalled();
+  });
+
   test("deletes only membership when participant has authUserId", async () => {
-    mockSend
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: { S: "default-tenant" },
-          userId: { S: "admin" },
-          role: { S: "admin" },
-        },
-      })
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: { S: "default-tenant" },
-          name: { S: "Demo" },
-        },
-      })
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: { S: "default-tenant" },
-          userId: { S: "admin" },
-          role: { S: "admin" },
-        },
-      })
+    authMocks()
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: "default-tenant" },
@@ -160,8 +225,6 @@ describe("deleteParticipant Lambda", () => {
       notificationEmail: "alice@example.com",
       notificationEmailSent: true,
     });
-    // No scan and no profile delete in this case.
-    expect(mockSend).toHaveBeenCalled();
     expect(sesMockSend).toHaveBeenCalledTimes(1);
     const mailArg = sesMockSend.mock.calls[0][0];
     const html = mailArg?.Message?.Body?.Html?.Data || "";
@@ -171,27 +234,7 @@ describe("deleteParticipant Lambda", () => {
   });
 
   test("deletes only membership when user still has membership in another tenant", async () => {
-    mockSend
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: { S: "default-tenant" },
-          userId: { S: "admin" },
-          role: { S: "admin" },
-        },
-      })
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: { S: "default-tenant" },
-          name: { S: "Demo" },
-        },
-      })
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: { S: "default-tenant" },
-          userId: { S: "admin" },
-          role: { S: "admin" },
-        },
-      })
+    authMocks()
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: "default-tenant" },
@@ -249,4 +292,3 @@ describe("deleteParticipant Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Only admins can delete participants/);
   });
 });
-

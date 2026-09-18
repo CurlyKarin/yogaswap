@@ -427,13 +427,24 @@ locals {
     "delete_participant" = {
       name             = "delete-participant"
       file_name        = "deleteParticipant.zip"
-      table_arns       = [module.participants_table.table_arn, module.memberships_table.table_arn, module.tenants_table.table_arn, module.courses_table.table_arn]
+      table_arns       = [
+        module.participants_table.table_arn,
+        module.memberships_table.table_arn,
+        module.tenants_table.table_arn,
+        module.courses_table.table_arn,
+        module.course_enrollments_table.table_arn,
+        module.swaps_table.table_arn,
+        module.course_overrides_table.table_arn,
+      ]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:Scan", "dynamodb:Query", "dynamodb:PutItem"]
       tables = {
-        "PARTICIPANTS_TABLE" = module.participants_table.table_name
-        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
-        "TENANTS_TABLE"      = module.tenants_table.table_name
-        "COURSES_TABLE"      = module.courses_table.table_name
+        "PARTICIPANTS_TABLE"       = module.participants_table.table_name
+        "MEMBERSHIPS_TABLE"        = module.memberships_table.table_name
+        "TENANTS_TABLE"            = module.tenants_table.table_name
+        "COURSES_TABLE"            = module.courses_table.table_name
+        "COURSE_ENROLLMENTS_TABLE" = module.course_enrollments_table.table_name
+        "SWAPS_TABLE"              = module.swaps_table.table_name
+        "OVERRIDES_TABLE"          = module.course_overrides_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -482,11 +493,12 @@ locals {
         }
       ]
       environment = {
-        USER_POOL_ID      = aws_cognito_user_pool.yogaswap.id
-        BASE_URL          = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
-        TENANT_BASE_HOST  = local.tenant_base_host
-        SES_SOURCE_EMAIL  = local.ses_from_address # Display-Name + Adresse (Domain muss verifiziert sein)
-        AUTH_TOKENS_TABLE = module.auth_tokens_table.table_name
+        USER_POOL_ID                 = aws_cognito_user_pool.yogaswap.id
+        BASE_URL                     = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
+        TENANT_BASE_HOST             = local.tenant_base_host
+        SES_SOURCE_EMAIL             = local.ses_from_address # Display-Name + Adresse (Domain muss verifiziert sein)
+        AUTH_TOKENS_TABLE            = module.auth_tokens_table.table_name
+        AUTH_INVITE_TOKEN_TTL_SECONDS = "604800"
       }
     },
     "list_identity_candidates" = {

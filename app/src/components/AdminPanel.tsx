@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Mail, Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  checkStudioExitBlockers,
   deleteParticipant,
   getIdentityCandidates,
   getParticipants,
@@ -9,6 +10,7 @@ import {
   updateParticipant,
   type IdentityCandidate,
   type ParticipantWithStatus,
+  type StudioExitBlockers,
 } from "../api/participants";
 import type { Tenant, UserRole } from "shared/types";
 import { NICKNAME_MIN_LENGTH, validateNickname } from "shared/nickname";
@@ -165,6 +167,9 @@ export default function AdminPanel({
   const [bulkInviteResult, setBulkInviteResult] = useState("");
   const [deleteRunningByUserId, setDeleteRunningByUserId] = useState<Record<string, boolean>>({});
   const [deleteTarget, setDeleteTarget] = useState<ParticipantWithStatus | null>(null);
+  const [deleteExitBlockers, setDeleteExitBlockers] = useState<StudioExitBlockers | null>(null);
+  const [deleteExitCheckLoading, setDeleteExitCheckLoading] = useState(false);
+  const [deleteExitCheckError, setDeleteExitCheckError] = useState("");
   const editingModalRef = useRef<HTMLDivElement | null>(null);
   const createModalRef = useRef<HTMLDivElement | null>(null);
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
@@ -1261,8 +1266,45 @@ export default function AdminPanel({
     }
   };
 
+  const openDeleteDialog = async (participant: ParticipantWithStatus) => {
+    setDeleteTarget(participant);
+    setDeleteExitBlockers(null);
+    setDeleteExitCheckError("");
+    setDeleteExitCheckLoading(true);
+    try {
+      const check = await checkStudioExitBlockers(participant.userId);
+      setDeleteExitBlockers({
+        asOf: check.asOf,
+        courses: check.courses,
+        swaps: check.swaps,
+        waitlist: check.waitlist,
+      });
+    } catch (err) {
+      console.error("Failed to check studio-exit blockers", err);
+      setDeleteExitCheckError(
+        "Voraussetzungen für das Entfernen konnten nicht geprüft werden. Bitte erneut versuchen.",
+      );
+    } finally {
+      setDeleteExitCheckLoading(false);
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteTarget(null);
+    setDeleteExitBlockers(null);
+    setDeleteExitCheckError("");
+    setDeleteExitCheckLoading(false);
+  };
+
+  const deleteExitBlocked = !!(
+    deleteExitBlockers &&
+    (deleteExitBlockers.courses.length > 0 ||
+      deleteExitBlockers.swaps.length > 0 ||
+      deleteExitBlockers.waitlist.length > 0)
+  );
+
   const confirmDeleteParticipant = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || deleteExitBlocked || deleteExitCheckLoading || deleteExitCheckError) return;
     const userId = deleteTarget.userId;
     setDeleteRunningByUserId((prev) => ({ ...prev, [userId]: true }));
     setBulkInviteResult("");
@@ -1283,7 +1325,7 @@ export default function AdminPanel({
           }`,
         );
       }
-      setDeleteTarget(null);
+      closeDeleteDialog();
       await refreshParticipants();
     } catch (err) {
       console.error("Failed to delete participant", err);
@@ -1571,7 +1613,7 @@ export default function AdminPanel({
                           !!inviteSendingByUserId[p.userId] ||
                           !!deleteRunningByUserId[p.userId]
                         }
-                        onClick={() => setDeleteTarget(p)}
+                        onClick={() => void openDeleteDialog(p)}
                       >
                         <Trash2 size={14} aria-hidden="true" />
                       </button>
@@ -2190,7 +2232,7 @@ export default function AdminPanel({
             if (!shouldHandleModalEscape(event)) return;
             if (deleteRunningByUserId[deleteTarget.userId]) return;
             event.preventDefault();
-            setDeleteTarget(null);
+            closeDeleteDialog();
           }}
         >
           <div className="modal modal-compact">
@@ -2210,11 +2252,77 @@ export default function AdminPanel({
                 ? "Dieser Zugang wird nur aus diesem Studio entfernt. Das Profil bleibt erhalten und es wird eine Info-Mail versendet."
                 : "Dieser Nutzer hat sich noch nicht registriert. Der Eintrag wird (falls keine weitere Studio-Zuordnung existiert) vollständig entfernt, ohne Info-Mail."}
             </p>
+            {deleteExitCheckLoading && (
+              <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
+                Prüfe Kurszuordnungen, Täusche und Warteliste…
+              </p>
+            )}
+            {deleteExitCheckError && (
+              <p style={{ marginTop: 0, color: "crimson", fontSize: 14 }}>{deleteExitCheckError}</p>
+            )}
+            {deleteExitBlocked && deleteExitBlockers && (
+              <div
+                style={{
+                  marginTop: "0.75rem",
+                  padding: "0.75rem",
+                  background: "#fff7ed",
+                  border: "1px solid #fdba74",
+                  borderRadius: 8,
+                  color: "#9a3412",
+                  fontSize: 14,
+                }}
+              >
+                <p style={{ marginTop: 0, marginBottom: "0.5rem" }}>
+                  Entfernen ist blockiert, solange noch Zukunft geplant ist. Bitte zuerst
+                  Kurs-Abmeldung, Tausch abbrechen bzw. von der Warteliste nehmen.
+                </p>
+                {deleteExitBlockers.courses.length > 0 && (
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <strong>Kurse</strong>
+                    <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                      {deleteExitBlockers.courses.map((course) => (
+                        <li key={`course-${course.courseId}`}>
+                          {course.courseName?.trim() || `Kurs ${course.courseId}`}
+                          {course.reason === "roster" ? " (Stamm-Cache)" : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {deleteExitBlockers.swaps.length > 0 && (
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <strong>Täusche</strong>
+                    <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                      {deleteExitBlockers.swaps.map((swap) => (
+                        <li
+                          key={`${swap.fromDate}-${swap.fromCourseId}-${swap.toDate}-${swap.toCourseId}`}
+                        >
+                          {swap.fromDate} (Kurs {swap.fromCourseId}) → {swap.toDate} (Kurs{" "}
+                          {swap.toCourseId}) · {swap.status}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {deleteExitBlockers.waitlist.length > 0 && (
+                  <div>
+                    <strong>Warteliste</strong>
+                    <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                      {deleteExitBlockers.waitlist.map((entry) => (
+                        <li key={`wl-${entry.courseId}-${entry.date}`}>
+                          {entry.date}: {entry.courseName?.trim() || `Kurs ${entry.courseId}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="modal-actions">
               <button
                 type="button"
                 className="modal-action-btn"
-                onClick={() => setDeleteTarget(null)}
+                onClick={closeDeleteDialog}
                 disabled={!!deleteRunningByUserId[deleteTarget.userId]}
               >
                 Abbrechen
@@ -2222,8 +2330,13 @@ export default function AdminPanel({
               <button
                 type="button"
                 className="btn-primary modal-action-btn"
-                onClick={confirmDeleteParticipant}
-                disabled={!!deleteRunningByUserId[deleteTarget.userId]}
+                onClick={() => void confirmDeleteParticipant()}
+                disabled={
+                  !!deleteRunningByUserId[deleteTarget.userId] ||
+                  deleteExitCheckLoading ||
+                  !!deleteExitCheckError ||
+                  deleteExitBlocked
+                }
               >
                 {deleteRunningByUserId[deleteTarget.userId] ? "Lösche..." : "Löschen"}
               </button>

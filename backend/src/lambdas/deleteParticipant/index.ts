@@ -16,6 +16,10 @@ import { loadTenantName } from "../shared/tenantSettingsLoader";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { getTenantContext } from "../shared/tenantContext";
+import {
+  collectStudioExitBlockers,
+  hasStudioExitBlockers,
+} from "../shared/studioExitBlockers";
 
 const client = dynamoClient;
 const ses = new SESClient({});
@@ -27,12 +31,24 @@ export const handler = async (
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const tenantsTable = process.env.TENANTS_TABLE;
   const coursesTable = process.env.COURSES_TABLE;
+  const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+  const swapsTable = process.env.SWAPS_TABLE;
+  const overridesTable = process.env.OVERRIDES_TABLE;
 
-  if (!participantsTable || !membershipsTable || !tenantsTable || !coursesTable) {
+  if (
+    !participantsTable ||
+    !membershipsTable ||
+    !tenantsTable ||
+    !coursesTable ||
+    !enrollmentsTable ||
+    !swapsTable ||
+    !overridesTable
+  ) {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: "PARTICIPANTS_TABLE, MEMBERSHIPS_TABLE, TENANTS_TABLE or COURSES_TABLE env var is not set",
+        error:
+          "PARTICIPANTS_TABLE, MEMBERSHIPS_TABLE, TENANTS_TABLE, COURSES_TABLE, COURSE_ENROLLMENTS_TABLE, SWAPS_TABLE or OVERRIDES_TABLE env var is not set",
       }),
     };
   }
@@ -44,6 +60,10 @@ export const handler = async (
       body: JSON.stringify({ error: "Missing userId in path" }),
     };
   }
+
+  const checkOnly =
+    event.queryStringParameters?.check === "1" ||
+    event.queryStringParameters?.check === "true";
 
   const { tenantId, userId: actorUserId } = getTenantContext(event);
   if (!actorUserId) {
@@ -89,6 +109,39 @@ export const handler = async (
     const profile = existingResp.Item
       ? (unmarshall(existingResp.Item) as ParticipantProfile)
       : undefined;
+
+    const blockers = await collectStudioExitBlockers({
+      client,
+      tenantId,
+      userId,
+      participantId: profile?.participantId,
+      coursesTable,
+      enrollmentsTable,
+      swapsTable,
+      overridesTable,
+    });
+
+    if (checkOnly) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          blocked: hasStudioExitBlockers(blockers),
+          ...blockers,
+        }),
+      };
+    }
+
+    if (hasStudioExitBlockers(blockers)) {
+      return {
+        statusCode: 409,
+        body: JSON.stringify({
+          error:
+            "Studio-Exit nicht möglich: noch zukünftige Kurszuordnungen, Täusche oder Wartelisten-Einträge.",
+          code: "studio_exit_blocked",
+          ...blockers,
+        }),
+      };
+    }
 
     await client.send(
       new DeleteItemCommand({
@@ -209,4 +262,3 @@ export const handler = async (
     };
   }
 };
-

@@ -184,6 +184,33 @@ export interface DeleteParticipantResponse {
   notificationEmailSent?: boolean;
 }
 
+export type StudioExitBlockers = {
+  asOf: string;
+  courses: Array<{ courseId: number; courseName?: string; reason: "enrollment" | "roster" }>;
+  swaps: Array<{
+    fromDate: string;
+    fromCourseId: number;
+    toDate: string;
+    toCourseId: number;
+    status: string;
+  }>;
+  waitlist: Array<{ courseId: number; date: string; courseName?: string }>;
+};
+
+export type StudioExitCheckResponse = StudioExitBlockers & {
+  blocked: boolean;
+};
+
+export async function checkStudioExitBlockers(
+  userId: string,
+): Promise<StudioExitCheckResponse> {
+  const response = await axios.delete<StudioExitCheckResponse>(
+    `/participants/${encodeURIComponent(userId)}`,
+    { params: { check: "1" } },
+  );
+  return response.data;
+}
+
 export async function deleteParticipant(userId: string): Promise<DeleteParticipantResponse> {
   const response = await axios.delete<DeleteParticipantResponse>(
     `/participants/${encodeURIComponent(userId)}`,
