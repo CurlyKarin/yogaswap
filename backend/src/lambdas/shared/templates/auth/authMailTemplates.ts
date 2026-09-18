@@ -164,6 +164,11 @@ type InvitePreparationMailInput = StudioMailFields & {
 type StudioAccessRemovedMailInput = StudioMailFields & {
   nickname: string;
   displayName?: string | null;
+  /**
+   * True when the person never finished registration (invite withdrawn).
+   * Wording differs from studio-exit for an already registered account.
+   */
+  inviteWithdrawn?: boolean;
 };
 
 type EmailChangedNewAddressMailInput = StudioMailFields & {
@@ -352,7 +357,42 @@ export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput
   const studio = resolveStudioDisplayName(input.studioName);
   const greeting = resolveAuthMailGreetingName(input);
   if (locale !== "de") {
-    return { subject: `${studio}: Zugang entfernt`, html: "", text: "" };
+    return {
+      subject: input.inviteWithdrawn
+        ? `${studio}: Einladung zurueckgezogen`
+        : `${studio}: Zugang entfernt`,
+      html: "",
+      text: "",
+    };
+  }
+
+  if (input.inviteWithdrawn) {
+    const withdrawnHtml = hasNamedStudio(studio)
+      ? `Die Einladung zu YogaSwap fuer <strong>${studio}</strong> wurde zurueckgezogen.`
+      : "Die Einladung zu YogaSwap wurde zurueckgezogen.";
+    const withdrawnText = hasNamedStudio(studio)
+      ? `Die Einladung zu YogaSwap fuer "${studio}" wurde zurueckgezogen.`
+      : "Die Einladung zu YogaSwap wurde zurueckgezogen.";
+    return composeMail({
+      subject: `${studio}: Einladung zurueckgezogen`,
+      studioName: studio,
+      studioUrl: input.studioUrl,
+      htmlBody: `
+        <h2>Hallo ${greeting}!</h2>
+        <p>${withdrawnHtml}</p>
+        <p>Bitte nutze den Link aus der Einladungs-Mail nicht mehr — er fuehrt nicht mehr zu einem gueltigen Studio-Zugang
+        fuer den Login-Namen <strong>${input.nickname}</strong>.</p>
+        <p>Falls das ein Versehen war, melde Dich bitte bei Deinem Studio.</p>
+      `,
+      textBody: [
+        `Hallo ${greeting}!`,
+        "",
+        withdrawnText,
+        `Bitte nutze den Link aus der Einladungs-Mail nicht mehr — er fuehrt nicht mehr zu einem gueltigen Studio-Zugang fuer den Login-Namen "${input.nickname}".`,
+        "",
+        "Falls das ein Versehen war, melde Dich bitte bei Deinem Studio.",
+      ].join("\n"),
+    });
   }
 
   const removedHtml = hasNamedStudio(studio)

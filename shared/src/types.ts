@@ -279,6 +279,9 @@ export interface ParticipantProfile {
   /** Optional: Verknüpfung zur Auth-Identität (z.B. Cognito sub). */
   authUserId?: string | null;
 
+  /** Optional: opaque Cognito Username (#324); Studio-Login bleibt `userId`. */
+  cognitoUsername?: string;
+
   /** Optional: Zeitpunkt der letzten Einladung (ISO timestamp). */
   inviteSentAt?: string;
 

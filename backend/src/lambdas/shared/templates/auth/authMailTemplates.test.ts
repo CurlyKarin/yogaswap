@@ -161,6 +161,25 @@ describe("authMailTemplates", () => {
     );
   });
 
+  test("buildStudioAccessRemovedMail with inviteWithdrawn uses withdrawn wording", () => {
+    const mail = buildStudioAccessRemovedMail({
+      locale: "de",
+      nickname: "Karin",
+      displayName: "Karin Example",
+      studioName: "Beharmony",
+      inviteWithdrawn: true,
+    });
+
+    expect(mail.subject).toBe("Beharmony: Einladung zurueckgezogen");
+    expect(mail.html).toContain("Hallo Karin Example!");
+    expect(mail.html).toContain(
+      "Die Einladung zu YogaSwap fuer <strong>Beharmony</strong> wurde zurueckgezogen",
+    );
+    expect(mail.html).toContain("Login-Namen <strong>Karin</strong>");
+    expect(mail.html).not.toContain("nur deaktiviert");
+    expect(mail.text).toContain("wurde zurueckgezogen");
+  });
+
   test("buildEmailChangedNewAddressMail returns german template with app link", () => {
     const mail = buildEmailChangedNewAddressMail({
       locale: "de",

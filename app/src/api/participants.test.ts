@@ -164,4 +164,24 @@ describe("participants API (getParticipants/updateParticipant)", () => {
     });
     expect(axios.delete).toHaveBeenCalledWith("/participants/alice");
   });
+
+  it("checkStudioExitBlockers fragt DELETE mit check=1 ab", async () => {
+    const { checkStudioExitBlockers } = await import("./participants");
+    vi.mocked(axios.delete).mockResolvedValueOnce({
+      data: {
+        blocked: true,
+        asOf: "2026-09-18",
+        courses: [{ courseId: 1, reason: "enrollment" }],
+        swaps: [],
+        waitlist: [],
+      },
+    });
+
+    const result = await checkStudioExitBlockers("alice");
+
+    expect(result.blocked).toBe(true);
+    expect(axios.delete).toHaveBeenCalledWith("/participants/alice", {
+      params: { check: "1" },
+    });
+  });
 });

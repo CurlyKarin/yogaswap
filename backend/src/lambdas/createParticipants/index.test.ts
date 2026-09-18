@@ -57,8 +57,7 @@ function adminGetUserResponse(username: string, sub = `sub-${username}`) {
 function mockNewUserCognitoPrelude(opaqueUsername: string) {
   return cognitoMockSend
     .mockRejectedValueOnce(new Error('UserNotFoundException'))
-    .mockResolvedValueOnce({}) // AdminCreateUser
-    .mockResolvedValueOnce({}) // AdminSetUserPassword
+    .mockResolvedValueOnce({}) // AdminCreateUser (FORCE_CHANGE_PASSWORD, no Permanent)
     .mockResolvedValueOnce({}) // AdminAddUserToGroup
     .mockResolvedValueOnce(adminGetUserResponse(opaqueUsername));
 }
@@ -305,6 +304,26 @@ describe('createParticipants Lambda', () => {
   });
 
   test('linkExisting uses Cognito nickname when no studio profile yet (#342)', async () => {
+    dynamoMockSend.mockImplementation((input: any) => {
+      // Cross-tenant evidence: registration completed elsewhere.
+      if (
+        input?.TableName === 'test-participants-table' &&
+        !input?.KeyConditionExpression &&
+        input?.FilterExpression?.includes('inviteCompletedAt')
+      ) {
+        return Promise.resolve({
+          Items: [
+            {
+              tenantId: { S: 'other-tenant' },
+              userId: { S: 'alice' },
+              inviteCompletedAt: { S: '2026-01-01T00:00:00.000Z' },
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    });
+
     cognitoMockSend
       .mockResolvedValueOnce({
         ...adminGetUserResponse('opaque-existing', 'sub-existing'),
@@ -352,6 +371,59 @@ describe('createParticipants Lambda', () => {
           userId: { S: 'alice' },
           cognitoUsername: { S: 'opaque-existing' },
           authUserId: { S: 'sub-existing' },
+        }),
+      }),
+    );
+  });
+
+  test('linkExisting of incomplete invite Cognito is not reactivation', async () => {
+    // No inviteCompletedAt anywhere — orphan from withdrawn invite.
+    dynamoMockSend.mockResolvedValue({});
+    cognitoMockSend
+      .mockResolvedValueOnce({
+        ...adminGetUserResponse('opaque-orphan', 'sub-orphan'),
+        UserStatus: 'CONFIRMED',
+      })
+      .mockResolvedValueOnce({
+        Users: [
+          {
+            Username: 'opaque-orphan',
+            UserStatus: 'CONFIRMED',
+            Attributes: [
+              { Name: 'sub', Value: 'sub-orphan' },
+              { Name: 'email', Value: 'orphan@example.com' },
+              { Name: 'nickname', Value: 'orphan' },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // AdminUpdateUserAttributes
+      .mockResolvedValueOnce({}) // AdminSetUserPassword (invite path)
+      .mockResolvedValueOnce({}) // AdminAddUserToGroup
+      .mockResolvedValueOnce(adminGetUserResponse('opaque-orphan', 'sub-orphan'));
+    sesMockSend.mockResolvedValueOnce({});
+
+    const event = baseEvent({
+      email: 'orphan@example.com',
+      nickname: 'orphan',
+      displayName: 'Orphan',
+      role: 'participant',
+      linkExisting: { cognitoUsername: 'opaque-orphan' },
+    });
+    event.headers = { 'x-tenant-id': 'test-tenant' };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(true);
+    expect(body.reactivated).toBe(false);
+    expect(body.link).toMatch(/token=/);
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Message: expect.objectContaining({
+          Subject: expect.objectContaining({
+            Data: expect.stringMatching(/Einladung/i),
+          }),
         }),
       }),
     );
@@ -494,6 +566,25 @@ describe('createParticipants Lambda', () => {
   });
 
   test('sendEmail:false with linkExisting sends access info mail (#342)', async () => {
+    dynamoMockSend.mockImplementation((input: any) => {
+      if (
+        input?.TableName === 'test-participants-table' &&
+        !input?.KeyConditionExpression &&
+        input?.FilterExpression?.includes('inviteCompletedAt')
+      ) {
+        return Promise.resolve({
+          Items: [
+            {
+              tenantId: { S: 'other-tenant' },
+              userId: { S: 'alice' },
+              inviteCompletedAt: { S: '2026-01-01T00:00:00.000Z' },
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    });
+
     cognitoMockSend
       .mockResolvedValueOnce({
         ...adminGetUserResponse('opaque-existing', 'sub-existing'),
@@ -725,8 +816,7 @@ describe('createParticipants Lambda', () => {
     const opaqueUsername = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
     jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
     cognitoMockSend
-      .mockResolvedValueOnce({}) // AdminCreateUser (no legacy AdminGetUser)
-      .mockResolvedValueOnce({}) // AdminSetUserPassword
+      .mockResolvedValueOnce({}) // AdminCreateUser (no legacy AdminGetUser; FORCE_CHANGE_PASSWORD)
       .mockResolvedValueOnce({}) // AdminAddUserToGroup
       .mockResolvedValueOnce(adminGetUserResponse(opaqueUsername));
 
@@ -759,8 +849,7 @@ describe('createParticipants Lambda', () => {
     const opaqueUsername = '33333333-4444-4555-8666-777777777777';
     jest.spyOn(require('crypto'), 'randomUUID').mockReturnValue(opaqueUsername);
     cognitoMockSend
-      .mockResolvedValueOnce({}) // AdminCreateUser (no legacy AdminGetUser)
-      .mockResolvedValueOnce({}) // AdminSetUserPassword
+      .mockResolvedValueOnce({}) // AdminCreateUser (no legacy AdminGetUser; FORCE_CHANGE_PASSWORD)
       .mockResolvedValueOnce({}) // AdminAddUserToGroup
       .mockResolvedValueOnce(adminGetUserResponse(opaqueUsername));
     sesMockSend.mockResolvedValueOnce({});

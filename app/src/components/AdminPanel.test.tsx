@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import AdminPanel from "./AdminPanel";
 import {
+  checkStudioExitBlockers,
   deleteParticipant,
   getIdentityCandidates,
   getParticipants,
@@ -18,6 +19,7 @@ vi.mock("../api/participants", () => ({
   getIdentityCandidates: vi.fn(),
   updateParticipant: vi.fn(),
   deleteParticipant: vi.fn(),
+  checkStudioExitBlockers: vi.fn(),
 }));
 
 const mockedInviteUser = inviteUser as unknown as ReturnType<typeof vi.fn>;
@@ -26,12 +28,20 @@ const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi
 const mockedGetIdentityCandidates = getIdentityCandidates as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
 const mockedDeleteParticipant = deleteParticipant as unknown as ReturnType<typeof vi.fn>;
+const mockedCheckStudioExitBlockers = checkStudioExitBlockers as unknown as ReturnType<typeof vi.fn>;
 
 describe("AdminPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedGetParticipants.mockResolvedValue([]);
     mockedGetIdentityCandidates.mockResolvedValue([]);
+    mockedCheckStudioExitBlockers.mockResolvedValue({
+      blocked: false,
+      asOf: "2026-09-18",
+      courses: [],
+      swaps: [],
+      waitlist: [],
+    });
   });
 
 
@@ -78,8 +88,9 @@ describe("AdminPanel", () => {
       success: true,
       membershipDeleted: true,
       profileDeleted: true,
-      notificationEmail: "alice@example.com",
-      notificationEmailSent: true,
+      notificationEmailAttempted: false,
+      notificationEmailSent: false,
+      authTokensInvalidated: 0,
     });
 
     const { container } = render(<AdminPanel canEditRoles />);
@@ -95,13 +106,116 @@ describe("AdminPanel", () => {
     expect(
       within(deleteDialog).getByText(/vollständig entfernt, ohne Info-Mail/i),
     ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockedCheckStudioExitBlockers).toHaveBeenCalledWith("alice");
+      expect(within(deleteDialog).getByRole("button", { name: /^Löschen$/i })).not.toBeDisabled();
+    });
     fireEvent.click(within(deleteDialog).getByRole("button", { name: /^Löschen$/i }));
 
     await waitFor(() => {
       expect(mockedDeleteParticipant).toHaveBeenCalledWith("alice");
       expect(within(panel).getByText(/Profil-Cleanup/i)).toBeInTheDocument();
+      expect(within(panel).queryByText(/Info-Mail/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it("zieht Einladung zurück mit Info-Mail-Hinweis und Erfolgsmeldung", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "alice",
+          participantId: "alice",
+          role: "participant",
+          email: "alice@example.com",
+          status: "invited",
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    mockedDeleteParticipant.mockResolvedValueOnce({
+      success: true,
+      membershipDeleted: true,
+      profileDeleted: true,
+      notificationEmail: "alice@example.com",
+      notificationEmailAttempted: true,
+      notificationEmailSent: true,
+      authTokensInvalidated: 1,
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Löschen alice"));
+    const deleteDialog = within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i });
+    expect(
+      within(deleteDialog).getByText(/Einladung wird zurückgezogen/i),
+    ).toBeInTheDocument();
+    expect(
+      within(deleteDialog).getByText(/Info-Mail versendet/i),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(deleteDialog).getByRole("button", { name: /^Löschen$/i })).not.toBeDisabled();
+    });
+    fireEvent.click(within(deleteDialog).getByRole("button", { name: /^Löschen$/i }));
+
+    await waitFor(() => {
+      expect(mockedDeleteParticipant).toHaveBeenCalledWith("alice");
       expect(within(panel).getByText(/Info-Mail gesendet an alice@example.com/i)).toBeInTheDocument();
     });
+  });
+
+  it("blockiert Studio-Exit bei offenen Kurszuordnungen und zeigt die Blocker", async () => {
+    mockedGetParticipants.mockResolvedValueOnce([
+      {
+        tenantId: "default-tenant",
+        userId: "alice",
+        participantId: "alice",
+        role: "participant",
+        email: "alice@example.com",
+        status: "active",
+        authUserId: "sub-123",
+      },
+    ]);
+    mockedCheckStudioExitBlockers.mockResolvedValueOnce({
+      blocked: true,
+      asOf: "2026-09-18",
+      courses: [{ courseId: 1, courseName: "Morgenyoga", reason: "enrollment" }],
+      swaps: [
+        {
+          fromDate: "2026-09-20",
+          fromCourseId: 1,
+          toDate: "2026-09-22",
+          toCourseId: 2,
+          status: "pending",
+        },
+      ],
+      waitlist: [{ courseId: 3, date: "2026-09-25", courseName: "Abend" }],
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("alice")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByLabelText("Löschen alice"));
+    const deleteDialog = within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i });
+
+    await waitFor(() => {
+      expect(within(deleteDialog).getByText(/Morgenyoga/i)).toBeInTheDocument();
+      expect(within(deleteDialog).getByText(/pending/i)).toBeInTheDocument();
+      expect(within(deleteDialog).getByText(/Abend/i)).toBeInTheDocument();
+      expect(within(deleteDialog).getByRole("button", { name: /^Löschen$/i })).toBeDisabled();
+    });
+    expect(mockedDeleteParticipant).not.toHaveBeenCalled();
   });
 
   it("zeigt im Löschdialog für registrierte Nutzer den Hinweis auf Info-Mail", async () => {
@@ -211,12 +325,17 @@ describe("AdminPanel", () => {
     });
     fireEvent.click(within(panel).getByLabelText("Löschen alice"));
     const dialog = within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i });
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: /^Löschen$/i })).not.toBeDisabled();
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: /^Löschen$/i }));
 
     await waitFor(() => {
-      expect(within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i })).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: /Lösche/i })).toBeDisabled();
     });
-    fireEvent.keyDown(within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i }), { key: "Escape" });
+    fireEvent.keyDown(within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i }), {
+      key: "Escape",
+    });
     expect(within(panel).getByRole("dialog", { name: /Teilnehmer löschen/i })).toBeInTheDocument();
 
     resolveDelete({

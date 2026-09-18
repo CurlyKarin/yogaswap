@@ -6,6 +6,7 @@ import {
   QueryCommand,
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
+import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import type { ParticipantProfile } from "@yogaswap/shared";
@@ -16,9 +17,16 @@ import { loadTenantName } from "../shared/tenantSettingsLoader";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { getTenantContext } from "../shared/tenantContext";
+import {
+  collectStudioExitBlockers,
+  hasStudioExitBlockers,
+} from "../shared/studioExitBlockers";
+import { invalidateAuthTokensForUser } from "../shared/invalidateAuthTokens";
+import { deleteCognitoUserBestEffort } from "../shared/deleteIncompleteCognitoUser";
 
 const client = dynamoClient;
 const ses = new SESClient({});
+const cognito = new CognitoIdentityProviderClient({});
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -27,12 +35,26 @@ export const handler = async (
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const tenantsTable = process.env.TENANTS_TABLE;
   const coursesTable = process.env.COURSES_TABLE;
+  const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+  const swapsTable = process.env.SWAPS_TABLE;
+  const overridesTable = process.env.OVERRIDES_TABLE;
+  const authTokensTable = process.env.AUTH_TOKENS_TABLE;
+  const userPoolId = process.env.USER_POOL_ID;
 
-  if (!participantsTable || !membershipsTable || !tenantsTable || !coursesTable) {
+  if (
+    !participantsTable ||
+    !membershipsTable ||
+    !tenantsTable ||
+    !coursesTable ||
+    !enrollmentsTable ||
+    !swapsTable ||
+    !overridesTable
+  ) {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: "PARTICIPANTS_TABLE, MEMBERSHIPS_TABLE, TENANTS_TABLE or COURSES_TABLE env var is not set",
+        error:
+          "PARTICIPANTS_TABLE, MEMBERSHIPS_TABLE, TENANTS_TABLE, COURSES_TABLE, COURSE_ENROLLMENTS_TABLE, SWAPS_TABLE or OVERRIDES_TABLE env var is not set",
       }),
     };
   }
@@ -44,6 +66,10 @@ export const handler = async (
       body: JSON.stringify({ error: "Missing userId in path" }),
     };
   }
+
+  const checkOnly =
+    event.queryStringParameters?.check === "1" ||
+    event.queryStringParameters?.check === "true";
 
   const { tenantId, userId: actorUserId } = getTenantContext(event);
   if (!actorUserId) {
@@ -90,6 +116,39 @@ export const handler = async (
       ? (unmarshall(existingResp.Item) as ParticipantProfile)
       : undefined;
 
+    const blockers = await collectStudioExitBlockers({
+      client,
+      tenantId,
+      userId,
+      participantId: profile?.participantId,
+      coursesTable,
+      enrollmentsTable,
+      swapsTable,
+      overridesTable,
+    });
+
+    if (checkOnly) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          blocked: hasStudioExitBlockers(blockers),
+          ...blockers,
+        }),
+      };
+    }
+
+    if (hasStudioExitBlockers(blockers)) {
+      return {
+        statusCode: 409,
+        body: JSON.stringify({
+          error:
+            "Studio-Exit nicht möglich: noch zukünftige Kurszuordnungen, Täusche oder Wartelisten-Einträge.",
+          code: "studio_exit_blocked",
+          ...blockers,
+        }),
+      };
+    }
+
     await client.send(
       new DeleteItemCommand({
         TableName: membershipsTable,
@@ -132,8 +191,38 @@ export const handler = async (
     let profileDeleted = false;
     const hasAuthUserId = !!profile?.authUserId;
     const hasRegistrationHistory = !!profile?.authUserId || !!profile?.inviteCompletedAt;
+    const hadInviteSent = !!profile?.inviteSentAt?.trim();
+    const inviteWithdrawn = !hasRegistrationHistory && hadInviteSent;
+    const shouldNotifyRemoval =
+      !!profile?.email?.trim() && (hasRegistrationHistory || hadInviteSent);
     const notificationEmail = profile?.email?.trim() || "";
+    let notificationEmailAttempted = false;
     let notificationEmailSent = false;
+    let authTokensInvalidated = 0;
+
+    if (authTokensTable) {
+      try {
+        authTokensInvalidated = await invalidateAuthTokensForUser({
+          client,
+          authTokensTable,
+          tenantId,
+          userId,
+        });
+      } catch (tokenErr) {
+        console.warn("deleteParticipant token invalidation failed:", tokenErr);
+      }
+    }
+
+    // Incomplete invite: remove orphan Cognito user so re-add is a fresh invite, not false reactivation.
+    let cognitoUserDeleted = false;
+    if (inviteWithdrawn && userPoolId) {
+      cognitoUserDeleted = await deleteCognitoUserBestEffort({
+        cognito,
+        userPoolId,
+        cognitoUsername: profile?.cognitoUsername,
+        userId,
+      });
+    }
 
     if (profile && !hasAuthUserId) {
       const membershipsByUser = await client.send(
@@ -162,9 +251,8 @@ export const handler = async (
       }
     }
 
-    // Optional notification email only for participants with login history.
-    // Never-registered invited/no-login users are removed quietly to avoid confusing mails.
-    if (profile?.email && hasRegistrationHistory) {
+    if (shouldNotifyRemoval && profile?.email) {
+      notificationEmailAttempted = true;
       const sesSourceEmail = resolveSesSourceEmail();
       const mailLocale = process.env.MAIL_LOCALE || "de";
       const studioName = await loadTenantName(client, tenantsTable, tenantId);
@@ -175,6 +263,7 @@ export const handler = async (
         displayName: profile.displayName,
         studioName,
         studioUrl: resolveAppBaseUrlForTenant(tenantId),
+        ...(inviteWithdrawn ? { inviteWithdrawn: true } : {}),
       });
       try {
         await ses.send(
@@ -197,8 +286,11 @@ export const handler = async (
         success: true,
         membershipDeleted: true,
         profileDeleted,
-        notificationEmail: notificationEmail || undefined,
+        notificationEmail: notificationEmailAttempted ? notificationEmail || undefined : undefined,
+        notificationEmailAttempted,
         notificationEmailSent,
+        authTokensInvalidated,
+        cognitoUserDeleted,
       }),
     };
   } catch (error) {
@@ -209,4 +301,3 @@ export const handler = async (
     };
   }
 };
-

@@ -226,11 +226,12 @@ describe("CourseMembersDialog", () => {
     );
 
     expect(await screen.findByRole("button", { name: "Weitere Mitglieder" })).toBeInTheDocument();
-    expect(screen.getByText("alice@studio.test")).toBeInTheDocument();
+    // Wait for getParticipants — the toggle is visible before profiles resolve.
+    expect(await screen.findByText("alice@studio.test")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /alice bis .* beenden/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Weitere Mitglieder" }));
-    expect(screen.getByText("cara@studio.test")).toBeInTheDocument();
+    expect(await screen.findByText("cara@studio.test")).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("cara gültig ab"), "2099-06-16");
     expect(screen.getByLabelText("cara gültig bis")).toBeInTheDocument();
 
