@@ -2,6 +2,7 @@ import { APIGatewayProxyEvent } from "aws-lambda";
 import { handler } from "./index";
 import { collectStudioExitBlockers } from "../shared/studioExitBlockers";
 import { invalidateAuthTokensForUser } from "../shared/invalidateAuthTokens";
+import { deleteCognitoUserBestEffort } from "../shared/deleteIncompleteCognitoUser";
 
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
@@ -40,11 +41,18 @@ jest.mock("../shared/invalidateAuthTokens", () => ({
   invalidateAuthTokensForUser: jest.fn().mockResolvedValue(0),
 }));
 
+jest.mock("../shared/deleteIncompleteCognitoUser", () => ({
+  deleteCognitoUserBestEffort: jest.fn().mockResolvedValue(false),
+}));
+
 const mockedCollectBlockers = collectStudioExitBlockers as jest.MockedFunction<
   typeof collectStudioExitBlockers
 >;
 const mockedInvalidateTokens = invalidateAuthTokensForUser as jest.MockedFunction<
   typeof invalidateAuthTokensForUser
+>;
+const mockedDeleteCognito = deleteCognitoUserBestEffort as jest.MockedFunction<
+  typeof deleteCognitoUserBestEffort
 >;
 
 const emptyBlockers = {
@@ -69,6 +77,7 @@ describe("deleteParticipant Lambda", () => {
       SWAPS_TABLE: "test-swaps",
       OVERRIDES_TABLE: "test-overrides",
       AUTH_TOKENS_TABLE: "test-auth-tokens",
+      USER_POOL_ID: "test-user-pool",
       SES_SOURCE_EMAIL: "yogaswap@example.com",
     };
     mockSend.mockReset();
@@ -77,6 +86,8 @@ describe("deleteParticipant Lambda", () => {
     mockedCollectBlockers.mockResolvedValue(emptyBlockers);
     mockedInvalidateTokens.mockReset();
     mockedInvalidateTokens.mockResolvedValue(0);
+    mockedDeleteCognito.mockReset();
+    mockedDeleteCognito.mockResolvedValue(false);
   });
 
   afterAll(() => {
@@ -145,6 +156,7 @@ describe("deleteParticipant Lambda", () => {
       notificationEmailAttempted: false,
       notificationEmailSent: false,
       authTokensInvalidated: 0,
+      cognitoUserDeleted: false,
     });
     expect(sesMockSend).not.toHaveBeenCalled();
     expect(mockedInvalidateTokens).toHaveBeenCalledWith(
@@ -154,6 +166,7 @@ describe("deleteParticipant Lambda", () => {
         userId: "alice",
       }),
     );
+    expect(mockedDeleteCognito).not.toHaveBeenCalled();
   });
 
   test("returns 409 when studio exit is blocked by future enrollment", async () => {
@@ -245,6 +258,7 @@ describe("deleteParticipant Lambda", () => {
       notificationEmailAttempted: true,
       notificationEmailSent: true,
       authTokensInvalidated: 0,
+      cognitoUserDeleted: false,
     });
     expect(sesMockSend).toHaveBeenCalledTimes(1);
     const mailArg = sesMockSend.mock.calls[0][0];
@@ -258,6 +272,7 @@ describe("deleteParticipant Lambda", () => {
 
   test("invited-only delete sends invite-withdrawn mail and reports token invalidation", async () => {
     mockedInvalidateTokens.mockResolvedValueOnce(2);
+    mockedDeleteCognito.mockResolvedValueOnce(true);
     authMocks()
       .mockResolvedValueOnce({
         Item: {
@@ -266,6 +281,7 @@ describe("deleteParticipant Lambda", () => {
           displayName: { S: "Alice Example" },
           email: { S: "alice@example.com" },
           inviteSentAt: { S: "2026-09-01T12:00:00.000Z" },
+          cognitoUsername: { S: "opaque-alice" },
         },
       })
       .mockResolvedValueOnce({}) // membership delete
@@ -290,8 +306,16 @@ describe("deleteParticipant Lambda", () => {
       notificationEmailAttempted: true,
       notificationEmailSent: true,
       authTokensInvalidated: 2,
+      cognitoUserDeleted: true,
     });
     expect(mockedInvalidateTokens).toHaveBeenCalled();
+    expect(mockedDeleteCognito).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userPoolId: "test-user-pool",
+        cognitoUsername: "opaque-alice",
+        userId: "alice",
+      }),
+    );
     const mailArg = sesMockSend.mock.calls[0][0];
     const html = mailArg?.Message?.Body?.Html?.Data || "";
     expect(mailArg?.Message?.Subject?.Data).toContain("Einladung zurueckgezogen");
@@ -321,6 +345,7 @@ describe("deleteParticipant Lambda", () => {
     expect(JSON.parse(result.body).notificationEmailAttempted).toBe(false);
     expect(JSON.parse(result.body).notificationEmailSent).toBe(false);
     expect(JSON.parse(result.body).authTokensInvalidated).toBe(0);
+    expect(JSON.parse(result.body).cognitoUserDeleted).toBe(false);
   });
 
   test("returns 403 when actor cannot manage participants", async () => {

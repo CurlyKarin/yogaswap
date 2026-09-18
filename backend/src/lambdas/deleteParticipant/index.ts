@@ -6,6 +6,7 @@ import {
   QueryCommand,
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
+import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import type { ParticipantProfile } from "@yogaswap/shared";
@@ -21,9 +22,11 @@ import {
   hasStudioExitBlockers,
 } from "../shared/studioExitBlockers";
 import { invalidateAuthTokensForUser } from "../shared/invalidateAuthTokens";
+import { deleteCognitoUserBestEffort } from "../shared/deleteIncompleteCognitoUser";
 
 const client = dynamoClient;
 const ses = new SESClient({});
+const cognito = new CognitoIdentityProviderClient({});
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -36,6 +39,7 @@ export const handler = async (
   const swapsTable = process.env.SWAPS_TABLE;
   const overridesTable = process.env.OVERRIDES_TABLE;
   const authTokensTable = process.env.AUTH_TOKENS_TABLE;
+  const userPoolId = process.env.USER_POOL_ID;
 
   if (
     !participantsTable ||
@@ -209,6 +213,17 @@ export const handler = async (
       }
     }
 
+    // Incomplete invite: remove orphan Cognito user so re-add is a fresh invite, not false reactivation.
+    let cognitoUserDeleted = false;
+    if (inviteWithdrawn && userPoolId) {
+      cognitoUserDeleted = await deleteCognitoUserBestEffort({
+        cognito,
+        userPoolId,
+        cognitoUsername: profile?.cognitoUsername,
+        userId,
+      });
+    }
+
     if (profile && !hasAuthUserId) {
       const membershipsByUser = await client.send(
         new ScanCommand({
@@ -275,6 +290,7 @@ export const handler = async (
         notificationEmailAttempted,
         notificationEmailSent,
         authTokensInvalidated,
+        cognitoUserDeleted,
       }),
     };
   } catch (error) {

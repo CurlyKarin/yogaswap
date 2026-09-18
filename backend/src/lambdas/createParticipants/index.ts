@@ -25,6 +25,7 @@ import {
   listCognitoUsersByEmail,
   resolveCognitoUsernameAndSub,
 } from "../shared/cognitoUserIdentity";
+import { hasCompletedInviteForPoolUser } from "../shared/deleteIncompleteCognitoUser";
 import { resolveAuthTokenTtlSeconds } from "../shared/authTokenTtl";
 
 const cognito = new CognitoIdentityProviderClient({});
@@ -814,16 +815,36 @@ export const handler = async (event: any) => {
           ],
         }),
       );
-      // Reactivation: confirmed Cognito user, either new to this studio OR already active here.
-      // Still-invited (auth + inviteSentAt, no inviteCompletedAt) keeps invite/password path when mailing.
+      // Reactivation: confirmed Cognito + completed registration evidence.
+      // Incomplete invites also end up CONFIRMED (Permanent password on create) — do not
+      // treat bare pool presence / !existingProfileFound as reactivation.
+      // Still-invited (inviteSentAt, no inviteCompletedAt) keeps invite/password path.
       const alreadyActiveInStudio =
         existingProfileFound &&
         !!existingAuthUserId &&
         (!!existingInviteCompletedAt || !existingInviteSentAt);
+      const completedHere = !!existingInviteCompletedAt;
+      let completedElsewhere = false;
+      if (
+        !alreadyActiveInStudio &&
+        !completedHere &&
+        !existingProfileFound &&
+        hasExplicitLink &&
+        linkedAuthUserId &&
+        linkedPoolStatus === "CONFIRMED" &&
+        process.env.PARTICIPANTS_TABLE
+      ) {
+        completedElsewhere = await hasCompletedInviteForPoolUser({
+          client: dynamodb,
+          participantsTable: process.env.PARTICIPANTS_TABLE,
+          cognitoUsername,
+          authUserId: linkedAuthUserId,
+        });
+      }
       if (
         linkedAuthUserId &&
         linkedPoolStatus === "CONFIRMED" &&
-        (!existingProfileFound || alreadyActiveInStudio)
+        (alreadyActiveInStudio || completedHere || completedElsewhere)
       ) {
         // Do not reset password / send invite-registration mail (#342).
         reactivated = true;
@@ -840,6 +861,8 @@ export const handler = async (event: any) => {
       // Quiet link of non-active: attach Cognito only; password/invite later (#345).
     } else {
       // New Cognito user: opaque Username (#324), studio login name only as nickname attribute.
+      // Keep FORCE_CHANGE_PASSWORD (no Permanent) until invite token completes — avoids
+      // false "reactivated" when an invite is withdrawn and later re-linked.
       await cognito.send(
         new AdminCreateUserCommand({
           UserPoolId: poolId,
@@ -852,15 +875,6 @@ export const handler = async (event: any) => {
             { Name: "custom:role", Value: role },
           ],
           MessageAction: "SUPPRESS",
-        }),
-      );
-
-      await cognito.send(
-        new AdminSetUserPasswordCommand({
-          UserPoolId: poolId,
-          Username: cognitoUsername,
-          Password: rawPassword,
-          Permanent: true,
         }),
       );
     }

@@ -455,10 +455,18 @@ locals {
           Effect   = "Allow"
           Action   = ["ses:SendEmail"]
           Resource = "*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "cognito-idp:AdminDeleteUser"
+          ]
+          Resource = aws_cognito_user_pool.yogaswap.arn
         }
       ]
       environment = {
         SES_SOURCE_EMAIL = local.ses_from_address
+        USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
       }
     },
     "create_participants" = {
@@ -466,7 +474,7 @@ locals {
       file_name        = "createParticipants.zip"
       timeout          = 15
       table_arns       = [module.memberships_table.table_arn, module.participants_table.table_arn, module.auth_tokens_table.table_arn, module.tenants_table.table_arn]
-      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"]
+      dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"]
       tables = {
         "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
