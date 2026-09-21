@@ -56,12 +56,22 @@ export interface UpdateParticipantRequest {
   email?: string | null;
   displayName?: string | null;
   role?: UserRole;
+  /** @deprecated #350 — email change on active always resets; kept for API compat */
   forcePasswordResetOnEmailChange?: boolean;
   settings?: ParticipantSettings;
   inviteSentAt?: string | null;
   inviteCompletedAt?: string | null;
   authUserId?: string | null;
 }
+
+export type UpdateParticipantResponse = ParticipantWithStatus & {
+  passwordResetTriggered?: boolean;
+  passwordResetEmailSent?: boolean;
+  roleChanged?: boolean;
+  roleChangedEmailSent?: boolean;
+  displayNameChanged?: boolean;
+  displayNameChangedEmailSent?: boolean;
+};
 
 export type ParticipantSortBy = "nickname" | "userId" | "email" | "status";
 export type ParticipantSortOrder = "asc" | "desc";
@@ -168,8 +178,8 @@ export async function getParticipantRoster(): Promise<ParticipantRosterEntry[]> 
 export async function updateParticipant(
   userId: string,
   data: UpdateParticipantRequest,
-): Promise<ParticipantWithStatus> {
-  const response = await axios.put<ParticipantWithStatus>(
+): Promise<UpdateParticipantResponse> {
+  const response = await axios.put<UpdateParticipantResponse>(
     `/participants/${encodeURIComponent(userId)}`,
     data,
   );

@@ -5,6 +5,7 @@ import {
   QueryCommand,
 } from "@aws-sdk/client-dynamodb";
 import {
+  AdminSetUserPasswordCommand,
   AdminUpdateUserAttributesCommand,
   AdminUserGlobalSignOutCommand,
   CognitoIdentityProviderClient,
@@ -27,7 +28,6 @@ import {
   buildDisplayNameChangedMail,
   buildEmailChangedNewAddressMail,
   buildEmailChangedOldAddressMail,
-  buildRecoveryMail,
   buildRoleChangedMail,
   toSesAuthMessage,
 } from "../shared/templates/auth/authMailTemplates";
@@ -42,6 +42,11 @@ const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
 
 function generateOneTimeToken(bytes = 32) {
   return crypto.randomBytes(bytes).toString("base64url");
+}
+
+/** Random permanent password — user must use the reset link (#350). */
+function generateInvalidatedPassword(): string {
+  return crypto.randomBytes(18).toString("base64url") + "Aa1!";
 }
 
 type UpdateParticipantBody = {
@@ -317,57 +322,6 @@ export const handler = async (
             }
 
             if (emailChanged && existingStatus === "active") {
-              const baseUrl = resolveAppBaseUrlForTenant(tenantId);
-              const sesSourceEmail = resolveSesSourceEmail();
-              const mailLocale = process.env.MAIL_LOCALE || "de";
-              const oldEmail = (existing.email ?? "").trim();
-
-              // Best practice: confirm change to new address.
-              try {
-                const changedNewMail = buildEmailChangedNewAddressMail({
-                  locale: mailLocale,
-                  nickname: targetUserId,
-                  loginUrl: baseUrl,
-                  newEmail: email,
-                  studioName: await getStudioName(),
-                  studioUrl: baseUrl,
-                });
-                await ses.send(
-                  new SendEmailCommand({
-                    Source: sesSourceEmail,
-                    Destination: { ToAddresses: [email] },
-                    Message: toSesAuthMessage(changedNewMail),
-                  }),
-                );
-              } catch (mailErr) {
-                console.warn("Failed to send email-change confirmation to new address:", mailErr);
-              }
-
-              // Optional security notification to old address (if different).
-              if (oldEmail && oldEmail.toLowerCase() !== email.toLowerCase()) {
-                try {
-                  const changedOldMail = buildEmailChangedOldAddressMail({
-                    locale: mailLocale,
-                    nickname: targetUserId,
-                    loginUrl: baseUrl,
-                    newEmail: email,
-                    studioName: await getStudioName(),
-                    studioUrl: baseUrl,
-                  });
-                  await ses.send(
-                    new SendEmailCommand({
-                      Source: sesSourceEmail,
-                      Destination: { ToAddresses: [oldEmail] },
-                      Message: toSesAuthMessage(changedOldMail),
-                    }),
-                  );
-                } catch (mailErr) {
-                  console.warn("Failed to send email-change security mail to old address:", mailErr);
-                }
-              }
-            }
-
-            if (emailChanged && existingStatus === "active" && body.forcePasswordResetOnEmailChange) {
               const authTokensTable = process.env.AUTH_TOKENS_TABLE;
               if (!authTokensTable) {
                 return {
@@ -375,6 +329,16 @@ export const handler = async (
                   body: JSON.stringify({ error: "AUTH_TOKENS_TABLE env var is not set" }),
                 };
               }
+
+              // Invalidate old password immediately — reset link is the only way back in (#350).
+              await cognito.send(
+                new AdminSetUserPasswordCommand({
+                  UserPoolId: userPoolId,
+                  Username: cognitoUsername,
+                  Password: generateInvalidatedPassword(),
+                  Permanent: true,
+                }),
+              );
 
               const tokenTtlSeconds = resolveAuthTokenTtlSeconds("admin-password-reset");
               const nowSeconds = Math.floor(Date.now() / 1000);
@@ -398,26 +362,59 @@ export const handler = async (
               const baseUrl = resolveAppBaseUrlForTenant(tenantId);
               const sesSourceEmail = resolveSesSourceEmail();
               const mailLocale = process.env.MAIL_LOCALE || "de";
-              const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(cognitoUsername)}&email=${encodeURIComponent(email)}`;
-              const recoveryMail = buildRecoveryMail({
-                locale: mailLocale,
-                nickname: targetUserId,
-                link,
-                studioName: await getStudioName(),
-                studioUrl: baseUrl,
-              });
+              const oldEmail = (existing.email ?? "").trim();
+              const studioName = await getStudioName();
+              // Studio login name in link — not opaque Cognito Username (#324).
+              const passwordResetLink = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(targetUserId)}&email=${encodeURIComponent(email)}`;
+
+              // One mail to new address: email-change notice + mandatory reset CTA (#350).
               try {
+                const changedNewMail = buildEmailChangedNewAddressMail({
+                  locale: mailLocale,
+                  nickname: targetUserId,
+                  loginUrl: baseUrl,
+                  newEmail: email,
+                  studioName,
+                  studioUrl: baseUrl,
+                  passwordResetLink,
+                });
                 await ses.send(
                   new SendEmailCommand({
                     Source: sesSourceEmail,
                     Destination: { ToAddresses: [email] },
-                    Message: toSesAuthMessage(recoveryMail),
+                    Message: toSesAuthMessage(changedNewMail),
                   }),
                 );
                 passwordResetEmailSent = true;
                 updated.inviteSentAt = new Date().toISOString();
               } catch (mailErr) {
-                console.warn("Failed to send password-reset email after email change:", mailErr);
+                console.warn(
+                  "Failed to send combined email-change + password-reset mail to new address:",
+                  mailErr,
+                );
+              }
+
+              // Security notification to old address (if different).
+              if (oldEmail && oldEmail.toLowerCase() !== email.toLowerCase()) {
+                try {
+                  const changedOldMail = buildEmailChangedOldAddressMail({
+                    locale: mailLocale,
+                    nickname: targetUserId,
+                    loginUrl: baseUrl,
+                    newEmail: email,
+                    studioName,
+                    studioUrl: baseUrl,
+                  });
+                  await ses.send(
+                    new SendEmailCommand({
+                      Source: sesSourceEmail,
+                      Destination: { ToAddresses: [oldEmail] },
+                      Message: toSesAuthMessage(changedOldMail),
+                    }),
+                  );
+                } catch (mailErr) {
+                  console.warn("Failed to send email-change security mail to old address:", mailErr);
+                }
               }
             }
           } catch (syncErr) {
