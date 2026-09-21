@@ -176,6 +176,8 @@ type EmailChangedNewAddressMailInput = StudioMailFields & {
   displayName?: string | null;
   loginUrl: string;
   newEmail: string;
+  /** When set (#350), include mandatory password-reset CTA in the same mail. */
+  passwordResetLink?: string;
 };
 
 type EmailChangedOldAddressMailInput = StudioMailFields & {
@@ -436,8 +438,28 @@ export function buildEmailChangedNewAddressMail(
     return { subject: `${studio}: E-Mail-Adresse aktualisiert`, html: "", text: "" };
   }
 
+  const resetLink = input.passwordResetLink?.trim();
+  const resetHtml = resetLink
+    ? `
+        <p>Aus Sicherheitsgruenden musst Du ein neues Passwort festlegen, bevor Du Dich wieder anmelden kannst.</p>
+        <p><a href="${resetLink}">Neues Passwort fuer YogaSwap festlegen</a></p>
+        <p>Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode.</p>
+      `
+    : `<p><a href="${input.loginUrl}">Zur YogaSwap-Anmeldung</a></p>`;
+  const resetText = resetLink
+    ? [
+        "Aus Sicherheitsgruenden musst Du ein neues Passwort festlegen, bevor Du Dich wieder anmelden kannst.",
+        "",
+        `Neues Passwort festlegen: ${resetLink}`,
+        "",
+        "Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode.",
+      ].join("\n")
+    : `Anmeldung: ${input.loginUrl}`;
+
   return composeMail({
-    subject: `${studio}: E-Mail-Adresse aktualisiert`,
+    subject: resetLink
+      ? `${studio}: E-Mail geaendert — Passwort neu setzen`
+      : `${studio}: E-Mail-Adresse aktualisiert`,
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
     htmlBody: `
@@ -445,7 +467,7 @@ export function buildEmailChangedNewAddressMail(
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} die Login-E-Mail-Adresse
         auf <strong>${input.newEmail}</strong> geaendert.</p>
         <p>${loginNameStillHtml(input.nickname)}</p>
-        <p><a href="${input.loginUrl}">Zur YogaSwap-Anmeldung</a></p>
+        ${resetHtml}
       `,
     textBody: [
       `Hallo ${greeting}!`,
@@ -453,7 +475,7 @@ export function buildEmailChangedNewAddressMail(
       `Auf YogaSwap wurde ${forStudioAccessText(studio)} die Login-E-Mail-Adresse auf "${input.newEmail}" geaendert.`,
       loginNameStillText(input.nickname),
       "",
-      `Anmeldung: ${input.loginUrl}`,
+      resetText,
     ].join("\n"),
   });
 }

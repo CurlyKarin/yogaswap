@@ -545,8 +545,9 @@ describe("updateParticipant Lambda", () => {
           name: { S: "Demo" },
         },
       }) // studio name for email-change mails
-      .mockResolvedValueOnce({});
-    cognitoMockSend.mockResolvedValueOnce({});
+      .mockResolvedValueOnce({}) // AUTH_TOKENS PutItem (#350 mandatory reset)
+      .mockResolvedValueOnce({}); // participants PutItem
+    cognitoMockSend.mockResolvedValueOnce({}).mockResolvedValueOnce({});
     sesMockSend.mockResolvedValue({});
 
     const result = await handler(
@@ -556,6 +557,7 @@ describe("updateParticipant Lambda", () => {
     );
 
     expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).passwordResetTriggered).toBe(true);
     expect(cognitoMockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         UserPoolId: "test-user-pool-id",
@@ -616,7 +618,7 @@ describe("updateParticipant Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/sync email/i);
   });
 
-  test("forces password reset on email change when requested", async () => {
+  test("forces password reset on active email change without opt-in (#350)", async () => {
     mockSend
       .mockResolvedValueOnce({
         Item: {
@@ -634,13 +636,14 @@ describe("updateParticipant Lambda", () => {
           userId: { S: "admin" },
           role: { S: "admin" },
         },
-      }) // actor role check for forced reset
+      }) // actor role check for email change
       .mockResolvedValueOnce({
         Item: {
           tenantId: { S: "default-tenant" },
           userId: { S: "alice" },
           email: { S: "alice@example.com" },
           authUserId: { S: "sub-123" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
           cognitoUsername: { S: "Alice" },
         },
       }) // existing participant
@@ -659,7 +662,6 @@ describe("updateParticipant Lambda", () => {
       makeEvent({
         body: JSON.stringify({
           email: "alice.new@example.com",
-          forcePasswordResetOnEmailChange: true,
         }),
       }),
     );

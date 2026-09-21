@@ -1539,7 +1539,7 @@ describe("AdminPanel", () => {
     expect(within(dialog).getByLabelText("Rolle")).toBeInTheDocument();
   });
 
-  it("erzwingt optional Passwort-Reset beim E-Mail-Wechsel", async () => {
+  it("erzwingt Passwort-Reset bei E-Mail-Wechsel ohne Checkbox (#350)", async () => {
     mockedGetParticipants.mockResolvedValueOnce([
       {
         tenantId: "default-tenant",
@@ -1555,7 +1555,8 @@ describe("AdminPanel", () => {
       userId: "alice", participantId: "alice",
       role: "participant",
       email: "alice.new@example.com",
-      status: "invited",
+      status: "active",
+      passwordResetTriggered: true,
       passwordResetEmailSent: true,
     });
 
@@ -1572,17 +1573,21 @@ describe("AdminPanel", () => {
     fireEvent.change(within(dialog).getByPlaceholderText("E-Mail"), {
       target: { value: "alice.new@example.com" },
     });
-    fireEvent.click(
-      within(dialog).getByLabelText(/Passwort-Reset-Mail senden/i),
-    );
-    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern/i }));
+    expect(
+      within(dialog).getByText(/Änderungsinfo und Link zum neuen Passwort/i),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/Passwort-Reset-Mail senden/i)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Speichern und Senden/i }));
 
     await waitFor(() => {
       expect(mockedUpdateParticipant).toHaveBeenCalledWith("alice", {
         email: "alice.new@example.com",
         role: "participant",
       });
-      expect(mockedResetParticipantPassword).toHaveBeenCalledWith("alice");
+      expect(mockedResetParticipantPassword).not.toHaveBeenCalled();
+      expect(
+        within(panel).getByText(/Info- und Passwort-Reset-Mail wurde an alice.new@example.com gesendet/i),
+      ).toBeInTheDocument();
     });
   });
 

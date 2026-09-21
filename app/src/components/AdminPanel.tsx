@@ -486,12 +486,14 @@ export default function AdminPanel({
         setEditingError("E-Mail von registrierten Teilnehmern kann nur von Admins geändert werden.");
         return;
       }
-      const shouldForcePasswordReset =
+      // #350: optional standalone reset (no email change). Email change always resets in backend.
+      const shouldSendStandalonePasswordReset =
         original?.status === "active" &&
+        !emailChanged &&
         editingForcePasswordResetOnEmailChange &&
         nextEmailText.length > 0;
 
-      await updateParticipant(
+      const updated = await updateParticipant(
         editingUserId,
         canEditRoles
           ? {
@@ -524,12 +526,22 @@ export default function AdminPanel({
       setEditingUserId(null);
       const roleChanged = canEditRoles && original?.role !== editingRole;
       const wasInvited = original?.status === "invited";
-      if (shouldForcePasswordReset) {
+      if (emailChanged && original?.status === "active" && nextEmailText.length > 0) {
+        if (updated.passwordResetEmailSent) {
+          setBulkInviteResult(
+            `E-Mail aktualisiert. Info- und Passwort-Reset-Mail wurde an ${nextEmailText} gesendet.`,
+          );
+        } else if (updated.passwordResetTriggered) {
+          setBulkInviteResult(
+            `E-Mail aktualisiert. Passwort ist gesperrt, aber die Mail an ${nextEmailText} konnte nicht versendet werden.`,
+          );
+        } else {
+          setBulkInviteResult(
+            "E-Mail aktualisiert. Info-Mail wurde an die neue Adresse gesendet.",
+          );
+        }
+      } else if (shouldSendStandalonePasswordReset) {
         setBulkInviteResult("Änderungen gespeichert. Passwort-Reset wird gesendet.");
-      } else if (emailChanged && original?.status === "active") {
-        setBulkInviteResult(
-          "E-Mail aktualisiert. Info-Mail wurde an die neue Adresse gesendet.",
-        );
       } else if (wasInvited) {
         setBulkInviteResult("Änderungen gespeichert. Einladung wird erneut gesendet.");
       } else if (roleChanged && original?.status === "active") {
@@ -541,27 +553,29 @@ export default function AdminPanel({
       } else if (displayNameChanged) {
         setBulkInviteResult("Displayname aktualisiert.");
       }
-      if (canEditRoles && original?.status === "active" && nextEmailText.length > 0) {
+      if (
+        canEditRoles &&
+        shouldSendStandalonePasswordReset &&
+        original
+      ) {
         const effectiveParticipant: ParticipantWithStatus = {
           ...original,
           email: nextEmailText,
           role: canEditRoles ? editingRole : original.role,
         };
-        if (editingForcePasswordResetOnEmailChange) {
-          const resetResult = await sendPasswordResetForParticipant(effectiveParticipant, {
-            refreshAfter: false,
-          });
-          if (resetResult?.ok && resetResult.emailSent) {
-            setBulkInviteResult("Änderungen gespeichert. Passwort-Reset-Mail wurde gesendet.");
-          } else if (resetResult?.ok && !resetResult.emailSent) {
-            setBulkInviteResult(
-              "Änderungen gespeichert. Passwort-Reset angestoßen, aber E-Mail konnte nicht versendet werden.",
-            );
-          } else {
-            setBulkInviteResult(
-              "Änderungen gespeichert, aber Passwort-Reset konnte nicht gestartet werden.",
-            );
-          }
+        const resetResult = await sendPasswordResetForParticipant(effectiveParticipant, {
+          refreshAfter: false,
+        });
+        if (resetResult?.ok && resetResult.emailSent) {
+          setBulkInviteResult("Änderungen gespeichert. Passwort-Reset-Mail wurde gesendet.");
+        } else if (resetResult?.ok && !resetResult.emailSent) {
+          setBulkInviteResult(
+            "Änderungen gespeichert. Passwort-Reset angestoßen, aber E-Mail konnte nicht versendet werden.",
+          );
+        } else {
+          setBulkInviteResult(
+            "Änderungen gespeichert, aber Passwort-Reset konnte nicht gestartet werden.",
+          );
         }
       }
       if (wasInvited && nextEmailText.length > 0) {
@@ -600,14 +614,15 @@ export default function AdminPanel({
     editingEmailChanged ||
     editingDisplayNameChanged ||
     editingRoleChanged ||
-    (editingCanSendReset && editingForcePasswordResetOnEmailChange);
-  /** Label „Speichern und Senden“ only when this save is expected to trigger SES (#345). */
+    (editingCanSendReset && !editingEmailChanged && editingForcePasswordResetOnEmailChange);
+  /** Label „Speichern und Senden“ only when this save is expected to trigger SES (#345/#350). */
   const editingWillSendMail =
     editingSendsInvite ||
     (editingOriginal?.status === "active" &&
       editingEmailTrimmed.length > 0 &&
       (editingEmailChanged || editingDisplayNameChanged || editingRoleChanged)) ||
     (editingCanSendReset &&
+      !editingEmailChanged &&
       editingForcePasswordResetOnEmailChange &&
       editingEmailTrimmed.length > 0);
   const createIsReactivation = createNicknameCheckState === "reactivation";
@@ -1696,7 +1711,16 @@ export default function AdminPanel({
                   onChange={(role) => setEditingRole(role as UserRole)}
                 />
               )}
-              {canEditRoles && editingOriginal?.status === "active" && (
+              {canEditRoles && editingOriginal?.status === "active" && editingEmailChanged && (
+                <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>
+                  Bei E-Mail-Änderung wird das bisherige Passwort ungültig. An die neue Adresse geht
+                  eine Mail mit Änderungsinfo und Link zum neuen Passwort.
+                </p>
+              )}
+              {canEditRoles &&
+                editingOriginal?.status === "active" &&
+                !editingEmailChanged &&
+                editingEmailTrimmed.length > 0 && (
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
                     type="checkbox"

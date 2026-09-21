@@ -76,9 +76,15 @@ Umgebung: Demo / Staging / Prod — bitte ankreuzen.
 
 ### B2 Bestehende Person (Admin-Passwort-Reset)
 
-1. AdminPanel → Passwort zurücksetzen  
+1. AdminPanel → Passwort zurücksetzen (Bearbeiten, Checkbox ohne E-Mail-Wechsel)  
 2. Link-Mail → neues Passwort → Code-Mail  
 3. Code + Login  
+
+### B2b E-Mail-Änderung an aktivem Konto (#350)
+
+1. AdminPanel → E-Mail eines **aktiven** Mitglieds ändern und speichern  
+2. Erwartung: **eine** Mail an die neue Adresse (Änderung + Passwort-Reset-Link); Security-Mail an die alte Adresse  
+3. Altes Passwort funktioniert nicht mehr; Anmeldung erst nach Reset-Link + Code  
 
 ### B3 Self-Service „Passwort vergessen“
 

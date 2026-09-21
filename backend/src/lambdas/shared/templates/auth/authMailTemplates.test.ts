@@ -195,6 +195,24 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("Dein Login-Name ist weiterhin <strong>Karin</strong>");
   });
 
+  test("buildEmailChangedNewAddressMail with passwordResetLink combines change + reset (#350)", () => {
+    const mail = buildEmailChangedNewAddressMail({
+      locale: "de",
+      nickname: "Karin",
+      newEmail: "karin.neu@example.com",
+      loginUrl: "https://app.yogaswap.de",
+      studioName: "Beharmony",
+      passwordResetLink: "https://app.yogaswap.de/invite?mode=admin_reset&token=abc",
+    });
+
+    expect(mail.subject).toBe("Beharmony: E-Mail geaendert — Passwort neu setzen");
+    expect(mail.html).toContain("karin.neu@example.com");
+    expect(mail.html).toContain("Neues Passwort fuer YogaSwap festlegen");
+    expect(mail.html).toContain("https://app.yogaswap.de/invite?mode=admin_reset&token=abc");
+    expect(mail.html).not.toContain("Zur YogaSwap-Anmeldung");
+    expect(mail.text).toContain("Neues Passwort festlegen:");
+  });
+
   test("buildEmailChangedOldAddressMail returns german security template", () => {
     const mail = buildEmailChangedOldAddressMail({
       locale: "de",
