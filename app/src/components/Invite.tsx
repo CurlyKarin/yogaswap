@@ -90,11 +90,16 @@ export default function Invite({ onSuccess }: { onSuccess?: () => void }) {
   // Sonst wirft Amplify bei signIn() -> UserAlreadyAuthenticatedException.
   useEffect(() => {
     if (!tokenMode) return;
+    let cancelled = false;
     setAuthCleared(false);
     (async () => {
       await clearCognitoSession();
-      setAuthCleared(true);
+      // Nach Unmount/Navigate kein setState (Vitest: window is not defined).
+      if (!cancelled) setAuthCleared(true);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [nicknameParam, tokenMode]);
 
   // user inputs

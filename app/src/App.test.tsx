@@ -75,6 +75,16 @@ vi.mock("./auth/useAppAuth", () => ({
   useAppAuth: vi.fn(() => createMockUseAppAuth()),
 }));
 
+// Idle-Watchdog / Visibility-Reconcile in Unit-Tests no-op (#318 CI Timer-Leak).
+vi.mock("./auth/sessionExpiry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./auth/sessionExpiry")>();
+  return {
+    ...actual,
+    startSessionIdleWatchdog: vi.fn(() => () => undefined),
+    reconcileLocalUserWithCognitoSession: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 vi.mock("aws-amplify/auth", () => ({
   fetchAuthSession: vi.fn(),
 }));
