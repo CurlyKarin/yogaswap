@@ -13,6 +13,12 @@ import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/s
 import { User, UserRole, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
 import { fetchAuthSession } from "aws-amplify/auth";
+import {
+  SESSION_ENDED_EVENT,
+  consumeSessionNotice,
+  reconcileLocalUserWithCognitoSession,
+  startSessionIdleWatchdog,
+} from "./auth/sessionExpiry";
 import { getTenantContext, TenantNotFoundError } from "./api/tenantContext";
 import UnknownStudio from "./components/UnknownStudio";
 import { canInviteParticipants, canManageParticipants } from "shared/permissions";
@@ -46,6 +52,7 @@ function MainApp() {
   const [pendingActingForUserId, setPendingActingForUserId] = useState<string | null>(null);
   const [delegationPickerOpen, setDelegationPickerOpen] = useState(false);
   const [delegationSearch, setDelegationSearch] = useState("");
+  const [sessionNotice, setSessionNotice] = useState(() => consumeSessionNotice());
   const { logout, isLoading, error } = useAppAuth();
 
   // Studio-Existenz vor Login prüfen (#261) — GET /tenant-context ist öffentlich.
@@ -126,6 +133,40 @@ function MainApp() {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  // #318: Session beendet (401 / Idle / Token weg) → UI auf Login + Hinweis.
+  useEffect(() => {
+    const onSessionEnded = () => {
+      setSessionNotice(consumeSessionNotice());
+      setCurrentUser(null);
+      setActorUserId(null);
+      setActingForUserId(null);
+      setActingForUserIdState(null);
+      setPendingActingForUserId(null);
+    };
+    window.addEventListener(SESSION_ENDED_EVENT, onSessionEnded);
+    return () => window.removeEventListener(SESSION_ENDED_EVENT, onSessionEnded);
+  }, []);
+
+  // #318: Tab wieder sichtbar → lokale User-Anzeige mit Cognito abgleichen.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void reconcileLocalUserWithCognitoSession();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, []);
+
+  // #318: Idle-Timeout (nur solange UI eingeloggt wirkt).
+  useEffect(() => {
+    if (!currentUser) return;
+    return startSessionIdleWatchdog();
+  }, [currentUser]);
 
   // Sticky Kurs-Toolbar unter dem Header (#287): Offset an Header-/Toolbar-Höhe koppeln.
   useEffect(() => {
@@ -242,6 +283,7 @@ function MainApp() {
 
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {
+    setSessionNotice("");
     saveCurrentUser(loggedInUser);
     setActorUserId(loggedInUser.nickname);
     setCurrentUser(loggedInUser);
@@ -409,7 +451,7 @@ function MainApp() {
           <UnknownStudio tenantId={unknownTenantId} />
         ) : !effectiveUser ? (
           <section id="main-content" className="main-section" aria-label="Anmeldung">
-            <Login onLogin={handleLogin} />
+            <Login onLogin={handleLogin} sessionNotice={sessionNotice} />
           </section>
         ) : (
           <section

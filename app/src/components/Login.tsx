@@ -6,12 +6,15 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
 import { clearCognitoSession } from "../auth/cognitoSession";
+import { consumeSessionNotice } from "../auth/sessionExpiry";
 import { isDemoLoginEnabled } from "../lib/demoLoginFlag";
 
 type Props = {
   onLogin: (user: User) => void;
   /** Dedicated /login route: existing session → home; otherwise clear orphan Cognito state. */
   guestRoute?: boolean;
+  /** Session-Ende Hinweis (#318), z. B. nach 401 / Idle. */
+  sessionNotice?: string;
 };
 type LoginRouteState = {
   info?: unknown;
@@ -22,7 +25,7 @@ type LoginRouteState = {
 const DEMO_USERNAME = "Luna";
 const DEMO_PASSWORD = "Hallo123!";
 
-export default function Login({ onLogin, guestRoute = false }: Props) {
+export default function Login({ onLogin, guestRoute = false, sessionNotice = "" }: Props) {
   const { state, pathname } = useLocation();
   const navigate = useNavigate();
   const prefillUsername =
@@ -39,9 +42,12 @@ export default function Login({ onLogin, guestRoute = false }: Props) {
   const [password, setPassword] = useState(useDemoPrefill ? DEMO_PASSWORD : prefillPassword);
   const { login, logout, isLoading, error } = useCognitoAuth();
   const [sessionBusy, setSessionBusy] = useState(guestRoute);
-  const infoMessage = typeof (state as LoginRouteState | null)?.info === "string"
-    ? ((state as LoginRouteState).info as string)
-    : "";
+  const [expiredNotice] = useState(() => sessionNotice.trim() || consumeSessionNotice());
+  const infoMessage =
+    expiredNotice ||
+    (typeof (state as LoginRouteState | null)?.info === "string"
+      ? ((state as LoginRouteState).info as string)
+      : "");
 
   // Guest /login: gültige Session → App; verwaiste Cognito-Session → clearen (#338).
   useEffect(() => {
