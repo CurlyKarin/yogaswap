@@ -9,6 +9,8 @@ import axios from 'axios';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { DEFAULT_TENANT_ID } from 'shared/types';
 import { resolveTenantIdFromHostname } from 'shared/tenantHost';
+import { loadCurrentUser } from 'shared/lib/storage';
+import { endSessionDueToExpiry, installSessionDebugApi } from './auth/sessionExpiry';
 
 // Tenant aus Hostname (#249), Apex/localhost → VITE_DEFAULT_TENANT_ID / default-tenant.
 const configuredDefaultTenantId = import.meta.env.VITE_DEFAULT_TENANT_ID?.trim();
@@ -42,6 +44,28 @@ axios.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// #318: API 401 bei zuvor eingeloggtem User → Session beenden + Hinweis.
+axios.interceptors.response.use(
+  (response) => response,
+  async (error: unknown) => {
+    const err = error as {
+      response?: { status?: number };
+      config?: { url?: string; headers?: Record<string, unknown> };
+    };
+    if (err?.response?.status === 401 && loadCurrentUser()) {
+      const url = String(err.config?.url ?? "");
+      const isPublicAuth =
+        url.includes("/auth/resolve-login") ||
+        url.includes("/auth/password-reset") ||
+        url.includes("/tenant-context");
+      if (!isPublicAuth) {
+        await endSessionDueToExpiry("unauthorized");
+      }
+    }
+    return Promise.reject(error);
+  },
+);
 
 // Checkmark DEBUG: Prüfe Config
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID;
@@ -99,6 +123,8 @@ Amplify.configure({
     },
   },
 });
+
+installSessionDebugApi();
 
 // Checkmark BrowserRouter um App
 createRoot(document.getElementById('root')!).render(

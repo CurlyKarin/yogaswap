@@ -87,6 +87,16 @@ resource "aws_cognito_user_pool_client" "yogaswap_app" {
 
   generate_secret = false
 
+  # #318: Explizite Token-Laufzeiten (Amplify refreshed Access/ID solange Refresh gültig).
+  access_token_validity  = 60
+  id_token_validity      = 60
+  refresh_token_validity = 30
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
+
   callback_urls = concat(
     ["https://${module.cloudfront_spa.distribution_url}", "http://localhost:5173"],
     [for alias in local.cloudfront_apex_aliases : "https://${alias}"],
