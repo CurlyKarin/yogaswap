@@ -105,12 +105,15 @@ export function startSessionIdleWatchdog(options?: {
   const now = options?.now ?? (() => Date.now());
   let lastActivity = now();
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
 
   const schedule = () => {
+    if (stopped) return;
     if (timer) clearTimeout(timer);
     const remaining = timeoutMs - (now() - lastActivity);
     timer = setTimeout(() => {
       void (async () => {
+        if (stopped) return;
         if (!loadCurrentUser()) {
           schedule();
           return;
@@ -134,7 +137,9 @@ export function startSessionIdleWatchdog(options?: {
   schedule();
 
   return () => {
+    stopped = true;
     if (timer) clearTimeout(timer);
+    timer = null;
     for (const eventName of IDLE_ACTIVITY_EVENTS) {
       window.removeEventListener(eventName, onActivity);
     }

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, render, fireEvent, waitFor, within, screen } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Invite from "./Invite";
@@ -59,6 +59,13 @@ describe("Invite", () => {
     vi.clearAllMocks();
     localStorage.clear();
     mockedClearCognitoSession.mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    cleanup();
+    // React-Scheduler / Navigate-Updates vor jsdom-Teardown ablaufen lassen (#324/#318 CI).
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
   });
 
   it("zeigt Anzeigename in der Begrüßung und Nickname als Login-Name (#327)", async () => {
@@ -155,6 +162,9 @@ describe("Invite", () => {
         authUserId: "cognito-sub-alice",
       });
     });
+    await waitFor(() => {
+      expect(screen.getByText("Home")).toBeInTheDocument();
+    });
   });
 
   it("verknüpft authUserId über Studio-Login-Name trotz opaque Cognito-Username (#324)", async () => {
@@ -214,6 +224,9 @@ describe("Invite", () => {
         opaque,
         expect.anything(),
       );
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Home")).toBeInTheDocument();
     });
   });
 
