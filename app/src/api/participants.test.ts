@@ -3,6 +3,7 @@ import {
   deleteParticipant,
   getParticipants,
   inviteUser,
+  purgeParticipant,
   updateParticipant,
 } from "./participants";
 import axios from "axios";
@@ -163,6 +164,22 @@ describe("participants API (getParticipants/updateParticipant)", () => {
       profileDeleted: true,
     });
     expect(axios.delete).toHaveBeenCalledWith("/participants/alice");
+  });
+
+  it("purgeParticipant DELETE ruft /permanent auf", async () => {
+    vi.mocked(axios.delete).mockResolvedValueOnce({
+      data: {
+        success: true,
+        profileDeleted: true,
+        cognitoUserDeleted: true,
+        purgeScope: "full_account",
+      },
+    });
+
+    const result = await purgeParticipant("alice");
+
+    expect(result.purgeScope).toBe("full_account");
+    expect(axios.delete).toHaveBeenCalledWith("/participants/alice/permanent");
   });
 
   it("checkStudioExitBlockers fragt DELETE mit check=1 ab", async () => {

@@ -195,6 +195,21 @@ export interface DeleteParticipantResponse {
   notificationEmailAttempted?: boolean;
   notificationEmailSent?: boolean;
   authTokensInvalidated?: number;
+  cognitoUserDeleted?: boolean;
+}
+
+export type PurgeScope = "studio_only" | "full_account";
+
+export interface PurgeParticipantResponse {
+  success: boolean;
+  profileDeleted: boolean;
+  cognitoUserDeleted: boolean;
+  purgeScope: PurgeScope;
+  otherStudioPresence?: boolean;
+  notificationEmail?: string;
+  notificationEmailAttempted?: boolean;
+  notificationEmailSent?: boolean;
+  authTokensInvalidated?: number;
 }
 
 export type StudioExitBlockers = {
@@ -227,6 +242,14 @@ export async function checkStudioExitBlockers(
 export async function deleteParticipant(userId: string): Promise<DeleteParticipantResponse> {
   const response = await axios.delete<DeleteParticipantResponse>(
     `/participants/${encodeURIComponent(userId)}`,
+  );
+  return response.data;
+}
+
+/** Permanent delete of a former (orphaned) member (#271). */
+export async function purgeParticipant(userId: string): Promise<PurgeParticipantResponse> {
+  const response = await axios.delete<PurgeParticipantResponse>(
+    `/participants/${encodeURIComponent(userId)}/permanent`,
   );
   return response.data;
 }
