@@ -171,6 +171,15 @@ type StudioAccessRemovedMailInput = StudioMailFields & {
   inviteWithdrawn?: boolean;
 };
 
+export type AccountPurgeScope = "studio_only" | "full_account";
+
+type AccountPurgedMailInput = StudioMailFields & {
+  nickname: string;
+  displayName?: string | null;
+  /** #271: how far permanent delete went. */
+  purgeScope: AccountPurgeScope;
+};
+
 type EmailChangedNewAddressMailInput = StudioMailFields & {
   nickname: string;
   displayName?: string | null;
@@ -424,6 +433,75 @@ export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput
       "",
       "Wenn Du eine vollstaendige Entfernung Deines Kontos moechtest, schreibe bitte an support@yogaswap.de.",
       "Falls das ein Versehen war, melde Dich bitte bei Deinem Studio.",
+    ].join("\n"),
+  });
+}
+
+/** Permanent delete confirmation (#271) — studio-only vs full Cognito account. */
+export function buildAccountPurgedMail(input: AccountPurgedMailInput): MailTemplate {
+  const locale = normalizeLocale(input.locale);
+  const studio = resolveStudioDisplayName(input.studioName);
+  const greeting = resolveAuthMailGreetingName(input);
+  const fullAccount = input.purgeScope === "full_account";
+
+  if (locale !== "de") {
+    return {
+      subject: fullAccount
+        ? `${studio}: Konto geloescht`
+        : `${studio}: Studio-Daten geloescht`,
+      html: "",
+      text: "",
+    };
+  }
+
+  if (fullAccount) {
+    const html = hasNamedStudio(studio)
+      ? `Auf Wunsch wurden Deine Daten bei <strong>${studio}</strong> und Dein YogaSwap-Login (Login-Name <strong>${input.nickname}</strong>) endgueltig geloescht.`
+      : `Auf Wunsch wurden Deine Studio-Daten und Dein YogaSwap-Login (Login-Name <strong>${input.nickname}</strong>) endgueltig geloescht.`;
+    const text = hasNamedStudio(studio)
+      ? `Auf Wunsch wurden Deine Daten bei "${studio}" und Dein YogaSwap-Login (Login-Name "${input.nickname}") endgueltig geloescht.`
+      : `Auf Wunsch wurden Deine Studio-Daten und Dein YogaSwap-Login (Login-Name "${input.nickname}") endgueltig geloescht.`;
+    return composeMail({
+      subject: `${studio}: Konto geloescht`,
+      studioName: studio,
+      studioUrl: input.studioUrl,
+      htmlBody: `
+        <h2>Hallo ${greeting}!</h2>
+        <p>${html}</p>
+        <p>Eine Anmeldung mit diesem Login ist nicht mehr moeglich.</p>
+      `,
+      textBody: [
+        `Hallo ${greeting}!`,
+        "",
+        text,
+        "",
+        "Eine Anmeldung mit diesem Login ist nicht mehr moeglich.",
+      ].join("\n"),
+    });
+  }
+
+  const htmlStudio = hasNamedStudio(studio)
+    ? `Auf Wunsch wurden Deine Daten fuer <strong>${studio}</strong> endgueltig aus YogaSwap entfernt (Login-Name <strong>${input.nickname}</strong>).`
+    : `Auf Wunsch wurden Deine Studio-Daten endgueltig aus YogaSwap entfernt (Login-Name <strong>${input.nickname}</strong>).`;
+  const textStudio = hasNamedStudio(studio)
+    ? `Auf Wunsch wurden Deine Daten fuer "${studio}" endgueltig aus YogaSwap entfernt (Login-Name "${input.nickname}").`
+    : `Auf Wunsch wurden Deine Studio-Daten endgueltig aus YogaSwap entfernt (Login-Name "${input.nickname}").`;
+  return composeMail({
+    subject: `${studio}: Studio-Daten geloescht`,
+    studioName: studio,
+    studioUrl: input.studioUrl,
+    htmlBody: `
+        <h2>Hallo ${greeting}!</h2>
+        <p>${htmlStudio}</p>
+        <p>Dein YogaSwap-Login bleibt bestehen, weil Du noch mit mindestens einem anderen Studio verknuepft bist
+        (aktiv oder ehemalig).</p>
+      `,
+    textBody: [
+      `Hallo ${greeting}!`,
+      "",
+      textStudio,
+      "",
+      "Dein YogaSwap-Login bleibt bestehen, weil Du noch mit mindestens einem anderen Studio verknuepft bist (aktiv oder ehemalig).",
     ].join("\n"),
   });
 }

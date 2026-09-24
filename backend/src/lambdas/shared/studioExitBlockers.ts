@@ -11,6 +11,7 @@ import { querySwapsForUserRefs } from "./swapQueryHelpers";
 export type StudioExitCourseBlocker = {
   courseId: number;
   courseName?: string;
+  /** @deprecated Roster-only blockers are no longer emitted (#271); kept for API compat. */
   reason: "enrollment" | "roster";
 };
 
@@ -102,18 +103,14 @@ export async function collectStudioExitBlockers(params: {
   );
 
   const courseNameById = new Map<number, string>();
-  const rosterCourseIds = new Set<number>();
+  const courseStatusById = new Map<number, string>();
   for (const item of coursesResp.Items ?? []) {
     const courseId = Number(item.courseId?.N ?? item.courseId?.S);
     if (!Number.isFinite(courseId)) continue;
     const name = item.name?.S?.trim();
     if (name) courseNameById.set(courseId, name);
-    const roster = (item.participants?.L ?? [])
-      .map((entry) => entry.S?.trim() || "")
-      .filter(Boolean);
-    if (listIncludesParticipantRef(roster, refs)) {
-      rosterCourseIds.add(courseId);
-    }
+    // Missing status treated as active (same as getCourses).
+    courseStatusById.set(courseId, item.status?.S?.trim() || "active");
   }
 
   const enrollments = await queryCourseEnrollments({
@@ -121,32 +118,27 @@ export async function collectStudioExitBlockers(params: {
     tableName: enrollmentsTable,
     tenantId,
   });
+  // CourseEnrollments are source of truth for "still planned" (#271 / #361).
+  // Stale course.participants[] alone must not block (check stays read-only;
+  // soft-delete still strips the nickname from the roster on execute).
+  // Inactive courses: members cannot be edited in UI → do not block studio exit.
+  // Draft (planning) and active: still block while enrollment has future/open validity.
   const enrollmentCourseIds = new Set<number>();
   for (const enrollment of enrollments) {
     if (!refs.has(enrollment.participantId.trim().toLowerCase())) continue;
     if (!enrollmentBlocksStudioExit(enrollment, asOf)) continue;
+    const status = courseStatusById.get(enrollment.courseId) ?? "active";
+    if (status === "inactive") continue;
     enrollmentCourseIds.add(enrollment.courseId);
   }
 
-  const courses: StudioExitCourseBlocker[] = [];
-  const seenCourses = new Set<number>();
-  for (const courseId of enrollmentCourseIds) {
-    seenCourses.add(courseId);
-    courses.push({
+  const courses: StudioExitCourseBlocker[] = [...enrollmentCourseIds]
+    .sort((a, b) => a - b)
+    .map((courseId) => ({
       courseId,
       courseName: courseNameById.get(courseId),
-      reason: "enrollment",
-    });
-  }
-  for (const courseId of rosterCourseIds) {
-    if (seenCourses.has(courseId)) continue;
-    courses.push({
-      courseId,
-      courseName: courseNameById.get(courseId),
-      reason: "roster",
-    });
-  }
-  courses.sort((a, b) => a.courseId - b.courseId);
+      reason: "enrollment" as const,
+    }));
 
   const swapsRaw = await querySwapsForUserRefs({
     client,

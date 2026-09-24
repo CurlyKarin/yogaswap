@@ -1,4 +1,5 @@
 import {
+  buildAccountPurgedMail,
   buildAuthMailFooter,
   buildCognitoPasswordResetCodeMail,
   buildEmailChangedNewAddressMail,
@@ -178,6 +179,32 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("Login-Namen <strong>Karin</strong>");
     expect(mail.html).not.toContain("nur deaktiviert");
     expect(mail.text).toContain("wurde zurueckgezogen");
+  });
+
+  test("buildAccountPurgedMail full_account wording", () => {
+    const mail = buildAccountPurgedMail({
+      locale: "de",
+      nickname: "Karin",
+      displayName: "Karin Example",
+      studioName: "Beharmony",
+      purgeScope: "full_account",
+    });
+    expect(mail.subject).toBe("Beharmony: Konto geloescht");
+    expect(mail.html).toContain("YogaSwap-Login");
+    expect(mail.html).toContain("endgueltig geloescht");
+    expect(mail.html).toContain("nicht mehr moeglich");
+  });
+
+  test("buildAccountPurgedMail studio_only wording", () => {
+    const mail = buildAccountPurgedMail({
+      locale: "de",
+      nickname: "Karin",
+      studioName: "Beharmony",
+      purgeScope: "studio_only",
+    });
+    expect(mail.subject).toBe("Beharmony: Studio-Daten geloescht");
+    expect(mail.html).toContain("anderen Studio verknuepft");
+    expect(mail.html).not.toContain("nicht mehr moeglich");
   });
 
   test("buildEmailChangedNewAddressMail returns german template with app link", () => {

@@ -8,6 +8,7 @@ import {
   getIdentityCandidates,
   getParticipants,
   inviteUser,
+  purgeParticipant,
   resetParticipantPassword,
   updateParticipant,
 } from "../api/participants";
@@ -19,6 +20,7 @@ vi.mock("../api/participants", () => ({
   getIdentityCandidates: vi.fn(),
   updateParticipant: vi.fn(),
   deleteParticipant: vi.fn(),
+  purgeParticipant: vi.fn(),
   checkStudioExitBlockers: vi.fn(),
 }));
 
@@ -28,6 +30,7 @@ const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi
 const mockedGetIdentityCandidates = getIdentityCandidates as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateParticipant = updateParticipant as unknown as ReturnType<typeof vi.fn>;
 const mockedDeleteParticipant = deleteParticipant as unknown as ReturnType<typeof vi.fn>;
+const mockedPurgeParticipant = purgeParticipant as unknown as ReturnType<typeof vi.fn>;
 const mockedCheckStudioExitBlockers = checkStudioExitBlockers as unknown as ReturnType<typeof vi.fn>;
 
 describe("AdminPanel", () => {
@@ -116,6 +119,90 @@ describe("AdminPanel", () => {
       expect(mockedDeleteParticipant).toHaveBeenCalledWith("alice");
       expect(within(panel).getByText(/Profil-Cleanup/i)).toBeInTheDocument();
       expect(within(panel).queryByText(/Info-Mail/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it("löscht ehemalige Mitglieder endgültig über den Purge-Dialog (#271)", async () => {
+    mockedGetParticipants
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "active",
+          participantId: "active",
+          role: "participant",
+          email: "active@example.com",
+          status: "active",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "former",
+          participantId: "former",
+          email: "former@example.com",
+          status: "no_login",
+          authUserId: "sub-former",
+        },
+        {
+          tenantId: "default-tenant",
+          userId: "active",
+          participantId: "active",
+          role: "participant",
+          email: "active@example.com",
+          status: "active",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          tenantId: "default-tenant",
+          userId: "active",
+          participantId: "active",
+          role: "participant",
+          email: "active@example.com",
+          status: "active",
+        },
+      ]);
+
+    mockedPurgeParticipant.mockResolvedValueOnce({
+      success: true,
+      profileDeleted: true,
+      cognitoUserDeleted: true,
+      purgeScope: "full_account",
+      notificationEmail: "former@example.com",
+      notificationEmailAttempted: true,
+      notificationEmailSent: true,
+    });
+
+    const { container } = render(<AdminPanel canEditRoles />);
+    const panel = container.querySelector("div");
+    if (!panel) throw new Error("Panel not found");
+
+    await waitFor(() => {
+      expect(within(panel).getByText("active")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(panel).getByRole("button", { name: /Ehemalige endgültig löschen/i }));
+
+    const purgeDialog = await within(panel).findByRole("dialog", {
+      name: /Ehemalige endgültig löschen/i,
+    });
+    await waitFor(() => {
+      expect(mockedGetParticipants).toHaveBeenCalledWith({ includeOrphaned: true });
+      expect(within(purgeDialog).getByText("former")).toBeInTheDocument();
+      expect(within(purgeDialog).queryByText("active")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(within(purgeDialog).getByLabelText("Endgültig löschen former"));
+    const confirmDialog = within(panel).getByRole("dialog", {
+      name: /Endgültiges Löschen bestätigen/i,
+    });
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: /Endgültig löschen/i }));
+
+    await waitFor(() => {
+      expect(mockedPurgeParticipant).toHaveBeenCalledWith("former");
+      expect(
+        within(panel).getByText(/Studio-Daten und YogaSwap-Login von "former" endgültig gelöscht/i),
+      ).toBeInTheDocument();
     });
   });
 

@@ -6,6 +6,7 @@ import {
   getIdentityCandidates,
   getParticipants,
   inviteUser,
+  purgeParticipant,
   resetParticipantPassword,
   updateParticipant,
   type IdentityCandidate,
@@ -45,7 +46,7 @@ function bulkResultTone(message: string): BulkResultTone {
   if (/fehlgeschlagen|fehler/i.test(text) || (/konnte nicht/i.test(text) && !/info-mail|e-mail/i.test(text))) {
     return "error";
   }
-  if (/gesendet|angelegt|reaktiviert|verknüpft|aktualisiert|gespeichert|entfernt/i.test(text)) {
+  if (/gesendet|angelegt|reaktiviert|verknüpft|aktualisiert|gespeichert|entfernt|gelöscht|endgültig/i.test(text)) {
     return "success";
   }
   return "info";
@@ -170,9 +171,16 @@ export default function AdminPanel({
   const [deleteExitBlockers, setDeleteExitBlockers] = useState<StudioExitBlockers | null>(null);
   const [deleteExitCheckLoading, setDeleteExitCheckLoading] = useState(false);
   const [deleteExitCheckError, setDeleteExitCheckError] = useState("");
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+  const [formerParticipants, setFormerParticipants] = useState<ParticipantWithStatus[]>([]);
+  const [formerLoading, setFormerLoading] = useState(false);
+  const [formerError, setFormerError] = useState("");
+  const [purgeConfirmTarget, setPurgeConfirmTarget] = useState<ParticipantWithStatus | null>(null);
+  const [purgeRunningUserId, setPurgeRunningUserId] = useState<string | null>(null);
   const editingModalRef = useRef<HTMLDivElement | null>(null);
   const createModalRef = useRef<HTMLDivElement | null>(null);
   const deleteModalRef = useRef<HTMLDivElement | null>(null);
+  const purgeModalRef = useRef<HTMLDivElement | null>(null);
   const createDisplayNameInputRef = useRef<HTMLInputElement | null>(null);
   const createNicknameInputRef = useRef<HTMLInputElement | null>(null);
   const createEmailInputRef = useRef<HTMLInputElement | null>(null);
@@ -702,7 +710,12 @@ export default function AdminPanel({
     }
   }, [deleteTarget, focusFirstInModal]);
   useEffect(() => {
-    const anyModalOpen = !!editingUserId || createOpen || !!deleteTarget;
+    if (purgeDialogOpen) {
+      queueMicrotask(() => focusFirstInModal(purgeModalRef.current));
+    }
+  }, [purgeDialogOpen, focusFirstInModal]);
+  useEffect(() => {
+    const anyModalOpen = !!editingUserId || createOpen || !!deleteTarget || purgeDialogOpen;
     if (!anyModalOpen) return;
 
     const onDocumentKeyDown = (event: KeyboardEvent) => {
@@ -722,6 +735,7 @@ export default function AdminPanel({
         (editingUserId && editingModalRef.current) ||
         (createOpen && createModalRef.current) ||
         (deleteTarget && deleteModalRef.current) ||
+        (purgeDialogOpen && purgeModalRef.current) ||
         null;
       if (!activeModal) return;
 
@@ -764,7 +778,7 @@ export default function AdminPanel({
     return () => {
       document.removeEventListener("keydown", onDocumentKeyDown, true);
     };
-  }, [editingUserId, createOpen, deleteTarget, getFocusableElements, createEmailEditable]);
+  }, [editingUserId, createOpen, deleteTarget, purgeDialogOpen, getFocusableElements, createEmailEditable]);
   useEffect(() => {
     if (!createOpen) return;
     if (createNicknameCheckState !== "new") return;
@@ -1350,6 +1364,61 @@ export default function AdminPanel({
     }
   };
 
+  const closePurgeDialog = () => {
+    if (purgeRunningUserId) return;
+    setPurgeDialogOpen(false);
+    setFormerParticipants([]);
+    setFormerError("");
+    setFormerLoading(false);
+    setPurgeConfirmTarget(null);
+  };
+
+  const openPurgeDialog = async () => {
+    setPurgeDialogOpen(true);
+    setPurgeConfirmTarget(null);
+    setFormerError("");
+    setFormerLoading(true);
+    try {
+      const list = await getParticipants({ includeOrphaned: true });
+      setFormerParticipants(list.filter((p) => !p.role));
+    } catch (err) {
+      console.error("Failed to load former participants", err);
+      setFormerParticipants([]);
+      setFormerError("Ehemalige Mitglieder konnten nicht geladen werden.");
+    } finally {
+      setFormerLoading(false);
+    }
+  };
+
+  const confirmPurgeParticipant = async () => {
+    if (!purgeConfirmTarget || purgeRunningUserId) return;
+    const userId = purgeConfirmTarget.userId;
+    setPurgeRunningUserId(userId);
+    setBulkInviteResult("");
+    try {
+      const result = await purgeParticipant(userId);
+      const scopeText =
+        result.purgeScope === "full_account"
+          ? `Studio-Daten und YogaSwap-Login von "${userId}" endgültig gelöscht.`
+          : `Studio-Daten von "${userId}" endgültig gelöscht (Login bleibt wegen anderer Studio-Verknüpfung).`;
+      let message = scopeText;
+      if (result.notificationEmailAttempted && result.notificationEmail) {
+        message += result.notificationEmailSent
+          ? ` Info-Mail gesendet an ${result.notificationEmail}.`
+          : ` Info-Mail an ${result.notificationEmail} konnte nicht versendet werden.`;
+      }
+      setBulkInviteResult(message);
+      setPurgeConfirmTarget(null);
+      setFormerParticipants((prev) => prev.filter((p) => p.userId !== userId));
+      await refreshParticipants();
+    } catch (err) {
+      console.error("Failed to purge participant", err);
+      setBulkInviteResult(`"${userId}" konnte nicht endgültig gelöscht werden.`);
+    } finally {
+      setPurgeRunningUserId(null);
+    }
+  };
+
   const bulkTone = bulkInviteResult ? bulkResultTone(bulkInviteResult) : null;
   const bulkBanner = bulkTone ? BULK_RESULT_BANNER[bulkTone] : null;
   
@@ -1360,22 +1429,43 @@ export default function AdminPanel({
       ) : null}
       <div className="admin-panel">
       <section aria-labelledby="participants-heading">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", gap: "0.75rem", flexWrap: "wrap" }}>
           <h3 id="participants-heading" style={{ margin: 0 }}>
             Teilnehmer verwalten
           </h3>
-          <button
-            type="button"
-            title="Neuer Teilnehmer"
-            aria-label="Neuer Teilnehmer"
-            onClick={openCreate}
-            disabled={createSaving || editingSaving}
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-              <Plus size={16} aria-hidden="true" />
-              Neu
-            </span>
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {canEditRoles && (
+              <button
+                type="button"
+                className="linkish"
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  color: "#6b7280",
+                  fontSize: 13,
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                }}
+                onClick={() => void openPurgeDialog()}
+                disabled={createSaving || editingSaving || !!purgeRunningUserId}
+              >
+                Ehemalige endgültig löschen
+              </button>
+            )}
+            <button
+              type="button"
+              title="Neuer Teilnehmer"
+              aria-label="Neuer Teilnehmer"
+              onClick={openCreate}
+              disabled={createSaving || editingSaving}
+            >
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                <Plus size={16} aria-hidden="true" />
+                Neu
+              </span>
+            </button>
+          </div>
         </div>
         <div style={{ marginBottom: "0.5rem" }}>
           <input
@@ -2367,6 +2457,162 @@ export default function AdminPanel({
                 {deleteRunningByUserId[deleteTarget.userId] ? "Lösche..." : "Löschen"}
               </button>
             </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {purgeDialogOpen && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ehemalige endgültig löschen"
+          ref={purgeModalRef}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (!shouldHandleModalEscape(event)) return;
+            if (purgeRunningUserId) return;
+            event.preventDefault();
+            closePurgeDialog();
+          }}
+        >
+          <div className="modal modal-compact">
+            <div className="modal-header">
+              <h4>Ehemalige endgültig löschen</h4>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
+                Nur Personen ohne aktive Studio-Mitgliedschaft. Bei weiterer Studio-Verknüpfung
+                (aktiv oder ehemalig) bleibt der YogaSwap-Login erhalten.
+              </p>
+              {formerLoading && (
+                <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>Lade Ehemalige…</p>
+              )}
+              {formerError && (
+                <p style={{ marginTop: 0, color: "crimson", fontSize: 14 }}>{formerError}</p>
+              )}
+              {!formerLoading && !formerError && formerParticipants.length === 0 && (
+                <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
+                  Keine ehemaligen Mitglieder in diesem Studio.
+                </p>
+              )}
+              {!formerLoading && formerParticipants.length > 0 && (
+                <ul
+                  style={{
+                    listStyle: "none",
+                    margin: 0,
+                    padding: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.5rem",
+                  }}
+                >
+                  {formerParticipants.map((p) => (
+                    <li
+                      key={p.userId}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                        padding: "0.5rem 0",
+                        borderBottom: "1px solid #e5e7eb",
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>
+                          {participantDisplayName(p)}
+                          {p.displayName?.trim() ? (
+                            <span style={{ fontWeight: 400, color: "#6b7280" }}>
+                              {" "}
+                              ({p.userId})
+                            </span>
+                          ) : null}
+                        </div>
+                        {p.email?.trim() ? (
+                          <div style={{ fontSize: 13, color: "#6b7280" }}>{p.email}</div>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        aria-label={`Endgültig löschen ${p.userId}`}
+                        disabled={!!purgeRunningUserId}
+                        onClick={() => setPurgeConfirmTarget(p)}
+                      >
+                        Löschen
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="modal-action-btn"
+                  onClick={closePurgeDialog}
+                  disabled={!!purgeRunningUserId}
+                >
+                  Schließen
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {purgeConfirmTarget && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Endgültiges Löschen bestätigen"
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (!shouldHandleModalEscape(event)) return;
+            if (purgeRunningUserId) return;
+            event.preventDefault();
+            setPurgeConfirmTarget(null);
+          }}
+        >
+          <div className="modal modal-compact">
+            <div className="modal-header">
+              <h4>Endgültig löschen?</h4>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginTop: 0, color: "#4b5563" }}>
+                <strong>{participantDisplayName(purgeConfirmTarget)}</strong>
+                {purgeConfirmTarget.displayName?.trim()
+                  ? ` (${purgeConfirmTarget.userId})`
+                  : ""}{" "}
+                unwiderruflich aus diesem Studio entfernen?
+              </p>
+              <p style={{ marginTop: 0, color: "#6b7280", fontSize: 14 }}>
+                Das Profil in diesem Studio wird gelöscht. Der YogaSwap-Login wird nur entfernt,
+                wenn keine weitere Studio-Verknüpfung existiert. Es wird eine Info-Mail an die
+                hinterlegte Adresse gesendet.
+              </p>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="modal-action-btn"
+                  onClick={() => setPurgeConfirmTarget(null)}
+                  disabled={!!purgeRunningUserId}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary modal-action-btn"
+                  onClick={() => void confirmPurgeParticipant()}
+                  disabled={!!purgeRunningUserId}
+                >
+                  {purgeRunningUserId === purgeConfirmTarget.userId
+                    ? "Lösche…"
+                    : "Endgültig löschen"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

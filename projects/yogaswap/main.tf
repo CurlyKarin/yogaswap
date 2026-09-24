@@ -475,6 +475,45 @@ locals {
         USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
       }
     },
+    "purge_participant" = {
+      name             = "purge-participant"
+      file_name        = "purgeParticipant.zip"
+      table_arns       = [
+        module.participants_table.table_arn,
+        module.memberships_table.table_arn,
+        module.tenants_table.table_arn,
+        module.auth_tokens_table.table_arn,
+      ]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:Scan"]
+      tables = {
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
+        "MEMBERSHIPS_TABLE"  = module.memberships_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
+        "AUTH_TOKENS_TABLE"  = module.auth_tokens_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+      additional_policies = [
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail"]
+          Resource = "*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "cognito-idp:AdminDeleteUser"
+          ]
+          Resource = aws_cognito_user_pool.yogaswap.arn
+        }
+      ]
+      environment = {
+        SES_SOURCE_EMAIL = local.ses_from_address
+        USER_POOL_ID     = aws_cognito_user_pool.yogaswap.id
+        BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
+        TENANT_BASE_HOST = local.tenant_base_host
+      }
+    },
     "create_participants" = {
       name             = "create-participants"
       file_name        = "createParticipants.zip"
@@ -710,6 +749,7 @@ locals {
     "POST /auth/resolve-login"                     = "resolve_login"
     "PUT /participants/{userId}"                   = "update_participant"
     "DELETE /participants/{userId}"                = "delete_participant"
+    "DELETE /participants/{userId}/permanent"      = "purge_participant"
     "GET /tenant-context"                          = "get_tenant_context"
     "PUT /tenant-settings"                         = "update_tenant_settings"
   }
@@ -733,6 +773,7 @@ module "yogaswap_api" {
     "GET /participants/identity-candidates",
     "PUT /participants/{userId}",
     "DELETE /participants/{userId}",
+    "DELETE /participants/{userId}/permanent",
     "POST /participants",
     "POST /participants/{userId}/password-reset",
     "POST /courses",
