@@ -22,7 +22,12 @@ import { getParticipantRoster } from "../api/participants";
 import { getCourseDates } from "../lib/dates";
 import { canShowCourseInPastWeek, computeEarliestWeekAnchor } from "../lib/courseTermActions";
 import { collectWeekOccurrences, type WeekCourseRow } from "../lib/courseWeekOccurrences";
-import { isPersonallyInvolvedInCourse } from "../lib/weekMyCoursesFilter";
+import {
+  hasStemOrInstructorInvolvement,
+  isPersonallyInvolvedInCourse,
+  narrowWeekOccurrencesForOnlyMyCourses,
+  personalSwapDateIsosForCourse,
+} from "../lib/weekMyCoursesFilter";
 import {
   buildParticipantNameByRefMap,
   resolveActorFromMembership,
@@ -223,7 +228,26 @@ export function useCoursesData({
         continue;
       }
 
-      rows.push({ course, occurrences });
+      let weekOccurrences = occurrences;
+      let cardDateIsos: string[] | undefined;
+      if (onlyMyCourses && !hasStemOrInstructorInvolvement(course, actor)) {
+        weekOccurrences = narrowWeekOccurrencesForOnlyMyCourses(
+          course,
+          occurrences,
+          actor,
+          swaps,
+        );
+        if (weekOccurrences.length === 0) continue;
+        cardDateIsos = Array.from(personalSwapDateIsosForCourse(course.id, actor, swaps)).sort(
+          (a, b) => a.localeCompare(b),
+        );
+      }
+
+      rows.push({
+        course,
+        occurrences: weekOccurrences,
+        ...(cardDateIsos ? { cardDateIsos } : {}),
+      });
     }
     return {
       rows: rows.sort((a, b) => sortCoursesForDisplay(a.course, b.course)),

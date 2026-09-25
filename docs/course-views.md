@@ -105,6 +105,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 - Hinweis unter der Toolbar in der Wochenansicht (Absagen/Tauschen).
 - **„Nur meine Kurse“** (#258): Person-Icon in der Wochen-Navigation.
   - **Teilnehmende:** standardmäßig an (nur Kurse mit eigener Beteiligung: Stammplatz, Swap oder Instructor-Zuordnung).
+  - **Reine Tausch-Ziel-/Ursprungskurse** (#298): bei aktivem Filter nur **Termine mit eigenem Swap** (`pending`/`active`), nicht die ganze Serie in anderen KWs.
   - **Admin/Kursleitung mit Kurszuordnung:** standardmäßig an, umschaltbar.
   - **Admin/Kursleitung ohne Zuordnung:** Button deaktiviert, immer alle Kurse.
   - Zustand wird **nicht** in `sessionStorage` gemerkt (Rollen-Default bei jedem Laden) — bewusst einfach für Teilnehmende.
