@@ -99,6 +99,59 @@ describe("updateTenantSettings Lambda", () => {
     expect(PutItemCommand).toHaveBeenCalled();
   });
 
+  test("stores and clears studio contact email (#272)", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Beharmony" },
+          settings: {
+            M: {
+              contactEmail: { S: "old@studio.de" },
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Beharmony" },
+          settings: {
+            M: {
+              contactEmail: { S: "info@beharmony.yoga" },
+              contactName: { S: "Studio-Team" },
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const saved = await handler(
+      makeEvent({
+        contactEmail: "info@beharmony.yoga",
+        contactName: "Studio-Team",
+      }),
+    );
+    expect(saved.statusCode).toBe(200);
+    expect(JSON.parse(saved.body).settings).toMatchObject({
+      contactEmail: "info@beharmony.yoga",
+      contactName: "Studio-Team",
+    });
+
+    const cleared = await handler(
+      makeEvent({
+        contactEmail: "",
+        contactName: "",
+      }),
+    );
+    expect(cleared.statusCode).toBe(200);
+    expect(JSON.parse(cleared.body).settings.contactEmail).toBeUndefined();
+    expect(JSON.parse(cleared.body).settings.contactName).toBeUndefined();
+  });
+
   test("rejects shrinking planning horizon when open swaps block", async () => {
     findHorizonShrinkBlockers.mockResolvedValueOnce({
       strip: { startInclusive: "2026-06-24", endInclusive: "2026-07-15" },

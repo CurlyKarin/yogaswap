@@ -24,6 +24,8 @@ const MVP_SETTINGS_KEYS = [
   "cancellationSwapCutoffMinutesBeforeStart",
 ] as const;
 
+const CONTACT_SETTINGS_KEYS = ["contactEmail", "contactName"] as const;
+
 function parseBody(event: APIGatewayProxyEvent): StudioSettingsPatch | null {
   if (!event.body) return null;
   try {
@@ -45,13 +47,24 @@ function mergeTenantSettings(
       (next as Record<string, number>)[key] = patch[key] as number;
     }
   }
+  for (const key of CONTACT_SETTINGS_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
+    const raw = patch[key];
+    const trimmed = typeof raw === "string" ? raw.trim() : "";
+    if (trimmed) {
+      next[key] = trimmed;
+    } else {
+      delete next[key];
+    }
+  }
   return next;
 }
 
 function hasUpdatablePatch(patch: StudioSettingsPatch): boolean {
   return (
     Object.prototype.hasOwnProperty.call(patch, "name") ||
-    MVP_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key))
+    MVP_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
+    CONTACT_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key))
   );
 }
 

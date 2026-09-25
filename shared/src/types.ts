@@ -237,6 +237,15 @@ export interface TenantSettings {
    * Default im Code: 60.
    */
   cancellationSwapCutoffMinutesBeforeStart?: number;
+  /**
+   * Öffentliche Studio-Kontaktadresse für transaktionale Mails (#272).
+   * Darf Alias/Gruppenpostfach sein (nicht zwingend ein Admin-Login).
+   */
+  contactEmail?: string;
+  /**
+   * Anzeigename zum Kontakt (z. B. „Studio-Team“). Fehlt → Tenant-Name als Label.
+   */
+  contactName?: string;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

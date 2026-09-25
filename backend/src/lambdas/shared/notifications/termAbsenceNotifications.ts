@@ -3,6 +3,7 @@ import {
   buildParticipantTermReleasedMail,
   buildStudioTermCancelledMail,
 } from "../templates/course/termMailTemplates";
+import { loadStudioMailContext } from "../studioContact";
 
 function resolveLoginUrl(baseUrl?: string): string | undefined {
   if (!baseUrl) return undefined;
@@ -18,11 +19,17 @@ export async function notifyStudioTermCancelled(
     dateIso: string;
     time: string;
     participantsTable?: string;
+    tenantsTable?: string;
     sesSourceEmail?: string;
     baseUrl?: string;
   },
 ) {
   const loginUrl = resolveLoginUrl(params.baseUrl);
+  const { studioContact } = await loadStudioMailContext(
+    client,
+    params.tenantsTable,
+    params.tenantId,
+  );
   return sendMailToParticipantUserIds(client, {
     participantsTable: params.participantsTable,
     sesSourceEmail: params.sesSourceEmail,
@@ -36,6 +43,7 @@ export async function notifyStudioTermCancelled(
         dateIso: params.dateIso,
         time: params.time,
         loginUrl,
+        studioContact,
       }),
   });
 }

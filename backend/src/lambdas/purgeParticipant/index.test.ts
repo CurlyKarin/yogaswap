@@ -4,6 +4,7 @@ import { invalidateAuthTokensForUser } from "../shared/invalidateAuthTokens";
 import { deleteCognitoUserBestEffort } from "../shared/deleteIncompleteCognitoUser";
 import { hasOtherStudioParticipantPresence } from "../shared/otherStudioPresence";
 
+
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {
@@ -11,6 +12,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => {
     GetItemCommand: jest.fn((input) => input),
     DeleteItemCommand: jest.fn((input) => input),
     ScanCommand: jest.fn((input) => input),
+    QueryCommand: jest.fn((input) => input),
     mockSend,
   };
 });

@@ -32,7 +32,7 @@ import {
   toSesAuthMessage,
 } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
-import { loadTenantName } from "../shared/tenantSettingsLoader";
+import { loadStudioMailContext, type StudioContact } from "../shared/studioContact";
 import { resolveAuthTokenTtlSeconds } from "../shared/authTokenTtl";
 
 const client = dynamoClient;
@@ -111,14 +111,19 @@ export const handler = async (
 
   try {
     let studioName: string | undefined;
-    let studioNameLoaded = false;
-    const getStudioName = async () => {
-      if (!studioNameLoaded) {
-        studioName = await loadTenantName(client, tenantsTable, tenantId);
-        studioNameLoaded = true;
+    let studioContact: StudioContact | undefined;
+    let studioMailLoaded = false;
+    const ensureStudioMailContext = async () => {
+      if (!studioMailLoaded) {
+        const ctx = await loadStudioMailContext(client, tenantsTable, tenantId);
+        studioName = ctx.studioName;
+        studioContact = ctx.studioContact;
+        studioMailLoaded = true;
       }
-      return studioName;
+      return { studioName, studioContact };
     };
+    const getStudioName = async () => (await ensureStudioMailContext()).studioName;
+    const getStudioContact = async () => (await ensureStudioMailContext()).studioContact;
     const hasAuthUserId =
       Object.prototype.hasOwnProperty.call(body, "authUserId") &&
       typeof body.authUserId === "string" &&
@@ -364,6 +369,7 @@ export const handler = async (
               const mailLocale = process.env.MAIL_LOCALE || "de";
               const oldEmail = (existing.email ?? "").trim();
               const studioName = await getStudioName();
+              const studioContact = await getStudioContact();
               // Studio login name in link — not opaque Cognito Username (#324).
               const passwordResetLink = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(targetUserId)}&email=${encodeURIComponent(email)}`;
 
@@ -376,6 +382,7 @@ export const handler = async (
                   newEmail: email,
                   studioName,
                   studioUrl: baseUrl,
+                  studioContact,
                   passwordResetLink,
                 });
                 await ses.send(
@@ -404,6 +411,7 @@ export const handler = async (
                     newEmail: email,
                     studioName,
                     studioUrl: baseUrl,
+                    studioContact,
                   });
                   await ses.send(
                     new SendEmailCommand({
@@ -539,6 +547,7 @@ export const handler = async (
           newRole: nextRoleForMail ?? "participant",
           studioName: await getStudioName(),
           studioUrl: baseUrl,
+          studioContact: await getStudioContact(),
         });
         await ses.send(
           new SendEmailCommand({
@@ -569,6 +578,7 @@ export const handler = async (
           newDisplayName: nextDisplayLabel,
           studioName: await getStudioName(),
           studioUrl: baseUrl,
+          studioContact: await getStudioContact(),
         });
         await ses.send(
           new SendEmailCommand({

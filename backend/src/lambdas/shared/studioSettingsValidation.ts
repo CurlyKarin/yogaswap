@@ -10,7 +10,11 @@ export type StudioSettingsPatch = {
   maxOffsetDays?: number;
   rollingPlanningHorizonWeeks?: number;
   cancellationSwapCutoffMinutesBeforeStart?: number;
+  contactEmail?: string | null;
+  contactName?: string | null;
 };
+
+const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string | null {
   if (Object.prototype.hasOwnProperty.call(patch, "name")) {
@@ -49,6 +53,26 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     const minutes = patch.cancellationSwapCutoffMinutesBeforeStart;
     if (!Number.isInteger(minutes) || (minutes ?? 0) < 0 || (minutes ?? 0) > 24 * 60) {
       return "Absagefrist für Mitglieder muss eine ganze Zahl zwischen 0 und 1440 sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "contactEmail")) {
+    const raw = patch.contactEmail;
+    if (raw != null && typeof raw !== "string") {
+      return "Kontakt-E-Mail muss Text sein.";
+    }
+    const email = typeof raw === "string" ? raw.trim() : "";
+    if (email && !CONTACT_EMAIL_RE.test(email)) {
+      return "Bitte eine gültige Kontakt-E-Mail eingeben (oder das Feld leeren).";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "contactName")) {
+    const raw = patch.contactName;
+    if (raw != null && typeof raw !== "string") {
+      return "Kontaktname muss Text sein.";
+    }
+    const label = typeof raw === "string" ? raw.trim() : "";
+    if (label.length > 80) {
+      return "Kontaktname darf höchstens 80 Zeichen haben.";
     }
   }
   return null;

@@ -19,7 +19,7 @@ import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { buildInviteMail, buildReactivationMail, toSesAuthMessage } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
-import { loadTenantName } from "../shared/tenantSettingsLoader";
+import { loadStudioMailContext, type StudioContact } from "../shared/studioContact";
 import {
   generateOpaqueCognitoUsername,
   listCognitoUsersByEmail,
@@ -190,6 +190,7 @@ async function trySendReactivationMail(params: {
   displayName?: string;
   tenantId: string;
   studioName?: string;
+  studioContact?: StudioContact;
   mailLocale: string;
 }): Promise<boolean> {
   const to = params.toEmail.trim();
@@ -202,6 +203,7 @@ async function trySendReactivationMail(params: {
     loginUrl: baseUrl,
     studioName: params.studioName,
     studioUrl: baseUrl,
+    studioContact: params.studioContact,
   });
   try {
     await ses.send(
@@ -357,7 +359,7 @@ export const handler = async (event: any) => {
   const { userId: actorUserId } = getTenantContext(event as any);
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
   const mailLocale = process.env.MAIL_LOCALE || "de";
-  const studioName = await loadTenantName(
+  const { studioName, studioContact } = await loadStudioMailContext(
     dynamodb,
     process.env.TENANTS_TABLE,
     tenantId,
@@ -588,6 +590,7 @@ export const handler = async (event: any) => {
           displayName: displayNameCanonical,
           tenantId,
           studioName,
+          studioContact,
           mailLocale,
         });
       }
@@ -1056,6 +1059,7 @@ export const handler = async (event: any) => {
         displayName: displayNameCanonical,
         tenantId,
         studioName,
+        studioContact,
         mailLocale,
       });
       if (!emailSent) {
@@ -1146,6 +1150,7 @@ export const handler = async (event: any) => {
     loginUrl: baseUrl,
     studioName,
     studioUrl: baseUrl,
+    studioContact,
   });
   const inviteMail = buildInviteMail({
     locale: mailLocale,
@@ -1154,6 +1159,7 @@ export const handler = async (event: any) => {
     link,
     studioName,
     studioUrl: baseUrl,
+    studioContact,
   });
 
   let emailSent = false;

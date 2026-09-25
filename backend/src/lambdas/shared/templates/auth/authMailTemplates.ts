@@ -1,8 +1,16 @@
+import {
+  formatStudioContactHtml,
+  formatStudioContactText,
+  type StudioContact,
+} from "../../studioContact";
+
 export type AuthMailLocale = "de";
 
 const DEFAULT_STUDIO_LABEL = "YogaSwap";
 const PLATFORM_BLURB =
   "YogaSwap ist eine Plattform zum Tauschen von Yogakurs-Terminen.";
+
+export type { StudioContact };
 
 /** Anzeigename für Auth-Mails; Fallback „YogaSwap“, wenn Name fehlt (#268). */
 export function resolveStudioDisplayName(studioName?: string | null): string {
@@ -61,6 +69,8 @@ type StudioMailFields = {
   studioName?: string | null;
   /** Studio-/App-URL nur im Plain-Text-Footer (kein zweiter HTML-Link → bessere Zustellbarkeit). */
   studioUrl?: string | null;
+  /** Studio-Kontakt aus Tenant-Settings (#272); fehlt → kein Kontakthinweis. */
+  studioContact?: StudioContact | null;
 };
 
 export type MailTemplate = {
@@ -86,12 +96,19 @@ function normalizeLocale(locale?: string): AuthMailLocale {
   return "de";
 }
 
-/** HTML-Footer: ohne zusaetzliche Links (Spam-Filter). */
-export function buildAuthMailFooterHtml(studioName?: string | null): string {
+/** HTML-Footer: ohne zusaetzliche Links (Spam-Filter). Studio-Kontakt als Klartext (#272). */
+export function buildAuthMailFooterHtml(
+  studioName?: string | null,
+  studioContact?: StudioContact | null,
+): string {
   const studio = resolveStudioDisplayName(studioName);
   const lines = [PLATFORM_BLURB];
   if (hasNamedStudio(studio)) {
     lines.push(`Studio: <strong>${studio}</strong>`);
+  }
+  const contactLine = formatStudioContactHtml(studioContact);
+  if (contactLine) {
+    lines.push(contactLine);
   }
   return (
     `<hr style="border:none;border-top:1px solid #ddd;margin:24px 0 12px;" />` +
@@ -103,11 +120,16 @@ export function buildAuthMailFooterHtml(studioName?: string | null): string {
 export function buildAuthMailFooterText(
   studioName?: string | null,
   studioUrl?: string | null,
+  studioContact?: StudioContact | null,
 ): string {
   const studio = resolveStudioDisplayName(studioName);
   const lines = [PLATFORM_BLURB];
   if (hasNamedStudio(studio)) {
     lines.push(`Studio: ${studio}`);
+  }
+  const contactLine = formatStudioContactText(studioContact);
+  if (contactLine) {
+    lines.push(contactLine);
   }
   const url = studioUrl?.trim();
   if (url) {
@@ -120,8 +142,9 @@ export function buildAuthMailFooterText(
 export function buildAuthMailFooter(
   studioName?: string | null,
   _studioUrl?: string | null,
+  studioContact?: StudioContact | null,
 ): string {
-  return buildAuthMailFooterHtml(studioName);
+  return buildAuthMailFooterHtml(studioName, studioContact);
 }
 
 function composeMail(params: {
@@ -130,11 +153,12 @@ function composeMail(params: {
   textBody: string;
   studioName?: string | null;
   studioUrl?: string | null;
+  studioContact?: StudioContact | null;
 }): MailTemplate {
   return {
     subject: params.subject,
-    html: `${params.htmlBody.trim()}\n${buildAuthMailFooterHtml(params.studioName)}`,
-    text: `${params.textBody.trim()}\n\n--\n${buildAuthMailFooterText(params.studioName, params.studioUrl)}`,
+    html: `${params.htmlBody.trim()}\n${buildAuthMailFooterHtml(params.studioName, params.studioContact)}`,
+    text: `${params.textBody.trim()}\n\n--\n${buildAuthMailFooterText(params.studioName, params.studioUrl, params.studioContact)}`,
   };
 }
 
@@ -232,6 +256,7 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
     subject: `${studio}: Einladung`,
     studioName: studio,
     studioUrl: input.studioUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Willkommen ${greeting}!</h2>
         <p>${inviteHtml}</p>
@@ -266,6 +291,7 @@ export function buildRecoveryMail(input: RecoveryMailInput): MailTemplate {
     subject: `${studio}: Passwort zuruecksetzen`,
     studioName: studio,
     studioUrl: input.studioUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} das Passwort zurueckgesetzt
@@ -308,6 +334,7 @@ export function buildReactivationMail(input: ReactivationMailInput): MailTemplat
     subject: `${studio}: Zugang freigeschaltet`,
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>${accessHtml}</p>
@@ -346,6 +373,7 @@ export function buildInvitePreparationMail(input: InvitePreparationMailInput): M
     subject: `${studio}: Einladung`,
     studioName: studio,
     studioUrl: input.studioUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Willkommen ${greeting}!</h2>
         <p>${prepHtml}</p>
@@ -388,6 +416,7 @@ export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput
       subject: `${studio}: Einladung zurueckgezogen`,
       studioName: studio,
       studioUrl: input.studioUrl,
+    studioContact: input.studioContact,
       htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>${withdrawnHtml}</p>
@@ -417,6 +446,7 @@ export function buildStudioAccessRemovedMail(input: StudioAccessRemovedMailInput
     subject: `${studio}: Zugang entfernt`,
     studioName: studio,
     studioUrl: input.studioUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>${removedHtml}</p>
@@ -465,6 +495,7 @@ export function buildAccountPurgedMail(input: AccountPurgedMailInput): MailTempl
       subject: `${studio}: Konto geloescht`,
       studioName: studio,
       studioUrl: input.studioUrl,
+    studioContact: input.studioContact,
       htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>${html}</p>
@@ -490,6 +521,7 @@ export function buildAccountPurgedMail(input: AccountPurgedMailInput): MailTempl
     subject: `${studio}: Studio-Daten geloescht`,
     studioName: studio,
     studioUrl: input.studioUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>${htmlStudio}</p>
@@ -540,6 +572,7 @@ export function buildEmailChangedNewAddressMail(
       : `${studio}: E-Mail-Adresse aktualisiert`,
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} die Login-E-Mail-Adresse
@@ -576,6 +609,7 @@ export function buildEmailChangedOldAddressMail(
     subject: `${studio}: Sicherheitshinweis E-Mail geaendert`,
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} die Login-E-Mail-Adresse
@@ -608,6 +642,7 @@ export function buildRoleChangedMail(input: RoleChangedMailInput): MailTemplate 
     subject: `${studio}: Rolle aktualisiert`,
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} Deine Rolle von
@@ -639,6 +674,7 @@ export function buildDisplayNameChangedMail(input: DisplayNameChangedMailInput):
     subject: `${studio}: Anzeigename aktualisiert`,
     studioName: studio,
     studioUrl: input.studioUrl ?? input.loginUrl,
+    studioContact: input.studioContact,
     htmlBody: `
         <h2>Hallo ${greeting}!</h2>
         <p>Auf YogaSwap wurde ${forStudioAccessHtml(studio)} Dein Anzeigename von

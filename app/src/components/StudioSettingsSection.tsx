@@ -56,6 +56,8 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const cutoffDefault = resolveCancellationSwapCutoffMinutes(tenant.settings);
 
   const [name, setName] = useState(tenant.name);
+  const [contactEmail, setContactEmail] = useState(tenant.settings?.contactEmail ?? "");
+  const [contactName, setContactName] = useState(tenant.settings?.contactName ?? "");
   const [inactiveGraceDays, setInactiveGraceDays] = useState(String(graceDefault));
   const [minOffsetDays, setMinOffsetDays] = useState(String(swapDefaults.minOffsetDays));
   const [maxOffsetDays, setMaxOffsetDays] = useState(String(swapDefaults.maxOffsetDays));
@@ -68,6 +70,8 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   useEffect(() => {
     const swap = resolveSwapWindow(tenant.settings);
     setName(tenant.name);
+    setContactEmail(tenant.settings?.contactEmail ?? "");
+    setContactName(tenant.settings?.contactName ?? "");
     setInactiveGraceDays(String(resolveInactiveGraceDays(tenant.settings)));
     setMinOffsetDays(String(swap.minOffsetDays));
     setMaxOffsetDays(String(swap.maxOffsetDays));
@@ -80,6 +84,8 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const handleSave = async () => {
     const patch = {
       name: name.trim(),
+      contactEmail: contactEmail.trim(),
+      contactName: contactName.trim(),
       inactiveGraceDaysAfterCourseEnd: Number.parseInt(inactiveGraceDays, 10),
       minOffsetDays: Number.parseInt(minOffsetDays, 10),
       maxOffsetDays: Number.parseInt(maxOffsetDays, 10),
@@ -133,6 +139,34 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
               onChange={(e) => setName(e.target.value)}
               disabled={saving}
               autoComplete="organization"
+            />
+          </label>
+
+          <label className="dialog-field">
+            <FieldLabelWithTooltip tooltip="Öffentliche Adresse in Einladungs-, Reset- und Absage-Mails. Darf ein Alias oder Gruppenpostfach sein (z. B. info@…). Leer lassen = kein Kontakthinweis in den Mails.">
+              Kontakt-E-Mail (für Mails)
+            </FieldLabelWithTooltip>
+            <input
+              type="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              disabled={saving}
+              autoComplete="email"
+              placeholder="info@studio.example"
+            />
+          </label>
+
+          <label className="dialog-field">
+            <FieldLabelWithTooltip tooltip="Optionaler Anzeigename neben der Kontakt-E-Mail (z. B. „Studio-Team“). Ohne Eintrag wird der Studioname verwendet.">
+              Kontaktname (optional)
+            </FieldLabelWithTooltip>
+            <input
+              type="text"
+              value={contactName}
+              onChange={(e) => setContactName(e.target.value)}
+              disabled={saving}
+              autoComplete="organization"
+              placeholder="Studio-Team"
             />
           </label>
 

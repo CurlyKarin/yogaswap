@@ -65,6 +65,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const swapsTable = process.env.SWAPS_TABLE;
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const participantsTable = process.env.PARTICIPANTS_TABLE;
+  const tenantsTable = process.env.TENANTS_TABLE;
   const sesSourceEmail = formatSesFromAddress(process.env.SES_SOURCE_EMAIL || "");
   const studioNotificationEmails = parseCsvEmails(process.env.STUDIO_NOTIFICATION_EMAILS);
   if (!coursesTable || !overridesTable || !swapsTable || !membershipsTable) {
@@ -384,6 +385,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           dateIso: date,
           time: courseTime,
           participantsTable,
+          tenantsTable,
           sesSourceEmail,
           baseUrl,
         });

@@ -13,7 +13,7 @@ import type { ParticipantProfile } from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { buildStudioAccessRemovedMail, toSesAuthMessage } from "../shared/templates/auth/authMailTemplates";
-import { loadTenantName } from "../shared/tenantSettingsLoader";
+import { loadStudioMailContext } from "../shared/studioContact";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { getTenantContext } from "../shared/tenantContext";
@@ -255,7 +255,11 @@ export const handler = async (
       notificationEmailAttempted = true;
       const sesSourceEmail = resolveSesSourceEmail();
       const mailLocale = process.env.MAIL_LOCALE || "de";
-      const studioName = await loadTenantName(client, tenantsTable, tenantId);
+      const { studioName, studioContact } = await loadStudioMailContext(
+        client,
+        tenantsTable,
+        tenantId,
+      );
       const removedMail = buildStudioAccessRemovedMail({
         locale: mailLocale,
         // Studio login name (#324) — never participantId/opaque Cognito Username.
@@ -263,6 +267,7 @@ export const handler = async (
         displayName: profile.displayName,
         studioName,
         studioUrl: resolveAppBaseUrlForTenant(tenantId),
+        studioContact,
         ...(inviteWithdrawn ? { inviteWithdrawn: true } : {}),
       });
       try {
