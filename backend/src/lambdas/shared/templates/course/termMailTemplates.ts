@@ -1,5 +1,9 @@
 import { formatTermDateTimeDe } from "./courseMailTemplates";
 import { resolveOperationalMailGreeting } from "../mailGreeting";
+import {
+  formatStudioContactHtml,
+  type StudioContact,
+} from "../../studioContact";
 
 type MailTemplate = {
   subject: string;
@@ -13,6 +17,8 @@ export type TermMailInput = {
   dateIso: string;
   time: string;
   loginUrl?: string;
+  /** Studio-Kontakt aus Tenant-Settings (#272). */
+  studioContact?: StudioContact | null;
 };
 
 function termLine(dateIso: string, time: string): string {
@@ -21,6 +27,11 @@ function termLine(dateIso: string, time: string): string {
 
 function loginHint(loginUrl?: string): string {
   return loginUrl ? `<p><a href="${loginUrl}">Zum YogaSwap-Login</a></p>` : "";
+}
+
+function contactHint(contact?: StudioContact | null): string {
+  const line = formatStudioContactHtml(contact);
+  return line ? `<p>${line}</p>` : "";
 }
 
 /** Studio-/Trainer-Absage eines gesamten Termins (cancelCourseDate). */
@@ -32,6 +43,7 @@ export function buildStudioTermCancelledMail(input: TermMailInput): MailTemplate
     html: `
       <p>Hallo ${greeting},</p>
       <p>der Termin am ${when} im Kurs <strong>${input.courseName}</strong> wurde abgesagt.</p>
+      ${contactHint(input.studioContact)}
       ${loginHint(input.loginUrl)}
     `,
   };

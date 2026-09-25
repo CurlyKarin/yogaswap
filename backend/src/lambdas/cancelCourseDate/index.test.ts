@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { handler } from "./index";
 
+
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {

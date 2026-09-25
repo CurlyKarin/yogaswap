@@ -4,6 +4,7 @@ import { collectStudioExitBlockers } from "../shared/studioExitBlockers";
 import { invalidateAuthTokensForUser } from "../shared/invalidateAuthTokens";
 import { deleteCognitoUserBestEffort } from "../shared/deleteIncompleteCognitoUser";
 
+
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {

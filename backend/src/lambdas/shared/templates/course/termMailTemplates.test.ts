@@ -16,6 +16,15 @@ describe("termMailTemplates", () => {
     expect(mail.html).toMatch(/18:00/);
   });
 
+  test("buildStudioTermCancelledMail includes studio contact (#272)", () => {
+    const mail = buildStudioTermCancelledMail({
+      ...base,
+      studioContact: { email: "info@beharmony.yoga", name: "Beharmony" },
+    });
+    expect(mail.html).toContain("Bei Fragen wende Dich an Dein Studio");
+    expect(mail.html).toContain("info@beharmony.yoga");
+  });
+
   test("buildParticipantTermReleasedMail describes freed slot and Ersatztermin", () => {
     const mail = buildParticipantTermReleasedMail(base);
     expect(mail.subject).toMatch(/freigegeben/);

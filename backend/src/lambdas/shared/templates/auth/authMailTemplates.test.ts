@@ -30,6 +30,32 @@ describe("authMailTemplates", () => {
     expect(footer).not.toContain("<a href");
   });
 
+  test("HTML footer includes studio contact without mailto links (#272)", () => {
+    const footer = buildAuthMailFooter("Beharmony", undefined, {
+      email: "info@beharmony.yoga",
+      name: "Beharmony",
+    });
+    expect(footer).toContain("Bei Fragen wende Dich an Dein Studio");
+    expect(footer).toContain("<strong>Beharmony</strong>");
+    expect(footer).toContain("info@beharmony.yoga");
+    expect(footer).not.toContain("mailto:");
+    expect(footer).not.toContain("<a href");
+  });
+
+  test("buildInviteMail text footer includes studio contact (#272)", () => {
+    const mail = buildInviteMail({
+      nickname: "Karin",
+      link: "https://example.com/invite",
+      studioName: "Beharmony",
+      studioUrl: "https://beharmony.app.yogaswap.de",
+      studioContact: { email: "info@beharmony.yoga", name: "Beharmony" },
+    });
+    expect(mail.text).toContain(
+      "Bei Fragen wende Dich an Dein Studio: Beharmony (info@beharmony.yoga)",
+    );
+    expect(mail.html).toContain("info@beharmony.yoga");
+  });
+
   test("toSesAuthMessage includes Text and Html parts", () => {
     const mail = buildInviteMail({
       nickname: "Karin",

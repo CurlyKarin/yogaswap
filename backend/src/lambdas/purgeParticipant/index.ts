@@ -10,7 +10,7 @@ import {
   buildAccountPurgedMail,
   toSesAuthMessage,
 } from "../shared/templates/auth/authMailTemplates";
-import { loadTenantName } from "../shared/tenantSettingsLoader";
+import { loadStudioMailContext } from "../shared/studioContact";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { getTenantContext } from "../shared/tenantContext";
@@ -177,13 +177,18 @@ export const handler = async (
     let notificationEmailSent = false;
     if (notificationEmail) {
       notificationEmailAttempted = true;
-      const studioName = await loadTenantName(client, tenantsTable, tenantId);
+      const { studioName, studioContact } = await loadStudioMailContext(
+        client,
+        tenantsTable,
+        tenantId,
+      );
       const purgedMail = buildAccountPurgedMail({
         locale: process.env.MAIL_LOCALE || "de",
         nickname: profile.userId || userId,
         displayName: profile.displayName,
         studioName,
         studioUrl: resolveAppBaseUrlForTenant(tenantId),
+        studioContact,
         purgeScope: effectiveScope,
       });
       try {

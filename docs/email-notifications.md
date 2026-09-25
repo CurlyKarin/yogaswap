@@ -2,7 +2,7 @@
 
 Stand: **MVP Teilnehmer-Benachrichtigungen implementiert** (Issue [#45](https://github.com/CurlyKarin/yogaswap/issues/45)). Dieses Dokument ist Inventar, Produktentscheidungen und Zielbild für Folgearbeit (Trainer:in, Schalter, Digest).
 
-Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-Anhang). Absender `SES_SOURCE_EMAIL` (Rollout: `noreply@yogaswap.de`). App-Auth (Invite/Reset-Token) unterdrückt Cognito-Mails (`MessageAction: SUPPRESS`) und nutzt eigene Templates. App-Auth-Mails nennen den **Studio-Namen** (Tenant `name`, Fallback „YogaSwap“, #268). Cognito-Code-Mails (Forgot/Admin-Reset) gehen über denselben SES-Absender (`email_sending_account = DEVELOPER`, #106) mit deutschen Custom-Message-Texten (#107/#108) — ohne Studio-Name (nur Cognito-Attribute). Domain/Production: [`docs/ses-production.md`](./ses-production.md) (#80). QA/Freigabe Auth-Mails: [`docs/cognito-mail-qa.md`](./cognito-mail-qa.md) (#109).
+Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-Anhang). Absender `SES_SOURCE_EMAIL` (Rollout: `noreply@yogaswap.de`). App-Auth (Invite/Reset-Token) unterdrückt Cognito-Mails (`MessageAction: SUPPRESS`) und nutzt eigene Templates. App-Auth-Mails nennen den **Studio-Namen** (Tenant `name`, Fallback „YogaSwap“, #268) und ggf. den **Studio-Kontakt** (`TenantSettings.contactEmail` / optional `contactName`, #272). Cognito-Code-Mails (Forgot/Admin-Reset) gehen über denselben SES-Absender (`email_sending_account = DEVELOPER`, #106) mit deutschen Custom-Message-Texten (#107/#108) — ohne Studio-Name/Kontakt (nur Cognito-Attribute). Domain/Production: [`docs/ses-production.md`](./ses-production.md) (#80). QA/Freigabe Auth-Mails: [`docs/cognito-mail-qa.md`](./cognito-mail-qa.md) (#109).
 
 ### MVP #45 — Umsetzungsstand (Teilnehmer:innen)
 
@@ -60,6 +60,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 ### Hilfslogik
 
 - **Profil + E-Mail auflösen:** `backend/src/lambdas/shared/participantEmailLookup.ts` (`resolveParticipantEmail`)
+- **Studio-Kontakt (#272):** `TenantSettings.contactEmail` (+ optional `contactName`) in den Studioeinstellungen. Geladen über `loadStudioMailContext` (`studioContact.ts`). Ohne `contactEmail` kein Kontakthinweis. Alias/Gruppenpostfach erlaubt; kein Admin-Login nötig. Cognito-Code-Mails (#107) ohne Kontakt.
 - **Locale:** `MAIL_LOCALE` (Default `de`)
 - **Login-Links:** `BASE_URL`
 

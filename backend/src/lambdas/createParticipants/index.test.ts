@@ -2,6 +2,7 @@ import { handler } from './index';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 
 // Mock Cognito
+
 jest.mock('@aws-sdk/client-cognito-identity-provider', () => {
   const mockSend = jest.fn();
   return {

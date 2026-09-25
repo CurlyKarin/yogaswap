@@ -7,7 +7,7 @@ import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import crypto from "crypto";
 import { buildRecoveryMail, toSesAuthMessage } from "../shared/templates/auth/authMailTemplates";
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
-import { loadTenantName } from "../shared/tenantSettingsLoader";
+import { loadStudioMailContext } from "../shared/studioContact";
 import { resolveAuthTokenTtlSeconds } from "../shared/authTokenTtl";
 
 const ses = new SESClient({});
@@ -116,7 +116,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const link = `${baseUrl}/invite?mode=admin_reset&tenantId=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(oneTimeToken)}&nickname=${encodeURIComponent(
       targetUserId,
     )}&email=${encodeURIComponent(email)}`;
-    const studioName = await loadTenantName(
+    const { studioName, studioContact } = await loadStudioMailContext(
       dynamodb,
       process.env.TENANTS_TABLE,
       tenantId,
@@ -130,6 +130,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         link,
         studioName,
         studioUrl: baseUrl,
+        studioContact,
       });
       await ses.send(
         new SendEmailCommand({

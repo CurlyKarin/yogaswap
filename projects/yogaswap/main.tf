@@ -336,7 +336,7 @@ locals {
     "cancel_course_date" = {
       name             = "cancel-course-date"
       file_name        = "cancelCourseDate.zip"
-      table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn, module.participants_table.table_arn]
+      table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn, module.participants_table.table_arn, module.tenants_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Scan", "dynamodb:Query"]
       tables = {
         "COURSES_TABLE"      = module.courses_table.table_name
@@ -344,6 +344,7 @@ locals {
         "OVERRIDES_TABLE"    = module.course_overrides_table.table_name
         "SWAPS_TABLE"        = module.swaps_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []

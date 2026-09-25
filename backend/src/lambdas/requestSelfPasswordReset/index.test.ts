@@ -1,6 +1,7 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { handler } from "./index";
 
+
 jest.mock("@aws-sdk/client-dynamodb", () => {
   const mockSend = jest.fn();
   return {
