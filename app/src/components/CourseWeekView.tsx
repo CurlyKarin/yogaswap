@@ -144,14 +144,20 @@ export default function CourseWeekView({
         </p>
       )}
       <div className="grid">
-        {rows.map(({ course }) => {
-          const cardDates = getWeekViewCardDates(course, weekAnchor, tenantSettings);
+        {rows.map(({ course, occurrences, cardDateIsos }) => {
+          const cardDates = getWeekViewCardDates(
+            course,
+            weekAnchor,
+            tenantSettings,
+            undefined,
+            cardDateIsos,
+          );
           const focusDate =
             todayFocusRequest?.courseId === course.id
               ? buildCourseOccurrenceLocal(todayFocusRequest.dateIso, course.time)
               : null;
           const initialSelectedDate =
-            focusDate ?? preferredWeekCardDate(course, weekAnchor);
+            focusDate ?? preferredWeekCardDate(course, weekAnchor, undefined, occurrences);
 
           return (
             <div

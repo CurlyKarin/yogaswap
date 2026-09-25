@@ -64,6 +64,11 @@ export function collectWeekOccurrences(
 export type WeekCourseRow = {
   course: Course;
   occurrences: WeekOccurrence[];
+  /**
+   * Wenn gesetzt (reine Tausch-Beteiligung bei „nur meine Kurse“, #298):
+   * CourseCard-Terminliste auf diese ISO-Daten beschränken.
+   */
+  cardDateIsos?: string[];
 };
 
 export type WeekDayGroup = {
@@ -101,6 +106,7 @@ export function getWeekViewCardDates(
   weekStart: Date,
   settings?: TenantSettings,
   now: Date = new Date(),
+  onlyDateIsos?: ReadonlySet<string> | readonly string[],
 ): Date[] {
   const future = getCourseDates(course, now);
   const inWeek = weekOccurrenceDates(course, weekStart).filter((d) =>
@@ -114,7 +120,12 @@ export function getWeekViewCardDates(
   for (const d of [...future, ...inWeek, ...pastGrace]) {
     merged.set(toLocalDateIso(d), d);
   }
-  return Array.from(merged.values()).sort((a, b) => a.getTime() - b.getTime());
+  let dates = Array.from(merged.values()).sort((a, b) => a.getTime() - b.getTime());
+  if (onlyDateIsos) {
+    const allow = onlyDateIsos instanceof Set ? onlyDateIsos : new Set(onlyDateIsos);
+    dates = dates.filter((d) => allow.has(toLocalDateIso(d)));
+  }
+  return dates;
 }
 
 /**
@@ -161,8 +172,9 @@ export function preferredWeekCardDate(
   course: Course,
   weekStart: Date,
   now: Date = new Date(),
+  occurrencesOverride?: WeekOccurrence[],
 ): Date | undefined {
-  const occurrences = collectWeekOccurrences(course, weekStart);
+  const occurrences = occurrencesOverride ?? collectWeekOccurrences(course, weekStart);
   if (occurrences.length > 0) {
     return pickPreferredFromWeekDates(
       occurrenceDatesSorted(occurrences, course),

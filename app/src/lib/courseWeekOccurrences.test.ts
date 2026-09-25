@@ -83,6 +83,24 @@ describe("preferredWeekCardDate", () => {
 });
 
 describe("getWeekViewCardDates", () => {
+  it("limits dates when onlyDateIsos is set (#298)", () => {
+    const now = new Date(2026, 5, 1, 12, 0, 0);
+    const weekStart = new Date(2026, 5, 15); // Mo 15.06.2026
+    const course: Course = {
+      id: 1,
+      name: "Test",
+      weekday: "Tue",
+      time: "10:00",
+      capacity: 8,
+      participants: [],
+      dates: ["2026-06-16", "2026-06-17", "2026-06-23"],
+      excludedDates: [],
+    };
+    const keys = getWeekViewCardDates(course, weekStart, undefined, now, ["2026-06-16"]).map((d) =>
+      toLocalDateIso(d),
+    );
+    expect(keys).toEqual(["2026-06-16"]);
+  });
   it("includes in-week past dates only while they remain in term grace", () => {
     const course: Course = {
       id: 1,
