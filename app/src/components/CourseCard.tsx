@@ -75,7 +75,7 @@ export default function CourseCard({
     initialSelectedDate,
     includePastTermsInSelect,
   });
-  const { selectedDate, setSelectedDate, selectedDateKey, userName, hasNoUpcomingDates, inactiveNotice, excludedTermNotice, pastTermNotice } = termState;
+  const { selectedDate, setSelectedDate, selectedDateKey, userName, hasNoUpcomingDates, inactiveNotice, excludedTermNotice, previewTermNotice, pastTermNotice, showPreviewMarker } = termState;
 
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [absenceSaving, setAbsenceSaving] = useState(false);
@@ -158,7 +158,7 @@ export default function CourseCard({
   return (
     <article
       tabIndex={-1}
-      className={`course-card${participantActionsLocked ? " course-card--inactive-participant" : ""}${highlighted ? " course-card--today-focus" : ""}`}
+      className={`course-card${participantActionsLocked ? " course-card--inactive-participant" : ""}${showPreviewMarker ? " course-card--preview-term" : ""}${highlighted ? " course-card--today-focus" : ""}`}
       aria-labelledby={titleId}
       aria-describedby={scheduleDescId}
     >
@@ -179,6 +179,7 @@ export default function CourseCard({
         guestSeatSaving={guestSeatSaving}
         onAdjustGuestCount={onAdjustGuestCount ? handleAdjustGuestCount : undefined}
         includePastTermsInSelect={includePastTermsInSelect}
+        tenantSettings={tenantSettings}
         termState={termState}
         selectedDate={selectedDate}
         onSelectedDateChange={handleSelectedDateChange}
@@ -189,6 +190,11 @@ export default function CourseCard({
         {excludedTermNotice && (
           <div className="course-card-footer-notice" role="status">
             <span className="muted small">{excludedTermNotice}</span>
+          </div>
+        )}
+        {previewTermNotice && (
+          <div className="course-card-footer-notice" role="status">
+            <span className="muted small">{previewTermNotice}</span>
           </div>
         )}
         {inactiveNotice && !pastTermNotice && (

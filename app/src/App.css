@@ -701,6 +701,17 @@ body {
   color: #991b1b;
 }
 
+.course-term-visual-marker--preview {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+.course-card--preview-term {
+  border-color: #e0e7ff;
+  background: #fafaff;
+}
+
 .course-card--inactive-participant {
   border-color: #e5e7eb;
   background: #fafafa;

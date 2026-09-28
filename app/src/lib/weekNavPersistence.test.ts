@@ -47,10 +47,21 @@ describe("weekNavPersistence", () => {
 
   it("keeps in-range weeks unchanged", () => {
     const earliest = startOfWeekMonday(new Date(2026, 0, 5));
-    const stored = startOfWeekMonday(new Date(2099, 5, 14));
+    const latest = startOfWeekMonday(new Date(2027, 0, 4));
+    const stored = startOfWeekMonday(new Date(2026, 5, 14));
     writeStoredWeekAnchor(storageKey, stored);
 
-    expect(resolveInitialWeekAnchor(storageKey, earliest).getTime()).toBe(stored.getTime());
-    expect(clampWeekAnchor(stored, earliest).getTime()).toBe(stored.getTime());
+    expect(resolveInitialWeekAnchor(storageKey, earliest, latest).getTime()).toBe(stored.getTime());
+    expect(clampWeekAnchor(stored, earliest, latest).getTime()).toBe(stored.getTime());
+  });
+
+  it("clamps stored weeks to latestWeekAnchor", () => {
+    const earliest = startOfWeekMonday(new Date(2026, 0, 5));
+    const latest = startOfWeekMonday(new Date(2027, 0, 4));
+    const tooLate = startOfWeekMonday(new Date(2099, 5, 14));
+    writeStoredWeekAnchor(storageKey, tooLate);
+
+    expect(resolveInitialWeekAnchor(storageKey, earliest, latest).getTime()).toBe(latest.getTime());
+    expect(clampWeekAnchor(tooLate, earliest, latest).getTime()).toBe(latest.getTime());
   });
 });

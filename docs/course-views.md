@@ -46,6 +46,8 @@ Vertretung (`forceParticipantView` in `App`): Teilnehmer-Perspektive in der **Wo
 
 **Mental Model:** Eine **Kalenderwoche** (`weekAnchor`); alle **aktiven** Kurse als Kacheln im Grid (#336). `draft` / `inactive` erscheinen hier nicht — auch nicht für Admin/Instructor (die bleiben in der **Kursübersicht** sichtbar, damit fehlende Entwürfe nach dem Login auffallen). Pro Kurs Termine dieser Woche (und Nachlauf-Sprünge) über die Terminauswahl in der Kachel.
 
+Bei **Rollkursen** erscheinen Termine auch **außerhalb** des Teilnehmer-Sichtfensters als **Vorschau** (#330): Marker `CalendarRange`, Suffix `(Vorschau)`, keine Absage/Tausch/Gäste; Fußzeilen-Hinweis. Entfall außerhalb des Fensters nutzt denselben Vorschau-Status (#297). Navigation **›** ist auf **52 Wochen** (bzw. Kursende) begrenzt; Admin-Terminplanung bleibt bei ~156 Wochen.
+
 ### Gemeinsame Kalenderwoche
 
 - Alle Kacheln beziehen sich auf dieselbe KW (`weekAnchor`).
@@ -61,6 +63,7 @@ Vertretung (`forceParticipantView` in `App`): Teilnehmer-Perspektive in der **Wo
 | Zustand | Erkennbar wie | Aktionen (Teilnehmer) |
 |--------|----------------|------------------------|
 | **Studio-Entfall** (`excludedDates`) | Marker `CalendarX` (rot), Dropdown `(entfällt)`, Hinweis „Termin entfällt“ | Keine Absage/Tausch; Swap ggf. nur abbrechen |
+| **Vorschau** (außerhalb Sichtfenster, #330) | Marker `CalendarRange`, Dropdown `(Vorschau)`, Fußzeilen-Hinweis | Keine Absage/Tausch/Gäste |
 | **Vergangen** (Nachlauf) | Marker `History` | Kurs-Wind-down: keine Absage am laufenden Termin; RC-Absage → „Anderen Termin wählen“ / offene Anfragen; Swaps abbrechen |
 | **Cutoff** (kurz vor Start) | Marker `Clock3` | Kein neuer Tausch; SN/RC-Regeln (#167) |
 | **Eigene RC/SN** | Chips (eigenes Chip grün; SN: du kräftig rot, andere blass) | Absage/Tausch wie in Kursübersicht |
@@ -122,6 +125,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 |--------|-----------|
 | **Sichtbarkeit** | Vergangene KW: nur Kurse im Kalender-Nachlauf (Rollkurs) bzw. bis inklusivem Block-Endedatum mit Termin in dieser KW. |
 | **Navigation ‹** | `computeEarliestWeekAnchor`; ‹ deaktiviert am unteren Limit. |
+| **Navigation ›** | `computeLatestWeekAnchor` — max. 52 Wochen voraus bzw. Kursende (#330); › deaktiviert am oberen Limit. |
 | **Vergangener Termin** | Keine Absage am laufenden Termin; kein Tausch ohne RC-Absage. |
 | **RC abgesagt** | „Anderen Termin wählen“, weitere Tauschanfragen, offene Anfragen abbrechen — auch im Kurs-Wind-down. |
 | **Bestehende Swaps** | Abbrechen/verwalten weiter möglich. |
@@ -171,6 +175,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 - [#164](https://github.com/CurlyKarin/yogaswap/issues/164) — Wochenansicht
 - [#149](https://github.com/CurlyKarin/yogaswap/issues/149) — Kursstatus-Sichtbarkeit
 - [#336](https://github.com/CurlyKarin/yogaswap/issues/336) — Wochenansicht nur aktive Kurse
+- [#330](https://github.com/CurlyKarin/yogaswap/issues/330) — Rollkurs-Termine außerhalb Sichtfenster als Vorschau
 - [#182](https://github.com/CurlyKarin/yogaswap/issues/182) — Layout Kurskacheln
 - [#185](https://github.com/CurlyKarin/yogaswap/issues/185) — Tausch-Ursprung / eigene Absagen in der Kachel
 - [#186](https://github.com/CurlyKarin/yogaswap/issues/186) — Terminübersicht nach Woche

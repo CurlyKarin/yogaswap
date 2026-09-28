@@ -5,12 +5,19 @@ import {
 import type { Course, TenantSettings } from "shared/types";
 import { getCourseDates } from "./dates";
 import { isTermInParticipantSwapGrace } from "./courseTermActions";
+import {
+  isWeekViewPreviewTerm,
+  seriesWeekdayIsoInLocalWeek,
+  weekViewForwardHorizonEndIso,
+} from "./weekViewPreview";
 
 export type WeekOccurrenceKind = "scheduled" | "excluded";
 
 export type WeekOccurrence = {
   dateIso: string;
   kind: WeekOccurrenceKind;
+  /** #330: außerhalb Teilnehmer-Sichtfenster (Rollkurs-Vorschau). */
+  preview?: boolean;
 };
 
 export function toLocalDateIso(date: Date): string {
@@ -37,10 +44,24 @@ export function isExcludedCourseDate(
   return (course.excludedDates ?? []).includes(dateIso);
 }
 
-/** Sichtbare und ausgeschlossene Termine der Kalenderwoche (lokales Mo–So). */
+type CollectWeekOccurrencesCourse = Pick<Course, "dates" | "excludedDates"> &
+  Partial<
+    Pick<
+      Course,
+      "weekday" | "planningMode" | "plannedEndDate" | "seriesEndDate" | "visibleUntil"
+    >
+  >;
+
+/**
+ * Sichtbare und ausgeschlossene Termine der Kalenderwoche (lokales Mo–So).
+ * Rollkurse (#330): Serientag auch außerhalb des Sichtfensters bis zur 52-Wochen-Kappe
+ * (Vorschau), damit stattfindende und entfallene Termine symmetrisch sind.
+ */
 export function collectWeekOccurrences(
-  course: Pick<Course, "dates" | "excludedDates">,
+  course: CollectWeekOccurrencesCourse,
   weekStart: Date,
+  settings?: TenantSettings,
+  now: Date = new Date(),
 ): WeekOccurrence[] {
   const { start, end } = weekRangeKeys(weekStart);
   const excluded = new Set(course.excludedDates ?? []);
@@ -49,15 +70,34 @@ export function collectWeekOccurrences(
   for (const iso of course.dates ?? []) {
     if (isIsoDateInWeek(iso, start, end)) dateSet.add(iso);
   }
+
+  const forwardEnd =
+    course.planningMode === "rolling_continuous"
+      ? weekViewForwardHorizonEndIso(course, now)
+      : null;
+
   for (const iso of course.excludedDates ?? []) {
-    if (isIsoDateInWeek(iso, start, end)) dateSet.add(iso);
+    if (!isIsoDateInWeek(iso, start, end)) continue;
+    if (forwardEnd && iso > forwardEnd) continue;
+    dateSet.add(iso);
+  }
+
+  if (course.planningMode === "rolling_continuous" && course.weekday && forwardEnd) {
+    const seriesIso = seriesWeekdayIsoInLocalWeek(weekStart, course.weekday);
+    if (seriesIso && isIsoDateInWeek(seriesIso, start, end) && seriesIso <= forwardEnd) {
+      const todayLocal = toLocalDateIso(now);
+      if (seriesIso >= todayLocal) {
+        dateSet.add(seriesIso);
+      }
+    }
   }
 
   return Array.from(dateSet)
     .sort((a, b) => a.localeCompare(b))
     .map((dateIso) => ({
       dateIso,
-      kind: excluded.has(dateIso) ? "excluded" : "scheduled",
+      kind: excluded.has(dateIso) ? ("excluded" as const) : ("scheduled" as const),
+      ...(isWeekViewPreviewTerm(course, dateIso, settings, now) ? { preview: true } : {}),
     }));
 }
 
@@ -77,8 +117,13 @@ export type WeekDayGroup = {
 };
 
 /** Termine der Kalenderwoche als lokale Date-Objekte (inkl. ausgeschlossener). */
-export function weekOccurrenceDates(course: Course, weekStart: Date): Date[] {
-  return collectWeekOccurrences(course, weekStart)
+export function weekOccurrenceDates(
+  course: Course,
+  weekStart: Date,
+  settings?: TenantSettings,
+  now: Date = new Date(),
+): Date[] {
+  return collectWeekOccurrences(course, weekStart, settings, now)
     .map((o) => buildCourseOccurrenceLocal(o.dateIso, course.time))
     .filter((d): d is Date => d !== null)
     .sort((a, b) => a.getTime() - b.getTime());
@@ -109,7 +154,7 @@ export function getWeekViewCardDates(
   onlyDateIsos?: ReadonlySet<string> | readonly string[],
 ): Date[] {
   const future = getCourseDates(course, now);
-  const inWeek = weekOccurrenceDates(course, weekStart).filter((d) =>
+  const inWeek = weekOccurrenceDates(course, weekStart, settings, now).filter((d) =>
     isSelectableWeekViewDate(course, toLocalDateIso(d), settings, now),
   );
   const pastGrace = (course.dates ?? [])
@@ -173,8 +218,11 @@ export function preferredWeekCardDate(
   weekStart: Date,
   now: Date = new Date(),
   occurrencesOverride?: WeekOccurrence[],
+  settings?: TenantSettings,
 ): Date | undefined {
-  const occurrences = occurrencesOverride ?? collectWeekOccurrences(course, weekStart);
+  const occurrences =
+    occurrencesOverride ?? collectWeekOccurrences(course, weekStart, settings, now);
+
   if (occurrences.length > 0) {
     return pickPreferredFromWeekDates(
       occurrenceDatesSorted(occurrences, course),

@@ -30,6 +30,56 @@ describe("collectWeekOccurrences", () => {
       false,
     );
   });
+
+  it("adds rolling series terms outside visibility window as preview (#330)", () => {
+    const now = new Date(2026, 5, 1, 12, 0, 0);
+    const previewWeek = new Date(2026, 7, 3); // Mo 3.8.2026 — hinter 5-Wochen-Fenster
+    const course: Course = {
+      id: 1,
+      name: "Flow",
+      weekday: "Mon",
+      time: "10:00",
+      capacity: 8,
+      participants: [],
+      planningMode: "rolling_continuous",
+      dates: ["2026-06-01", "2026-06-08"],
+      excludedDates: [],
+    };
+    const occ = collectWeekOccurrences(
+      course,
+      previewWeek,
+      { rollingPlanningHorizonWeeks: 5 },
+      now,
+    );
+    expect(occ).toEqual([
+      { dateIso: "2026-08-03", kind: "scheduled", preview: true },
+    ]);
+  });
+
+  it("marks excluded rolling terms outside visibility window as preview too (#297/#330)", () => {
+    const now = new Date(2026, 5, 1, 12, 0, 0);
+    const previewWeek = new Date(2026, 7, 3);
+    const course: Course = {
+      id: 1,
+      name: "Flow",
+      weekday: "Mon",
+      time: "10:00",
+      capacity: 8,
+      participants: [],
+      planningMode: "rolling_continuous",
+      dates: ["2026-06-01"],
+      excludedDates: ["2026-08-03"],
+    };
+    const occ = collectWeekOccurrences(
+      course,
+      previewWeek,
+      { rollingPlanningHorizonWeeks: 5 },
+      now,
+    );
+    expect(occ).toEqual([
+      { dateIso: "2026-08-03", kind: "excluded", preview: true },
+    ]);
+  });
 });
 
 describe("weekRangeKeys", () => {

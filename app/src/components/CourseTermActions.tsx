@@ -100,6 +100,7 @@ export default function CourseTermActions({
     swapWindow,
     swapForThisTerm,
     isSelectedTermExcluded,
+    isSelectedTermPreview,
     canUseFullTermActions,
     canSwapFromPastCancelled,
     canRequestMorePastRcSwaps,
@@ -115,6 +116,10 @@ export default function CourseTermActions({
     swapForWaitlist,
     cancellableUserSwapsOnCourse,
   } = termState;
+
+  if (isSelectedTermPreview) {
+    return null;
+  }
 
   return (
     <>

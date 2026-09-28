@@ -34,6 +34,7 @@ import { getSwapsByStatus } from "../api/swaps";
 import { getOverrides } from "../api/overrides";
 import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getCourseDates } from "../lib/dates";
+import { courseDatesForMembersDialog } from "../lib/courseMembersDialogModel";
 import { WEEKDAY_OPTIONS } from "../lib/weekdayLabels";
 import {
   createCourse,
@@ -1005,7 +1006,9 @@ export default function CourseList({
         courseId={membersTargetCourse?.id}
         courseName={membersTargetCourse?.name}
         courseStatus={membersTargetCourse?.status}
-        courseDates={membersTargetCourse?.dates ?? []}
+        courseDates={
+          membersTargetCourse ? courseDatesForMembersDialog(membersTargetCourse) : []
+        }
         courseTime={membersTargetCourse?.time}
         tenantSettings={tenant?.settings}
         enrollments={enrollments}

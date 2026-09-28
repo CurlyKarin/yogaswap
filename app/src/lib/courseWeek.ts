@@ -30,11 +30,14 @@ export function formatWeekNavLabel(weekStart: Date): string {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
   const kw = getIsoWeekNumber(weekStart);
-  const fmt: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
-  const start = weekStart.toLocaleDateString("de-DE", fmt);
-  const end = weekEnd.toLocaleDateString("de-DE", fmt);
-  const year = weekStart.getFullYear() !== weekEnd.getFullYear() ? ` ${weekEnd.getFullYear()}` : "";
-  return `KW ${kw} · ${start} – ${end}${year}`;
+  const crossYear = weekStart.getFullYear() !== weekEnd.getFullYear();
+  const startFmt: Intl.DateTimeFormatOptions = crossYear
+    ? { day: "numeric", month: "short", year: "numeric" }
+    : { day: "numeric", month: "short" };
+  const endFmt: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
+  const start = weekStart.toLocaleDateString("de-DE", startFmt);
+  const end = weekEnd.toLocaleDateString("de-DE", endFmt);
+  return `KW ${kw} · ${start} – ${end}`;
 }
 
 /** Wenn occurrence außerhalb von weekStart-Woche liegt → neuer weekAnchor. */

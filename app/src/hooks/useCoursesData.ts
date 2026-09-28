@@ -21,6 +21,7 @@ import { getSwaps, getSwapsByStatus } from "../api/swaps";
 import { getParticipantRoster } from "../api/participants";
 import { getCourseDates } from "../lib/dates";
 import { canShowCourseInPastWeek, computeEarliestWeekAnchor } from "../lib/courseTermActions";
+import { computeLatestWeekAnchor } from "../lib/weekViewPreview";
 import { collectWeekOccurrences, type WeekCourseRow } from "../lib/courseWeekOccurrences";
 import {
   hasStemOrInstructorInvolvement,
@@ -210,7 +211,7 @@ export function useCoursesData({
     const rows: WeekCourseRow[] = [];
     let hiddenPastCourses = 0;
     for (const course of weekVisibleCourses) {
-      const occurrences = collectWeekOccurrences(course, weekAnchor);
+      const occurrences = collectWeekOccurrences(course, weekAnchor, tenant?.settings);
       if (occurrences.length === 0) continue;
 
       if (!canShowCourseInPastWeek(course, weekAnchor, tenant?.settings)) {
@@ -276,6 +277,11 @@ export function useCoursesData({
     [weekVisibleCourses, tenant?.settings],
   );
 
+  const latestWeekAnchor = useMemo(
+    () => computeLatestWeekAnchor(weekVisibleCourses, tenant?.settings),
+    [weekVisibleCourses, tenant?.settings],
+  );
+
   return {
     loading,
     error,
@@ -288,6 +294,7 @@ export function useCoursesData({
     weekCourseRows: weekCourseRows.rows,
     hiddenPastCourseCount: weekCourseRows.hiddenPastCourses,
     earliestWeekAnchor,
+    latestWeekAnchor,
     canSeeCourseManagement,
     membershipForPermissions,
     confirmSwap: swapHandlers.confirmSwap,
