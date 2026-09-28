@@ -36,7 +36,7 @@ ZugriffsfristEnde = max( plannedEndDate, letzterTerminIso + inactiveGraceDaysAft
 ```
 
 - **Ohne** `plannedEndDate`: kein Auto-Inaktiv (unbefristeter Rollkurs).
-- **Mit** `plannedEndDate`: `shouldAutoDeactivateCourse` beim Reconcile; Teilnehmer-Sichtbarkeit über `participantCourseAccessDeadlineIso` (siehe [course-status-visibility.md](./course-status-visibility.md)).
+- **Mit** `plannedEndDate`: `shouldAutoDeactivateCourse` beim Reconcile; Teilnehmer-Wind-down nur solange der Kurs noch `active` und in der Zugriffsfrist ist — `inactive` ist für Teilnehmende sofort weg (#336, siehe [course-status-visibility.md](./course-status-visibility.md)).
 
 ## Swaps und Cleanup
 

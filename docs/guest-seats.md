@@ -14,6 +14,10 @@
 - **Wartelisten-Nachrücken:** nur wenn `participants.length < capacity` und effektive Belegung (Teilnehmer + Gäste) unter `capacity` liegt; Nachrücken über `processPromotions`.
 - **Self-Service-Tausch:** reguläre Vollheit und Raumgrenze berücksichtigen Gäste (`hasRegularBookingCapacity`, `validateTermOccupancy`).
 
+## Abgrenzung
+
+- **Springer ohne Kurs / Kontingent** (ehemals #38): Pilotstudio regelt „warten auf Block-Platz“ und gelegentliche Mitnahme über Gastplätze. Ein gebuchtes Kontingent oder Kurse ohne Termine ist **nicht** spezifiziert — neues Ticket erst bei klarem Produkt. Richtung grob: eher `participant` + Settings, keine Rolle `trial` (`docs/multi-tenancy.md`).
+
 ## Code
 
 - `shared/src/courseCapacity.ts` — `resolveGuestCount`, `resolveEffectiveOccupancy`, `validateTermOccupancy`, `canPromoteFromWaitlist`

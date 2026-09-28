@@ -44,7 +44,7 @@ Vertretung (`forceParticipantView` in `App`): Teilnehmer-Perspektive in der **Wo
 
 ## Wochenansicht
 
-**Mental Model:** Eine **Kalenderwoche** (`weekAnchor`); alle sichtbaren Kurse als Kacheln im Grid. Pro Kurs Termine dieser Woche (und Nachlauf-Sprünge) über die Terminauswahl in der Kachel.
+**Mental Model:** Eine **Kalenderwoche** (`weekAnchor`); alle **aktiven** Kurse als Kacheln im Grid (#336). `draft` / `inactive` erscheinen hier nicht — auch nicht für Admin/Instructor (die bleiben in der **Kursübersicht** sichtbar, damit fehlende Entwürfe nach dem Login auffallen). Pro Kurs Termine dieser Woche (und Nachlauf-Sprünge) über die Terminauswahl in der Kachel.
 
 ### Gemeinsame Kalenderwoche
 
@@ -132,7 +132,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 
 | Thema | Issue / Doku |
 |--------|----------------|
-| Kursstatus, `visibleDates`, Nachlauf, Wind-down, Block-Endedatum | #149, #204, #296, `course-status-visibility.md` |
+| Kursstatus, `visibleDates`, Nachlauf, Wind-down, Block-Endedatum | #149, #204, #296, #336, `course-status-visibility.md` |
 | Kalender-/Swap-Zeitachse, Sondertermine | #164 (dieses Dokument) |
 | Kontrollierte Überplanung | #153, `course-overbooking.md` |
 | Kurzfristige Absage (SN/RC, Cutoff) | #167, `short-notice-cancellation.md` |
@@ -170,6 +170,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 
 - [#164](https://github.com/CurlyKarin/yogaswap/issues/164) — Wochenansicht
 - [#149](https://github.com/CurlyKarin/yogaswap/issues/149) — Kursstatus-Sichtbarkeit
+- [#336](https://github.com/CurlyKarin/yogaswap/issues/336) — Wochenansicht nur aktive Kurse
 - [#182](https://github.com/CurlyKarin/yogaswap/issues/182) — Layout Kurskacheln
 - [#185](https://github.com/CurlyKarin/yogaswap/issues/185) — Tausch-Ursprung / eigene Absagen in der Kachel
 - [#186](https://github.com/CurlyKarin/yogaswap/issues/186) — Terminübersicht nach Woche
