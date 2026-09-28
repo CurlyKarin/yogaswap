@@ -321,6 +321,32 @@ describe("CoursesShell", () => {
     expect(screen.getByText(formatWeekNavLabel(storedWeek))).toBeInTheDocument();
   });
 
+  it("does not clamp a restored future week to today while courses are loading", () => {
+    const todayWeek = startOfWeekMonday(new Date());
+    const storedWeek = addWeeks(todayWeek, 4);
+    writeStoredWeekAnchor(buildWeekAnchorStorageKey("default-tenant", "maya"), storedWeek);
+    mockUseCoursesData.mockReturnValue(
+      createCoursesDataMock({
+        loading: true,
+        earliestWeekAnchor: todayWeek,
+        latestWeekAnchor: todayWeek,
+      }),
+    );
+
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    expect(screen.getByText(formatWeekNavLabel(storedWeek))).toBeInTheDocument();
+    expect(
+      readStoredWeekAnchor(buildWeekAnchorStorageKey("default-tenant", "maya"))?.getTime(),
+    ).toBe(storedWeek.getTime());
+  });
+
   it("persists week navigation in sessionStorage", async () => {
     const user = userEvent.setup();
     const storageKey = buildWeekAnchorStorageKey("default-tenant", "maya");

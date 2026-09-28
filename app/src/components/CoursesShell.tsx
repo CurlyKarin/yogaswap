@@ -160,13 +160,16 @@ export default function CoursesShell({
   }, [weekAnchorStorageKey, earliestWeekAnchor, latestWeekAnchor]);
 
   useEffect(() => {
+    // Während Laden nicht klemmen: earliest/latest sind sonst oft „heute“ und
+    // überschreiben eine aus sessionStorage wiederhergestellte Zukunfts-KW.
+    if (loading) return;
     setWeekAnchorState((prev) => {
       const clamped = clampWeekAnchor(prev, earliestWeekAnchor, latestWeekAnchor);
       if (clamped.getTime() === prev.getTime()) return prev;
       writeStoredWeekAnchor(weekAnchorStorageKey, clamped);
       return clamped;
     });
-  }, [earliestWeekAnchor, latestWeekAnchor, weekAnchorStorageKey]);
+  }, [earliestWeekAnchor, latestWeekAnchor, weekAnchorStorageKey, loading]);
 
   useEffect(() => {
     if (!canSeeCourseManagement && viewMode === "courses") {

@@ -77,6 +77,12 @@ describe("weekViewPreview", () => {
     expect(latest.getTime()).toBe(expected.getTime());
   });
 
+  it("computeLatestWeekAnchor uses full forward cap when course list is empty", () => {
+    const latest = computeLatestWeekAnchor([], undefined, now);
+    const expected = startOfWeekMonday(addWeeks(startOfWeekMonday(now), WEEK_VIEW_FORWARD_HORIZON_WEEKS));
+    expect(latest.getTime()).toBe(expected.getTime());
+  });
+
   it("computeLatestWeekAnchor respects earlier planned end", () => {
     const latest = computeLatestWeekAnchor(
       [{ ...rollingCourse, plannedEndDate: "2026-07-15" }],

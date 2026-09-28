@@ -113,6 +113,10 @@ export function computeLatestWeekAnchor(
 ): Date {
   const todayWeek = startOfWeekMonday(now);
   const absoluteCap = startOfWeekMonday(addWeeks(todayWeek, WEEK_VIEW_FORWARD_HORIZON_WEEKS));
+  // Ohne Kurse (z. B. noch laden): volle Vorschau-Kappe, sonst würde sessionStorage
+  // einer Zukunfts-KW sofort auf „heute“ geklemmt (#330).
+  if (courses.length === 0) return absoluteCap;
+
   let latest = todayWeek;
 
   for (const course of courses) {
