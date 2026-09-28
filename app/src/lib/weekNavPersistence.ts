@@ -57,11 +57,21 @@ export function writeStoredWeekAnchor(storageKey: string, weekAnchor: Date): voi
   }
 }
 
-export function clampWeekAnchor(weekAnchor: Date, earliestWeekAnchor: Date): Date {
+export function clampWeekAnchor(
+  weekAnchor: Date,
+  earliestWeekAnchor: Date,
+  latestWeekAnchor?: Date,
+): Date {
   const normalized = startOfWeekMonday(weekAnchor);
   const earliest = startOfWeekMonday(earliestWeekAnchor);
   if (normalized.getTime() < earliest.getTime()) {
     return earliest;
+  }
+  if (latestWeekAnchor) {
+    const latest = startOfWeekMonday(latestWeekAnchor);
+    if (normalized.getTime() > latest.getTime()) {
+      return latest;
+    }
   }
   return normalized;
 }
@@ -69,8 +79,9 @@ export function clampWeekAnchor(weekAnchor: Date, earliestWeekAnchor: Date): Dat
 export function resolveInitialWeekAnchor(
   storageKey: string,
   earliestWeekAnchor: Date,
+  latestWeekAnchor?: Date,
 ): Date {
   const stored = readStoredWeekAnchor(storageKey);
   const fallback = startOfWeekMonday(new Date());
-  return clampWeekAnchor(stored ?? fallback, earliestWeekAnchor);
+  return clampWeekAnchor(stored ?? fallback, earliestWeekAnchor, latestWeekAnchor);
 }

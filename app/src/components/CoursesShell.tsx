@@ -85,6 +85,7 @@ export default function CoursesShell({
     adjustGuestCount,
     canManageGuestSeats,
     earliestWeekAnchor,
+    latestWeekAnchor,
     actor,
     participantNameByRef,
   } = useCoursesData({
@@ -123,12 +124,12 @@ export default function CoursesShell({
     (update: Date | ((prev: Date) => Date)) => {
       setWeekAnchorState((prev) => {
         const next = typeof update === "function" ? update(prev) : update;
-        const clamped = clampWeekAnchor(next, earliestWeekAnchor);
+        const clamped = clampWeekAnchor(next, earliestWeekAnchor, latestWeekAnchor);
         writeStoredWeekAnchor(weekAnchorStorageKey, clamped);
         return clamped;
       });
     },
-    [earliestWeekAnchor, weekAnchorStorageKey],
+    [earliestWeekAnchor, latestWeekAnchor, weekAnchorStorageKey],
   );
 
   useEffect(() => {
@@ -149,19 +150,26 @@ export default function CoursesShell({
   useEffect(() => {
     if (prevWeekAnchorStorageKeyRef.current === weekAnchorStorageKey) return;
     prevWeekAnchorStorageKeyRef.current = weekAnchorStorageKey;
-    const resolved = resolveInitialWeekAnchor(weekAnchorStorageKey, earliestWeekAnchor);
+    const resolved = resolveInitialWeekAnchor(
+      weekAnchorStorageKey,
+      earliestWeekAnchor,
+      latestWeekAnchor,
+    );
     setWeekAnchorState(resolved);
     writeStoredWeekAnchor(weekAnchorStorageKey, resolved);
-  }, [weekAnchorStorageKey, earliestWeekAnchor]);
+  }, [weekAnchorStorageKey, earliestWeekAnchor, latestWeekAnchor]);
 
   useEffect(() => {
+    // Während Laden nicht klemmen: earliest/latest sind sonst oft „heute“ und
+    // überschreiben eine aus sessionStorage wiederhergestellte Zukunfts-KW.
+    if (loading) return;
     setWeekAnchorState((prev) => {
-      const clamped = clampWeekAnchor(prev, earliestWeekAnchor);
+      const clamped = clampWeekAnchor(prev, earliestWeekAnchor, latestWeekAnchor);
       if (clamped.getTime() === prev.getTime()) return prev;
       writeStoredWeekAnchor(weekAnchorStorageKey, clamped);
       return clamped;
     });
-  }, [earliestWeekAnchor, weekAnchorStorageKey]);
+  }, [earliestWeekAnchor, latestWeekAnchor, weekAnchorStorageKey, loading]);
 
   useEffect(() => {
     if (!canSeeCourseManagement && viewMode === "courses") {
@@ -171,6 +179,7 @@ export default function CoursesShell({
 
   const weekLabel = formatWeekNavLabel(weekAnchor);
   const canGoToPreviousWeek = weekAnchor.getTime() > earliestWeekAnchor.getTime();
+  const canGoToNextWeek = weekAnchor.getTime() < latestWeekAnchor.getTime();
   const prevWeekBtnRef = useRef<HTMLButtonElement>(null);
   const nextWeekBtnRef = useRef<HTMLButtonElement>(null);
   const [weekLimitAnnouncement, setWeekLimitAnnouncement] = useState("");
@@ -186,6 +195,15 @@ export default function CoursesShell({
       nextWeekBtnRef.current?.focus();
     }
   }, [canGoToPreviousWeek, weekAnchor]);
+
+  useEffect(() => {
+    if (canGoToNextWeek) return;
+    const nextBtn = nextWeekBtnRef.current;
+    if (nextBtn && document.activeElement === nextBtn) {
+      setWeekLimitAnnouncement("Späteste sichtbare Kalenderwoche erreicht.");
+      prevWeekBtnRef.current?.focus();
+    }
+  }, [canGoToNextWeek, weekAnchor]);
 
   return (
     <>
@@ -227,6 +245,9 @@ export default function CoursesShell({
             <span id="course-week-nav-prev-limit" className="visually-hidden">
               Früheste sichtbare Kalenderwoche erreicht
             </span>
+            <span id="course-week-nav-next-limit" className="visually-hidden">
+              Späteste sichtbare Kalenderwoche erreicht
+            </span>
             <div className="course-week-nav-core">
               <button
                 ref={prevWeekBtnRef}
@@ -257,7 +278,14 @@ export default function CoursesShell({
                 type="button"
                 className="course-week-nav-btn"
                 aria-label="Nächste Woche"
-                onClick={() => setWeekAnchor((prev) => addWeeks(prev, 1))}
+                disabled={!canGoToNextWeek}
+                aria-describedby={!canGoToNextWeek ? "course-week-nav-next-limit" : undefined}
+                onClick={() =>
+                  setWeekAnchor((prev) => {
+                    const next = addWeeks(prev, 1);
+                    return next.getTime() > latestWeekAnchor.getTime() ? latestWeekAnchor : next;
+                  })
+                }
               >
                 <ChevronRight size={18} aria-hidden="true" />
               </button>

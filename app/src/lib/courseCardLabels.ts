@@ -5,6 +5,10 @@ import { weekdayLabelDe } from "./weekdayLabels";
 export const TERM_MARKER_EXCLUDED_LABEL = "Termin entfällt (vom Studio abgesagt)";
 export const TERM_MARKER_PAST_LABEL = "Vergangener Termin im Nachlauf";
 export const TERM_MARKER_CUTOFF_LABEL = "Kurz vor Termin (Cutoff)";
+export const TERM_MARKER_PREVIEW_LABEL = "Termin außerhalb des Sichtfensters (nur Vorschau)";
+
+export const PREVIEW_TERM_NOTICE =
+  "Dieser Termin liegt außerhalb des Sichtfensters — nur Vorschau, Absage und Tausch sind noch nicht möglich.";
 
 export type AbsenceAnnouncementOutcome =
   | "saving"
@@ -132,6 +136,10 @@ export function resolvePastTermNotice(input: {
 
 export function excludedTermOptionSuffix(): string {
   return " (entfällt)";
+}
+
+export function previewTermOptionSuffix(): string {
+  return " (Vorschau)";
 }
 
 export function lastTermOptionSuffix(): string {

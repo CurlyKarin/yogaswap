@@ -62,6 +62,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     adjustGuestCount: ReturnType<typeof vi.fn>;
     canManageGuestSeats: boolean;
     earliestWeekAnchor: Date;
+    latestWeekAnchor: Date;
   };
 
   const createCoursesDataMock = (overrides: Partial<MockCoursesData> = {}): MockCoursesData => ({
@@ -80,6 +81,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     adjustGuestCount: vi.fn(),
     canManageGuestSeats: false,
     earliestWeekAnchor: new Date(2026, 0, 5),
+    latestWeekAnchor: new Date(2027, 0, 4),
     ...overrides,
   });
 
@@ -299,8 +301,14 @@ describe("CoursesShell", () => {
   });
 
   it("restores weekAnchor from sessionStorage on mount", () => {
-    const storedWeek = startOfWeekMonday(new Date(2099, 5, 14));
+    const storedWeek = startOfWeekMonday(new Date(2026, 5, 14));
     writeStoredWeekAnchor(buildWeekAnchorStorageKey("default-tenant", "maya"), storedWeek);
+    mockUseCoursesData.mockReturnValue(
+      createCoursesDataMock({
+        earliestWeekAnchor: startOfWeekMonday(new Date(2026, 0, 5)),
+        latestWeekAnchor: startOfWeekMonday(new Date(2027, 0, 4)),
+      }),
+    );
 
     render(
       <CoursesShell
@@ -311,6 +319,32 @@ describe("CoursesShell", () => {
     );
 
     expect(screen.getByText(formatWeekNavLabel(storedWeek))).toBeInTheDocument();
+  });
+
+  it("does not clamp a restored future week to today while courses are loading", () => {
+    const todayWeek = startOfWeekMonday(new Date());
+    const storedWeek = addWeeks(todayWeek, 4);
+    writeStoredWeekAnchor(buildWeekAnchorStorageKey("default-tenant", "maya"), storedWeek);
+    mockUseCoursesData.mockReturnValue(
+      createCoursesDataMock({
+        loading: true,
+        earliestWeekAnchor: todayWeek,
+        latestWeekAnchor: todayWeek,
+      }),
+    );
+
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    expect(screen.getByText(formatWeekNavLabel(storedWeek))).toBeInTheDocument();
+    expect(
+      readStoredWeekAnchor(buildWeekAnchorStorageKey("default-tenant", "maya"))?.getTime(),
+    ).toBe(storedWeek.getTime());
   });
 
   it("persists week navigation in sessionStorage", async () => {

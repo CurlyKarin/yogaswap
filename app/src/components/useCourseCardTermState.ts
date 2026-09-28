@@ -27,10 +27,11 @@ import {
 } from "shared/cancellationSwapCutoff";
 import { resolveEffectiveTermOccupancy, resolveStemForDate } from "shared/courseEnrollment";
 import { getAvailableDates, getWaitlistDates, toDateKey } from "../lib/dates";
-import { resolveInactiveParticipantNotice, resolvePastTermNotice } from "../lib/courseCardLabels";
+import { resolveInactiveParticipantNotice, resolvePastTermNotice, PREVIEW_TERM_NOTICE } from "../lib/courseCardLabels";
 import { canRequestSwapFromPastCancelledOrigin, isTermInParticipantSwapGrace } from "../lib/courseTermActions";
 import { formatSwapStatusLine } from "../lib/courseTermActionLabels";
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
+import { isWeekViewPreviewTerm } from "../lib/weekViewPreview";
 import type { SwapSettings } from "../types";
 
 export type AbsenceToggleOutcome = "cancelled" | "shortNoticeCancelled" | "undo";
@@ -294,34 +295,45 @@ export function useCourseCardTermState({
   );
   const isPastOccurrence = isOccurrenceInPast(selectedDateKey, course.time);
   const isSelectedTermExcluded = isExcludedCourseDate(course, selectedDateKey);
+  const isSelectedTermPreview = isWeekViewPreviewTerm(
+    course,
+    selectedDateKey,
+    tenantSettings,
+  );
   const termInSwapGrace = isTermInParticipantSwapGrace(selectedDateKey, course, tenantSettings);
   const showPastGraceMarker =
     (includePastTermsInSelect || participantActionsLocked) &&
     isPastOccurrence &&
     !isSelectedTermExcluded &&
+    !isSelectedTermPreview &&
     termInSwapGrace;
   const showCutoffMarker =
     includePastTermsInSelect &&
     !isPastOccurrence &&
     !isSelectedTermExcluded &&
+    !isSelectedTermPreview &&
     originInCutoff;
   const showExcludedTermMarker = includePastTermsInSelect && isSelectedTermExcluded;
+  const showPreviewMarker = includePastTermsInSelect && isSelectedTermPreview;
   const canUseFullTermActions =
     !participantActionsLocked &&
+    !isSelectedTermPreview &&
     hasUpcomingDates &&
     (isParticipant || originallyParticipant) &&
     !isPastOccurrence &&
     !isSelectedTermExcluded;
-  const canRequestPastRcSwap = canRequestSwapFromPastCancelledOrigin({
-    isoDate: selectedDateKey,
-    courseTime: course.time,
-    course,
-    tenantSettings,
-    override,
-    userName,
-    participants,
-    originallyParticipant,
-  });
+  const canRequestPastRcSwap =
+    !isSelectedTermPreview &&
+    canRequestSwapFromPastCancelledOrigin({
+      isoDate: selectedDateKey,
+      courseTime: course.time,
+      course,
+      tenantSettings,
+      override,
+      userName,
+      participants,
+      originallyParticipant,
+    });
   const canSwapFromPastCancelled = swapForThisTerm == null && canRequestPastRcSwap;
   const canRequestMorePastRcSwaps =
     canRequestPastRcSwap &&
@@ -339,12 +351,14 @@ export function useCourseCardTermState({
     swapForThisTerm != null && canCancelSwap(swapForThisTerm, allCourses);
   const showPastTermSwapActions =
     !isSelectedTermExcluded &&
+    !isSelectedTermPreview &&
     isPastOccurrence &&
     (isParticipant || originallyParticipant || hasCancelled) &&
     (swapForThisTermCancellable || canSwapFromPastCancelled || canRequestMorePastRcSwaps);
   const excludedTermNotice = showExcludedTermMarker
     ? "Dieser Termin entfällt — vom Studio abgesagt."
     : null;
+  const previewTermNotice = showPreviewMarker ? PREVIEW_TERM_NOTICE : null;
 
   const isAutomaticallyInactive =
     isInactiveCourse && looksLikeAutomaticallyInactive(course, hasUpcomingDates);
@@ -479,15 +493,18 @@ export function useCourseCardTermState({
     cancellableUserSwapsOnCourse,
     isPastOccurrence,
     isSelectedTermExcluded,
+    isSelectedTermPreview,
     showPastGraceMarker,
     showCutoffMarker,
     showExcludedTermMarker,
+    showPreviewMarker,
     canUseFullTermActions,
     canSwapFromPastCancelled,
     canRequestMorePastRcSwaps,
     swapForThisTermCancellable,
     showPastTermSwapActions,
     excludedTermNotice,
+    previewTermNotice,
     inactiveNotice,
     pastTermNotice,
     termSelectDisabled,

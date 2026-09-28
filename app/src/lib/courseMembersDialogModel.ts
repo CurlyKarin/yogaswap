@@ -1,4 +1,4 @@
-import type { CourseEnrollment, CourseStatus, TenantSettings } from "shared/types";
+import type { CourseEnrollment, CourseStatus, TenantSettings, Course } from "shared/types";
 import {
   findLastClosedCourseTermIso,
   findNextOpenCourseTermIso,
@@ -11,6 +11,42 @@ import {
   pickRelevantEnrollmentForParticipant,
   type EnrollmentChange,
 } from "shared/courseEnrollment";
+import { deriveVisibleDates } from "./courseSchedule";
+
+/** Wie Admin-Terminplanung: Bis-Daten dürfen hinter dem Teilnehmer-Sichtfenster liegen (#330). */
+const MEMBERS_DIALOG_ROLLING_DATE_HORIZON_WEEKS = 156;
+
+/**
+ * Termine für Mitglieder-Dialog: bei Rollkursen Serie bis Admin-Horizont (inkl. jenseits Sichtfenster).
+ */
+export function courseDatesForMembersDialog(
+  course: Pick<
+    Course,
+    | "dates"
+    | "weekday"
+    | "planningMode"
+    | "plannedEndDate"
+    | "excludedDates"
+    | "seriesStartDate"
+    | "seriesEndDate"
+    | "visibilityMode"
+    | "visibleFrom"
+    | "visibleUntil"
+  >,
+): string[] {
+  const existing = course.dates ?? [];
+  if (course.planningMode !== "rolling_continuous") return existing;
+  const generated = deriveVisibleDates({
+    planningMode: "rolling_continuous",
+    weekday: course.weekday,
+    plannedEndDate: course.plannedEndDate,
+    rollingPlanningHorizonWeeks: MEMBERS_DIALOG_ROLLING_DATE_HORIZON_WEEKS,
+    excludedDates: course.excludedDates ?? [],
+    includedDates: [],
+    fallbackDates: existing,
+  });
+  return Array.from(new Set([...existing, ...generated])).sort((a, b) => a.localeCompare(b));
+}
 
 export function toIsoDateOnlyLocal(date: Date = new Date()): string {
   const year = date.getFullYear();

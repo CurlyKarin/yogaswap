@@ -1,23 +1,26 @@
 import { useId } from "react";
-import { CalendarX, Clock3, History } from "lucide-react";
-import type { Course } from "shared/types";
+import { CalendarRange, CalendarX, Clock3, History } from "lucide-react";
+import type { Course, TenantSettings } from "shared/types";
 import { resolveGuestCount, resolveMaxCapacity, resolveOverbookLimit, resolveEffectiveOccupancy, validateTermOccupancy } from "shared/courseCapacity";
 import { toDateKey } from "../lib/dates";
 import {
   excludedTermOptionSuffix,
   lastTermOptionSuffix,
   participantChipAriaLabel,
+  previewTermOptionSuffix,
   guestChipAriaLabel,
   GUEST_CHIP_LABEL,
   resolveCourseScheduleDisplay,
   TERM_MARKER_CUTOFF_LABEL,
   TERM_MARKER_EXCLUDED_LABEL,
   TERM_MARKER_PAST_LABEL,
+  TERM_MARKER_PREVIEW_LABEL,
   termSelectAriaLabel,
   termSelectDisabledHint,
   waitlistChipAriaLabel,
 } from "../lib/courseCardLabels";
 import { isExcludedCourseDate } from "../lib/courseWeekOccurrences";
+import { isWeekViewPreviewTerm } from "../lib/weekViewPreview";
 import type { CourseCardTermState } from "./useCourseCardTermState";
 import { displayNameForParticipantRef } from "../lib/participants";
 import { matchesParticipantRef } from "shared/participantActor";
@@ -32,6 +35,7 @@ type CourseCardDetailsProps = {
   guestSeatSaving?: boolean;
   onAdjustGuestCount?: (delta: 1 | -1) => void;
   includePastTermsInSelect: boolean;
+  tenantSettings?: TenantSettings;
   termState: CourseCardTermState;
   participantNameByRef?: Map<string, string>;
   selectedDate: string;
@@ -48,6 +52,7 @@ export default function CourseCardDetails({
   guestSeatSaving = false,
   onAdjustGuestCount,
   includePastTermsInSelect,
+  tenantSettings,
   termState,
   participantNameByRef,
   selectedDate,
@@ -75,6 +80,7 @@ export default function CourseCardDetails({
     showPastGraceMarker,
     showCutoffMarker,
     showExcludedTermMarker,
+    showPreviewMarker,
     isPastOccurrence,
     termSelectDisabled,
   } = termState;
@@ -94,6 +100,7 @@ export default function CourseCardDetails({
   const showGuestControls =
     canManageGuestSeats &&
     !showExcludedTermMarker &&
+    !showPreviewMarker &&
     !hasNoUpcomingDates &&
     !isPastOccurrence &&
     !!onAdjustGuestCount;
@@ -127,7 +134,10 @@ export default function CourseCardDetails({
             )}
           </div>
         </div>
-        {(showPastGraceMarker || showCutoffMarker || showExcludedTermMarker) && (
+        {(showPastGraceMarker ||
+          showCutoffMarker ||
+          showExcludedTermMarker ||
+          showPreviewMarker) && (
           <div className="course-head-meta">
             <div className="course-term-visual-markers" role="status">
               {showExcludedTermMarker && (
@@ -138,6 +148,16 @@ export default function CourseCardDetails({
                   title={TERM_MARKER_EXCLUDED_LABEL}
                 >
                   <CalendarX size={12} aria-hidden="true" />
+                </span>
+              )}
+              {showPreviewMarker && (
+                <span
+                  className="course-term-visual-marker course-term-visual-marker--preview"
+                  role="img"
+                  aria-label={TERM_MARKER_PREVIEW_LABEL}
+                  title={TERM_MARKER_PREVIEW_LABEL}
+                >
+                  <CalendarRange size={12} aria-hidden="true" />
                 </span>
               )}
               {showPastGraceMarker && (
@@ -215,13 +235,16 @@ export default function CourseCardDetails({
                       const excludedLabel = isExcludedCourseDate(course, dateIso)
                         ? excludedTermOptionSuffix()
                         : "";
+                      const previewLabel = isWeekViewPreviewTerm(course, dateIso, tenantSettings)
+                        ? previewTermOptionSuffix()
+                        : "";
                       const lastTermLabel =
                         showLastTermMarkerInSelect && dateIso === lastActualOccurrenceIso
                           ? lastTermOptionSuffix()
                           : "";
                       return {
                         value: date.toISOString(),
-                        label: `${date.toLocaleDateString()}${excludedLabel}${lastTermLabel}`,
+                        label: `${date.toLocaleDateString()}${excludedLabel}${previewLabel}${lastTermLabel}`,
                       };
                     },
                   )

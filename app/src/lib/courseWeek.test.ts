@@ -48,6 +48,16 @@ describe("formatWeekNavLabel", () => {
     expect(label).toMatch(/^KW \d+ · /);
     expect(label).toContain("–");
   });
+
+  it("shows year once within the same year", () => {
+    const label = formatWeekNavLabel(startOfWeekMonday(new Date(2026, 4, 26)));
+    expect(label).toBe("KW 22 · 25. Mai – 31. Mai 2026");
+  });
+
+  it("shows both years across New Year without duplicating the end year", () => {
+    const label = formatWeekNavLabel(startOfWeekMonday(new Date(2026, 11, 28)));
+    expect(label).toBe("KW 53 · 28. Dez. 2026 – 3. Jan. 2027");
+  });
 });
 
 describe("getIsoWeekNumber", () => {

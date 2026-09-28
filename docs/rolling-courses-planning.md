@@ -14,8 +14,8 @@ Für `planningMode: rolling_continuous` gibt es **kein** separates Kursfeld für
 
 ### Konsequenzen
 
-- **Teilnehmer** sehen und tauschen nur Termine innerhalb der N Wochen (`deriveVisibleDates` mit Studio-Wert).
-- **Admin und Kursleiter** planen im UI mit langem Kalenderhorizont (~156 Wochen); `excludedDates` für Ferien o. Ä. sind dort möglich.
+- **Teilnehmer** sehen und tauschen nur Termine innerhalb der N Wochen (`deriveVisibleDates` mit Studio-Wert). In der **Wochenansicht** zusätzlich **Vorschau** bis max. 52 Wochen (#330) — ohne Aktionen.
+- **Admin und Kursleiter** planen im UI mit langem Kalenderhorizont (~156 Wochen); `excludedDates` für Ferien o. Ä. sind dort möglich. Mitglieder-Dialog: Bis-Daten ebenfalls bis Admin-Horizont (#330).
 - **Planungssperre** (= Teilnehmer-Sichtfenster), nur bei **aktivem** Kurs: innerhalb der N Wochen nur **Absage**, kein Ausschließen; außerhalb der N Wochen (bis Admin-Horizont) Ausschließen im Termin-Dialog.
 - **Entwurf** (`draft`): Terminplanung inkl. Ausschließen im gesamten Admin-Horizont (auch innerhalb der N Wochen). Inaktive Rollkurse: kein separater Ausschluss-Kalender (Scope bewusst eng).
 - Früheres Beenden eines Rollkurses: `plannedEndDate` im Kursdialog (nicht vor Ende der Planungssperre). Termine danach fallen aus der Ableitung; einzelne Termine davor nur per Absage.
