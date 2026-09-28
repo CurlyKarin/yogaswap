@@ -13,7 +13,7 @@ import {
   includesParticipantRef,
   resolveActorParticipantRef,
 } from "shared/participantActor";
-import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
+import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard, isActiveCourseForWeekView } from "shared/permissions";
 import { getCourses } from "../api/courses";
 import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getOverrides } from "../api/overrides";
@@ -200,10 +200,16 @@ export function useCoursesData({
     );
   }, [courses, membershipForPermissions, tenant?.settings, courseContext]);
 
+  /** Wochenansicht (#336): draft/inactive ausblenden — Verwaltung bleibt in der Kursliste. */
+  const weekVisibleCourses = useMemo(
+    () => visibleCourses.filter(isActiveCourseForWeekView),
+    [visibleCourses],
+  );
+
   const weekCourseRows = useMemo((): { rows: WeekCourseRow[]; hiddenPastCourses: number } => {
     const rows: WeekCourseRow[] = [];
     let hiddenPastCourses = 0;
-    for (const course of visibleCourses) {
+    for (const course of weekVisibleCourses) {
       const occurrences = collectWeekOccurrences(course, weekAnchor);
       if (occurrences.length === 0) continue;
 
@@ -254,7 +260,7 @@ export function useCoursesData({
       hiddenPastCourses,
     };
   }, [
-    visibleCourses,
+    weekVisibleCourses,
     weekAnchor,
     canSeeCourseManagement,
     membershipForPermissions,
@@ -266,8 +272,8 @@ export function useCoursesData({
   ]);
 
   const earliestWeekAnchor = useMemo(
-    () => computeEarliestWeekAnchor(visibleCourses, tenant?.settings),
-    [visibleCourses, tenant?.settings],
+    () => computeEarliestWeekAnchor(weekVisibleCourses, tenant?.settings),
+    [weekVisibleCourses, tenant?.settings],
   );
 
   return {

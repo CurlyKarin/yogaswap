@@ -1,15 +1,16 @@
-# Kursstatus, Sichtbarkeit und Auto-Transition (#149, #204)
+# Kursstatus, Sichtbarkeit und Auto-Transition (#149, #204, #336)
 
-Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogaswap/issues/149), [#204](https://github.com/CurlyKarin/yogaswap/issues/204) und [#296](https://github.com/CurlyKarin/yogaswap/issues/296): welche Kurse Teilnehmende sehen, wann ein Kurs automatisch `inactive` wird, und wie Nachlauf vs. Block-Endedatum zusammenhängen.
+Dokumentation zum Verhalten ab Issue [#149](https://github.com/CurlyKarin/yogaswap/issues/149), [#204](https://github.com/CurlyKarin/yogaswap/issues/204), [#296](https://github.com/CurlyKarin/yogaswap/issues/296) und [#336](https://github.com/CurlyKarin/yogaswap/issues/336): welche Kurse Teilnehmende sehen, wann ein Kurs automatisch `inactive` wird, und wie Nachlauf vs. Block-Endedatum zusammenhängen.
 
 ## Kurzfassung
 
 | Thema | Verhalten |
 |--------|-----------|
-| **`draft`** | Teilnehmer:innen sehen den Kurs nicht. |
+| **`draft`** | Teilnehmer:innen sehen den Kurs nicht. Admin/Instructor: in der **Kursliste**, nicht in der **Wochenansicht** (#336). |
 | **`active`** | Normale Sichtbarkeit; Termine über `getCourseDates` (Datum + Uhrzeit ≥ jetzt). |
+| **`inactive`** | Teilnehmer:innen sehen den Kurs **nie** (#336) — auch manuell vor Fristende sofort weg. Admin/Instructor: Kursliste ja, Wochenansicht nein. |
 | **`active` → `inactive`** | Automatisch, wenn ein **Blockende** definiert ist und der UTC-Kalendertag **nach** der Zugriffsfrist liegt (siehe unten). Nicht mehr allein bei „kein Zukunftstermin“. |
-| **Nachlauf** | Nur **durchlaufende Kurse**: Teilnehmende sehen den Kurs nach dem letzten Termin noch bis zur Auto-Inaktiv-Schwelle (Default **7** Kalendertage nach letztem Termin bzw. `plannedEndDate`, UTC). **Kursblöcke:** kein Studio-Nachlauf — Frist = inklusives `seriesEndDate` (#296). |
+| **Nachlauf / Wind-down** | Nur solange der Kurs noch **`active`** ist und in der Zugriffsfrist liegt. Rollkurse: Default **7** Kalendertage nach letztem Termin bzw. `plannedEndDate` (UTC). **Kursblöcke:** kein Studio-Nachlauf — Frist = inklusives `seriesEndDate` (#296). |
 | **Lazy Reconcile** | Beim **`GET /courses`** werden Status und abgeleitete `dates` bei Bedarf in DynamoDB nachgezogen. |
 
 Studio-Konfiguration: **Admin → Studio-Einstellungen** ([#44](https://github.com/CurlyKarin/yogaswap/issues/44), [#312](https://github.com/CurlyKarin/yogaswap/issues/312)) — **Allgemein** (u. a. Absagefrist für Mitglieder); unter **Durchlaufende Kurse**: `inactiveGraceDaysAfterCourseEnd`, `minOffsetDays` / `maxOffsetDays`, `rollingPlanningHorizonWeeks` (nicht für Kursblöcke). Rollkurse: [rolling-courses-planning.md](./rolling-courses-planning.md).
@@ -20,30 +21,25 @@ Studio-Konfiguration: **Admin → Studio-Einstellungen** ([#44](https://github.c
 
 ```mermaid
 flowchart LR
-  subgraph participant [Teilnehmer:in]
+  subgraph participant [Teilnehmende]
     P1{status?}
     P1 -->|draft| PH[nicht sichtbar]
+    P1 -->|inactive| PH
     P1 -->|active| PA[sichtbar mit Zukunftsterminen]
     P1 -->|active, letzter Termin vorbei| PW{noch in Zugriffsfrist?}
     PW -->|ja| PG[Kachel sichtbar, Wind-down]
     PW -->|nein| PH
-    P1 -->|inactive| PI{noch in Zugriffsfrist?}
-    PI -->|ja| PG
-    PI -->|nein| PH
   end
 
-  subgraph admin [Admin / Instructor Verwaltung]
-    A1[Status filtert nicht]
-    A2[immer in Kursliste wenn Berechtigung]
+  subgraph admin [Admin / Instructor]
+    A1[Kursliste: Status filtert nicht]
+    A2[Wochenansicht: nur active]
   end
 ```
 
-**Quelle:** `shared/src/permissions.ts` — `canSeeCourse`, `canShowParticipantCourseCard`.
+**Quelle:** `shared/src/permissions.ts` — `canSeeCourse`, `canShowParticipantCourseCard`, `isActiveCourseForWeekView`.
 
-Teilnehmer-Kachel auch **ohne Zukunftstermine**, wenn:
-
-- `inactive` und noch innerhalb der Zugriffsfrist, oder
-- `active`, letzter Termin vorbei, aber noch in der Zugriffsfrist (`isWithinPostCourseEndGrace` — bis Reconcile oder bei laufendem Block).
+Teilnehmer-Kachel auch **ohne Zukunftstermine**, wenn der Kurs noch **`active`** ist, der letzte Termin vorbei ist, aber noch in der Zugriffsfrist (`isWithinPostCourseEndGrace` — bis Reconcile oder bei laufendem Block). Sobald der Status `inactive` ist (manuell oder per Reconcile), verschwindet der Kurs für Teilnehmende sofort (#336).
 
 ---
 
@@ -205,3 +201,4 @@ In der UI stehen diese Felder unter **Durchlaufende Kurse** ([#312](https://gith
 - [#165](https://github.com/CurlyKarin/yogaswap/issues/165) — Rollende Kurse mit optionalem Ende
 - [#296](https://github.com/CurlyKarin/yogaswap/issues/296) — Kursblock: Tausch und Rechte bis Endedatum
 - [#312](https://github.com/CurlyKarin/yogaswap/issues/312) — Studio-Einstellungen nur für durchlaufende Kurse
+- [#336](https://github.com/CurlyKarin/yogaswap/issues/336) — Wochenansicht nur `active`; `inactive` für Teilnehmende sofort weg

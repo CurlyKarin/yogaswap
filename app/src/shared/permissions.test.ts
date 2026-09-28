@@ -7,6 +7,7 @@ import {
   canSeeAllCourses,
   canSeeCourse,
   canShowParticipantCourseCard,
+  isActiveCourseForWeekView,
 } from "shared/permissions";
 import type {
   UserTenantMembership,
@@ -239,7 +240,7 @@ describe("permissions", () => {
       ).toBe(false);
     });
 
-    it("zeigt Participant inaktive Kursblöcke nur bis zum inklusiven Endedatum", () => {
+    it("blendet inactive fuer Participant immer aus (#336), auch vor Fristende", () => {
       const inactiveEnded = {
         ...dummyCourse,
         status: "inactive" as const,
@@ -249,60 +250,41 @@ describe("permissions", () => {
       const onEnd = new Date(Date.UTC(2026, 4, 10, 12, 0, 0));
       expect(
         canSeeCourse(participantMembership, defaultSettings, inactiveEnded, {
-          isTaughtByUser: false,
-          isBookedByUser: false,
+          isTaughtByUser: true,
+          isBookedByUser: true,
           now: onEnd,
-        }),
-      ).toBe(true);
-
-      const afterEnd = new Date(Date.UTC(2026, 4, 11, 12, 0, 0));
-      expect(
-        canSeeCourse(participantMembership, defaultSettings, inactiveEnded, {
-          isTaughtByUser: false,
-          isBookedByUser: false,
-          now: afterEnd,
         }),
       ).toBe(false);
     });
 
-    it("respektiert inactiveGraceDaysAfterCourseEnd im Tenant für Rollkurse", () => {
-      const inactiveEnded = {
+    it("blendet manuell inactive Rollkurs fuer Participant sofort aus", () => {
+      const inactiveRolling = {
         ...dummyCourse,
         status: "inactive" as const,
         planningMode: "rolling_continuous" as const,
-        plannedEndDate: "2026-05-10",
-        dates: ["2026-05-10"],
+        plannedEndDate: "2026-05-20",
+        dates: ["2026-05-18"],
       };
-      const dayAfterShortGrace = new Date(Date.UTC(2026, 4, 14, 12, 0, 0));
+      const beforeEnd = new Date(Date.UTC(2026, 4, 12, 12, 0, 0));
       expect(
-        canSeeCourse(
-          participantMembership,
-          { ...defaultSettings, inactiveGraceDaysAfterCourseEnd: 3 },
-          inactiveEnded,
-          {
-            isTaughtByUser: false,
-            isBookedByUser: false,
-            now: dayAfterShortGrace,
-          },
-        ),
-      ).toBe(false);
-    });
-
-    it("blendet inaktiven Kurs fuer Participant aus, wenn Buchungs-/Instructor-Restriktion greift", () => {
-      const inactiveEnded = {
-        ...dummyCourse,
-        status: "inactive" as const,
-        seriesEndDate: "2026-05-10",
-        dates: ["2026-05-10"],
-      };
-      const onEnd = new Date(Date.UTC(2026, 4, 10, 12, 0, 0));
-      expect(
-        canSeeCourse(participantMembership, restrictiveSettings, inactiveEnded, {
+        canSeeCourse(participantMembership, defaultSettings, inactiveRolling, {
           isTaughtByUser: false,
-          isBookedByUser: false,
-          now: onEnd,
+          isBookedByUser: true,
+          now: beforeEnd,
         }),
       ).toBe(false);
+    });
+  });
+
+  describe("isActiveCourseForWeekView", () => {
+    it("laesst active und fehlenden Status durch", () => {
+      expect(isActiveCourseForWeekView(dummyCourse)).toBe(true);
+      expect(isActiveCourseForWeekView({ ...dummyCourse, status: "active" })).toBe(true);
+    });
+
+    it("filtert draft und inactive (#336)", () => {
+      expect(isActiveCourseForWeekView({ ...dummyCourse, status: "draft" })).toBe(false);
+      expect(isActiveCourseForWeekView({ ...dummyCourse, status: "inactive" })).toBe(false);
     });
   });
 
@@ -346,7 +328,7 @@ describe("permissions", () => {
       ).toBe(true);
     });
 
-    it("zeigt inaktiven Kursblock am Endedatum auch ohne sichtbare Termine", () => {
+    it("blendet inactive auch am Endedatum und mit Terminen aus (#336)", () => {
       const inactiveEnded = {
         ...dummyCourse,
         status: "inactive" as const,
@@ -357,10 +339,10 @@ describe("permissions", () => {
       expect(
         canShowParticipantCourseCard(participantMembership, defaultSettings, inactiveEnded, {
           ...baseCtx,
-          hasVisibleCourseDates: false,
+          hasVisibleCourseDates: true,
           now: onEnd,
         }),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it("blendet draft auch mit Terminen aus", () => {

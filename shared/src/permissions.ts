@@ -1,7 +1,5 @@
 import {
   isWithinPostCourseEndGrace,
-  participantCourseAccessDeadlineIso,
-  toIsoDateUtc,
   wouldAutoDeactivateOnReconcile,
 } from "./courseStatus";
 import type {
@@ -144,15 +142,15 @@ function participantBaseVisible(
  *
  * Teilnehmer:innen:
  * - `draft`: nie sichtbar
- * - `inactive`: nur bis zur Zugriffsfrist (`participantCourseAccessDeadlineIso`;
- *   Kursblock = inklusives `seriesEndDate`, Rollkurs = Ende + Nachlauf) und nur wenn die
- *   bestehende Buchungs-/Instructor-Logik zutrifft
+ * - `inactive`: nie sichtbar (#336 — auch manuell vor Fristende sofort weg;
+ *   Wind-down/RC nur solange der Kurs noch `active` und in der Zugriffsfrist ist)
  * - `active` / ohne Status: wie bisher
  *
- * Instructor:innen / Admins: Status filtert die Sichtbarkeit nicht (Planung / Verwaltung).
+ * Instructor:innen / Admins: Status filtert die Kurslisten-Sichtbarkeit nicht (Planung / Verwaltung).
+ * Die Wochenansicht zeigt für alle Rollen nur `active` (#336).
  *
- * `context.now` optional (Default: `new Date()`); fuer Tests oder deterministische UI
- * explizit setzen. Nachlauf vergleicht Kalendertage in UTC (ISO-Datum).
+ * `context.now` bleibt für Aufrufer optional (API-Stabilität); `canSeeCourse` wertet es
+ * für Teilnehmende nicht mehr aus, weil `inactive` sofort unsichtbar ist.
  */
 export function canSeeCourse(
   membership: UserTenantMembership,
@@ -161,12 +159,10 @@ export function canSeeCourse(
   context: {
     isTaughtByUser?: boolean;
     isBookedByUser?: boolean;
-    /** Referenzzeit fuer inaktiven Nachlauf; Default `new Date()`. */
+    /** Optional; für Teilnehmende bei `canSeeCourse` ungenutzt (#336). */
     now?: Date;
   },
 ): boolean {
-  const refNow = context.now ?? new Date();
-  const todayIso = toIsoDateUtc(refNow);
   const status = course.status ?? "active";
 
   if (membership.role === "admin") return true;
@@ -177,22 +173,27 @@ export function canSeeCourse(
   }
 
   // Participant
-  if (status === "draft") return false;
-
-  if (status === "inactive") {
-    const deadline = participantCourseAccessDeadlineIso(course, settings);
-    if (!deadline || todayIso > deadline) return false;
-  }
+  if (status === "draft" || status === "inactive") return false;
 
   return participantBaseVisible(settings, context);
 }
 
 /**
+ * Wochenansicht (#336): nur Kurse mit Status `active` (fehlendes Status-Feld = active).
+ * Draft/Inactive bleiben in der Kursliste für Admin/Instructor sichtbar.
+ */
+export function isActiveCourseForWeekView(course: Pick<Course, "status">): boolean {
+  return (course.status ?? "active") === "active";
+}
+
+/**
  * Teilnehmer-Kursliste (Kacheln): Kurs anzeigen, wenn {@link canSeeCourse} zutrifft und
  * entweder sichtbare Termine existieren (`hasVisibleCourseDates`, z. B. aus
- * `getCourseDates`) oder der Kurs `inactive` ist (Nachlauf ohne aktuelle Termine).
+ * `getCourseDates`) oder der Kurs im aktiven Wind-down ohne Zukunftstermine ist
+ * (`wouldAutoDeactivateOnReconcile` + Zugriffsfrist).
  *
  * Admin/Instructor-Listen nutzen `visibleCourses` direkt, nicht diese Funktion.
+ * Wochenansicht: zusätzlich nur `active` (#336).
  */
 export function canShowParticipantCourseCard(
   membership: UserTenantMembership,
@@ -208,7 +209,7 @@ export function canShowParticipantCourseCard(
   if (!canSeeCourse(membership, settings, course, context)) return false;
   if (context.hasVisibleCourseDates) return true;
   const status = course.status ?? "active";
-  if (status === "inactive") return true;
+  if (status !== "active") return false;
   const now = context.now ?? new Date();
   if (
     wouldAutoDeactivateOnReconcile(course, context.hasVisibleCourseDates) &&
