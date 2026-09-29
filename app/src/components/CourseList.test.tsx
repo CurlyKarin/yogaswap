@@ -806,6 +806,7 @@ describe("CourseList", () => {
       ...baseMembership,
       role: "admin",
     };
+    // Future window so this stays normal draft planning (not #331 replan).
     const mockCourses: Course[] = [
       {
         tenantId: "default-tenant",
@@ -816,11 +817,11 @@ describe("CourseList", () => {
         capacity: 10,
         status: "draft",
         planningMode: "bounded_series",
-        seriesStartDate: "2026-01-01",
-        seriesEndDate: "2026-01-31",
+        seriesStartDate: "2099-01-01",
+        seriesEndDate: "2099-01-31",
         excludedDates: [],
         participants: [],
-        dates: ["2026-01-06"],
+        dates: ["2099-01-06"],
       },
     ];
 
@@ -836,31 +837,31 @@ describe("CourseList", () => {
     const datesButtons = screen.getAllByRole("button", { name: /termine bearbeiten kurs a/i });
     await user.click(datesButtons[datesButtons.length - 1]);
 
-    expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-01"));
-    expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-31"));
+    expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2099-01-01"));
+    expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2099-01-31"));
 
     await user.click(screen.getByRole("button", { name: /kalender für zeitraum öffnen/i }));
     expect(screen.getByRole("button", { name: /kalender schließen/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /datum 2026-01-05/i }));
-    await user.click(screen.getByRole("button", { name: /datum 2026-01-26/i }));
+    await user.click(screen.getByRole("button", { name: /datum 2099-01-05/i }));
+    await user.click(screen.getByRole("button", { name: /datum 2099-01-26/i }));
     await waitFor(() => {
-      expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-05"));
-      expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-26"));
+      expect(screen.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2099-01-05"));
+      expect(screen.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2099-01-26"));
     });
     await user.click(screen.getByRole("button", { name: /kalender schließen/i }));
-    expect(screen.queryByRole("button", { name: /datum 2026-01-13/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /datum 2099-01-13/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /kalender für ausnahmetermin öffnen/i }));
-    const excludedCell = screen.getByRole("button", { name: /ausnahme datum 2026-01-13/i });
+    const excludedCell = screen.getByRole("button", { name: /ausnahme datum 2099-01-13/i });
     await user.click(excludedCell);
-    expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
+    expect(screen.getByText(formatDateForDisplay("2099-01-13"))).toBeInTheDocument();
     await user.click(excludedCell);
     expect(screen.getByText(/keine ausgeschlossenen termine/i)).toBeInTheDocument();
     await user.click(excludedCell);
-    expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
+    expect(screen.getByText(formatDateForDisplay("2099-01-13"))).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /kalender schließen/i }));
-    expect(screen.queryByRole("button", { name: /ausnahme datum 2026-01-13/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ausnahme datum 2099-01-13/i })).not.toBeInTheDocument();
 
     const saveButtons = screen.getAllByRole("button", { name: /termine übernehmen/i });
     await user.click(saveButtons[saveButtons.length - 1]);
@@ -871,9 +872,10 @@ describe("CourseList", () => {
         expect.objectContaining({
           planningMode: "bounded_series",
           visibilityMode: "fixed_window",
-          seriesStartDate: "2026-01-05",
-          seriesEndDate: "2026-01-26",
-          excludedDates: ["2026-01-13"],
+          seriesStartDate: "2099-01-05",
+          seriesEndDate: "2099-01-26",
+          excludedDates: ["2099-01-13"],
+          replanPending: false,
         }),
       );
     });

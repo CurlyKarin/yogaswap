@@ -46,6 +46,7 @@ function mapItemToCourseResponse(
     excludedDates,
     includedDates,
     visibleDates,
+    ...(item.replanPending?.BOOL === true ? { replanPending: true } : {}),
     participants: item.participants?.L
       ? item.participants.L.map((p) => p.S).filter(Boolean)
       : [],

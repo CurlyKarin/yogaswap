@@ -96,6 +96,11 @@ export type Course = {
   includedDates?: string[];
   visibleDates?: string[];
   /**
+   * #331: Nach `inactive → draft` true — Termin-Dialog startet Wiederbeplanung.
+   * Wird beim Speichern der Terminkonfiguration wieder auf false gesetzt.
+   */
+  replanPending?: boolean;
+  /**
    * Aktueller Stamm-Cache: Nicknames (#317 hybrid).
    * Parallel zu CourseEnrollments (#302); Occupancy pro Termin via `stemOn(date)` (#303).
    */

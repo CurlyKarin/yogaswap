@@ -26,11 +26,11 @@ function makeCourse(overrides: Partial<Course> = {}): Course {
     capacity: 10,
     status: "draft",
     planningMode: "bounded_series",
-    seriesStartDate: "2026-01-01",
-    seriesEndDate: "2026-01-31",
+    seriesStartDate: "2099-01-01",
+    seriesEndDate: "2099-01-31",
     excludedDates: [],
     participants: [],
-    dates: ["2026-01-06"],
+    dates: ["2099-01-06"],
     ...overrides,
   };
 }
@@ -82,6 +82,41 @@ describe("CourseDatesDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("startet Wiederbeplanung ohne alten Zeitraum und ohne Ausnahmen (#331)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-29T12:00:00.000Z"));
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "draft",
+          seriesStartDate: "2025-09-01",
+          seriesEndDate: "2025-12-15",
+          excludedDates: ["2025-10-06"],
+          dates: ["2025-09-01"],
+          replanPending: true,
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialogQueries = within(dialogs[dialogs.length - 1]);
+    expect(dialogQueries.getByText(/wiederbeplanung/i)).toBeInTheDocument();
+    expect(
+      dialogQueries.getByRole("status"),
+    ).toHaveTextContent(/ausnahmen wurden für die neuplanung zurückgesetzt/i);
+    expect(dialogQueries.getByLabelText("Startdatum Wert")).toHaveTextContent("—");
+    expect(dialogQueries.getByLabelText("Enddatum Wert")).toHaveTextContent("—");
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(dialogQueries.getByRole("button", { name: /kalender für zeitraum öffnen/i }));
+    expect(dialogQueries.getByText(/september 2026/i)).toBeInTheDocument();
+  });
+
   it("beschriftet das Endedatum als Saisonende für Teilnahme und Tausch", () => {
     render(
       <CourseDatesDialog
@@ -120,14 +155,14 @@ describe("CourseDatesDialog", () => {
     const dialogQueries = within(dialog);
     const rangeCalendarButtons = dialogQueries.getAllByRole("button", { name: /kalender für zeitraum öffnen/i });
     await user.click(rangeCalendarButtons[rangeCalendarButtons.length - 1]);
-    await user.click(dialogQueries.getByRole("button", { name: /datum 2026-01-26/i }));
-    await user.click(dialogQueries.getByRole("button", { name: /datum 2026-01-05/i }));
+    await user.click(dialogQueries.getByRole("button", { name: /datum 2099-01-26/i }));
+    await user.click(dialogQueries.getByRole("button", { name: /datum 2099-01-05/i }));
 
     await waitFor(() => {
       const startValues = screen.getAllByLabelText("Startdatum Wert");
       const endValues = screen.getAllByLabelText("Enddatum Wert");
-      expect(startValues[startValues.length - 1]).toHaveTextContent(formatDateForDisplay("2026-01-05"));
-      expect(endValues[endValues.length - 1]).toHaveTextContent(formatDateForDisplay("2026-01-26"));
+      expect(startValues[startValues.length - 1]).toHaveTextContent(formatDateForDisplay("2099-01-05"));
+      expect(endValues[endValues.length - 1]).toHaveTextContent(formatDateForDisplay("2099-01-26"));
     });
 
     await user.click(dialogQueries.getByRole("button", { name: /termine übernehmen/i }));
@@ -138,9 +173,10 @@ describe("CourseDatesDialog", () => {
         expect.objectContaining({
           planningMode: "bounded_series",
           visibilityMode: "fixed_window",
-          seriesStartDate: "2026-01-05",
-          seriesEndDate: "2026-01-26",
+          seriesStartDate: "2099-01-05",
+          seriesEndDate: "2099-01-26",
           excludedDates: [],
+          replanPending: false,
         }),
       );
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -169,13 +205,13 @@ describe("CourseDatesDialog", () => {
     await user.click(excludedCalendarButtons[excludedCalendarButtons.length - 1]);
 
     // Montag bei weekday=Tue darf nicht auswählbar sein.
-    expect(dialogQueries.getByRole("button", { name: /ausnahme datum 2026-01-12/i })).toBeDisabled();
+    expect(dialogQueries.getByRole("button", { name: /ausnahme datum 2099-01-12/i })).toBeDisabled();
 
-    const tuesdayCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2026-01-13/i });
+    const tuesdayCell = dialogQueries.getByRole("button", { name: /ausnahme datum 2099-01-13/i });
     expect(tuesdayCell).not.toBeDisabled();
     await user.click(tuesdayCell);
 
-    expect(screen.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
+    expect(screen.getByText(formatDateForDisplay("2099-01-13"))).toBeInTheDocument();
   });
 
   it("speichert durchlaufende Kurse ohne kursbezogenes Sichtfenster", async () => {
@@ -268,7 +304,13 @@ describe("CourseDatesDialog", () => {
     const onClose = vi.fn();
     render(
       <CourseDatesDialog
-        course={makeCourse({ status: "active", participants: ["luna", "maya"] })}
+        course={makeCourse({
+          status: "active",
+          seriesStartDate: "2026-01-01",
+          seriesEndDate: "2026-01-31",
+          dates: ["2026-01-06"],
+          participants: ["luna", "maya"],
+        })}
         overrides={[
           {
             courseId: 1,
@@ -344,7 +386,12 @@ describe("CourseDatesDialog", () => {
     const onClose = vi.fn();
     render(
       <CourseDatesDialog
-        course={makeCourse({ status: "active", dates: ["2026-01-06"] })}
+        course={makeCourse({
+          status: "active",
+          seriesStartDate: "2026-01-01",
+          seriesEndDate: "2026-01-31",
+          dates: ["2026-01-06"],
+        })}
         overrides={[]}
         swaps={[]}
         canManageCourses
@@ -484,7 +531,13 @@ describe("CourseDatesDialog", () => {
     const onSaved = vi.fn().mockResolvedValue(undefined);
     render(
       <CourseDatesDialog
-        course={makeCourse({ status: "active", participants: ["luna"] })}
+        course={makeCourse({
+          status: "active",
+          seriesStartDate: "2026-01-01",
+          seriesEndDate: "2026-01-31",
+          dates: ["2026-01-06"],
+          participants: ["luna"],
+        })}
         overrides={[
           {
             courseId: 1,
@@ -528,7 +581,13 @@ describe("CourseDatesDialog", () => {
     mockedCancelCourseDate.mockResolvedValue({ success: true, courseId: 1, date: "2026-01-06" });
     render(
       <CourseDatesDialog
-        course={makeCourse({ status: "active", participants: ["Luna"] })}
+        course={makeCourse({
+          status: "active",
+          seriesStartDate: "2026-01-01",
+          seriesEndDate: "2026-01-31",
+          dates: ["2026-01-06"],
+          participants: ["Luna"],
+        })}
         overrides={[
           {
             courseId: 1,
