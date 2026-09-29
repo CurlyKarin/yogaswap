@@ -29,6 +29,7 @@ function mapApiCourseToCourse(item: ApiCourse): Course {
     excludedDates: item.excludedDates ?? [],
     includedDates: item.includedDates ?? [],
     visibleDates,
+    ...(item.replanPending === true ? { replanPending: true } : {}),
     participants: item.participants ?? [],
     dates: visibleDates,
     ...(item.tenantId ? { tenantId: item.tenantId } : {}),
@@ -55,6 +56,8 @@ export type CreateCourseRequest = {
   excludedDates?: string[];
   includedDates?: string[];
   participants?: string[];
+  /** #331: beim Speichern der Termine auf false setzen */
+  replanPending?: boolean;
 };
 
 export type UpdateCourseRequest = Partial<CreateCourseRequest> & {

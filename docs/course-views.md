@@ -170,12 +170,31 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 
 ---
 
+## Kursblock-Wiederbeplanung (Termin-Dialog, #331)
+
+Beim Öffnen von **Termine verwalten** für einen **Draft-Kursblock**, wenn `replanPending` gesetzt ist (nach `inactive → draft`) **oder** das bisherige Fenster **schon beendet** ist (`seriesEnd` vor heute):
+
+| Kalender | Beim Öffnen / Replan → aktueller Monat? | Alte Selection ausblenden? |
+|----------|------------------------------------------|----------------------------|
+| Zeitraum-Range (Block) | ja | ja (Start/Ende leer bis neue Wahl) |
+| Start-Datum | ja | ja |
+| End-Datum | ja | ja |
+| Ausschluss-Termine | ja; `excludedDates` geleert + Hinweis | ja (Liste/Markierung leer) |
+| Mitglieder-Dialog (validFrom / validUntil) | unverändert (nicht Teil von #331) | — |
+
+Nach Speichern eines neuen Fensters: `replanPending: false`, `deriveVisibleDates` + Backend-`pruneScheduleExceptions`. Mitglieder/`participants[]` → [#361](https://github.com/CurlyKarin/yogaswap/issues/361).
+
+`replanPending` wird beim Statuswechsel **inactive → draft** (Kursblock) gesetzt und erst beim Speichern der Terminkonfiguration wieder gelöscht — damit Erstplanung mit Start heute/gestern am Folgetag nicht erneut zurückgesetzt wird.
+
+---
+
 ## Verknüpfung
 
 - [#164](https://github.com/CurlyKarin/yogaswap/issues/164) — Wochenansicht
 - [#149](https://github.com/CurlyKarin/yogaswap/issues/149) — Kursstatus-Sichtbarkeit
 - [#336](https://github.com/CurlyKarin/yogaswap/issues/336) — Wochenansicht nur aktive Kurse
 - [#330](https://github.com/CurlyKarin/yogaswap/issues/330) — Rollkurs-Termine außerhalb Sichtfenster als Vorschau
+- [#331](https://github.com/CurlyKarin/yogaswap/issues/331) — Kursblock-Wiederbeplanung: Kalender und Ausnahmen
 - [#182](https://github.com/CurlyKarin/yogaswap/issues/182) — Layout Kurskacheln
 - [#185](https://github.com/CurlyKarin/yogaswap/issues/185) — Tausch-Ursprung / eigene Absagen in der Kachel
 - [#186](https://github.com/CurlyKarin/yogaswap/issues/186) — Terminübersicht nach Woche

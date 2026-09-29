@@ -17,11 +17,13 @@ import {
   getRollingAdminPlanningRangeIso,
   getRollingWindowRangeIso,
   ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS,
+  REPLAN_EXCLUSIONS_CLEARED_NOTICE,
   isValidIsoDateOnly,
   monthKeyFromIsoDate,
   parseIsoDateOnlyUtc,
   planningModeLabel,
   shiftMonthKey,
+  toMonthKey,
   type CalendarCell,
   type CourseDatesEditorState,
 } from "./courseDatesDialogUtils";
@@ -414,8 +416,16 @@ export default function CourseDatesDialog({
     return formatMonthLabel(datesState.excludedCalendarMonth, displayLocale);
   }, [datesState, displayLocale]);
 
-  const formattedSeriesStart = datesState ? formatIsoDateForDisplay(datesState.seriesStartDate, displayLocale) : "";
-  const formattedSeriesEnd = datesState ? formatIsoDateForDisplay(datesState.seriesEndDate, displayLocale) : "";
+  const formattedSeriesStart = datesState
+    ? isValidIsoDateOnly(datesState.seriesStartDate)
+      ? formatIsoDateForDisplay(datesState.seriesStartDate, displayLocale)
+      : "—"
+    : "";
+  const formattedSeriesEnd = datesState
+    ? isValidIsoDateOnly(datesState.seriesEndDate)
+      ? formatIsoDateForDisplay(datesState.seriesEndDate, displayLocale)
+      : "—"
+    : "";
   const formattedExcludedDates = useMemo(() => {
     if (!datesState) return [];
     return datesState.excludedDates.map((entry) => formatIsoDateForDisplay(entry, displayLocale));
@@ -484,17 +494,22 @@ export default function CourseDatesDialog({
 
   const toggleRangeDatePicker = () => {
     if (saving) return;
-    setDatesState((prev) =>
-      prev
-        ? {
-            ...prev,
-            rangeDatePickerOpen: !prev.rangeDatePickerOpen,
-            excludedDatePickerOpen: false,
-            startDatePickerOpen: false,
-            endDatePickerOpen: false,
-          }
-        : prev,
-    );
+    setDatesState((prev) => {
+      if (!prev) return prev;
+      const nextOpen = !prev.rangeDatePickerOpen;
+      const currentMonth = toMonthKey(
+        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate(), 12)),
+      );
+      return {
+        ...prev,
+        rangeDatePickerOpen: nextOpen,
+        excludedDatePickerOpen: false,
+        startDatePickerOpen: false,
+        endDatePickerOpen: false,
+        rangeCalendarMonth:
+          nextOpen && prev.replanMode ? currentMonth : prev.rangeCalendarMonth,
+      };
+    });
   };
 
   const closeRangeDatePicker = () => {
@@ -527,6 +542,9 @@ export default function CourseDatesDialog({
     setDatesState((prev) => {
       if (!prev) return prev;
       const nextOpen = !prev.startDatePickerOpen;
+      const currentMonth = toMonthKey(
+        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate(), 12)),
+      );
       return {
         ...prev,
         startDatePickerOpen: nextOpen,
@@ -534,7 +552,9 @@ export default function CourseDatesDialog({
         rangeDatePickerOpen: false,
         excludedDatePickerOpen: false,
         rangeCalendarMonth: nextOpen
-          ? (monthKeyFromIsoDate(prev.seriesStartDate) ?? prev.rangeCalendarMonth)
+          ? prev.replanMode
+            ? currentMonth
+            : (monthKeyFromIsoDate(prev.seriesStartDate) ?? prev.rangeCalendarMonth)
           : prev.rangeCalendarMonth,
       };
     });
@@ -545,6 +565,9 @@ export default function CourseDatesDialog({
     setDatesState((prev) => {
       if (!prev) return prev;
       const nextOpen = !prev.endDatePickerOpen;
+      const currentMonth = toMonthKey(
+        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate(), 12)),
+      );
       return {
         ...prev,
         endDatePickerOpen: nextOpen,
@@ -552,7 +575,9 @@ export default function CourseDatesDialog({
         rangeDatePickerOpen: false,
         excludedDatePickerOpen: false,
         rangeCalendarMonth: nextOpen
-          ? (monthKeyFromIsoDate(prev.seriesEndDate) ?? prev.rangeCalendarMonth)
+          ? prev.replanMode
+            ? currentMonth
+            : (monthKeyFromIsoDate(prev.seriesEndDate) ?? prev.rangeCalendarMonth)
           : prev.rangeCalendarMonth,
       };
     });
@@ -587,15 +612,24 @@ export default function CourseDatesDialog({
 
   const toggleExcludedDatePicker = () => {
     if (saving) return;
-    setDatesState((prev) =>
-      prev
-        ? {
-            ...prev,
-            excludedDatePickerOpen: !prev.excludedDatePickerOpen,
-            rangeDatePickerOpen: false,
-          }
-        : prev,
-    );
+    setDatesState((prev) => {
+      if (!prev) return prev;
+      const nextOpen = !prev.excludedDatePickerOpen;
+      const currentMonth = toMonthKey(
+        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate(), 12)),
+      );
+      return {
+        ...prev,
+        excludedDatePickerOpen: nextOpen,
+        rangeDatePickerOpen: false,
+        excludedCalendarMonth:
+          nextOpen && (prev.replanMode || !isValidIsoDateOnly(prev.seriesStartDate))
+            ? currentMonth
+            : nextOpen && isValidIsoDateOnly(prev.seriesStartDate)
+              ? (monthKeyFromIsoDate(prev.seriesStartDate) ?? prev.excludedCalendarMonth)
+              : prev.excludedCalendarMonth,
+      };
+    });
   };
 
   const closeExcludedDatePicker = () => {
@@ -615,10 +649,11 @@ export default function CourseDatesDialog({
     if (!isValidIsoDateOnly(isoDate)) return;
     setDatesState((prev) => {
       if (!prev) return prev;
-      const target = prev.rangeSelectionTarget;
+      const pickingStart =
+        prev.rangeSelectionTarget === "start" || !isValidIsoDateOnly(prev.seriesStartDate);
       let nextStart = prev.seriesStartDate;
       let nextEnd = prev.seriesEndDate;
-      if (target === "start") {
+      if (pickingStart) {
         nextStart = isoDate;
         nextEnd = isoDate;
       } else {
@@ -633,11 +668,11 @@ export default function CourseDatesDialog({
         ...prev,
         seriesStartDate: nextStart,
         seriesEndDate: nextEnd,
-        rangeSelectionTarget: target === "start" ? "end" : "start",
+        rangeSelectionTarget: pickingStart ? "end" : "start",
+        excludedCalendarMonth: monthKeyFromIsoDate(nextStart) ?? prev.excludedCalendarMonth,
       };
     });
     setFormError(null);
-    setFormNotices([]);
   };
 
   const shiftRangeCalendarMonth = (monthDelta: number) => {
@@ -819,6 +854,7 @@ export default function CourseDatesDialog({
           visibilityMode: "rolling_horizon",
           excludedDates: datesState.excludedDates,
           includedDates: [],
+          replanPending: false,
         });
       } else {
         await updateCourse(courseApiPathKey(course), {
@@ -830,6 +866,7 @@ export default function CourseDatesDialog({
           visibleUntil: datesState.seriesEndDate,
           excludedDates: datesState.excludedDates,
           includedDates: [],
+          replanPending: false,
         });
       }
       onClose();
@@ -860,6 +897,7 @@ export default function CourseDatesDialog({
         visibilityMode: "rolling_horizon",
         excludedDates: datesState.excludedDates,
         includedDates: [],
+        replanPending: false,
       });
       initialExcludedDatesRef.current = [...datesState.excludedDates];
       setActiveCalendarAction(null);
@@ -934,6 +972,14 @@ export default function CourseDatesDialog({
           {datesState.planningMode === "bounded_series" && (
             <div className="course-editor-subsection">
               <strong className="course-editor-list-title">Zeitraum</strong>
+              {datesState.replanMode && (
+                <p className="course-editor-note" role="status">
+                  Wiederbeplanung: alter Zeitraum ist nicht vorausgewählt. Bitte Start und Ende neu setzen.
+                  {datesState.replanExclusionsCleared
+                    ? ` ${REPLAN_EXCLUSIONS_CLEARED_NOTICE}`
+                    : ""}
+                </p>
+              )}
               <p className="course-editor-note">
                 Start: <strong aria-label="Startdatum Wert">{formattedSeriesStart}</strong> | Ende:{" "}
                 <strong aria-label="Enddatum Wert">{formattedSeriesEnd}</strong>

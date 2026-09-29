@@ -96,6 +96,8 @@ type UpdateCourseBody = {
   includedDates?: string[];
   participants?: string[];
   enrollmentChanges?: EnrollmentChange[];
+  /** Client may only clear (#331); set true happens on inactive→draft. */
+  replanPending?: boolean;
 };
 
 function parseBody(event: APIGatewayProxyEvent): UpdateCourseBody | null {
@@ -310,6 +312,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     && !Object.prototype.hasOwnProperty.call(body, "includedDates")
     && !Object.prototype.hasOwnProperty.call(body, "participants")
     && !Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
+    && !Object.prototype.hasOwnProperty.call(body, "replanPending")
   ) {
     return { statusCode: 400, body: JSON.stringify({ error: "No updatable fields provided" }) };
   }
@@ -826,6 +829,22 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const existingCourseUid = item.courseUid?.S?.trim();
     const nextCourseUid = existingCourseUid || generateCourseUid();
 
+    // #331: Recycling-Signal — setzen bei inactive→draft, Client darf nur clearen.
+    let nextReplanPending = item.replanPending?.BOOL === true;
+    if (
+      Boolean(status) &&
+      currentStatus === "inactive" &&
+      nextStatus === "draft" &&
+      (nextPlanningMode ?? "bounded_series") === "bounded_series"
+    ) {
+      nextReplanPending = true;
+    } else if (
+      Object.prototype.hasOwnProperty.call(body, "replanPending") &&
+      body.replanPending === false
+    ) {
+      nextReplanPending = false;
+    }
+
     const updateItem: Record<string, any> = {
       tenantId: { S: tenantId },
       courseId: { S: courseId },
@@ -852,6 +871,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     if (nextIncludedDates.length > 0) {
       updateItem.includedDates = { L: nextIncludedDates.map((entry) => ({ S: entry })) };
+    }
+    if (nextReplanPending) {
+      updateItem.replanPending = { BOOL: true };
     }
 
     await client.send(
@@ -1441,6 +1463,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         visibleUntil: nextVisibleUntil,
         excludedDates: nextExcludedDates,
         includedDates: nextIncludedDates,
+        ...(nextReplanPending ? { replanPending: true } : {}),
         visibleDates: nextDates,
         participants: nextParticipants.map((p) => p.S).filter(Boolean),
         dates: nextDates,

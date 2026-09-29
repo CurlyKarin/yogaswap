@@ -418,6 +418,60 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).status).toBe("draft");
   });
 
+  test("sets replanPending on inactive -> draft for bounded series (#331)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({ Item: baseCourseItem("inactive") })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ status: "draft" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).replanPending).toBe(true);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          status: { S: "draft" },
+          replanPending: { BOOL: true },
+        }),
+      }),
+    );
+  });
+
+  test("clears replanPending when client sends false (#331)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("draft"),
+          replanPending: { BOOL: true },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ replanPending: false }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).replanPending).toBeUndefined();
+    const putInput = (PutItemCommand as unknown as jest.Mock).mock.calls.at(-1)?.[0];
+    expect(putInput.Item.replanPending).toBeUndefined();
+  });
+
+  test("does not set replanPending on inactive -> draft for rolling courses", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("inactive"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          seriesStartDate: undefined,
+          seriesEndDate: undefined,
+          participants: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ status: "draft" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).replanPending).toBeUndefined();
+  });
+
   test("blocks active -> inactive when upcoming occurrences exist and course has participants", async () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);

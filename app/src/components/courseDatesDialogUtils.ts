@@ -18,7 +18,17 @@ export type CourseDatesEditorState = {
   startDatePickerOpen: boolean;
   endDatePickerOpen: boolean;
   rangeSelectionTarget: "start" | "end";
+  /**
+   * #331: Wiederbeplanung eines beendeten Kursblocks (Draft, seriesEnd vor heute).
+   * Alte Range nicht als Selection; Ausnahmen geleert.
+   */
+  replanMode?: boolean;
+  /** Hinweis, dass Ausnahmen beim Einstieg zurückgesetzt wurden. */
+  replanExclusionsCleared?: boolean;
 };
+
+export const REPLAN_EXCLUSIONS_CLEARED_NOTICE =
+  "Bisherige Ausnahmen wurden für die Neuplanung zurückgesetzt.";
 
 export type CalendarCell = {
   isoDate: string;
@@ -151,12 +161,21 @@ export function buildSeriesCalendarCells(
   excludedDates: string[],
 ): CalendarCell[] {
   const monthStart = parseMonthKey(monthKey);
-  const rangeStart = parseIsoDateOnlyUtc(rangeStartIso);
-  const rangeEnd = parseIsoDateOnlyUtc(rangeEndIso);
-  if (!monthStart || !rangeStart || !rangeEnd) return [];
-  const normalizedRangeStart = toIsoDateOnly(rangeStart);
-  const normalizedRangeEnd = toIsoDateOnly(rangeEnd);
-  if (compareIsoDate(normalizedRangeStart, normalizedRangeEnd) > 0) return [];
+  if (!monthStart) return [];
+
+  const hasRange = isValidIsoDateOnly(rangeStartIso) && isValidIsoDateOnly(rangeEndIso);
+  const rangeStart = hasRange ? parseIsoDateOnlyUtc(rangeStartIso) : null;
+  const rangeEnd = hasRange ? parseIsoDateOnlyUtc(rangeEndIso) : null;
+  if (hasRange && (!rangeStart || !rangeEnd)) return [];
+
+  const normalizedRangeStart = rangeStart ? toIsoDateOnly(rangeStart) : "";
+  const normalizedRangeEnd = rangeEnd ? toIsoDateOnly(rangeEnd) : "";
+  if (
+    hasRange &&
+    compareIsoDate(normalizedRangeStart, normalizedRangeEnd) > 0
+  ) {
+    return [];
+  }
 
   const weekdayIndex = WEEKDAY_ORDER[weekday];
   if (!weekdayIndex || weekdayIndex < 1 || weekdayIndex > 7) return [];
@@ -173,7 +192,9 @@ export function buildSeriesCalendarCells(
     const current = addDaysUtc(gridStart, index);
     const isoDate = toIsoDateOnly(current);
     const inSeriesRange =
-      compareIsoDate(isoDate, normalizedRangeStart) >= 0 && compareIsoDate(isoDate, normalizedRangeEnd) <= 0;
+      hasRange &&
+      compareIsoDate(isoDate, normalizedRangeStart) >= 0 &&
+      compareIsoDate(isoDate, normalizedRangeEnd) <= 0;
     const isSeriesDate = inSeriesRange && current.getUTCDay() === jsWeekday;
     cells.push({
       isoDate,
@@ -182,8 +203,8 @@ export function buildSeriesCalendarCells(
       inSeriesRange,
       isSeriesDate,
       isExcluded: excludedSet.has(isoDate),
-      isRangeStart: isoDate === normalizedRangeStart,
-      isRangeEnd: isoDate === normalizedRangeEnd,
+      isRangeStart: hasRange && isoDate === normalizedRangeStart,
+      isRangeEnd: hasRange && isoDate === normalizedRangeEnd,
     });
   }
   return cells;
@@ -195,6 +216,7 @@ export function generateSeriesPreviewDates(
   endDate: string,
   excludedDates: string[],
 ): string[] {
+  if (!isValidIsoDateOnly(startDate) || !isValidIsoDateOnly(endDate)) return [];
   return deriveVisibleDates({
     planningMode: "bounded_series",
     visibilityMode: "fixed_window",
@@ -268,8 +290,74 @@ export function planningModeLabel(mode: CoursePlanningMode | undefined): string 
   return "Kursblock (fixes Fenster)";
 }
 
-export function createDatesState(course: Course): CourseDatesEditorState {
+function todayIsoLocal(now: Date): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function resolveSeriesEndIso(
+  course: Pick<Course, "seriesEndDate" | "visibleUntil" | "dates">,
+): string {
+  const fromFields = course.seriesEndDate?.trim() || course.visibleUntil?.trim() || "";
+  if (isValidIsoDateOnly(fromFields)) return fromFields;
+  const dates = dedupeAndSortDates(course.dates ?? []);
+  return dates.length > 0 ? dates[dates.length - 1]! : "";
+}
+
+/**
+ * Wiederbeplanung (#331): Draft-Kursblock mit `replanPending` (nach inactive→draft)
+ * oder mit bereits beendetem Serienfenster (`seriesEnd` vor heute).
+ */
+export function isCourseBlockReplanContext(
+  course: Pick<
+    Course,
+    | "status"
+    | "planningMode"
+    | "seriesEndDate"
+    | "visibleUntil"
+    | "dates"
+    | "replanPending"
+  >,
+  now: Date = new Date(),
+): boolean {
+  if ((course.planningMode ?? "bounded_series") !== "bounded_series") return false;
+  if ((course.status ?? "active") !== "draft") return false;
+  if (course.replanPending === true) return true;
+  const todayIso = todayIsoLocal(now);
+  const endIso = resolveSeriesEndIso(course);
+  return isValidIsoDateOnly(endIso) && endIso < todayIso;
+}
+
+export function createDatesState(course: Course, now: Date = new Date()): CourseDatesEditorState {
   const defaults = buildDefaultSeriesWindow();
+  const currentMonth = toMonthKey(
+    new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 12)),
+  );
+  const replanMode = isCourseBlockReplanContext(course, now);
+
+  if (replanMode) {
+    const hadExclusions = (course.excludedDates ?? []).length > 0;
+    return {
+      courseId: course.id,
+      weekday: course.weekday,
+      planningMode: "bounded_series",
+      seriesStartDate: "",
+      seriesEndDate: "",
+      excludedDates: [],
+      rangeCalendarMonth: currentMonth,
+      excludedCalendarMonth: currentMonth,
+      rangeDatePickerOpen: false,
+      excludedDatePickerOpen: false,
+      startDatePickerOpen: false,
+      endDatePickerOpen: false,
+      rangeSelectionTarget: "start",
+      replanMode: true,
+      replanExclusionsCleared: hadExclusions,
+    };
+  }
+
   const initialStart =
     course.planningMode === "rolling_continuous"
       ? defaults.start
@@ -285,8 +373,8 @@ export function createDatesState(course: Course): CourseDatesEditorState {
     seriesStartDate: initialStart,
     seriesEndDate: initialEnd,
     excludedDates: dedupeAndSortDates(course.excludedDates ?? []),
-    rangeCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
-    excludedCalendarMonth: monthKeyFromIsoDate(initialStart) ?? toMonthKey(new Date()),
+    rangeCalendarMonth: monthKeyFromIsoDate(initialStart) ?? currentMonth,
+    excludedCalendarMonth: monthKeyFromIsoDate(initialStart) ?? currentMonth,
     rangeDatePickerOpen: false,
     excludedDatePickerOpen: false,
     startDatePickerOpen: false,
