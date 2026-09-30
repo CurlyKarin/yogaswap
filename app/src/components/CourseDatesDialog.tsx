@@ -267,12 +267,15 @@ export default function CourseDatesDialog({
     isValidIsoDateOnly(datesState.seriesStartDate) &&
     isValidIsoDateOnly(datesState.seriesEndDate) &&
     compareIsoDate(datesState.seriesStartDate, datesState.seriesEndDate) <= 0;
+  const isInactiveScheduleLocked = course?.status === "inactive";
+  const canEditSchedule = canManageCourses && !isInactiveScheduleLocked;
   const isActiveCancellationMode = course?.status === "active";
   const isRollingActiveMode = isActiveCancellationMode && datesState?.planningMode === "rolling_continuous";
   const isActiveBounded = isActiveCancellationMode && datesState?.planningMode === "bounded_series";
   const isRollingDraftPlanning =
     course?.status === "draft" && datesState?.planningMode === "rolling_continuous";
   const showExcludedDatesEditor =
+    canEditSchedule &&
     !isActiveCancellationMode &&
     (datesState?.planningMode !== "rolling_continuous" || isRollingDraftPlanning);
   const rangeEditBounds = useMemo(
@@ -286,7 +289,7 @@ export default function CourseDatesDialog({
       datesState.seriesEndDate !== (course.seriesEndDate ?? course.visibleUntil));
 
   const canSaveDatesConfig =
-    canManageCourses &&
+    canEditSchedule &&
     !saving &&
     !!datesState &&
     (
@@ -303,11 +306,11 @@ export default function CourseDatesDialog({
 
   const fullPlannedDatesForActiveCancellation = useMemo(() => {
     if (!datesState || !isActiveCancellationMode) return [];
-    if (datesState.planningMode === "rolling_continuous" && canManageCourses) {
+    if (datesState.planningMode === "rolling_continuous" && canEditSchedule) {
       return generatePreviewDates({ ...datesState, excludedDates: [] }, ROLLING_ADMIN_PLANNING_PREVIEW_WEEKS);
     }
     return generatePreviewDates({ ...datesState, excludedDates: [] }, rollingPlanningHorizonWeeks);
-  }, [datesState, isActiveCancellationMode, canManageCourses, rollingPlanningHorizonWeeks]);
+  }, [datesState, isActiveCancellationMode, canEditSchedule, rollingPlanningHorizonWeeks]);
 
   const activePreviewDates = useMemo(() => {
     if (!datesState || !isActiveCancellationMode) return [];
@@ -337,9 +340,9 @@ export default function CourseDatesDialog({
   }, [datesState, rollingPlanningHorizonWeeks]);
 
   const rollingAdminPlanningRange = useMemo(() => {
-    if (!datesState || datesState.planningMode !== "rolling_continuous" || !canManageCourses) return null;
+    if (!datesState || datesState.planningMode !== "rolling_continuous" || !canEditSchedule) return null;
     return getRollingAdminPlanningRangeIso();
-  }, [datesState, canManageCourses]);
+  }, [datesState, canEditSchedule]);
 
   const effectiveRange = useMemo(() => {
     if (!datesState) return null;
@@ -820,7 +823,7 @@ export default function CourseDatesDialog({
   };
 
   const saveDatesConfig = async () => {
-    if (!course || !datesState || !canManageCourses) return;
+    if (!course || !datesState || !canEditSchedule) return;
     if (isActiveCancellationMode && !isActiveBounded) return;
     if (datesState.planningMode === "bounded_series") {
       if (!datesSeriesRangeValid) {
@@ -887,7 +890,7 @@ export default function CourseDatesDialog({
       openImpactDialog();
       return;
     }
-    if (!course || !datesState || !canManageCourses) return;
+    if (!course || !datesState || !canEditSchedule) return;
     setSaving(true);
     setFormError(null);
     setFormNotices([]);
@@ -926,6 +929,12 @@ export default function CourseDatesDialog({
         <p className="course-editor-note">
           Planungsmodus: <strong>{planningModeLabel(course.planningMode)}</strong>
         </p>
+        {isInactiveScheduleLocked && (
+          <p className="course-editor-note" role="status">
+            Dieser Kurs ist inaktiv. Termine und Zeitraum sind nur zur Ansicht.
+            Zum Bearbeiten zuerst den Status auf In Planung setzen.
+          </p>
+        )}
         {isActiveCancellationMode && (
           <p className="course-editor-note">
             {isActiveBounded
@@ -959,7 +968,7 @@ export default function CourseDatesDialog({
                 {formatIsoDateForDisplay(rollingParticipantVisibilityRange.end, displayLocale)} —{" "}
                 {rollingPlanningHorizonWeeks} Wochen (Studio-Einstellungen).
               </p>
-              {canManageCourses && effectiveRange && (
+              {canEditSchedule && effectiveRange && (
                 <p className="course-editor-note">
                   Admin- und Kursleiter-Planung bis{" "}
                   {formatIsoDateForDisplay(effectiveRange.end, displayLocale)}. Innerhalb der{" "}
@@ -984,10 +993,12 @@ export default function CourseDatesDialog({
                 Start: <strong aria-label="Startdatum Wert">{formattedSeriesStart}</strong> | Ende:{" "}
                 <strong aria-label="Enddatum Wert">{formattedSeriesEnd}</strong>
               </p>
-              <p className="course-editor-note">
-                Das Endedatum ist der letzte Tag für Teilnahme und Tausch (Saisonende) und darf nach dem
-                letzten Unterrichtstag liegen.
-              </p>
+              {!isInactiveScheduleLocked && (
+                <p className="course-editor-note">
+                  Das Endedatum ist der letzte Tag für Teilnahme und Tausch (Saisonende) und darf nach dem
+                  letzten Unterrichtstag liegen.
+                </p>
+              )}
               {isActiveBounded ? (
                 <>
                   <p className="course-editor-note">
@@ -1063,7 +1074,7 @@ export default function CourseDatesDialog({
                     />
                   )}
                 </>
-              ) : (
+              ) : canEditSchedule ? (
                 <>
                   <div className="course-editor-inline-row">
                     <button
@@ -1153,7 +1164,7 @@ export default function CourseDatesDialog({
                     </div>
                   )}
                 </>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -1407,6 +1418,17 @@ export default function CourseDatesDialog({
             </div>
           )}
 
+          {isInactiveScheduleLocked && (
+            <div className="course-editor-subsection">
+              <strong className="course-editor-list-title">Ausgeschlossene Termine</strong>
+              {datesState.excludedDates.length === 0 ? (
+                <p className="course-editor-note">Keine ausgeschlossenen Termine.</p>
+              ) : (
+                <p className="course-editor-comma-list">{formattedExcludedDates.join(", ")}</p>
+              )}
+            </div>
+          )}
+
         </div>
         {formNotices.length > 0 && (
           <div style={{ color: "#8a6d1d", margin: 0 }}>
@@ -1471,7 +1493,11 @@ export default function CourseDatesDialog({
           </div>
         )}
         <div className="modal-actions">
-          {isActiveCancellationMode ? (
+          {isInactiveScheduleLocked ? (
+            <button type="button" className="modal-action-btn" onClick={onClose}>
+              Schließen
+            </button>
+          ) : isActiveCancellationMode ? (
             <>
               <button type="button" className="modal-action-btn" onClick={onClose} disabled={saving}>
                 Abbrechen

@@ -144,6 +144,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!courseResp.Item) {
       return { statusCode: 404, body: JSON.stringify({ error: "Course not found" }) };
     }
+    if ((courseResp.Item.status?.S ?? "active") === "inactive") {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error:
+            "Termine eines inaktiven Kurses können nicht abgesagt werden. Zuerst Status auf In Planung setzen.",
+        }),
+      };
+    }
     const courseName = courseResp.Item.name?.S ?? `Kurs ${courseId}`;
     const courseTime = courseResp.Item.time?.S ?? "";
     const staticParticipants = asStringList(courseResp.Item.participants);

@@ -117,6 +117,39 @@ describe("CourseDatesDialog", () => {
     expect(dialogQueries.getByText(/september 2026/i)).toBeInTheDocument();
   });
 
+  it("zeigt inaktive Kurse nur lesend ohne Speichern (#369)", async () => {
+    render(
+      <CourseDatesDialog
+        course={makeCourse({
+          status: "inactive",
+          seriesStartDate: "2026-01-01",
+          seriesEndDate: "2026-01-31",
+          excludedDates: ["2026-01-13"],
+          dates: ["2026-01-06"],
+        })}
+        overrides={[]}
+        swaps={[]}
+        canManageCourses
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /kurstermine bearbeiten/i });
+    const dialogQueries = within(dialogs[dialogs.length - 1]);
+    expect(
+      dialogQueries.getByText(/dieser kurs ist inaktiv/i),
+    ).toBeInTheDocument();
+    expect(dialogQueries.getByText(/status auf in planung setzen/i)).toBeInTheDocument();
+    expect(dialogQueries.queryByRole("button", { name: /kalender für zeitraum öffnen/i })).not.toBeInTheDocument();
+    expect(dialogQueries.queryByRole("button", { name: /termine übernehmen/i })).not.toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: /^schließen$/i })).toBeInTheDocument();
+    expect(dialogQueries.getByLabelText("Startdatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-01"));
+    expect(dialogQueries.getByLabelText("Enddatum Wert")).toHaveTextContent(formatDateForDisplay("2026-01-31"));
+    expect(dialogQueries.getByText(formatDateForDisplay("2026-01-13"))).toBeInTheDocument();
+    expect(mockedUpdateCourse).not.toHaveBeenCalled();
+  });
+
   it("beschriftet das Endedatum als Saisonende für Teilnahme und Tausch", () => {
     render(
       <CourseDatesDialog

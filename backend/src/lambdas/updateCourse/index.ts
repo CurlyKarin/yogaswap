@@ -557,6 +557,25 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }),
       };
     }
+    const schedulePatchRequested =
+      Object.prototype.hasOwnProperty.call(body, "planningMode") ||
+      Object.prototype.hasOwnProperty.call(body, "visibilityMode") ||
+      Object.prototype.hasOwnProperty.call(body, "seriesStartDate") ||
+      Object.prototype.hasOwnProperty.call(body, "seriesEndDate") ||
+      Object.prototype.hasOwnProperty.call(body, "plannedEndDate") ||
+      Object.prototype.hasOwnProperty.call(body, "visibleFrom") ||
+      Object.prototype.hasOwnProperty.call(body, "visibleUntil") ||
+      Object.prototype.hasOwnProperty.call(body, "excludedDates") ||
+      Object.prototype.hasOwnProperty.call(body, "includedDates");
+    if (currentStatus === "inactive" && nextStatus === "inactive" && schedulePatchRequested) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error:
+            "Termine eines inaktiven Kurses können nicht geändert werden. Zuerst Status auf In Planung setzen.",
+        }),
+      };
+    }
     if (status && nextStatus !== currentStatus) {
       const hasParticipants = courseHasParticipants(courseParticipants);
       const transitionAllowed =
