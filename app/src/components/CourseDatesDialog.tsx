@@ -931,7 +931,8 @@ export default function CourseDatesDialog({
         </p>
         {isInactiveScheduleLocked && (
           <p className="course-editor-note" role="status">
-            Inaktiver Kurs: Termine nur lesbar. Für Neuplanung zuerst den Status auf „In Planung“ setzen.
+            Dieser Kurs ist inaktiv. Termine und Zeitraum sind nur zur Ansicht.
+            Zum Bearbeiten zuerst den Status auf In Planung setzen.
           </p>
         )}
         {isActiveCancellationMode && (
@@ -967,7 +968,7 @@ export default function CourseDatesDialog({
                 {formatIsoDateForDisplay(rollingParticipantVisibilityRange.end, displayLocale)} —{" "}
                 {rollingPlanningHorizonWeeks} Wochen (Studio-Einstellungen).
               </p>
-              {canManageCourses && effectiveRange && (
+              {canEditSchedule && effectiveRange && (
                 <p className="course-editor-note">
                   Admin- und Kursleiter-Planung bis{" "}
                   {formatIsoDateForDisplay(effectiveRange.end, displayLocale)}. Innerhalb der{" "}
@@ -992,10 +993,12 @@ export default function CourseDatesDialog({
                 Start: <strong aria-label="Startdatum Wert">{formattedSeriesStart}</strong> | Ende:{" "}
                 <strong aria-label="Enddatum Wert">{formattedSeriesEnd}</strong>
               </p>
-              <p className="course-editor-note">
-                Das Endedatum ist der letzte Tag für Teilnahme und Tausch (Saisonende) und darf nach dem
-                letzten Unterrichtstag liegen.
-              </p>
+              {!isInactiveScheduleLocked && (
+                <p className="course-editor-note">
+                  Das Endedatum ist der letzte Tag für Teilnahme und Tausch (Saisonende) und darf nach dem
+                  letzten Unterrichtstag liegen.
+                </p>
+              )}
               {isActiveBounded ? (
                 <>
                   <p className="course-editor-note">
