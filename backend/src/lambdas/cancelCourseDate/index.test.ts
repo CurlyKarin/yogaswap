@@ -89,6 +89,26 @@ describe("cancelCourseDate Lambda", () => {
     process.env = OLD_ENV;
   });
 
+  test("rejects cancel for inactive courses (#369)", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          status: { S: "inactive" },
+          participants: { L: [] },
+          excludedDates: { L: [] },
+        },
+      });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/inaktiven Kurses/);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+  });
+
   test("cancels date and returns impact groups", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })

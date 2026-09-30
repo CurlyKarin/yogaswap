@@ -880,8 +880,18 @@ export default function CourseList({
                       </button>
                       <button
                         type="button"
-                        title={canManageCourses ? "Termine bearbeiten" : "Nur Admin kann Termine bearbeiten"}
-                        aria-label={`Termine bearbeiten ${course.name}`}
+                        title={
+                          !canManageCourses
+                            ? "Nur Admin kann Termine bearbeiten"
+                            : (course.status ?? "active") === "inactive"
+                              ? "Termine ansehen (nur lesbar — für Änderungen Status auf In Planung setzen)"
+                              : "Termine bearbeiten"
+                        }
+                        aria-label={
+                          (course.status ?? "active") === "inactive"
+                            ? `Termine ansehen ${course.name}`
+                            : `Termine bearbeiten ${course.name}`
+                        }
                         disabled={!canManageCourses || saving}
                         onClick={() => openDatesModal(course.id)}
                       >

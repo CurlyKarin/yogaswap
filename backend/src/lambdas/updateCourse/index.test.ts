@@ -378,6 +378,19 @@ describe("updateCourse Lambda", () => {
     expect(PutItemCommand).not.toHaveBeenCalled();
   });
 
+  test("rejects schedule patches for inactive courses (#369)", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
+    const result = await handler(
+      makeEvent({
+        excludedDates: ["2026-02-02"],
+        includedDates: [],
+      }),
+    );
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/inaktiven Kurses/);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+  });
+
   test("rejects invalid status transition inactive -> active", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
