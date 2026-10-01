@@ -55,6 +55,12 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     overrides: [];
     enrollments: [];
     swaps: [];
+    participantRoster: Array<{
+      tenantId: string;
+      userId: string;
+      participantId?: string;
+    }>;
+    fetchData: ReturnType<typeof vi.fn>;
     confirmSwap: ReturnType<typeof vi.fn>;
     requestSwap: ReturnType<typeof vi.fn>;
     cancelSwap: ReturnType<typeof vi.fn>;
@@ -74,6 +80,8 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     overrides: [],
     enrollments: [],
     swaps: [],
+    participantRoster: [],
+    fetchData: vi.fn(async () => undefined),
     confirmSwap: vi.fn(),
     requestSwap: vi.fn(),
     cancelSwap: vi.fn(),

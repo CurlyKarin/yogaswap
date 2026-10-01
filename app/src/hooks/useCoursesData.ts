@@ -18,7 +18,7 @@ import { getCourses } from "../api/courses";
 import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getOverrides } from "../api/overrides";
 import { getSwaps, getSwapsByStatus } from "../api/swaps";
-import { getParticipantRoster } from "../api/participants";
+import { getParticipantRoster, type ParticipantRosterEntry } from "../api/participants";
 import { getCourseDates } from "../lib/dates";
 import { canShowCourseInPastWeek, computeEarliestWeekAnchor } from "../lib/courseTermActions";
 import { computeLatestWeekAnchor } from "../lib/weekViewPreview";
@@ -94,9 +94,7 @@ export function useCoursesData({
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
   const [enrollments, setEnrollments] = useState<CourseEnrollment[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [participantRoster, setParticipantRoster] = useState<
-    Array<{ userId: string; participantId?: string }>
-  >([]);
+  const [participantRoster, setParticipantRoster] = useState<ParticipantRosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,34 +145,45 @@ export function useCoursesData({
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const swapsPromise = canSeeCourseManagement
-        ? Promise.all([getSwapsByStatus("pending"), getSwapsByStatus("active")]).then(([pending, active]) =>
-            dedupeSwaps([...pending, ...active]),
-          )
-        : getSwaps(actorRef);
 
-      const [courseData, overrideData, enrollmentData, swapsData, rosterData] = await Promise.all([
+      // Phase 1 (#328): kritischer Pfad — UI kann mit Kursen/Occupancy rendern.
+      const [courseData, overrideData, enrollmentData] = await Promise.all([
         getCourses(),
         getOverrides(),
         getCourseEnrollments(),
-        swapsPromise,
-        getParticipantRoster().catch(() => []),
       ]);
-
       setCourses(courseData.sort(sortCoursesForDisplay));
       setOverrides(Array.isArray(overrideData) ? overrideData : []);
       setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
-      setSwaps(swapsData);
-      setParticipantRoster(rosterData);
       setError(null);
+      setLoading(false);
     } catch (err) {
-      console.error("Error in useCoursesData:", err);
+      console.error("Error in useCoursesData (critical path):", err);
       setError("Failed to load data");
       setSwaps([]);
       setEnrollments([]);
       setParticipantRoster([]);
-    } finally {
       setLoading(false);
+      return;
+    }
+
+    // Phase 2 (#328): Swaps staffeln + Roster — nicht im gleichen Burst wie Phase 1.
+    try {
+      let swapsData: Swap[] = [];
+      if (canSeeCourseManagement) {
+        const pending = await getSwapsByStatus("pending");
+        const active = await getSwapsByStatus("active");
+        swapsData = dedupeSwaps([...pending, ...active]);
+      } else {
+        swapsData = await getSwaps(actorRef);
+      }
+      const rosterData = await getParticipantRoster().catch(() => []);
+      setSwaps(swapsData);
+      setParticipantRoster(rosterData);
+    } catch (err) {
+      console.error("Error in useCoursesData (deferred path):", err);
+      setSwaps([]);
+      setParticipantRoster([]);
     }
   }, [canSeeCourseManagement, actorRef]);
 
@@ -290,6 +299,7 @@ export function useCoursesData({
     overrides: swapHandlers.overrides,
     enrollments,
     swaps,
+    participantRoster,
     visibleCourses,
     weekCourseRows: weekCourseRows.rows,
     hiddenPastCourseCount: weekCourseRows.hiddenPastCourses,

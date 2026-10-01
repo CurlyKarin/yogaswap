@@ -4,7 +4,6 @@ import CourseCreateDialog from "./CourseCreateDialog";
 import CourseEditDialog from "./CourseEditDialog";
 import CourseDeleteDialog from "./CourseDeleteDialog";
 import CourseMembersDialog from "./CourseMembersDialog";
-import { useCourseSwaps } from "./useCourseSwaps";
 import { useEffect, useState, useMemo, useCallback, useRef, type KeyboardEvent, type RefObject } from "react";
 import { Plus, Pencil, Trash2, Users, CalendarDays } from "lucide-react";
 import {
@@ -29,28 +28,23 @@ import {
 } from "shared/courseEditPolicy";
 import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
 import { resolveMaxCapacity, validateOverbookLimit } from "shared/courseCapacity";
-import { getSwaps } from "../api/swaps";
-import { getSwapsByStatus } from "../api/swaps";
-import { getOverrides } from "../api/overrides";
-import { getCourseEnrollments } from "../api/courseEnrollments";
 import { getCourseDates } from "../lib/dates";
 import { courseDatesForMembersDialog } from "../lib/courseMembersDialogModel";
 import { WEEKDAY_OPTIONS } from "../lib/weekdayLabels";
 import {
   createCourse,
   deleteCourse,
-  getCourses,
   updateCourse,
 } from "../api/courses";
-import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard } from "shared/permissions";
-import { includesParticipantRef, resolveActorParticipantRef } from "shared/participantActor";
+import type { ParticipantRosterEntry } from "../api/participants";
+import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
+import { includesParticipantRef } from "shared/participantActor";
 import type { EnrollmentChange } from "shared/courseEnrollment";
 import {
   looksLikeAutomaticallyInactive,
   wouldAutoDeactivateOnReconcile,
 } from "shared/courseStatus";
 import { isParticipantCourseWindDown } from "../lib/courseTermActions";
-import { getParticipantRoster } from "../api/participants";
 import {
   buildParticipantNameByRefMap,
   resolveActorFromMembership,
@@ -62,8 +56,33 @@ type Props = {
   tenant?: Tenant;
   membership?: UserTenantMembership;
   forceParticipantView?: boolean;
-  /** Aktualisiert die Wochenansicht (gemeinsamer Datenstand in CoursesShell). */
-  onDataChanged?: () => void | Promise<void>;
+  /** Gemeinsamer Datenstand aus CoursesShell / useCoursesData (#328). */
+  courses: Course[];
+  overrides: CourseDateOverride[];
+  enrollments: CourseEnrollment[];
+  swaps: Swap[];
+  participantRoster: ParticipantRosterEntry[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => Promise<void>;
+  onToggleAbsence: (course: Course, dateIso: string, userName: string) => Promise<boolean>;
+  confirmSwap: (
+    fromCourse: Course,
+    fromDateIso: string,
+    toCourseId: number,
+    toDateIso: string,
+    userName: string,
+  ) => void;
+  requestSwap: (
+    fromCourse: Course,
+    fromDateIso: string,
+    toCourseId: number,
+    toDateIso: string,
+    userName: string,
+  ) => void;
+  cancelSwap: (swap: Swap, clickedCourseId: number) => void;
+  adjustGuestCount: (course: Course, dateIso: string, delta: 1 | -1) => Promise<void>;
+  canManageGuestSeats: boolean;
 };
 
 type CourseEditorState = {
@@ -86,23 +105,6 @@ type CourseCreateState = {
   overbookLimit: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
-};
-
-const WEEKDAY_ORDER: Record<string, number> = {
-  Mon: 1,
-  Monday: 1,
-  Tue: 2,
-  Tuesday: 2,
-  Wed: 3,
-  Wednesday: 3,
-  Thu: 4,
-  Thursday: 4,
-  Fri: 5,
-  Friday: 5,
-  Sat: 6,
-  Saturday: 6,
-  Sun: 7,
-  Sunday: 7,
 };
 
 const STATUS_OPTIONS: Array<{ value: CourseStatus; label: string }> = [
@@ -167,14 +169,6 @@ function getFocusableElements(node: HTMLElement): HTMLElement[] {
   return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
 }
 
-function sortCoursesForDisplay(a: Course, b: Course): number {
-  const weekdayA = WEEKDAY_ORDER[a.weekday] ?? 99;
-  const weekdayB = WEEKDAY_ORDER[b.weekday] ?? 99;
-  if (weekdayA !== weekdayB) return weekdayA - weekdayB;
-  if (a.time !== b.time) return a.time.localeCompare(b.time);
-  return a.id - b.id;
-}
-
 function toEditorState(course: Course): CourseEditorState {
   return {
     id: course.id,
@@ -189,34 +183,26 @@ function toEditorState(course: Course): CourseEditorState {
   };
 }
 
-function dedupeSwaps(values: Swap[]): Swap[] {
-  const seen = new Set<string>();
-  const result: Swap[] = [];
-  for (const swap of values) {
-    const key = `${swap.participantId}#${swap.fromCourseId}#${swap.fromDate}#${swap.toCourseId}#${swap.toDate}#${swap.status}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(swap);
-  }
-  return result;
-}
-
 export default function CourseList({
   currentUser,
   tenant,
   membership,
   forceParticipantView = false,
-  onDataChanged,
+  courses,
+  overrides,
+  enrollments,
+  swaps,
+  participantRoster,
+  loading,
+  error,
+  onRefresh,
+  onToggleAbsence,
+  confirmSwap,
+  requestSwap,
+  cancelSwap,
+  adjustGuestCount,
+  canManageGuestSeats,
 }: Props) {
-  const [swaps, setSwaps] = useState<Swap[]>([]);
-  const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
-  const [enrollments, setEnrollments] = useState<CourseEnrollment[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [participantRoster, setParticipantRoster] = useState<
-    Array<{ userId: string; participantId?: string }>
-  >([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -270,101 +256,18 @@ export default function CourseList({
   const canConfigureOverbooking = isAdmin || isInstructor;
   const editOverbookingOnly = canConfigureOverbooking && !canManageCourses;
 
-  // Subject = effectiveUser (Vertretung: vertretene Person), nicht getActorUserId (Admin).
   const actor = useMemo(
     () => resolveActorFromMembership(currentUser.nickname, effectiveMembership, participantRoster),
     [currentUser.nickname, effectiveMembership, participantRoster],
   );
-  const actorRef = useMemo(() => resolveActorParticipantRef(actor), [actor]);
   const participantNameByRef = useMemo(
     () => buildParticipantNameByRefMap(participantRoster),
     [participantRoster],
   );
 
-  const fetchData = useCallback(async () => {
-    try {
-      console.log("Fetching courses, overrides, and swaps...", {
-        participantId: actorRef,
-      });
-      setLoading(true);
-      const swapsPromise = canSeeCourseManagement
-        ? Promise.all([getSwapsByStatus("pending"), getSwapsByStatus("active")]).then(([pending, active]) =>
-            dedupeSwaps([...pending, ...active]),
-          )
-        : getSwaps(actorRef);
-
-      const [courseData, overrideData, enrollmentData, swapsData, rosterData] = await Promise.all([
-        getCourses(),
-        getOverrides(),
-        getCourseEnrollments(),
-        swapsPromise,
-        getParticipantRoster().catch(() => []),
-      ]);
-
-      console.log("Data fetched:", {
-        courseData,
-        overrideData,
-        enrollmentData,
-        swapsData,
-      });
-      setCourses(courseData.sort(sortCoursesForDisplay));
-      setOverrides(Array.isArray(overrideData) ? overrideData : []);
-      setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
-      setSwaps(swapsData);
-      setParticipantRoster(rosterData);
-      setError(null);
-    } catch (err) {
-      console.error("Error in fetchData:", err);
-      setError("Failed to load data");
-      setSwaps([]);
-      setEnrollments([]);
-      setParticipantRoster([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [canSeeCourseManagement, actorRef]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   const refreshAfterMutation = useCallback(async () => {
-    await fetchData();
-    await onDataChanged?.();
-  }, [fetchData, onDataChanged]);
-
-  const canManageGuestSeats = canManageParticipants(membershipForPermissions, tenant?.settings);
-
-  const {
-    confirmSwap,
-    requestSwap,
-    cancelSwap,
-    onToggleAbsence,
-    adjustGuestCount,
-    overrides: filteredOverrides,
-  } = useCourseSwaps(
-    courses,
-    overrides,
-    setOverrides,
-    swaps,
-    setSwaps,
-    currentUser,
-    actor,
-    fetchData,
-    tenant?.settings,
-    enrollments,
-  );
-
-  // 👉 Debug-Ausgabe bei jedem Swaps-Update
-  useEffect(() => {
-    console.log('🔄 Overrides updated:', overrides);
-    console.log('🔄 Filtered Overrides:', filteredOverrides);
-    console.log('🔄 Swaps updated:', swaps);
-  }, [overrides, filteredOverrides, swaps]);
-
-  useEffect(() => {
-    console.log('useEffect ausgelöst für nickname:', currentUser?.nickname);
-  }, [currentUser?.nickname]);
+    await onRefresh();
+  }, [onRefresh]);
 
   const visibleCourses = useMemo(() => {
     return courses.filter((course) =>
@@ -938,7 +841,7 @@ export default function CourseList({
                   canManageGuestSeats={canManageGuestSeats}
                   onAdjustGuestCount={adjustGuestCount}
                   dates={dates}
-                  overrides={filteredOverrides}
+                  overrides={overrides}
                   enrollments={enrollments}
                   swaps={swaps}
                   participantActionsLocked={
@@ -1037,7 +940,7 @@ export default function CourseList({
 
       <CourseDatesDialog
         course={datesTargetCourse ?? null}
-        overrides={filteredOverrides}
+        overrides={overrides}
         enrollments={enrollments}
         swaps={swaps}
         canManageCourses={canManageCourses}
