@@ -3,43 +3,17 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import CourseList from "./CourseList";
-import { createCourse, deleteCourse, getCourses, updateCourse } from "../api/courses";
-import { getOverrides } from "../api/overrides";
-import { getCourseEnrollments } from "../api/courseEnrollments";
-import { getSwaps, getSwapsByStatus } from "../api/swaps";
-import { getParticipants, getParticipantRoster } from "../api/participants";
+import { createCourse, deleteCourse, updateCourse } from "../api/courses";
+import { getParticipants } from "../api/participants";
 import type { User, Tenant, UserTenantMembership, Course } from "shared/types";
 import { canSeeCourse } from "shared/permissions";
 
 vi.mock("../api/courses");
-vi.mock("../api/overrides");
-vi.mock("../api/courseEnrollments");
-vi.mock("../api/swaps");
 vi.mock("../api/participants");
-vi.mock("./useCourseSwaps", () => {
-  return {
-    useCourseSwaps: () => ({
-      overrides: [],
-      swaps: [],
-      confirmSwap: vi.fn(),
-      requestSwap: vi.fn(),
-      cancelSwap: vi.fn(),
-      onToggleAbsence: vi.fn(),
-      adjustGuestCount: vi.fn(),
-    }),
-  };
-});
-
-const mockedGetCourses = getCourses as unknown as ReturnType<typeof vi.fn>;
 const mockedCreateCourse = createCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedUpdateCourse = updateCourse as unknown as ReturnType<typeof vi.fn>;
 const mockedDeleteCourse = deleteCourse as unknown as ReturnType<typeof vi.fn>;
-const mockedGetOverrides = getOverrides as unknown as ReturnType<typeof vi.fn>;
-const mockedGetCourseEnrollments = getCourseEnrollments as unknown as ReturnType<typeof vi.fn>;
-const mockedGetSwaps = getSwaps as unknown as ReturnType<typeof vi.fn>;
-const mockedGetSwapsByStatus = getSwapsByStatus as unknown as ReturnType<typeof vi.fn>;
 const mockedGetParticipants = getParticipants as unknown as ReturnType<typeof vi.fn>;
-const mockedGetParticipantRoster = getParticipantRoster as unknown as ReturnType<typeof vi.fn>;
 const mockedCanSeeCourse = canSeeCourse as unknown as ReturnType<typeof vi.fn>;
 
 vi.mock("shared/permissions", async (importOriginal) => {
@@ -75,24 +49,62 @@ function formatDateForDisplay(isoDate: string): string {
   );
 }
 
+
+const swapHandlers = {
+  onToggleAbsence: vi.fn(async () => true),
+  confirmSwap: vi.fn(),
+  requestSwap: vi.fn(),
+  cancelSwap: vi.fn(),
+  adjustGuestCount: vi.fn(async () => undefined),
+};
+
+type ListProps = React.ComponentProps<typeof CourseList>;
+
+function renderList(props: Partial<ListProps> = {}) {
+  const {
+    currentUser = baseUser,
+    courses = [],
+    overrides = [],
+    enrollments = [],
+    swaps = [],
+    participantRoster = [],
+    loading = false,
+    error = null,
+    onRefresh = vi.fn(async () => undefined),
+    canManageGuestSeats = false,
+    ...rest
+  } = props;
+  const tenant = "tenant" in props ? props.tenant : baseTenant;
+  const membership = "membership" in props ? props.membership : baseMembership;
+  return render(
+    <CourseList
+      currentUser={currentUser}
+      tenant={tenant}
+      membership={membership}
+      courses={courses}
+      overrides={overrides}
+      enrollments={enrollments}
+      swaps={swaps}
+      participantRoster={participantRoster}
+      loading={loading}
+      error={error}
+      onRefresh={onRefresh}
+      canManageGuestSeats={canManageGuestSeats}
+      {...swapHandlers}
+      {...rest}
+    />,
+  );
+}
+
 describe("CourseList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedGetCourses.mockReset();
-    mockedGetOverrides.mockReset();
-    mockedGetCourseEnrollments.mockReset();
-    mockedGetSwaps.mockReset();
-    mockedGetSwapsByStatus.mockReset();
     mockedCreateCourse.mockReset();
     mockedUpdateCourse.mockReset();
     mockedDeleteCourse.mockReset();
     mockedGetParticipants.mockReset();
-    mockedGetParticipantRoster.mockReset();
     mockedGetParticipants.mockResolvedValue([]);
-    mockedGetParticipantRoster.mockResolvedValue([]);
-    mockedGetCourseEnrollments.mockResolvedValue([]);
     mockedCanSeeCourse.mockImplementation(() => true);
-    mockedGetSwapsByStatus.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -100,8 +112,6 @@ describe("CourseList", () => {
   });
 
   it("zeigt während des Ladens 'Loading...' an und rendert anschließend Kurse (mit zukünftigen Terminen)", async () => {
-    const { canSeeCourse } = await import("shared/permissions");
-
     const mockCourses: Course[] = [
       {
         tenantId: "default-tenant",
@@ -115,39 +125,36 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-    (canSeeCourse as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => true);
-
-    render(
-      <CourseList currentUser={baseUser} tenant={baseTenant} membership={baseMembership} />,
-    );
-
-    // Initial: Loading
+    const { rerender } = renderList({ loading: true, courses: [] });
     expect(screen.getByText(/Loading.../i)).toBeInTheDocument();
 
-    // Danach wird entweder der Kursname oder zumindest das Grid gerendert
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading.../i)).not.toBeInTheDocument();
-      expect(
-        screen.queryByText(/Aktuell keine Kurse in dieser Ansicht/i),
-      ).not.toBeInTheDocument();
-    });
-  });
-
-  it("zeigt eine Fehlermeldung an, wenn das Laden fehlschlägt", async () => {
-    mockedGetCourses.mockRejectedValue(new Error("Network error"));
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-
-    render(
-      <CourseList currentUser={baseUser} tenant={baseTenant} membership={baseMembership} />,
+    rerender(
+      <CourseList
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={baseMembership}
+        courses={mockCourses}
+        overrides={[]}
+        enrollments={[]}
+        swaps={[]}
+        participantRoster={[]}
+        loading={false}
+        error={null}
+        onRefresh={vi.fn(async () => undefined)}
+        canManageGuestSeats={false}
+        {...swapHandlers}
+      />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText(/Failed to load data/i)).toBeInTheDocument();
-    });
+    expect(screen.queryByText(/Loading.../i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Aktuell keine Kurse in dieser Ansicht/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("zeigt eine Fehlermeldung an, wenn das Laden fehlschlägt", () => {
+    renderList({ error: "Failed to load data" });
+    expect(screen.getByText(/Failed to load data/i)).toBeInTheDocument();
   });
 
   it("strukturiert geladene Kurse als region mit article-Karten", async () => {
@@ -164,18 +171,10 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
+    renderList({ courses: mockCourses });
 
-    render(
-      <CourseList currentUser={baseUser} tenant={baseTenant} membership={baseMembership} />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByRole("region", { name: /kursübersicht/i })).toBeInTheDocument();
-      expect(screen.getByRole("article", { name: /kurs:\s*yoga basic/i })).toBeInTheDocument();
-    });
+    expect(screen.getByRole("region", { name: /kursübersicht/i })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /kurs:\s*yoga basic/i })).toBeInTheDocument();
   });
 
   it("zeigt Empty-State, wenn keine sichtbaren zukünftigen Termine vorhanden sind", async () => {
@@ -192,19 +191,11 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(pastOnlyCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
+    renderList({ courses: pastOnlyCourses });
 
-    render(
-      <CourseList currentUser={baseUser} tenant={baseTenant} membership={baseMembership} />,
-    );
-
-    await waitFor(() => {
-      const emptyState = screen.getByText(/Aktuell keine Kurse in dieser Ansicht/i);
-      expect(emptyState).toBeInTheDocument();
-      expect(emptyState.closest('[role="status"]')).toBeTruthy();
-    });
+    const emptyState = screen.getByText(/Aktuell keine Kurse in dieser Ansicht/i);
+    expect(emptyState).toBeInTheDocument();
+    expect(emptyState.closest('[role="status"]')).toBeTruthy();
   });
 
   it("filtert Kurse anhand von canSeeCourse und sortiert sie nach ID", async () => {
@@ -232,10 +223,6 @@ describe("CourseList", () => {
         dates: ["2099-06-16"],
       },
     ];
-
-    mockedGetCourses.mockResolvedValue(unsortedCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
     (canSeeCourse as unknown as ReturnType<typeof vi.fn>)
       .mockImplementation((membershipArg: UserTenantMembership, _settings, courseArg: Course) => {
         // Nur Kurs mit ID 2 ist sichtbar
@@ -243,16 +230,10 @@ describe("CourseList", () => {
         return courseArg.id === 2;
       });
 
-    render(
-      <CourseList currentUser={baseUser} tenant={baseTenant} membership={baseMembership} />,
-    );
+    renderList({ courses: unsortedCourses });
 
-    await waitFor(() => {
-      // Kurs A sollte gefiltert sein
-      expect(screen.queryByText("Kurs A")).not.toBeInTheDocument();
-      // Kurs B wird gerendert
-      expect(screen.getByText("Kurs B")).toBeInTheDocument();
-    });
+    expect(screen.queryByText("Kurs A")).not.toBeInTheDocument();
+    expect(screen.getByText("Kurs B")).toBeInTheDocument();
   });
 
   it("wendet canSeeCourse mit Cognito-Fallback an, wenn kein Tenant/Membership übergeben wird", async () => {
@@ -279,24 +260,15 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-
     const { canSeeCourse } = await import("shared/permissions");
 
-    render(<CourseList currentUser={baseUser} />);
+    renderList({ courses: mockCourses, tenant: undefined, membership: undefined });
 
-    // Standard-Teilnehmer sieht beide aktiven Kurse; Kacheln können mehrfach vorkommen
-    const kursAElements = await screen.findAllByText("Kurs A");
-    const kursBElements = await screen.findAllByText("Kurs B");
+    const kursAElements = screen.getAllByText("Kurs A");
+    const kursBElements = screen.getAllByText("Kurs B");
     expect(kursAElements.length).toBeGreaterThan(0);
     expect(kursBElements.length).toBeGreaterThan(0);
-
-    // Synthetische Membership: canSeeCourse wird pro Kurs aufgerufen (Standard-Teilnehmer sieht beide Kurse)
-    await waitFor(() => {
-      expect(canSeeCourse).toHaveBeenCalled();
-    });
+    expect(canSeeCourse).toHaveBeenCalled();
   });
 
   it("zeigt Admin-Kursverwaltung und legt Kurs über Modal an", async () => {
@@ -317,10 +289,6 @@ describe("CourseList", () => {
         dates: ["2099-06-16"],
       },
     ];
-
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
     mockedCreateCourse.mockResolvedValue({
       id: 2,
       name: "Neuer Kurs",
@@ -332,7 +300,7 @@ describe("CourseList", () => {
       dates: [],
     });
 
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+    renderList({ courses: mockCourses, membership: adminMembership });
 
     const courseMatches = await screen.findAllByText("Kurs A");
     expect(courseMatches.length).toBeGreaterThan(0);
@@ -377,11 +345,7 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={instructorMembership} />);
+    renderList({ courses: mockCourses, membership: instructorMembership });
 
     const courseMatches = await screen.findAllByText("Kurs A");
     expect(courseMatches.length).toBeGreaterThan(0);
@@ -442,24 +406,26 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-    mockedGetParticipantRoster.mockResolvedValue([
-      { userId: "maya", participantId: "11111111-2222-4333-8444-555555555555" },
-      { userId: "admin", participantId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
-    ]);
+    renderList({
+      currentUser: delegatedUser,
+      membership: adminMembership,
+      courses: mockCourses,
+      participantRoster: [
+        {
+          tenantId: "default-tenant",
+          userId: "maya",
+          participantId: "11111111-2222-4333-8444-555555555555",
+        },
+        {
+          tenantId: "default-tenant",
+          userId: "admin",
+          participantId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        },
+      ],
+      forceParticipantView: true,
+    });
 
-    render(
-      <CourseList
-        currentUser={delegatedUser}
-        tenant={baseTenant}
-        membership={adminMembership}
-        forceParticipantView
-      />,
-    );
-
-    await screen.findAllByText("Kurs A");
+    expect(screen.getAllByText("Kurs A").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Kurse verwalten/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /kurs anlegen/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /mitglieder bearbeiten kurs a/i })).not.toBeInTheDocument();
@@ -469,10 +435,6 @@ describe("CourseList", () => {
     expect(firstMembershipArg.role).toBe("participant");
     expect(firstMembershipArg.userId).toBe("maya");
     expect(firstMembershipArg.participantId).toBeUndefined();
-
-    await waitFor(() => {
-      expect(mockedGetSwaps).toHaveBeenCalledWith("maya");
-    });
   });
 
   it("aktiviert Speichern im Edit-Dialog erst nach Änderungen", async () => {
@@ -493,16 +455,12 @@ describe("CourseList", () => {
         dates: ["2099-06-16"],
       },
     ];
-
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
     mockedUpdateCourse.mockResolvedValue({
       ...mockCourses[0],
       name: "Kurs A Neu",
     });
 
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+    renderList({ courses: mockCourses, membership: adminMembership });
 
     const courseMatches = await screen.findAllByText("Kurs A");
     expect(courseMatches.length).toBeGreaterThan(0);
@@ -554,13 +512,9 @@ describe("CourseList", () => {
         dates: ["2026-01-05"],
       },
     ];
-
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
     mockedUpdateCourse.mockResolvedValue({ ...mockCourses[0], name: "Kurzer Block umbenannt" });
 
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+    renderList({ courses: mockCourses, membership: adminMembership });
 
     const user = userEvent.setup();
     await screen.findByText("Kurzer Block");
@@ -603,11 +557,7 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+    renderList({ courses: mockCourses, membership: adminMembership });
 
     const user = userEvent.setup();
     await screen.findByText("Rollend");
@@ -641,11 +591,7 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+    renderList({ courses: mockCourses, membership: adminMembership });
 
     const user = userEvent.setup();
     await screen.findAllByText("Kurs A");
@@ -684,11 +630,7 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+    renderList({ courses: mockCourses, membership: adminMembership });
 
     const user = userEvent.setup();
     await screen.findAllByText("Kurs A");
@@ -721,11 +663,7 @@ describe("CourseList", () => {
       },
     ];
 
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
-
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+    renderList({ courses: mockCourses, membership: adminMembership });
 
     const user = userEvent.setup();
     await screen.findAllByText("Kurs A");
@@ -744,7 +682,7 @@ describe("CourseList", () => {
     expect(screen.getByText(/Durchlaufend \(rollend\)/i)).toBeInTheDocument();
   });
 
-  it("benachrichtigt onDataChanged nach Mitglieder-Speichern", async () => {
+  it("benachrichtigt onRefresh nach Mitglieder-Speichern", async () => {
     const adminMembership: UserTenantMembership = {
       ...baseMembership,
       role: "admin",
@@ -763,11 +701,7 @@ describe("CourseList", () => {
         dates: ["2099-06-16"],
       },
     ];
-    const onDataChanged = vi.fn().mockResolvedValue(undefined);
-
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
     mockedGetParticipants.mockResolvedValue([
       { participantId: "luna", status: "active" },
     ]);
@@ -776,17 +710,10 @@ describe("CourseList", () => {
       participants: ["luna"],
     });
 
-    render(
-      <CourseList
-        currentUser={baseUser}
-        tenant={baseTenant}
-        membership={adminMembership}
-        onDataChanged={onDataChanged}
-      />,
-    );
+    renderList({ courses: mockCourses, membership: adminMembership, onRefresh });
 
     const user = userEvent.setup();
-    await screen.findAllByText("Kurs A");
+    expect(screen.getAllByText("Kurs A").length).toBeGreaterThan(0);
     const membersButtons = screen.getAllByRole("button", { name: /mitglieder bearbeiten kurs a/i });
     await user.click(membersButtons[membersButtons.length - 1]);
 
@@ -797,7 +724,7 @@ describe("CourseList", () => {
 
     await waitFor(() => {
       expect(mockedUpdateCourse).toHaveBeenCalled();
-      expect(onDataChanged).toHaveBeenCalled();
+      expect(onRefresh).toHaveBeenCalled();
     });
   });
 
@@ -824,13 +751,9 @@ describe("CourseList", () => {
         dates: ["2099-01-06"],
       },
     ];
-
-    mockedGetCourses.mockResolvedValue(mockCourses);
-    mockedGetOverrides.mockResolvedValue([]);
-    mockedGetSwaps.mockResolvedValue([]);
     mockedUpdateCourse.mockResolvedValue(mockCourses[0]);
 
-    render(<CourseList currentUser={baseUser} tenant={baseTenant} membership={adminMembership} />);
+    renderList({ courses: mockCourses, membership: adminMembership });
 
     const user = userEvent.setup();
     await screen.findAllByText("Kurs A");

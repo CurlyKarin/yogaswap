@@ -78,6 +78,7 @@ export default function CoursesShell({
     overrides,
     enrollments,
     swaps,
+    participantRoster,
     confirmSwap,
     requestSwap,
     cancelSwap,
@@ -371,7 +372,20 @@ export default function CoursesShell({
             tenant={tenant}
             membership={membership}
             forceParticipantView={forceParticipantView}
-            onDataChanged={fetchData}
+            courses={courses}
+            overrides={overrides}
+            enrollments={enrollments}
+            swaps={swaps}
+            participantRoster={participantRoster}
+            loading={loading}
+            error={error}
+            onRefresh={fetchData}
+            onToggleAbsence={onToggleAbsence}
+            confirmSwap={confirmSwap}
+            requestSwap={requestSwap}
+            cancelSwap={cancelSwap}
+            adjustGuestCount={adjustGuestCount}
+            canManageGuestSeats={canManageGuestSeats}
           />
         </section>
       )}

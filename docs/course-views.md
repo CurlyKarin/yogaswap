@@ -24,7 +24,7 @@ CoursesShell
   courses → CourseList → CourseCard   (nur canSeeCourseManagement)
 ```
 
-Daten: `useCoursesData` (Kurse, Overrides, Swaps, `weekCourseRows`, `earliestWeekAnchor`, `hiddenPastCourseCount`).
+Daten: `useCoursesData` (gemeinsam für Woche und Kursliste; Phase 1: Kurse/Overrides/Enrollments, Phase 2: Swaps/Roster — [#328](https://github.com/CurlyKarin/yogaswap/issues/328)). Ableitungen: `weekCourseRows`, `earliestWeekAnchor`, `hiddenPastCourseCount`.
 
 Vertretung (`forceParticipantView` in `App`): Teilnehmer-Perspektive in der **Wochenansicht**; Kursübersicht bleibt für Admin/Kursleitung reserviert.
 
