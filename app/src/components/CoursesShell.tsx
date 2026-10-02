@@ -71,6 +71,7 @@ export default function CoursesShell({
   const {
     loading,
     error,
+    deferredError,
     fetchData,
     courses,
     weekCourseRows,
@@ -343,6 +344,7 @@ export default function CoursesShell({
             onWeekAnchorChange={setWeekAnchor}
             loading={loading}
             error={error}
+            deferredError={deferredError}
             rows={weekCourseRows}
             hiddenPastCourseCount={hiddenPastCourseCount}
             courses={courses}
@@ -379,6 +381,7 @@ export default function CoursesShell({
             participantRoster={participantRoster}
             loading={loading}
             error={error}
+            deferredError={deferredError}
             onRefresh={fetchData}
             onToggleAbsence={onToggleAbsence}
             confirmSwap={confirmSwap}
