@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Course,
   CourseDateOverride,
@@ -97,6 +97,9 @@ export function useCoursesData({
   const [participantRoster, setParticipantRoster] = useState<ParticipantRosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Phase-2-Fehler (#372): Kurse bleiben sichtbar, Tausch/Roster fehlen. */
+  const [deferredError, setDeferredError] = useState<string | null>(null);
+  const fetchGenerationRef = useRef(0);
 
   const effectiveMembership = useMemo<UserTenantMembership | undefined>(() => {
     if (!membership) return undefined;
@@ -143,8 +146,12 @@ export function useCoursesData({
   );
 
   const fetchData = useCallback(async () => {
+    const generation = ++fetchGenerationRef.current;
+    const isCurrent = () => generation === fetchGenerationRef.current;
+
     try {
       setLoading(true);
+      setDeferredError(null);
 
       // Phase 1 (#328): kritischer Pfad — UI kann mit Kursen/Occupancy rendern.
       const [courseData, overrideData, enrollmentData] = await Promise.all([
@@ -152,17 +159,23 @@ export function useCoursesData({
         getOverrides(),
         getCourseEnrollments(),
       ]);
+      if (!isCurrent()) return;
       setCourses(courseData.sort(sortCoursesForDisplay));
       setOverrides(Array.isArray(overrideData) ? overrideData : []);
       setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
       setError(null);
-      setLoading(false);
+      // #372: Bei onlyMyCourses hängen Zeilen an Swaps — Loading bis Phase 2, kein leerer Flash.
+      if (!onlyMyCourses) {
+        setLoading(false);
+      }
     } catch (err) {
       console.error("Error in useCoursesData (critical path):", err);
+      if (!isCurrent()) return;
       setError("Failed to load data");
       setSwaps([]);
       setEnrollments([]);
       setParticipantRoster([]);
+      setDeferredError(null);
       setLoading(false);
       return;
     }
@@ -178,14 +191,22 @@ export function useCoursesData({
         swapsData = await getSwaps(actorRef);
       }
       const rosterData = await getParticipantRoster().catch(() => []);
+      if (!isCurrent()) return;
       setSwaps(swapsData);
       setParticipantRoster(rosterData);
+      setDeferredError(null);
     } catch (err) {
       console.error("Error in useCoursesData (deferred path):", err);
+      if (!isCurrent()) return;
       setSwaps([]);
       setParticipantRoster([]);
+      setDeferredError("Tauschdaten konnten nicht geladen werden.");
+    } finally {
+      if (isCurrent()) {
+        setLoading(false);
+      }
     }
-  }, [canSeeCourseManagement, actorRef]);
+  }, [canSeeCourseManagement, actorRef, onlyMyCourses]);
 
   useEffect(() => {
     fetchData();
@@ -294,6 +315,7 @@ export function useCoursesData({
   return {
     loading,
     error,
+    deferredError,
     fetchData,
     courses,
     overrides: swapHandlers.overrides,

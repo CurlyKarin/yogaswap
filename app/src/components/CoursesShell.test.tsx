@@ -28,6 +28,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
   type MockCoursesData = {
     loading: boolean;
     error: string | null;
+    deferredError: string | null;
     courses: Array<{
       id: number;
       name: string;
@@ -74,6 +75,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
   const createCoursesDataMock = (overrides: Partial<MockCoursesData> = {}): MockCoursesData => ({
     loading: false,
     error: null,
+    deferredError: null,
     courses: [],
     weekCourseRows: [],
     hiddenPastCourseCount: 0,

@@ -20,6 +20,8 @@ type Props = {
   onWeekAnchorChange: (weekStart: Date) => void;
   loading: boolean;
   error: string | null;
+  /** Soft error after critical path succeeded (e.g. swaps/roster). */
+  deferredError?: string | null;
   rows: WeekCourseRow[];
   hiddenPastCourseCount?: number;
   courses: Course[];
@@ -58,6 +60,7 @@ export default function CourseWeekView({
   onWeekAnchorChange,
   loading,
   error,
+  deferredError = null,
   rows,
   hiddenPastCourseCount = 0,
   courses,
@@ -129,6 +132,11 @@ export default function CourseWeekView({
   if (rows.length === 0) {
     return (
       <div className="course-week-view muted" role="status" style={{ textAlign: "center", padding: "2rem" }}>
+        {deferredError && (
+          <p className="muted" role="status" aria-live="polite" style={{ marginBottom: "0.75rem" }}>
+            {deferredError}
+          </p>
+        )}
         In dieser Kalenderwoche sind keine Termine sichtbar.
       </div>
     );
@@ -136,6 +144,11 @@ export default function CourseWeekView({
 
   return (
     <div className="course-week-view" role="region" aria-label="Wochenansicht">
+      {deferredError && (
+        <p className="muted" role="status" aria-live="polite">
+          {deferredError}
+        </p>
+      )}
       {hiddenPastCourseCount > 0 && (
         <p className="course-week-view-faded-hint muted" role="status">
           {hiddenPastCourseCount} weitere

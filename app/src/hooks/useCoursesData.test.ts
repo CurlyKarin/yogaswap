@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
-import type { Course, User, UserTenantMembership } from "shared/types";
+import type { Course, Swap, User, UserTenantMembership } from "shared/types";
 import { useCoursesData } from "./useCoursesData";
 
 vi.mock("../api/courses", () => ({
@@ -69,6 +69,8 @@ const mockCourse: Course = {
   dates: ["2099-06-16"],
 };
 
+const weekAnchor = new Date("2099-06-15T12:00:00.000Z");
+
 describe("useCoursesData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,7 +103,8 @@ describe("useCoursesData", () => {
       useCoursesData({
         currentUser: baseUser,
         membership,
-        weekAnchor: new Date("2099-06-15T12:00:00.000Z"),
+        weekAnchor,
+        onlyMyCourses: false,
       }),
     );
 
@@ -111,6 +114,7 @@ describe("useCoursesData", () => {
 
     expect(result.current.courses).toHaveLength(1);
     expect(result.current.error).toBeNull();
+    expect(result.current.deferredError).toBeNull();
     expect(mockedGetCourses).toHaveBeenCalled();
     expect(mockedGetOverrides).toHaveBeenCalled();
     expect(mockedGetCourseEnrollments).toHaveBeenCalled();
@@ -133,6 +137,130 @@ describe("useCoursesData", () => {
         { tenantId: "default-tenant", userId: "alice", participantId: "alice" },
       ]);
     });
+  });
+
+  it("hält loading bei onlyMyCourses bis Phase 2 fertig (#372)", async () => {
+    let resolveSwaps: (value: unknown) => void = () => undefined;
+    mockedGetSwaps.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSwaps = resolve;
+      }),
+    );
+    mockedGetParticipantRoster.mockResolvedValue([]);
+
+    const { result } = renderHook(() =>
+      useCoursesData({
+        currentUser: baseUser,
+        membership,
+        weekAnchor,
+        onlyMyCourses: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockedGetSwaps).toHaveBeenCalled();
+    });
+    expect(result.current.loading).toBe(true);
+    expect(result.current.courses).toHaveLength(1);
+
+    await act(async () => {
+      resolveSwaps([]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(result.current.deferredError).toBeNull();
+  });
+
+  it("setzt deferredError bei Phase-2-Fehler ohne Phase-1-Daten zu verwerfen (#372)", async () => {
+    mockedGetSwaps.mockRejectedValue(new Error("swap boom"));
+
+    const { result } = renderHook(() =>
+      useCoursesData({
+        currentUser: baseUser,
+        membership,
+        weekAnchor,
+        onlyMyCourses: false,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.deferredError).toMatch(/tauschdaten/i);
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.courses).toHaveLength(1);
+    expect(result.current.swaps).toEqual([]);
+  });
+
+  it("verwirft veraltete parallele fetchData-Ergebnisse (#372)", async () => {
+    let resolveFirstSwaps: (value: Swap[]) => void = () => undefined;
+    let resolveSecondSwaps: (value: Swap[]) => void = () => undefined;
+    let swapCall = 0;
+
+    mockedGetSwaps.mockImplementation(
+      () =>
+        new Promise<Swap[]>((resolve) => {
+          swapCall += 1;
+          if (swapCall === 1) resolveFirstSwaps = resolve;
+          else resolveSecondSwaps = resolve;
+        }),
+    );
+    mockedGetParticipantRoster.mockResolvedValue([]);
+
+    const { result } = renderHook(() =>
+      useCoursesData({
+        currentUser: baseUser,
+        membership,
+        weekAnchor,
+        onlyMyCourses: false,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockedGetSwaps).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      void result.current.fetchData();
+    });
+
+    await waitFor(() => {
+      expect(mockedGetSwaps).toHaveBeenCalledTimes(2);
+    });
+
+    const staleSwap: Swap = {
+      participantId: "alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 2,
+      toDate: "2099-06-17",
+      status: "pending",
+    };
+    const freshSwap: Swap = {
+      ...staleSwap,
+      status: "active",
+    };
+
+    await act(async () => {
+      resolveSecondSwaps([freshSwap]);
+    });
+    await waitFor(() => {
+      expect(result.current.swaps).toEqual([freshSwap]);
+    });
+
+    await act(async () => {
+      resolveFirstSwaps([staleSwap]);
+    });
+
+    // Microtask: stale Phase-2 darf den neueren Stand nicht überschreiben.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.swaps).toEqual([freshSwap]);
   });
 
   it("lädt für Admin pending/active Swaps sequenziell in Phase 2", async () => {
@@ -164,7 +292,7 @@ describe("useCoursesData", () => {
       useCoursesData({
         currentUser: { ...baseUser, role: "admin" },
         membership: adminMembership,
-        weekAnchor: new Date("2099-06-15T12:00:00.000Z"),
+        weekAnchor,
       }),
     );
 

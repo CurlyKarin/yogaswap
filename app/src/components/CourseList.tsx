@@ -64,6 +64,7 @@ type Props = {
   participantRoster: ParticipantRosterEntry[];
   loading: boolean;
   error: string | null;
+  deferredError?: string | null;
   onRefresh: () => Promise<void>;
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => Promise<boolean>;
   confirmSwap: (
@@ -195,6 +196,7 @@ export default function CourseList({
   participantRoster,
   loading,
   error,
+  deferredError = null,
   onRefresh,
   onToggleAbsence,
   confirmSwap,
@@ -715,6 +717,11 @@ export default function CourseList({
 
   return (
     <>
+      {deferredError && (
+        <p className="muted" role="status" aria-live="polite">
+          {deferredError}
+        </p>
+      )}
       {canSeeCourseManagement && (
         <div className="course-management-toolbar">
           <div className="course-management-title-group">
