@@ -60,7 +60,7 @@ describe("resolveEffectiveTermParticipants", () => {
     expect(resolved.usedLegacySnapshot).toBe(true);
   });
 
-  it("uses legacy snapshot roster as effective even when swapped lists differ", () => {
+  it("unions legacy swapped into effective occupancy (#376)", () => {
     const resolved = resolveEffectiveTermParticipants(
       { participants: ["alice", "bob"] },
       {
@@ -68,8 +68,32 @@ describe("resolveEffectiveTermParticipants", () => {
         swapped: ["alice"],
       },
     );
-    expect(resolved.participants).toEqual(["carol"]);
+    expect(resolved.participants).toEqual(["carol", "alice"]);
     expect(resolved.usedLegacySnapshot).toBe(true);
+  });
+
+  it("treats empty snapshot + swapped as stem plus swap-ins (#376)", () => {
+    const resolved = resolveEffectiveTermParticipants(course, {
+      participants: [],
+      swapped: ["maya"],
+    });
+    expect(resolved.participants).toEqual(["luna", "karin", "maya"]);
+    expect(resolved.cancelledParticipants).toEqual([]);
+    expect(resolved.swapped).toEqual(["maya"]);
+    expect(resolved.usedLegacySnapshot).toBe(true);
+  });
+
+  it("keeps swap-in on effective list when marking SN in legacy form (#376)", () => {
+    const resolved = resolveEffectiveTermParticipants(
+      { participants: ["alice"] },
+      {
+        participants: [],
+        swapped: ["charlie"],
+        shortNoticeCancellations: ["charlie"],
+      },
+    );
+    expect(resolved.participants).toContain("charlie");
+    expect(resolved.participants).toContain("alice");
   });
 
   it("accepts explicit stemParticipants override (#303)", () => {

@@ -111,4 +111,50 @@ describe("cutoffOverrideValidation", () => {
     });
     expect(error).toBeNull();
   });
+
+  it("erlaubt SN für Legacy-Swap-in im Cutoff (#376)", () => {
+    const before = makeOverride({
+      participants: [],
+      swapped: ["charlie"],
+      shortNoticeCancellations: [],
+    });
+    const after = makeOverride({
+      participants: [],
+      swapped: ["charlie"],
+      shortNoticeCancellations: ["charlie"],
+    });
+    expect(
+      validateShortNoticeParticipantsInvariant(after, ["alice"]),
+    ).toBeNull();
+    const error = validateSelfServiceOverrideTransition({
+      ...baseInput,
+      actorNickname: "charlie",
+      baseParticipants: ["alice"],
+      before,
+      after,
+      now: new Date(2099, 5, 15, 9, 30),
+    });
+    expect(error).toBeNull();
+  });
+
+  it("erlaubt SN für Stamm im Delta-Modell im Cutoff (#376)", () => {
+    const before = makeOverride({
+      participants: [],
+      cancelledParticipants: [],
+      swapped: [],
+    });
+    const after = makeOverride({
+      participants: [],
+      cancelledParticipants: [],
+      swapped: [],
+      shortNoticeCancellations: ["alice"],
+    });
+    const error = validateSelfServiceOverrideTransition({
+      ...baseInput,
+      before,
+      after,
+      now: new Date(2099, 5, 15, 9, 30),
+    });
+    expect(error).toBeNull();
+  });
 });
