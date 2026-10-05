@@ -9,6 +9,7 @@ import {
   participantChipAriaLabel,
   previewTermOptionSuffix,
   guestChipAriaLabel,
+  cancelledChipAriaLabel,
   GUEST_CHIP_LABEL,
   resolveCourseScheduleDisplay,
   TERM_MARKER_CUTOFF_LABEL,
@@ -63,6 +64,7 @@ export default function CourseCardDetails({
   const termSelectId = useId();
   const termSelectDisabledHintId = useId();
   const participantsLabelId = useId();
+  const cancelledLabelId = useId();
   const waitlistLabelId = useId();
 
   const {
@@ -70,6 +72,7 @@ export default function CourseCardDetails({
     swapped,
     shortNotice,
     waitlist,
+    cancelledParticipants,
     guestCount: rawGuestCount,
     actor,
     hasNoUpcomingDates,
@@ -334,6 +337,36 @@ export default function CourseCardDetails({
           )}
         </ul>
       </div>
+
+      {showOverbookingDetails && (
+        <div className="course-row list-row">
+          <div id={cancelledLabelId} className="label muted">
+            Abgesagt
+          </div>
+          <ul className="chips" aria-labelledby={cancelledLabelId}>
+            {showExcludedTermMarker ? (
+              <li className="chip muted small" aria-label="Keine Absagen, Termin entfällt">
+                —
+              </li>
+            ) : cancelledParticipants.length === 0 ? (
+              <li className="chip muted small">Keine Absagen</li>
+            ) : (
+              cancelledParticipants.map((name) => {
+                const displayName = displayNameForParticipantRef(name, participantNameByRef);
+                return (
+                  <li
+                    className="chip cancelled"
+                    key={name}
+                    aria-label={cancelledChipAriaLabel(displayName)}
+                  >
+                    {displayName}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
+      )}
 
       <div className="course-row list-row">
         <div id={waitlistLabelId} className="label muted">

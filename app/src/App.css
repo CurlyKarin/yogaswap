@@ -960,6 +960,16 @@ body {
   color: inherit;
   font-weight: 600;
 }
+/* Pending-Tausch (Warteliste): gleiche Gelb-Familie wie aktiver Tausch (#371) */
+.chip.wait:not(.chip-self) {
+  background-color: #fff9c4;
+  color: #5d4e37;
+}
+.chip.wait.chip-self {
+  background-color: #ffd54f;
+  color: inherit;
+  font-weight: 600;
+}
 /* Kurzfristig abgesagt (SN): andere = blass rot, eigener Chip = kräftig rot */
 .chip.short-notice:not(.chip-self) {
   background-color: #ffebee;
@@ -985,11 +995,19 @@ body {
   font-weight: 500;
 }
 
-/* Eingeloggte:r User in Teilnehmer- oder Warteliste (intensiver als „frei“) */
-.chip.chip-self:not(.short-notice):not(.swapped) {
+/* Eingeloggte Person in der Teilnehmerliste (nicht SN/Tausch/Warteliste — die haben eigene Farben) */
+.chip.chip-self:not(.short-notice):not(.swapped):not(.wait) {
   background-color: #2e7d32;
   color: #fff;
   font-weight: 600;
+}
+
+/* Rechtzeitige Absage (RC) — nur Studio/Kursleitung (#371) */
+.chip.cancelled {
+  background-color: #eceff1;
+  color: #546e7a;
+  text-decoration: line-through;
+  text-decoration-color: #78909c;
 }
 
 .chip.overbook-free {
