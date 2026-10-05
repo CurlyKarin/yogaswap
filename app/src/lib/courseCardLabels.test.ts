@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  cancelledChipAriaLabel,
   formatAbsenceAnnouncement,
   guestChipAriaLabel,
   participantChipAriaLabel,
@@ -20,8 +21,12 @@ describe("courseCardLabels", () => {
   });
 
   it("formatiert Wartelisten-Chip-Labels", () => {
-    expect(waitlistChipAriaLabel("bob", false)).toBe("bob, auf der Warteliste");
-    expect(waitlistChipAriaLabel("alice", true)).toBe("alice, du auf der Warteliste");
+    expect(waitlistChipAriaLabel("bob", false)).toBe("bob, offene Tauschanfrage (Warteliste)");
+    expect(waitlistChipAriaLabel("alice", true)).toBe(
+      "alice, du, offene Tauschanfrage (Warteliste)",
+    );
+    expect(cancelledChipAriaLabel("luna")).toBe("luna, rechtzeitig abgesagt");
+    expect(cancelledChipAriaLabel("alice", true)).toBe("alice, du, rechtzeitig abgesagt");
   });
 
   it("formatiert Gast-Chip-Labels", () => {

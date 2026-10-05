@@ -114,6 +114,9 @@ export function useCourseCardTermState({
     ? (override?.shortNoticeCancellations ?? [])
     : [];
   const waitlist = useTermScopedParticipantState ? (override?.waitlist ?? []) : [];
+  const cancelledParticipants = useTermScopedParticipantState
+    ? (override?.cancelledParticipants ?? [])
+    : [];
   const guestCount = useTermScopedParticipantState ? (override?.anonymousTrialCount ?? 0) : 0;
 
   const userNameLower = actorRef.toLowerCase();
@@ -458,6 +461,7 @@ export function useCourseCardTermState({
     swapped,
     shortNotice,
     waitlist,
+    cancelledParticipants,
     guestCount,
     userName,
     userNameLower,

@@ -960,6 +960,16 @@ body {
   color: inherit;
   font-weight: 600;
 }
+/* Pending-Tausch (Warteliste): gleiche Gelb-Familie wie aktiver Tausch (#371) */
+.chip.wait:not(.chip-self) {
+  background-color: #fff9c4;
+  color: #5d4e37;
+}
+.chip.wait.chip-self {
+  background-color: #ffd54f;
+  color: inherit;
+  font-weight: 600;
+}
 /* Kurzfristig abgesagt (SN): andere = blass rot, eigener Chip = kräftig rot */
 .chip.short-notice:not(.chip-self) {
   background-color: #ffebee;
@@ -985,10 +995,25 @@ body {
   font-weight: 500;
 }
 
-/* Eingeloggte:r User in Teilnehmer- oder Warteliste (intensiver als „frei“) */
-.chip.chip-self:not(.short-notice):not(.swapped) {
+/* Eingeloggte Person in der Teilnehmerliste (nicht SN/Tausch/Warteliste/RC — die haben eigene Farben) */
+.chip.chip-self:not(.short-notice):not(.swapped):not(.wait):not(.cancelled) {
   background-color: #2e7d32;
   color: #fff;
+  font-weight: 600;
+}
+
+/* Rechtzeitige Absage (RC): gleiche Rot-Familie wie SN — auch wenn „Abgesagt“ später für alle sichtbar wird (#371) */
+.chip.cancelled:not(.chip-self) {
+  background-color: #ffebee;
+  color: #8d4a4a;
+  text-decoration: line-through;
+  text-decoration-color: #c62828;
+}
+.chip.cancelled.chip-self {
+  background-color: #c62828;
+  color: #fff;
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
 }
 

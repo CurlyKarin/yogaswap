@@ -257,23 +257,91 @@ describe("CourseCard", () => {
     expect(container.querySelector(".chip.chip-self")).toHaveAttribute("aria-label", "alice, du");
   });
 
-  it("hebt den eigenen Chip in Teilnehmer- und Warteliste grün hervor", () => {
+  it("hebt den eigenen Chip in der Teilnehmerliste grün und auf der Warteliste gelb hervor", () => {
     const overrideWithWaitlist: CourseDateOverride = {
       ...baseOverride,
       participants: ["alice", "bob"],
-      waitlist: ["alice"],
+      waitlist: ["alice", "carol"],
     };
 
     const { container } = renderCourseCard({ overrides: [overrideWithWaitlist] });
 
-    const selfChips = container.querySelectorAll(".chip.chip-self");
-    expect(selfChips).toHaveLength(2);
-    expect(selfChips[0]).toHaveTextContent("alice");
-    expect(container.querySelector(".chip.wait.chip-self")).toHaveAttribute(
+    expect(container.querySelector(".chip.chip-self:not(.wait)")).toHaveTextContent("alice");
+    const selfWait = container.querySelector(".chip.wait.chip-self");
+    expect(selfWait).toHaveTextContent("alice");
+    expect(selfWait).toHaveAttribute(
       "aria-label",
-      "alice, du auf der Warteliste",
+      "alice, du, offene Tauschanfrage (Warteliste)",
+    );
+    expect(screen.getByText("carol").closest(".chip")).toHaveClass("wait");
+    expect(screen.getByText("carol").closest(".chip")).not.toHaveClass("chip-self");
+    expect(screen.getByText("carol").closest(".chip")).toHaveAttribute(
+      "aria-label",
+      "carol, offene Tauschanfrage (Warteliste)",
     );
     expect(screen.getByText("bob").closest(".chip")).not.toHaveClass("chip-self");
+  });
+
+  it("zeigt rechtzeitige Absagen nur mit Kursverwaltung (#371)", () => {
+    const overrideCancelled: CourseDateOverride = {
+      ...baseOverride,
+      participants: [],
+      cancelledParticipants: ["alice"],
+    };
+
+    const participantView = renderCourseCard({
+      overrides: [overrideCancelled],
+      showOverbookingDetails: false,
+    });
+    expect(participantView.queryByText("Abgesagt")).not.toBeInTheDocument();
+    expect(participantView.container.querySelector(".chip.cancelled")).toBeNull();
+    participantView.unmount();
+
+    const { container } = renderCourseCard({
+      overrides: [overrideCancelled],
+      showOverbookingDetails: true,
+    });
+    expect(screen.getByText("Abgesagt")).toBeInTheDocument();
+    const cancelledChip = container.querySelector(".chip.cancelled");
+    expect(cancelledChip).toHaveTextContent("alice");
+    expect(cancelledChip).toHaveClass("chip-self");
+    expect(cancelledChip).toHaveAttribute("aria-label", "alice, du, rechtzeitig abgesagt");
+  });
+
+  it("färbt fremde RC-Absagen blass rot, ohne chip-self", () => {
+    const overrideCancelled: CourseDateOverride = {
+      ...baseOverride,
+      participants: [],
+      cancelledParticipants: ["bob"],
+    };
+
+    const { container } = renderCourseCard({
+      overrides: [overrideCancelled],
+      showOverbookingDetails: true,
+    });
+    const cancelledChip = container.querySelector(".chip.cancelled");
+    expect(cancelledChip).toHaveTextContent("bob");
+    expect(cancelledChip).not.toHaveClass("chip-self");
+    expect(cancelledChip).toHaveAttribute("aria-label", "bob, rechtzeitig abgesagt");
+  });
+
+  it("listet kurzfristige Absagen nicht unter Abgesagt, sondern als short-notice Chip (#371/#376)", () => {
+    const overrideSn: CourseDateOverride = {
+      ...baseOverride,
+      participants: ["alice", "bob"],
+      shortNoticeCancellations: ["alice"],
+      cancelledParticipants: [],
+    };
+
+    const { container } = renderCourseCard({
+      overrides: [overrideSn],
+      showOverbookingDetails: true,
+    });
+
+    expect(screen.getByText("Abgesagt")).toBeInTheDocument();
+    expect(container.querySelector(".chip.cancelled")).toBeNull();
+    expect(screen.getByText("Keine Absagen")).toBeInTheDocument();
+    expect(container.querySelector(".chip.chip-self.short-notice")).toHaveTextContent("alice");
   });
 
   it("zeigt Hinweis bei gesperrter Teilnehmer-Ansicht für inaktiven Kurs", () => {

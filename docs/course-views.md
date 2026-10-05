@@ -77,7 +77,7 @@ Die Chip-Zeile zeigt die **effektive Terminbelegung**, nicht die Stamm-Mitglieds
 
 | Kontext | Anzeige |
 |---------|---------|
-| Gewählter Termin (Zukunft oder Wochenansicht) | Override: eingetragen, getauscht, SN, Warteliste, Gäste |
+| Gewählter Termin (Zukunft oder Wochenansicht) | Override: eingetragen, getauscht, SN, Warteliste, Gäste; Studio/Kursleitung zusätzlich RC-Absente (#371) |
 | Kursübersicht im **Nachlauf** (letzter Termin) | Override dieses Termins — wie in der Wochenansicht |
 | **Nach abgelaufener Zugriffsfrist** | Stammteilnehmer (`course.participants`); Termin-Dropdown „—“ |
 
@@ -155,7 +155,7 @@ Aggregierter Hinweis, wenn Kurse in der KW wegen abgelaufenem Nachlauf ausgeblen
 - [x] Studio-Entfall (`excludedDates`) sichtbar + Marker
 - [x] Termin-Marker Nachlauf / Cutoff / entfällt (ohne Text-Legende)
 - [x] Swap-Modal mit Kontext-Hilfen
-- [x] Chip-Hervorhebung: eigener Teilnehmer/Warteliste; SN/Tausch-Farben
+- [x] Chip-Hervorhebung: eigener Teilnehmer grün; Warteliste/Tausch gelb (blass/kräftig); SN rot; RC-Absente nur Studio (#371)
 - [x] Tests (`CoursesShell`, `CourseWeekView`, `courseWeekOccurrences`, `CourseCard`, …)
 
 ### Offen / Follow-up
@@ -199,6 +199,7 @@ Nach Speichern eines neuen Fensters: `replanPending: false`, `deriveVisibleDates
 - [#331](https://github.com/CurlyKarin/yogaswap/issues/331) — Kursblock-Wiederbeplanung: Kalender und Ausnahmen
 - [#182](https://github.com/CurlyKarin/yogaswap/issues/182) — Layout Kurskacheln
 - [#185](https://github.com/CurlyKarin/yogaswap/issues/185) — Tausch-Ursprung / eigene Absagen in der Kachel
+- [#371](https://github.com/CurlyKarin/yogaswap/issues/371) — Pending-Warteliste gelb; RC-Absente für Studio
 - [#186](https://github.com/CurlyKarin/yogaswap/issues/186) — Terminübersicht nach Woche
 - [#187](https://github.com/CurlyKarin/yogaswap/issues/187) — `weekAnchor` in Session, Vertretung in gleicher KW
 - [#287](https://github.com/CurlyKarin/yogaswap/issues/287) — Sticky Kurs-/Wochennavigation unter dem Header
