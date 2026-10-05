@@ -26,6 +26,7 @@ describe("courseCardLabels", () => {
       "alice, du, offene Tauschanfrage (Warteliste)",
     );
     expect(cancelledChipAriaLabel("luna")).toBe("luna, rechtzeitig abgesagt");
+    expect(cancelledChipAriaLabel("alice", true)).toBe("alice, du, rechtzeitig abgesagt");
   });
 
   it("formatiert Gast-Chip-Labels", () => {

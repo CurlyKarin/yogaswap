@@ -304,7 +304,25 @@ describe("CourseCard", () => {
     expect(screen.getByText("Abgesagt")).toBeInTheDocument();
     const cancelledChip = container.querySelector(".chip.cancelled");
     expect(cancelledChip).toHaveTextContent("alice");
-    expect(cancelledChip).toHaveAttribute("aria-label", "alice, rechtzeitig abgesagt");
+    expect(cancelledChip).toHaveClass("chip-self");
+    expect(cancelledChip).toHaveAttribute("aria-label", "alice, du, rechtzeitig abgesagt");
+  });
+
+  it("färbt fremde RC-Absagen blass rot, ohne chip-self", () => {
+    const overrideCancelled: CourseDateOverride = {
+      ...baseOverride,
+      participants: [],
+      cancelledParticipants: ["bob"],
+    };
+
+    const { container } = renderCourseCard({
+      overrides: [overrideCancelled],
+      showOverbookingDetails: true,
+    });
+    const cancelledChip = container.querySelector(".chip.cancelled");
+    expect(cancelledChip).toHaveTextContent("bob");
+    expect(cancelledChip).not.toHaveClass("chip-self");
+    expect(cancelledChip).toHaveAttribute("aria-label", "bob, rechtzeitig abgesagt");
   });
 
   it("listet kurzfristige Absagen nicht unter Abgesagt, sondern als short-notice Chip (#371/#376)", () => {

@@ -353,11 +353,12 @@ export default function CourseCardDetails({
             ) : (
               cancelledParticipants.map((name) => {
                 const displayName = displayNameForParticipantRef(name, participantNameByRef);
+                const isSelf = matchesParticipantRef(name, actor);
                 return (
                   <li
-                    className="chip cancelled"
+                    className={`chip cancelled${isSelf ? " chip-self" : ""}`}
                     key={name}
-                    aria-label={cancelledChipAriaLabel(displayName)}
+                    aria-label={cancelledChipAriaLabel(displayName, isSelf)}
                   >
                     {displayName}
                   </li>

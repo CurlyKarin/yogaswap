@@ -64,8 +64,8 @@ export function waitlistChipAriaLabel(name: string, isSelf: boolean): string {
     : `${name}, offene Tauschanfrage (Warteliste)`;
 }
 
-export function cancelledChipAriaLabel(name: string): string {
-  return `${name}, rechtzeitig abgesagt`;
+export function cancelledChipAriaLabel(name: string, isSelf = false): string {
+  return isSelf ? `${name}, du, rechtzeitig abgesagt` : `${name}, rechtzeitig abgesagt`;
 }
 
 export function formatAbsenceAnnouncement(

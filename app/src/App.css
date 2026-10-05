@@ -995,19 +995,26 @@ body {
   font-weight: 500;
 }
 
-/* Eingeloggte Person in der Teilnehmerliste (nicht SN/Tausch/Warteliste — die haben eigene Farben) */
-.chip.chip-self:not(.short-notice):not(.swapped):not(.wait) {
+/* Eingeloggte Person in der Teilnehmerliste (nicht SN/Tausch/Warteliste/RC — die haben eigene Farben) */
+.chip.chip-self:not(.short-notice):not(.swapped):not(.wait):not(.cancelled) {
   background-color: #2e7d32;
   color: #fff;
   font-weight: 600;
 }
 
-/* Rechtzeitige Absage (RC) — nur Studio/Kursleitung (#371) */
-.chip.cancelled {
-  background-color: #eceff1;
-  color: #546e7a;
+/* Rechtzeitige Absage (RC): gleiche Rot-Familie wie SN — auch wenn „Abgesagt“ später für alle sichtbar wird (#371) */
+.chip.cancelled:not(.chip-self) {
+  background-color: #ffebee;
+  color: #8d4a4a;
   text-decoration: line-through;
-  text-decoration-color: #78909c;
+  text-decoration-color: #c62828;
+}
+.chip.cancelled.chip-self {
+  background-color: #c62828;
+  color: #fff;
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
 }
 
 .chip.overbook-free {
