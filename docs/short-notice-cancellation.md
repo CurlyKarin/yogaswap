@@ -17,8 +17,14 @@
 
 `CourseDateOverride.shortNoticeCancellations`: Nicknames mit **kurzfristiger** Absage.
 
-- Nutzer **bleibt** in `participants` (Slot bleibt belegt, kein Nachrücken).
-- **Rechtzeitige (RC) Absage:** nur aus `participants`, nicht in SN — Tausch weiter möglich (auch wenn das Cutoff-Fenster später erreicht wird).
+- Nutzer **bleibt** in der effektiven Belegung (`participants` bzw. Stamm ⊕ `swapped`); Slot bleibt belegt, kein Nachrücken.
+- **Reingetauschte:** bleiben in `swapped` und zusätzlich in `shortNoticeCancellations` (#376).
+- **Rechtzeitige (RC) Absage:** aus der Belegung raus (`cancelledParticipants` / nicht mehr im effektiven Roster) — Tausch weiter möglich (auch wenn das Cutoff-Fenster später erreicht wird). RC erscheint für Studio unter „Abgesagt“ (#371); SN erscheint dort **nicht**.
+
+## UI (Kurskachel)
+
+- SN: Chip in der **Teilnehmerliste** mit `short-notice` (blass rot + durchgestrichen; eigen = kräftig rot).
+- Nicht in der Zeile „Abgesagt“ (nur RC).
 
 ## SN-Rücknahme (Produktentscheidung)
 

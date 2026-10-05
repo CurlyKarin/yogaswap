@@ -82,6 +82,15 @@ export function migrateLegacyOverrideToDeltas(
     };
   }
 
+  // Empty snapshot + swapped without cancelledParticipants → Delta-ähnlich (#376).
+  if (snapshot.length === 0 && explicitSwapped.length > 0) {
+    return {
+      participants: [],
+      cancelledParticipants: [],
+      swapped: uniqueCaseInsensitive(explicitSwapped),
+    };
+  }
+
   const legacy = deriveLegacyOverrideDeltas(previousStem, snapshot);
   return {
     participants: [],
@@ -99,7 +108,8 @@ export function migrateLegacyOverrideToDeltas(
  * - `swapped`: term additions
  * - SN flags are orthogonal: SN users remain in the returned list
  * - Legacy: if `cancelledParticipants` is absent, derive from snapshot — except
- *   empty named stubs, which keep the stem (guest/waitlist-only overrides)
+ *   empty named stubs, which keep the stem (guest/waitlist-only overrides).
+ *   Explicit `swapped` is always unioned into effective occupancy (#376).
  */
 export type ResolveEffectiveTermOptions = {
   /**
@@ -143,11 +153,35 @@ export function resolveEffectiveTermParticipants(
       };
     }
 
+    // Empty snapshot + explicit swapped (kein cancelledParticipants): oft Ring-/Swap-Writes
+    // die wie Delta gemeint sind — Stamm nicht als komplett abgesagt behandeln (#376).
+    if (snapshot.length === 0 && explicitSwapped.length > 0) {
+      let effective = [...stem];
+      for (const user of explicitSwapped) {
+        if (!includesUserCaseInsensitive(effective, user)) {
+          effective = [...effective, user];
+        }
+      }
+      return {
+        participants: uniqueCaseInsensitive(effective),
+        cancelledParticipants: [],
+        swapped: uniqueCaseInsensitive(explicitSwapped),
+        usedLegacySnapshot: true,
+      };
+    }
+
     const legacy = deriveLegacyOverrideDeltas(stem, snapshot);
     const swapped =
       explicitSwapped.length > 0 ? explicitSwapped : legacy.swapped;
+    // #376: Swap-ins in `swapped` zählen zur effektiven Belegung (SN-Invariante).
+    let effective = uniqueCaseInsensitive(snapshot);
+    for (const user of swapped) {
+      if (!includesUserCaseInsensitive(effective, user)) {
+        effective = [...effective, user];
+      }
+    }
     return {
-      participants: uniqueCaseInsensitive(snapshot),
+      participants: uniqueCaseInsensitive(effective),
       cancelledParticipants: uniqueCaseInsensitive(legacy.cancelledParticipants),
       swapped: uniqueCaseInsensitive(swapped),
       usedLegacySnapshot: true,
