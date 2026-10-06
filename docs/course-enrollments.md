@@ -120,10 +120,18 @@ effective = stemOn(T) ⊕ Override-Deltas (#291)
 
 Ohne Segmente für den Kurs → Fallback `course.participants`.
 
+## Lifecycle-Mails (#380)
+
+Aktivierungs- und geplantes-Kursende-Mails in `updateCourse` wählen Empfänger über
+`resolveLifecycleMailRecipientIds` (= `stemOn(referenceDate)` aus CourseEnrollments).
+Abgemeldete mit `validUntil` vor dem Referenztermin (R bzw. plannedEndDate) erhalten
+keine Mail — auch wenn sie noch im Drift-Cache `course.participants[]` stehen.
+Ohne Segmente: Fallback auf die Planungsliste/Cache bis Backfill (#385).
+
 ## Shared API
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
-- `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy`
+- `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy` / `resolveLifecycleMailRecipientIds`
 - `migrateParticipantsToEnrollments` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
 - `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForParticipant` / `enrollmentRangesOverlap`
 - `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`

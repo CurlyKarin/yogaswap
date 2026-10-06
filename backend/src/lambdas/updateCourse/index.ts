@@ -43,6 +43,7 @@ import {
   migrateLegacyOverrideToDeltas,
   planStemEnrollmentWrites,
   removeUserCaseInsensitive,
+  resolveLifecycleMailRecipientIds,
   resolveMigrationValidFrom,
   validateOverbookLimit,
   validateParticipantListSize,
@@ -908,6 +909,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       Boolean(enrollmentsTable) &&
       (participants != null || Boolean(enrollmentChanges?.length) || draftToActive) &&
       (effectiveStatus === "draft" || effectiveStatus === "active");
+    /** Nach Sync: Segmente für Lifecycle-Mails (#380); sonst bei Bedarf nachgeladen. */
+    let enrollmentsAfterSync: Awaited<ReturnType<typeof queryCourseEnrollments>> | null = null;
     if (shouldSyncEnrollments && enrollmentsTable) {
       const previousParticipantIds =
         item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
@@ -976,6 +979,25 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             }),
           );
         }
+        const deletedKeys = new Set(
+          planned.deletes.map(
+            (enrollment) =>
+              `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`,
+          ),
+        );
+        const putByKey = new Map(
+          planned.puts.map((enrollment) => [
+            `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`,
+            enrollment,
+          ]),
+        );
+        enrollmentsAfterSync = [
+          ...existingEnrollments.filter((enrollment) => {
+            const key = `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`;
+            return !deletedKeys.has(key) && !putByKey.has(key);
+          }),
+          ...planned.puts,
+        ];
         if (planned.puts.length > 0 || planned.deletes.length > 0) {
           console.info(
             JSON.stringify({
@@ -1004,6 +1026,37 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         };
       }
     }
+
+    const fallbackMailParticipants = nextParticipants
+      .map((entry) => entry.S ?? "")
+      .filter((entry) => entry.length > 0);
+
+    const resolveMailRecipients = async (referenceDateIso: string): Promise<string[]> => {
+      let enrollments = enrollmentsAfterSync;
+      if (!enrollments && enrollmentsTable) {
+        try {
+          enrollments = await queryCourseEnrollments({
+            client,
+            tableName: enrollmentsTable,
+            tenantId,
+            courseId: Number(courseId),
+          });
+        } catch (error) {
+          console.warn("updateCourse failed to load enrollments for lifecycle mail", {
+            tenantId,
+            courseId,
+            error,
+          });
+          enrollments = null;
+        }
+      }
+      return resolveLifecycleMailRecipientIds({
+        courseId: Number(courseId),
+        enrollments,
+        fallbackParticipants: fallbackMailParticipants,
+        referenceDateIso,
+      });
+    };
 
     if (isScheduleExceptionPatchBody(body)) {
       const reactivatedExcludedDates = resolveReactivatedExcludedDates(
@@ -1090,9 +1143,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const sesSourceEmail = process.env.SES_SOURCE_EMAIL;
       const baseUrlEnv = resolveAppBaseUrlForTenant(tenantId);
       const loginUrl = baseUrlEnv || undefined;
-      const participantUserIds = nextParticipants
-        .map((entry) => entry.S ?? "")
-        .filter((entry) => entry.length > 0);
+      const participantUserIds = await resolveMailRecipients(plannedEndNotifyDateIso);
       try {
         const mailSummary = await notifyParticipantsPlannedEndDate(client, {
           participantsTable,
@@ -1110,6 +1161,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           courseId,
           change: plannedEndNotifyChange,
           plannedEndDate: plannedEndNotifyDateIso,
+          recipientCount: participantUserIds.length,
           ...mailSummary,
         });
       } catch (notificationError) {
@@ -1356,9 +1408,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const upcomingTermIso = findNextUpcomingOccurrenceIso(nextDates, nextTime);
 
     if (status && currentStatus === "draft" && nextStatus === "active") {
-      const activatedParticipantIds = nextParticipants
-        .map((entry) => entry.S ?? "")
-        .filter((entry) => entry.length > 0);
+      const activationReferenceIso =
+        findNextOpenCourseTermIso(
+          nextDates,
+          nextTime,
+          resolveCancellationSwapCutoffMinutes(tenantSettings),
+        ) ??
+        upcomingTermIso ??
+        toIsoDateOnlyLocal(new Date());
+      const activatedParticipantIds = await resolveMailRecipients(activationReferenceIso);
       try {
         const mailSummary = await notifyCourseActivated(client, {
           tenantId,
@@ -1374,6 +1432,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         console.info("updateCourse course activated mail summary", {
           tenantId,
           courseId,
+          recipientCount: activatedParticipantIds.length,
           ...mailSummary,
         });
       } catch (notificationError) {

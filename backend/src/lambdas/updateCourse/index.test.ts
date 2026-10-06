@@ -246,8 +246,9 @@ describe("updateCourse Lambda", () => {
           visibilityMode: { S: "rolling_horizon" },
         },
       })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({ Items: [] }) // overrides tombstone scan
+      .mockResolvedValueOnce({ Items: [] }) // enrollments for lifecycle mail (#380)
       .mockResolvedValueOnce({
         Item: {
           email: { S: "luna@example.com" },
@@ -289,8 +290,9 @@ describe("updateCourse Lambda", () => {
           plannedEndDate: { S: "2099-06-20" },
         },
       })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({ Items: [] }) // overrides tombstone scan
+      .mockResolvedValueOnce({ Items: [] }) // enrollments for lifecycle mail (#380)
       .mockResolvedValueOnce({
         Item: {
           email: { S: "luna@example.com" },
@@ -337,6 +339,119 @@ describe("updateCourse Lambda", () => {
 
     expect(result.statusCode).toBe(200);
     expect(mockSesSend).not.toHaveBeenCalled();
+  });
+
+  test("plannedEndDate mail skips closed enrollments still in participants cache (#380)", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          planningMode: { S: "rolling_continuous" },
+          visibilityMode: { S: "rolling_horizon" },
+          participants: { L: [{ S: "luna" }, { S: "ghost" }] },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({ Items: [] }) // overrides tombstone scan
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+          },
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#ghost#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "ghost" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2026-02-01" },
+          },
+        ],
+      }) // enrollments for lifecycle mail
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ plannedEndDate: "2099-06-20" }));
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    const participantGets = (GetItemCommand as unknown as jest.Mock).mock.calls.filter(
+      (call) => call[0]?.TableName === "test-participants",
+    );
+    expect(participantGets).toHaveLength(1);
+    expect(participantGets[0][0].Key.userId.S).toBe("luna");
+  });
+
+  test("activation mail skips closed enrollments still in participants cache (#380)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("draft"),
+          participants: { L: [{ S: "luna" }, { S: "ghost" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+          dates: { L: [{ S: "2099-06-07" }, { S: "2099-06-14" }] },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+          },
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#ghost#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "ghost" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2026-02-01" },
+          },
+        ],
+      }) // enrollments sync query
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ status: "active" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).status).toBe("active");
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    const sesInput = mockSesSend.mock.calls[0][0];
+    expect(sesInput.Message.Subject.Data).toMatch(/aktiv/i);
+    const participantGets = (GetItemCommand as unknown as jest.Mock).mock.calls.filter(
+      (call) => call[0]?.TableName === "test-participants",
+    );
+    expect(participantGets).toHaveLength(1);
+    expect(participantGets[0][0].Key.userId.S).toBe("luna");
   });
 
   test("rejects plannedEndDate inside planning lock window", async () => {

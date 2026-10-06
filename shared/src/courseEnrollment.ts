@@ -142,6 +142,24 @@ export function resolveStemForDate(
   return stemOnDate(forCourse, dateIso);
 }
 
+/**
+ * Empfänger für Kurs-Lifecycle-Mails (#380 / #361).
+ * Mit Enrollment-Segmenten: `stemOn(referenceDate)` — Abgemeldete mit `validUntil` vor R fallen raus.
+ * Ohne Segmente: Fallback auf Planungsliste/Cache (`fallbackParticipants`) bis Backfill (#385).
+ */
+export function resolveLifecycleMailRecipientIds(input: {
+  courseId: number;
+  enrollments: EnrollmentStemInput[] | null | undefined;
+  fallbackParticipants: string[];
+  referenceDateIso: string;
+}): string[] {
+  return resolveStemForDate(
+    { id: input.courseId, participants: input.fallbackParticipants },
+    input.enrollments,
+    input.referenceDateIso,
+  );
+}
+
 /** Occupancy an Termin T: stemOn(T) ⊕ Override-Deltas (#303). */
 export function resolveEffectiveTermOccupancy(
   course: Pick<Course, "id" | "participants">,
