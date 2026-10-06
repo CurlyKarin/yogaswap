@@ -16,6 +16,7 @@ import {
   resolveMigrationValidFrom,
   resolveStemForDate,
   stemOnDate,
+  resolveLifecycleMailRecipientIds,
 } from "shared/courseEnrollment";
 import type { CourseEnrollment } from "shared/types";
 
@@ -125,6 +126,34 @@ describe("courseEnrollment", () => {
     ];
     expect(resolveStemForDate(course, enrollments, "2026-03-15")).toEqual(["luna"]);
     expect(resolveStemForDate(course, enrollments, "2026-04-01")).toEqual(["luna", "mia"]);
+  });
+
+  it("resolveLifecycleMailRecipientIds uses stemOn(R), not drift cache (#380)", () => {
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 1, participantId: "luna", validFrom: "2026-01-01" },
+      {
+        courseId: 1,
+        participantId: "ghost",
+        validFrom: "2026-01-01",
+        validUntil: "2026-02-01",
+      },
+    ];
+    expect(
+      resolveLifecycleMailRecipientIds({
+        courseId: 1,
+        enrollments,
+        fallbackParticipants: ["luna", "ghost"],
+        referenceDateIso: "2026-03-10",
+      }),
+    ).toEqual(["luna"]);
+    expect(
+      resolveLifecycleMailRecipientIds({
+        courseId: 1,
+        enrollments: [],
+        fallbackParticipants: ["luna", "ghost"],
+        referenceDateIso: "2026-03-10",
+      }),
+    ).toEqual(["luna", "ghost"]);
   });
 
   it("resolveEffectiveTermOccupancy applies deltas on enrollment stem", () => {
