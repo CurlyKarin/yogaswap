@@ -231,6 +231,71 @@ export function migrateParticipantsToEnrollments(
   return result;
 }
 
+export type PlanMissingOpenEnrollmentsInput = {
+  course: Pick<Course, "id" | "participants" | "seriesStartDate" | "visibleFrom" | "tenantId">;
+  existingEnrollments: CourseEnrollment[];
+  source?: CourseEnrollmentSource;
+  createdAt?: string;
+  actorUserId?: string;
+  /** Override default validFrom resolution (`resolveMigrationValidFrom`). */
+  validFrom?: string;
+};
+
+export type PlanMissingOpenEnrollmentsResult = {
+  puts: CourseEnrollment[];
+  addedParticipantIds: string[];
+  skippedParticipantIds: string[];
+};
+
+/**
+ * Idempotent heal for #385: active-course cache (`participants[]`) → missing segments.
+ * Only creates an open enrollment when the person has **no** enrollment rows for the course.
+ * Closed history (even with drift still in `participants[]`) is left alone — do not reopen.
+ */
+export function planMissingOpenEnrollmentsFromParticipants(
+  input: PlanMissingOpenEnrollmentsInput,
+): PlanMissingOpenEnrollmentsResult {
+  const source = input.source ?? "backfill";
+  const tenantId = input.course.tenantId ?? undefined;
+  const validFrom = input.validFrom ?? resolveMigrationValidFrom(input.course);
+  const forCourse = input.existingEnrollments.filter(
+    (entry) => entry.courseId === input.course.id,
+  );
+
+  const puts: CourseEnrollment[] = [];
+  const addedParticipantIds: string[] = [];
+  const skippedParticipantIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of input.course.participants ?? []) {
+    const participantId = raw.trim();
+    if (!participantId) continue;
+    const key = participantId.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    if (enrollmentsForParticipant(forCourse, participantId).length > 0) {
+      skippedParticipantIds.push(participantId);
+      continue;
+    }
+
+    puts.push(
+      buildOpenEnrollment({
+        courseId: input.course.id,
+        participantId,
+        validFrom,
+        tenantId,
+        source,
+        actorUserId: input.actorUserId,
+        createdAt: input.createdAt,
+      }),
+    );
+    addedParticipantIds.push(participantId);
+  }
+
+  return { puts, addedParticipantIds, skippedParticipantIds };
+}
+
 /** Open stem cache: segments without validUntil (or until in the future relative to `asOf`). */
 export function openEnrollmentParticipantIds(
   enrollments: Array<Pick<CourseEnrollment, "participantId" | "validUntil">>,

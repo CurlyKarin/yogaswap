@@ -11,6 +11,7 @@ import {
   migrateParticipantsToEnrollments,
   openEnrollmentParticipantIds,
   parseCourseEnrollmentSortKey,
+  planMissingOpenEnrollmentsFromParticipants,
   planStemEnrollmentWrites,
   resolveEffectiveTermOccupancy,
   resolveMigrationValidFrom,
@@ -109,6 +110,49 @@ describe("courseEnrollment", () => {
       { courseId: 1, participantId: "c", validFrom: "2026-01-01" },
     ];
     expect(openEnrollmentParticipantIds(enrollments, "2026-06-01")).toEqual(["b", "c"]);
+  });
+
+  it("planMissingOpenEnrollmentsFromParticipants only heals people with zero rows (#385)", () => {
+    const course = {
+      id: 3,
+      tenantId: "default-tenant",
+      participants: ["luna", "kai", "ghost"],
+      seriesStartDate: "2026-01-01",
+    };
+    const existing: CourseEnrollment[] = [
+      { courseId: 3, participantId: "luna", validFrom: "2026-01-01" },
+      {
+        courseId: 3,
+        participantId: "ghost",
+        validFrom: "2026-01-01",
+        validUntil: "2026-02-01",
+      },
+    ];
+    const planned = planMissingOpenEnrollmentsFromParticipants({
+      course,
+      existingEnrollments: existing,
+      createdAt: "2026-10-09T10:00:00.000Z",
+    });
+    // luna: has open row; ghost: closed history only — neither is a backfill gap
+    expect(planned.skippedParticipantIds).toEqual(["luna", "ghost"]);
+    expect(planned.addedParticipantIds).toEqual(["kai"]);
+    expect(planned.puts).toEqual([
+      {
+        tenantId: "default-tenant",
+        courseId: 3,
+        participantId: "kai",
+        validFrom: "2026-01-01",
+        source: "backfill",
+        createdAt: "2026-10-09T10:00:00.000Z",
+      },
+    ]);
+
+    const again = planMissingOpenEnrollmentsFromParticipants({
+      course,
+      existingEnrollments: [...existing, ...planned.puts],
+    });
+    expect(again.puts).toEqual([]);
+    expect(again.skippedParticipantIds).toEqual(["luna", "kai", "ghost"]);
   });
 
   it("resolveStemForDate falls back to course.participants without enrollments", () => {
