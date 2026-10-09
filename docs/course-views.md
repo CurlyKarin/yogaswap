@@ -182,9 +182,11 @@ Beim Öffnen von **Termine verwalten** für einen **Draft-Kursblock**, wenn `rep
 | Ausschluss-Termine | ja; `excludedDates` geleert + Hinweis | ja (Liste/Markierung leer) |
 | Mitglieder-Dialog (validFrom / validUntil) | unverändert (nicht Teil von #331) | — |
 
-Nach Speichern eines neuen Fensters: `replanPending: false`, `deriveVisibleDates` + Backend-`pruneScheduleExceptions`. Mitglieder/`participants[]` → [#361](https://github.com/CurlyKarin/yogaswap/issues/361).
+Nach Speichern eines neuen Fensters: `replanPending: false`, `deriveVisibleDates` + Backend-`pruneScheduleExceptions`.
 
 `replanPending` wird beim Statuswechsel **inactive → draft** (Kursblock) gesetzt und erst beim Speichern der Terminkonfiguration wieder gelöscht — damit Erstplanung mit Start heute/gestern am Folgetag nicht erneut zurückgesetzt wird.
+
+**Planungsliste (#381):** Beim `inactive → draft` schließt Backend offene Enrollments am **Blockende** und schreibt `participants[]` als Vorschlag aus `stemOn(Blockende)` (Studio kann im Mitglieder-Dialog kürzen/ergänzen). Materialisierung neuer Segmente: [#382](https://github.com/CurlyKarin/yogaswap/issues/382).
 
 **Inaktive Kurse (#369):** Termin-Dialog nur lesend; API lehnt Schedule-Patches (`excludedDates`, Serienfenster, …) und Terminabsagen ab, solange der Status `inactive` bleibt. Neuplanung erst nach Wechsel auf „In Planung“.
 

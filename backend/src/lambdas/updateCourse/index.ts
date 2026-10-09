@@ -41,6 +41,7 @@ import {
   buildCourseEnrollmentSortKey,
   enrollmentChangesToDateMaps,
   migrateLegacyOverrideToDeltas,
+  planInactiveToDraftEnrollmentTransition,
   planStemEnrollmentWrites,
   removeUserCaseInsensitive,
   resolveLifecycleMailRecipientIds,
@@ -655,7 +656,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const nextCapacity = capacity ?? existingCapacity;
     const nextOverbookLimit = overbookLimit ?? existingOverbookLimit;
     const nextId = item.id?.N ? Number.parseInt(item.id.N, 10) : Number.parseInt(courseId, 10);
-    const nextParticipants = participants
+    let nextParticipants = participants
       ? participants.map((entry) => ({ S: entry }))
       : (item.participants?.L ?? []);
     if (participants) {
@@ -865,6 +866,55 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       nextReplanPending = false;
     }
 
+    /** #381: inactive→draft — Segmente am Blockende schließen + Planungsliste vorschlagen. */
+    const inactiveToDraft = Boolean(status && currentStatus === "inactive" && nextStatus === "draft");
+    const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+    type InactiveToDraftPlan = ReturnType<typeof planInactiveToDraftEnrollmentTransition>;
+    let inactiveToDraftPlan: InactiveToDraftPlan | null = null;
+    if (inactiveToDraft && enrollmentsTable) {
+      try {
+        const existingEnrollments = await queryCourseEnrollments({
+          client,
+          tableName: enrollmentsTable,
+          tenantId,
+          courseId: Number(courseId),
+        });
+        const fallbackParticipants =
+          item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ??
+          [];
+        inactiveToDraftPlan = planInactiveToDraftEnrollmentTransition({
+          course: {
+            id: Number(courseId),
+            tenantId,
+            planningMode: (nextPlanningMode ?? item.planningMode?.S) as Course["planningMode"],
+            seriesEndDate: nextSeriesEndDate,
+            visibleUntil: nextVisibleUntil,
+            plannedEndDate: nextPlannedEndDate,
+          },
+          existingEnrollments,
+          fallbackParticipants,
+          closedAt: new Date().toISOString(),
+          actorUserId: actorUserId ?? undefined,
+        });
+        // Explicit participants patch wins; otherwise write Planungsliste suggestion.
+        if (participants == null) {
+          nextParticipants = inactiveToDraftPlan.suggestedParticipants.map((entry) => ({
+            S: entry,
+          }));
+        }
+      } catch (enrollmentError) {
+        console.error("updateCourse inactive→draft enrollment plan failed", {
+          tenantId,
+          courseId,
+          error: enrollmentError,
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Failed to prepare enrollments for replan" }),
+        };
+      }
+    }
+
     const updateItem: Record<string, any> = {
       tenantId: { S: tenantId },
       courseId: { S: courseId },
@@ -903,7 +953,59 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     );
 
-    const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+    if (inactiveToDraftPlan && enrollmentsTable) {
+      try {
+        for (const enrollment of inactiveToDraftPlan.puts) {
+          await client.send(
+            new PutItemCommand({
+              TableName: enrollmentsTable,
+              Item: enrollmentToDynamoItem(enrollment, tenantId),
+            }),
+          );
+        }
+        for (const enrollment of inactiveToDraftPlan.deletes) {
+          await client.send(
+            new DeleteItemCommand({
+              TableName: enrollmentsTable,
+              Key: {
+                tenantId: { S: tenantId },
+                courseId_userId_validFrom: {
+                  S: buildCourseEnrollmentSortKey(
+                    enrollment.courseId,
+                    enrollment.participantId,
+                    enrollment.validFrom,
+                  ),
+                },
+              },
+            }),
+          );
+        }
+        if (inactiveToDraftPlan.puts.length > 0 || inactiveToDraftPlan.deletes.length > 0) {
+          console.info(
+            JSON.stringify({
+              actor: actorUserId,
+              timestamp: new Date().toISOString(),
+              courseId,
+              reason: "inactive_to_draft_close_enrollments",
+              blockEndIso: inactiveToDraftPlan.blockEndIso,
+              closedCount: inactiveToDraftPlan.puts.length,
+              deletedCount: inactiveToDraftPlan.deletes.length,
+              suggestedParticipants: inactiveToDraftPlan.suggestedParticipants,
+            }),
+          );
+        }
+      } catch (enrollmentError) {
+        console.error("updateCourse inactive→draft enrollment writes failed", {
+          tenantId,
+          courseId,
+          error: enrollmentError,
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Failed to close enrollments for replan" }),
+        };
+      }
+    }
     const draftToActive = Boolean(status && currentStatus === "draft" && nextStatus === "active");
     const shouldSyncEnrollments =
       Boolean(enrollmentsTable) &&

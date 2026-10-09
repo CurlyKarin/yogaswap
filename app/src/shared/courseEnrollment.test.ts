@@ -11,6 +11,7 @@ import {
   migrateParticipantsToEnrollments,
   openEnrollmentParticipantIds,
   parseCourseEnrollmentSortKey,
+  planInactiveToDraftEnrollmentTransition,
   planMissingOpenEnrollmentsFromParticipants,
   planStemEnrollmentWrites,
   resolveEffectiveTermOccupancy,
@@ -110,6 +111,50 @@ describe("courseEnrollment", () => {
       { courseId: 1, participantId: "c", validFrom: "2026-01-01" },
     ];
     expect(openEnrollmentParticipantIds(enrollments, "2026-06-01")).toEqual(["b", "c"]);
+  });
+
+  it("planInactiveToDraftEnrollmentTransition closes opens at block end (#381)", () => {
+    const course = {
+      id: 1,
+      planningMode: "bounded_series" as const,
+      seriesEndDate: "2026-06-30",
+    };
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, participantId: "luna", validFrom: "2026-01-01" },
+      {
+        courseId: 1,
+        participantId: "ghost",
+        validFrom: "2026-01-01",
+        validUntil: "2026-03-01",
+      },
+      { courseId: 1, participantId: "kai", validFrom: "2026-01-01" },
+    ];
+    const planned = planInactiveToDraftEnrollmentTransition({
+      course,
+      existingEnrollments: existing,
+      fallbackParticipants: ["luna", "ghost", "kai", "stale"],
+      closedAt: "2026-10-09T12:00:00.000Z",
+      actorUserId: "admin1",
+    });
+    expect(planned.blockEndIso).toBe("2026-06-30");
+    expect(planned.deletes).toEqual([]);
+    expect(planned.puts.map((entry) => entry.participantId).sort()).toEqual(["kai", "luna"]);
+    expect(planned.puts.every((entry) => entry.validUntil === "2026-06-30")).toBe(true);
+    expect(planned.suggestedParticipants).toEqual(["luna", "kai"]);
+  });
+
+  it("planInactiveToDraftEnrollmentTransition keeps fallback without enrollment rows (#381)", () => {
+    const planned = planInactiveToDraftEnrollmentTransition({
+      course: {
+        id: 2,
+        planningMode: "bounded_series",
+        seriesEndDate: "2026-06-30",
+      },
+      existingEnrollments: [],
+      fallbackParticipants: ["luna", "kai"],
+    });
+    expect(planned.puts).toEqual([]);
+    expect(planned.suggestedParticipants).toEqual(["luna", "kai"]);
   });
 
   it("planMissingOpenEnrollmentsFromParticipants only heals people with zero rows (#385)", () => {

@@ -2,6 +2,7 @@ import {
   resolveEffectiveTermParticipants,
   type EffectiveTermParticipants,
 } from "./overrideOccupancy";
+import { courseBlockEndIso } from "./courseStatus";
 import type { Course, CourseDateOverride, CourseEnrollment, CourseEnrollmentSource } from "./types";
 
 /**
@@ -416,6 +417,93 @@ export function closeEnrollmentSegment<T extends CourseEnrollment>(
     ...(options.closedAt ? { closedAt: options.closedAt } : {}),
     ...(options.actorUserId ? { actorUserId: options.actorUserId } : {}),
   };
+}
+
+export type PlanInactiveToDraftEnrollmentTransitionInput = {
+  course: Pick<
+    Course,
+    "id" | "planningMode" | "seriesEndDate" | "visibleUntil" | "plannedEndDate" | "tenantId"
+  >;
+  existingEnrollments: CourseEnrollment[];
+  /** Fallback when the course has no enrollment rows yet (legacy cache). */
+  fallbackParticipants: string[];
+  closedAt?: string;
+  actorUserId?: string;
+};
+
+export type PlanInactiveToDraftEnrollmentTransitionResult = {
+  /** Block end used as `validUntil`; null if unknown (no closes). */
+  blockEndIso: string | null;
+  /** Open segments closed at block end (or deleted if never started after block end). */
+  puts: CourseEnrollment[];
+  deletes: CourseEnrollment[];
+  /** Planungsliste suggestion: `stemOn(blockEnd)` after closes; excludes early leavers. */
+  suggestedParticipants: string[];
+};
+
+/**
+ * #381: inactive → draft — close open enrollments at block end and suggest Planungsliste.
+ * Suggestion = `stemOn(blockEnd)` after closes (people still “dabei” through the block end).
+ * No enrollment rows → keep `fallbackParticipants` (legacy). Empty stem after closes → empty list.
+ */
+export function planInactiveToDraftEnrollmentTransition(
+  input: PlanInactiveToDraftEnrollmentTransitionInput,
+): PlanInactiveToDraftEnrollmentTransitionResult {
+  const forCourse = input.existingEnrollments.filter(
+    (entry) => entry.courseId === input.course.id,
+  );
+  const blockEndIso = courseBlockEndIso(input.course) ?? null;
+
+  if (forCourse.length === 0) {
+    return {
+      blockEndIso,
+      puts: [],
+      deletes: [],
+      suggestedParticipants: [...input.fallbackParticipants],
+    };
+  }
+
+  const puts: CourseEnrollment[] = [];
+  const deletes: CourseEnrollment[] = [];
+  let working = [...forCourse];
+
+  if (blockEndIso) {
+    for (const enrollment of forCourse) {
+      if (!isEnrollmentOpen(enrollment)) continue;
+      if (enrollment.validFrom > blockEndIso) {
+        deletes.push(enrollment);
+        working = working.filter(
+          (entry) =>
+            !(
+              entry.courseId === enrollment.courseId &&
+              entry.participantId.toLowerCase() === enrollment.participantId.toLowerCase() &&
+              entry.validFrom === enrollment.validFrom &&
+              isEnrollmentOpen(entry)
+            ),
+        );
+        continue;
+      }
+      const closed = closeEnrollmentSegment(enrollment, blockEndIso, {
+        closedAt: input.closedAt,
+        actorUserId: input.actorUserId,
+      });
+      puts.push(closed);
+      working = working.map((entry) =>
+        entry.courseId === enrollment.courseId &&
+        entry.participantId.toLowerCase() === enrollment.participantId.toLowerCase() &&
+        entry.validFrom === enrollment.validFrom &&
+        isEnrollmentOpen(entry)
+          ? closed
+          : entry,
+      );
+    }
+  }
+
+  const suggestedParticipants = blockEndIso
+    ? stemOnDate(working, blockEndIso)
+    : openEnrollmentParticipantIds(working);
+
+  return { blockEndIso, puts, deletes, suggestedParticipants };
 }
 
 export type PlanStemEnrollmentWritesInput = {
