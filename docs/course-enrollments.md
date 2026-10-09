@@ -97,6 +97,25 @@ Die Kurskarte bleibt bei `stemOn(T) ⊕ Deltas` für den **angezeigten** Termin,
 
 Seed schreibt Enrollments aus denselben Kursdaten mit.
 
+### Backfill Active-Kurse (#385)
+
+Aktive Kurse, die nie über `updateCourse`-Bootstrap liefen, können Personen nur in `participants[]`
+haben. Heal-Skript (idempotent):
+
+- Shared: `planMissingOpenEnrollmentsFromParticipants` — legt ein offenes Segment nur an, wenn die
+  Person in `participants[]` **noch gar keine** Enrollment-Zeile für den Kurs hat (`source: backfill`).
+  Geschlossene Historie (auch bei Drift im Cache) wird **nicht** wieder geöffnet.
+- Dry-Run-Log: `added` = würde neue Zeile schreiben; `skipped` = bereits Segmente vorhanden.
+- Ops (`backend`): zuerst Dry-Run, dann Live — ideal Demo vor Staging/Prod:
+
+```bash
+DRY_RUN=1 npm run backfill:active-course-enrollments
+# optional: TENANT_ID=… npm run …
+npm run backfill:active-course-enrollments
+```
+
+Env: `COURSES_TABLE`, `COURSE_ENROLLMENTS_TABLE`, `AWS_REGION`. Draft-Planungsliste bleibt unberührt (#381/#382).
+
 ### Backfill `participantId` (#317 hybrid)
 
 Neue Mitglieder erhalten beim Anlegen (`createParticipants`) eine UUID in `participants-table` (`participantId`, GSI `GSI_ParticipantId`). Operative Kurs-/Swap-/Enrollment-Refs bleiben **Nicknames**.
@@ -132,7 +151,7 @@ Ohne Segmente: Fallback auf die Planungsliste/Cache bis Backfill (#385).
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
 - `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy` / `resolveLifecycleMailRecipientIds`
-- `migrateParticipantsToEnrollments` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
+- `migrateParticipantsToEnrollments` / `planMissingOpenEnrollmentsFromParticipants` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
 - `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForParticipant` / `enrollmentRangesOverlap`
 - `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`
 

@@ -118,7 +118,7 @@ export type Course = {
  * Ein Stamm-Mitgliedschaftssegment für einen Kurs (#293 / #302).
  * Rejoin = neues Segment; Vergangenheit wird nicht überschrieben.
  */
-export type CourseEnrollmentSource = "manual" | "migration" | "reactivation" | "seed";
+export type CourseEnrollmentSource = "manual" | "migration" | "backfill" | "reactivation" | "seed";
 
 export type CourseEnrollment = {
   tenantId?: string;
