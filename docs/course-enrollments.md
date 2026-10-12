@@ -64,6 +64,16 @@ Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehend
 4. `course.participants[]` bleibt Cache der **aktuellen** Stamm-Liste an R (`stemOn(R)` / Dabei); kommende Segmente stehen in CourseEnrollments (#332)
 5. Override-/Swap-Cleanup bei Active bleibt (zukünftige Termine)
 
+### inactive → draft / Planungsliste (#381)
+
+Beim Statuswechsel **inactive → draft** (Wiederbeplanung):
+
+1. Offene Segmente schließen mit `validUntil` = **Blockende** (`courseBlockEndIso`: `seriesEndDate` bzw. `plannedEndDate`)
+2. **Planungsliste** (`participants[]`) = Vorschlag `stemOn(Blockende)` nach dem Schließen — Abgemeldete mit früherem `validUntil` sind nicht dabei
+3. Ohne Enrollment-Zeilen: bisherige `participants[]` als Legacy-Fallback behalten
+4. Expliziter `participants`-Patch im Request überschreibt den Vorschlag
+5. Neue offene Segmente für den nächsten Block entstehen erst bei **draft → active** (#382)
+
 ## Mitglieder-Dialog (#305)
 
 Der Dialog betrachtet den **aktuellen Zeitpunkt**. Die aktuellste Stamm-Information ist der **nächste noch offene Kurstermin R** (`stemOn(R)`), nicht das Kalenderdatum.
@@ -151,7 +161,7 @@ Ohne Segmente: Fallback auf die Planungsliste/Cache bis Backfill (#385).
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
 - `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy` / `resolveLifecycleMailRecipientIds`
-- `migrateParticipantsToEnrollments` / `planMissingOpenEnrollmentsFromParticipants` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
+- `migrateParticipantsToEnrollments` / `planMissingOpenEnrollmentsFromParticipants` / `planInactiveToDraftEnrollmentTransition` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
 - `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForParticipant` / `enrollmentRangesOverlap`
 - `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`
 

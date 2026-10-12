@@ -549,6 +549,7 @@ describe("updateCourse Lambda", () => {
   test("sets replanPending on inactive -> draft for bounded series (#331)", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("inactive") })
+      .mockResolvedValueOnce({ Items: [] }) // #381 enrollments query
       .mockResolvedValueOnce({});
 
     const result = await handler(makeEvent({ status: "draft" }));
@@ -559,6 +560,76 @@ describe("updateCourse Lambda", () => {
         Item: expect.objectContaining({
           status: { S: "draft" },
           replanPending: { BOOL: true },
+        }),
+      }),
+    );
+  });
+
+  test("inactive -> draft closes open enrollments at block end and suggests Planungsliste (#381)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("inactive"),
+          participants: { L: [{ S: "luna" }, { S: "ghost" }, { S: "kai" }] },
+          seriesEndDate: { S: "2026-06-30" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+          },
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#ghost#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "ghost" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2026-03-01" },
+          },
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#kai#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "kai" },
+            validFrom: { S: "2026-01-01" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({}) // close luna
+      .mockResolvedValueOnce({}); // close kai
+
+    const result = await handler(makeEvent({ status: "draft" }));
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.status).toBe("draft");
+    expect(body.participants).toEqual(["luna", "kai"]);
+    expect(body.replanPending).toBe(true);
+
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Item: expect.objectContaining({
+          participantId: { S: "luna" },
+          validFrom: { S: "2026-01-01" },
+          validUntil: { S: "2026-06-30" },
+        }),
+      }),
+    );
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Item: expect.objectContaining({
+          participantId: { S: "kai" },
+          validUntil: { S: "2026-06-30" },
         }),
       }),
     );
@@ -593,6 +664,7 @@ describe("updateCourse Lambda", () => {
           participants: { L: [] },
         },
       })
+      .mockResolvedValueOnce({ Items: [] }) // #381 enrollments query
       .mockResolvedValueOnce({});
 
     const result = await handler(makeEvent({ status: "draft" }));
