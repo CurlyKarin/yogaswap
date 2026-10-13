@@ -297,6 +297,104 @@ export function planMissingOpenEnrollmentsFromParticipants(
   return { puts, addedParticipantIds, skippedParticipantIds };
 }
 
+export type PlanDraftToActivePlanungslisteMaterializationInput = {
+  courseId: number;
+  tenantId?: string;
+  /** Planungsliste at activation (`course.participants[]`). */
+  planungsliste: string[];
+  existingEnrollments: CourseEnrollment[];
+  /** Preferred validFrom (series start / first term); bumped past closed history. */
+  validFrom: string;
+  source?: CourseEnrollmentSource;
+  createdAt?: string;
+  actorUserId?: string;
+};
+
+export type PlanDraftToActivePlanungslisteMaterializationResult = {
+  puts: CourseEnrollment[];
+  addedParticipantIds: string[];
+  skippedParticipantIds: string[];
+};
+
+/**
+ * #382: draft → active — materialize Planungsliste into open enrollment segments.
+ * Skips anyone who already has an open segment. Closed history stays; new open row
+ * starts at `validFrom` or the day after the latest `validUntil` (no overlap / key clash).
+ */
+export function planDraftToActivePlanungslisteMaterialization(
+  input: PlanDraftToActivePlanungslisteMaterializationInput,
+): PlanDraftToActivePlanungslisteMaterializationResult {
+  const source = input.source ?? "reactivation";
+  const forCourse = input.existingEnrollments.filter((entry) => entry.courseId === input.courseId);
+  const puts: CourseEnrollment[] = [];
+  const addedParticipantIds: string[] = [];
+  const skippedParticipantIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of input.planungsliste) {
+    const participantId = raw.trim();
+    if (!participantId) continue;
+    const key = participantId.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    if (findOpenEnrollmentForParticipant(forCourse, participantId)) {
+      skippedParticipantIds.push(participantId);
+      continue;
+    }
+
+    let validFrom = input.validFrom;
+    const latest = findLatestEnrollmentForParticipant(forCourse, participantId);
+    if (latest?.validUntil) {
+      const afterClosed = addDaysIso(latest.validUntil, 1);
+      if (afterClosed > validFrom) validFrom = afterClosed;
+    }
+
+    const existingForParticipant = enrollmentsForParticipant(forCourse, participantId);
+    const keyTaken = (from: string) =>
+      existingForParticipant.some((entry) => entry.validFrom === from) ||
+      puts.some(
+        (entry) =>
+          entry.participantId.toLowerCase() === key && entry.validFrom === from,
+      );
+    while (keyTaken(validFrom)) {
+      validFrom = addDaysIso(validFrom, 1);
+    }
+
+    const proposed = { validFrom };
+    const overlaps = existingForParticipant.some((entry) =>
+      enrollmentRangesOverlap(entry, proposed),
+    );
+    if (overlaps) {
+      const bumpFrom = existingForParticipant.reduce((acc, entry) => {
+        const end =
+          entry.validUntil && entry.validUntil !== "" ? entry.validUntil : entry.validFrom;
+        const next = addDaysIso(end, 1);
+        return next > acc ? next : acc;
+      }, validFrom);
+      validFrom = bumpFrom;
+      while (keyTaken(validFrom)) {
+        validFrom = addDaysIso(validFrom, 1);
+      }
+    }
+
+    puts.push(
+      buildOpenEnrollment({
+        courseId: input.courseId,
+        participantId,
+        validFrom,
+        tenantId: input.tenantId,
+        source,
+        actorUserId: input.actorUserId,
+        createdAt: input.createdAt,
+      }),
+    );
+    addedParticipantIds.push(participantId);
+  }
+
+  return { puts, addedParticipantIds, skippedParticipantIds };
+}
+
 /** Open stem cache: segments without validUntil (or until in the future relative to `asOf`). */
 export function openEnrollmentParticipantIds(
   enrollments: Array<Pick<CourseEnrollment, "participantId" | "validUntil">>,

@@ -41,8 +41,10 @@ import {
   buildCourseEnrollmentSortKey,
   enrollmentChangesToDateMaps,
   migrateLegacyOverrideToDeltas,
+  planDraftToActivePlanungslisteMaterialization,
   planInactiveToDraftEnrollmentTransition,
   planStemEnrollmentWrites,
+  ENROLLMENT_OPEN_START,
   removeUserCaseInsensitive,
   resolveLifecycleMailRecipientIds,
   resolveMigrationValidFrom,
@@ -1056,7 +1058,63 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           createdAt: new Date().toISOString(),
           closedAt: new Date().toISOString(),
         });
-        for (const enrollment of planned.puts) {
+        const allPuts = [...planned.puts];
+        const allDeletes = [...planned.deletes];
+
+        // #382: after stem sync, ensure every Planungsliste member has an open segment
+        // (recycle: closed history blocks bootstrap — materialize new opens explicitly).
+        if (draftToActive) {
+          const deletedKeysForWorking = new Set(
+            allDeletes.map(
+              (enrollment) =>
+                `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`,
+            ),
+          );
+          const putByKeyForWorking = new Map(
+            allPuts.map((enrollment) => [
+              `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`,
+              enrollment,
+            ]),
+          );
+          const workingAfterStem = [
+            ...existingEnrollments.filter((enrollment) => {
+              const key = `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`;
+              return !deletedKeysForWorking.has(key) && !putByKeyForWorking.has(key);
+            }),
+            ...allPuts,
+          ];
+          const materializeValidFrom =
+            migrationValidFrom !== ENROLLMENT_OPEN_START
+              ? migrationValidFrom
+              : (nextOpenTermIso ?? upcomingTermIso ?? todayIso);
+          const materialized = planDraftToActivePlanungslisteMaterialization({
+            courseId: Number(courseId),
+            tenantId,
+            planungsliste: nextParticipantIds,
+            existingEnrollments: workingAfterStem,
+            validFrom: materializeValidFrom,
+            source: "reactivation",
+            actorUserId: actorUserId ?? undefined,
+            createdAt: new Date().toISOString(),
+          });
+          allPuts.push(...materialized.puts);
+          if (materialized.puts.length > 0) {
+            console.info(
+              JSON.stringify({
+                actor: actorUserId,
+                timestamp: new Date().toISOString(),
+                courseId,
+                reason: "draft_to_active_planungsliste_materialize",
+                validFrom: materializeValidFrom,
+                added: materialized.addedParticipantIds,
+                skipped: materialized.skippedParticipantIds,
+                putCount: materialized.puts.length,
+              }),
+            );
+          }
+        }
+
+        for (const enrollment of allPuts) {
           await client.send(
             new PutItemCommand({
               TableName: enrollmentsTable,
@@ -1064,7 +1122,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             }),
           );
         }
-        for (const enrollment of planned.deletes) {
+        for (const enrollment of allDeletes) {
           await client.send(
             new DeleteItemCommand({
               TableName: enrollmentsTable,
@@ -1082,13 +1140,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           );
         }
         const deletedKeys = new Set(
-          planned.deletes.map(
+          allDeletes.map(
             (enrollment) =>
               `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`,
           ),
         );
         const putByKey = new Map(
-          planned.puts.map((enrollment) => [
+          allPuts.map((enrollment) => [
             `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`,
             enrollment,
           ]),
@@ -1098,7 +1156,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             const key = `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`;
             return !deletedKeys.has(key) && !putByKey.has(key);
           }),
-          ...planned.puts,
+          ...allPuts,
         ];
         if (planned.puts.length > 0 || planned.deletes.length > 0) {
           console.info(

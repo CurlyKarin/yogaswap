@@ -11,6 +11,7 @@ import {
   migrateParticipantsToEnrollments,
   openEnrollmentParticipantIds,
   parseCourseEnrollmentSortKey,
+  planDraftToActivePlanungslisteMaterialization,
   planInactiveToDraftEnrollmentTransition,
   planMissingOpenEnrollmentsFromParticipants,
   planStemEnrollmentWrites,
@@ -155,6 +156,60 @@ describe("courseEnrollment", () => {
     });
     expect(planned.puts).toEqual([]);
     expect(planned.suggestedParticipants).toEqual(["luna", "kai"]);
+  });
+
+  it("planDraftToActivePlanungslisteMaterialization opens Planungsliste after closed history (#382)", () => {
+    const existing: CourseEnrollment[] = [
+      {
+        courseId: 9,
+        participantId: "luna",
+        validFrom: "2026-01-01",
+        validUntil: "2026-06-30",
+      },
+      {
+        courseId: 9,
+        participantId: "ghost",
+        validFrom: "2026-01-01",
+        validUntil: "2026-03-01",
+      },
+      { courseId: 9, participantId: "barbara", validFrom: "2026-10-12" },
+    ];
+    const planned = planDraftToActivePlanungslisteMaterialization({
+      courseId: 9,
+      tenantId: "default-tenant",
+      planungsliste: ["luna", "ghost", "barbara", "kai"],
+      existingEnrollments: existing,
+      validFrom: "2026-10-12",
+      createdAt: "2026-10-13T10:00:00.000Z",
+    });
+    expect(planned.skippedParticipantIds).toEqual(["barbara"]);
+    expect(planned.addedParticipantIds).toEqual(["luna", "ghost", "kai"]);
+    expect(planned.puts).toEqual([
+      {
+        tenantId: "default-tenant",
+        courseId: 9,
+        participantId: "luna",
+        validFrom: "2026-10-12",
+        source: "reactivation",
+        createdAt: "2026-10-13T10:00:00.000Z",
+      },
+      {
+        tenantId: "default-tenant",
+        courseId: 9,
+        participantId: "ghost",
+        validFrom: "2026-10-12",
+        source: "reactivation",
+        createdAt: "2026-10-13T10:00:00.000Z",
+      },
+      {
+        tenantId: "default-tenant",
+        courseId: 9,
+        participantId: "kai",
+        validFrom: "2026-10-12",
+        source: "reactivation",
+        createdAt: "2026-10-13T10:00:00.000Z",
+      },
+    ]);
   });
 
   it("planMissingOpenEnrollmentsFromParticipants only heals people with zero rows (#385)", () => {

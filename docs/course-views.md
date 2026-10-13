@@ -186,7 +186,7 @@ Nach Speichern eines neuen Fensters: `replanPending: false`, `deriveVisibleDates
 
 `replanPending` wird beim Statuswechsel **inactive → draft** (Kursblock) gesetzt und erst beim Speichern der Terminkonfiguration wieder gelöscht — damit Erstplanung mit Start heute/gestern am Folgetag nicht erneut zurückgesetzt wird.
 
-**Planungsliste (#381):** Beim `inactive → draft` schließt Backend offene Enrollments am **Blockende** und schreibt `participants[]` als Vorschlag aus `stemOn(Blockende)` (Studio kann im Mitglieder-Dialog kürzen/ergänzen). Materialisierung neuer Segmente: [#382](https://github.com/CurlyKarin/yogaswap/issues/382).
+**Planungsliste (#381 / #382):** Beim `inactive → draft` schließt Backend offene Enrollments am **Blockende** und schreibt `participants[]` als Vorschlag aus `stemOn(Blockende)` (Studio kann im Mitglieder-Dialog kürzen/ergänzen). Beim `draft → active` werden daraus neue offene Segmente materialisiert (`source: reactivation`).
 
 **Inaktive Kurse (#369):** Termin-Dialog nur lesend; API lehnt Schedule-Patches (`excludedDates`, Serienfenster, …) und Terminabsagen ab, solange der Status `inactive` bleibt. Neuplanung erst nach Wechsel auf „In Planung“.
 
