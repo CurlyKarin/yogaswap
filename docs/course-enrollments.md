@@ -74,6 +74,16 @@ Beim Statuswechsel **inactive → draft** (Wiederbeplanung):
 4. Expliziter `participants`-Patch im Request überschreibt den Vorschlag
 5. Neue offene Segmente für den nächsten Block entstehen erst bei **draft → active** (#382)
 
+### draft → active / Materialisierung (#382)
+
+Beim Statuswechsel **draft → active**:
+
+1. Bestehende Stem-Sync (`planStemEnrollmentWrites`) wie bisher (Adds/Removes, Bootstrap wenn Tabelle leer)
+2. Zusätzlich: für jede Person auf der **Planungsliste** ohne offenes Segment → neues offenes Segment (`source: reactivation`)
+3. `validFrom` = Serienstart / `visibleFrom` (`resolveMigrationValidFrom`); Fallback nächster offener Termin / heute. Bei geschlossener Historie: frühestens Tag nach letztem `validUntil`
+4. Geschlossene Historie bleibt; `participants[]` bleibt die Planungsliste (= Cache der Dabei-Liste nach Materialisierung)
+5. Draft-UI unverändert flach (keine ab/bis)
+
 ## Mitglieder-Dialog (#305)
 
 Der Dialog betrachtet den **aktuellen Zeitpunkt**. Die aktuellste Stamm-Information ist der **nächste noch offene Kurstermin R** (`stemOn(R)`), nicht das Kalenderdatum.
@@ -161,7 +171,7 @@ Ohne Segmente: Fallback auf die Planungsliste/Cache bis Backfill (#385).
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
 - `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy` / `resolveLifecycleMailRecipientIds`
-- `migrateParticipantsToEnrollments` / `planMissingOpenEnrollmentsFromParticipants` / `planInactiveToDraftEnrollmentTransition` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
+- `migrateParticipantsToEnrollments` / `planMissingOpenEnrollmentsFromParticipants` / `planInactiveToDraftEnrollmentTransition` / `planDraftToActivePlanungslisteMaterialization` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
 - `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForParticipant` / `enrollmentRangesOverlap`
 - `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`
 

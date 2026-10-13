@@ -396,12 +396,13 @@ describe("updateCourse Lambda", () => {
     expect(participantGets[0][0].Key.userId.S).toBe("luna");
   });
 
-  test("activation mail skips closed enrollments still in participants cache (#380)", async () => {
+  test("activation mail uses stemOn after Planungsliste materialize; closed-only off list skipped (#380/#382)", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("draft"),
-          participants: { L: [{ S: "luna" }, { S: "ghost" }] },
+          // ghost only in closed history, not on Planungsliste
+          participants: { L: [{ S: "luna" }] },
           seriesStartDate: { S: "2099-01-01" },
           seriesEndDate: { S: "2099-12-31" },
           visibleFrom: { S: "2099-01-01" },
@@ -452,6 +453,86 @@ describe("updateCourse Lambda", () => {
     );
     expect(participantGets).toHaveLength(1);
     expect(participantGets[0][0].Key.userId.S).toBe("luna");
+  });
+
+  test("draft -> active materializes Planungsliste opens after closed history (#382)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("draft"),
+          participants: { L: [{ S: "luna" }, { S: "kai" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+          dates: { L: [{ S: "2099-06-07" }] },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2026-06-30" },
+          },
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#kai#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "kai" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2026-06-30" },
+          },
+        ],
+      }) // enrollments query
+      .mockResolvedValueOnce({}) // materialize luna
+      .mockResolvedValueOnce({}) // materialize kai
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "kai@example.com" },
+          authUserId: { S: "auth-kai" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+
+    mockSesSend.mockResolvedValue({});
+
+    const result = await handler(makeEvent({ status: "active" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).status).toBe("active");
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Item: expect.objectContaining({
+          participantId: { S: "luna" },
+          validFrom: { S: "2099-01-01" },
+          source: { S: "reactivation" },
+        }),
+      }),
+    );
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Item: expect.objectContaining({
+          participantId: { S: "kai" },
+          validFrom: { S: "2099-01-01" },
+          source: { S: "reactivation" },
+        }),
+      }),
+    );
   });
 
   test("rejects plannedEndDate inside planning lock window", async () => {
