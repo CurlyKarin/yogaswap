@@ -2399,7 +2399,6 @@ export default function AdminPanel({
                       {deleteExitBlockers.courses.map((course) => (
                         <li key={`course-${course.courseId}`}>
                           {course.courseName?.trim() || `Kurs ${course.courseId}`}
-                          {course.reason === "roster" ? " (Stamm-Cache)" : ""}
                         </li>
                       ))}
                     </ul>

@@ -11,7 +11,7 @@ import { querySwapsForUserRefs } from "./swapQueryHelpers";
 export type StudioExitCourseBlocker = {
   courseId: number;
   courseName?: string;
-  /** @deprecated Roster-only blockers are no longer emitted (#271); kept for API compat. */
+  /** @deprecated Roster-only blockers are no longer emitted (#271 / #383); kept for API compat. */
   reason: "enrollment" | "roster";
 };
 
@@ -118,9 +118,9 @@ export async function collectStudioExitBlockers(params: {
     tableName: enrollmentsTable,
     tenantId,
   });
-  // CourseEnrollments are source of truth for "still planned" (#271 / #361).
-  // Stale course.participants[] alone must not block (check stays read-only;
-  // soft-delete still strips the nickname from the roster on execute).
+  // CourseEnrollments are source of truth for "still planned" (#271 / #361 / #383).
+  // Stale course.participants[] / Planungsliste alone must not block (check stays
+  // read-only; soft-delete still strips the nickname from the roster on execute).
   // Inactive courses: members cannot be edited in UI → do not block studio exit.
   // Draft (planning) and active: still block while enrollment has future/open validity.
   const enrollmentCourseIds = new Set<number>();
