@@ -150,6 +150,10 @@ Veraltet und nicht für Demo/Prod: `REWRITE_OPERATIONAL_TO_UUID=1` schreibt Nick
 
 Auth/Login bleibt beim Nickname (`userId` im JWT); Anzeige mappt über Roster/`getParticipants`.
 
+## Studio-Exit (#383)
+
+`collectStudioExitBlockers` blockiert Studio-Austritt nur über **CourseEnrollments** (offen bzw. `validUntil ≥ heute`) in active/draft, plus Zukunft-Swaps/Waitlist — **nicht** über alleinigen Eintrag in `course.participants[]` / Planungsliste. Soft-Delete entfernt den Cache-Eintrag trotzdem. Details: `docs/multi-tenancy.md`.
+
 ## Occupancy (#303)
 
 ```text

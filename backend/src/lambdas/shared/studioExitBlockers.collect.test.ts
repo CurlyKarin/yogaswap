@@ -27,13 +27,14 @@ describe("collectStudioExitBlockers", () => {
     mockedQuerySwaps.mockResolvedValue([]);
   });
 
-  it("does not block on stale course.participants when enrollment is already past (#271)", async () => {
+  it("does not block on stale course.participants when enrollment is already past (#271/#383)", async () => {
     mockSend
       .mockResolvedValueOnce({
         Items: [
           {
             courseId: { N: "1" },
             name: { S: "Yoga Flow" },
+            status: { S: "active" },
             participants: { L: [{ S: "bjorn" }] },
           },
         ],
@@ -64,6 +65,43 @@ describe("collectStudioExitBlockers", () => {
     expect(blockers.courses).toEqual([]);
     expect(blockers.swaps).toEqual([]);
     expect(blockers.waitlist).toEqual([]);
+    expect(hasNoBlockers(blockers)).toBe(true);
+  });
+
+  it("does not block when only on course.participants with zero enrollment rows (#383)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            courseId: { N: "5" },
+            name: { S: "Planung" },
+            status: { S: "draft" },
+            participants: { L: [{ S: "bjorn" }] },
+          },
+          {
+            courseId: { N: "6" },
+            name: { S: "Aktiv Drift" },
+            status: { S: "active" },
+            participants: { L: [{ S: "bjorn" }] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ Items: [] });
+
+    mockedQueryEnrollments.mockResolvedValueOnce([]);
+
+    const blockers = await collectStudioExitBlockers({
+      client: { send: mockSend } as never,
+      tenantId: "t1",
+      userId: "bjorn",
+      coursesTable: "courses",
+      enrollmentsTable: "enrollments",
+      swapsTable: "swaps",
+      overridesTable: "overrides",
+      now: new Date("2026-09-24T12:00:00Z"),
+    });
+
+    expect(blockers.courses).toEqual([]);
     expect(hasNoBlockers(blockers)).toBe(true);
   });
 
