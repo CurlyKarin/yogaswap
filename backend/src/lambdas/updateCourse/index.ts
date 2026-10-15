@@ -18,9 +18,7 @@ import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeri
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
-  isPlanningModeChangeLocked,
   isPlannedEndDateAllowed,
-  isRollingInactiveBlocked,
   PLANNING_MODE_LOCKED_MESSAGE,
   PLANNED_END_INVALID_MESSAGE,
   ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
@@ -41,6 +39,9 @@ import {
   buildCourseEnrollmentSortKey,
   enrollmentChangesToDateMaps,
   migrateLegacyOverrideToDeltas,
+  deriveActiveParticipantsCacheFromStem,
+  hasPlannedEnrollmentStem,
+  isEnrollmentOpen,
   planDraftToActivePlanungslisteMaterialization,
   planInactiveToDraftEnrollmentTransition,
   planStemEnrollmentWrites,
@@ -535,12 +536,44 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const currentStatus = item.status?.S ?? "active";
     const currentPlanningMode = item.planningMode?.S ?? "bounded_series";
     const courseParticipants = item.participants?.L ?? [];
+    const enrollmentsTableForLocks = process.env.COURSE_ENROLLMENTS_TABLE;
+    /** #384: Active locks/transitions — Enrollments bevorzugt, Cache nur Fallback. */
+    let activeHasStemMembers: boolean | null = null;
+    const resolveActiveHasStemMembers = async (): Promise<boolean> => {
+      if (activeHasStemMembers != null) return activeHasStemMembers;
+      if (courseHasParticipants(courseParticipants)) {
+        activeHasStemMembers = true;
+        return true;
+      }
+      if (!enrollmentsTableForLocks || currentStatus !== "active") {
+        activeHasStemMembers = false;
+        return false;
+      }
+      try {
+        const rows = await queryCourseEnrollments({
+          client,
+          tableName: enrollmentsTableForLocks,
+          tenantId,
+          courseId: Number(courseId),
+        });
+        activeHasStemMembers = hasPlannedEnrollmentStem(rows, toIsoDateOnlyLocal(new Date()));
+      } catch (error) {
+        console.warn("updateCourse failed to load enrollments for stem presence", {
+          tenantId,
+          courseId,
+          error,
+        });
+        activeHasStemMembers = false;
+      }
+      return activeHasStemMembers;
+    };
 
     if (
       Object.prototype.hasOwnProperty.call(body, "planningMode") &&
       planningMode &&
       planningMode !== currentPlanningMode &&
-      isPlanningModeChangeLocked({ status: currentStatus, participants: courseParticipants })
+      currentStatus === "active" &&
+      (await resolveActiveHasStemMembers())
     ) {
       return {
         statusCode: 400,
@@ -581,7 +614,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       };
     }
     if (status && nextStatus !== currentStatus) {
-      const hasParticipants = courseHasParticipants(courseParticipants);
+      const hasParticipants =
+        currentStatus === "active"
+          ? await resolveActiveHasStemMembers()
+          : courseHasParticipants(courseParticipants);
       const transitionAllowed =
         (currentStatus === "inactive" && nextStatus === "draft") ||
         (currentStatus === "draft" && nextStatus === "active") ||
@@ -596,11 +632,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
       if (currentStatus === "active" && nextStatus === "inactive") {
         if (
-          isRollingInactiveBlocked({
-            status: currentStatus,
-            planningMode: currentPlanningMode,
-            participants: courseParticipants,
-          })
+          currentPlanningMode === "rolling_continuous" &&
+          (await resolveActiveHasStemMembers())
         ) {
           return {
             statusCode: 400,
@@ -1009,12 +1042,81 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
     const draftToActive = Boolean(status && currentStatus === "draft" && nextStatus === "active");
+    /**
+     * Draft = nur Planungsliste (`participants[]`); keine Enrollment-Writes (#381/#382).
+     * Segmente entstehen erst bei draft→active (Materialisierung) bzw. Active-Mitglieder-Sync.
+     */
     const shouldSyncEnrollments =
       Boolean(enrollmentsTable) &&
-      (participants != null || Boolean(enrollmentChanges?.length) || draftToActive) &&
-      (effectiveStatus === "draft" || effectiveStatus === "active");
+      (draftToActive ||
+        (effectiveStatus === "active" &&
+          (participants != null || Boolean(enrollmentChanges?.length))));
     /** Nach Sync: Segmente für Lifecycle-Mails (#380); sonst bei Bedarf nachgeladen. */
     let enrollmentsAfterSync: Awaited<ReturnType<typeof queryCourseEnrollments>> | null = null;
+
+    // Draft: vorzeitig angelegte Opens entfernen, wenn Planungsliste oder Kursfenster
+    // geändert wird (Planungsliste ist Wahrheit; keine hängenden Segmente mit altem validFrom).
+    const draftRosterOrWindowPatch =
+      participants != null ||
+      Object.prototype.hasOwnProperty.call(body, "seriesStartDate") ||
+      Object.prototype.hasOwnProperty.call(body, "seriesEndDate") ||
+      Object.prototype.hasOwnProperty.call(body, "visibleFrom") ||
+      Object.prototype.hasOwnProperty.call(body, "visibleUntil");
+    if (
+      enrollmentsTable &&
+      effectiveStatus === "draft" &&
+      !draftToActive &&
+      draftRosterOrWindowPatch
+    ) {
+      try {
+        const draftEnrollments = await queryCourseEnrollments({
+          client,
+          tableName: enrollmentsTable,
+          tenantId,
+          courseId: Number(courseId),
+        });
+        const prematureOpens = draftEnrollments.filter((enrollment) => isEnrollmentOpen(enrollment));
+        for (const enrollment of prematureOpens) {
+          await client.send(
+            new DeleteItemCommand({
+              TableName: enrollmentsTable,
+              Key: {
+                tenantId: { S: tenantId },
+                courseId_userId_validFrom: {
+                  S: buildCourseEnrollmentSortKey(
+                    enrollment.courseId,
+                    enrollment.participantId,
+                    enrollment.validFrom,
+                  ),
+                },
+              },
+            }),
+          );
+        }
+        if (prematureOpens.length > 0) {
+          console.info(
+            JSON.stringify({
+              actor: actorUserId,
+              timestamp: new Date().toISOString(),
+              courseId,
+              reason: "draft_purge_open_enrollments",
+              deletedCount: prematureOpens.length,
+            }),
+          );
+        }
+      } catch (enrollmentError) {
+        console.error("updateCourse draft open-enrollment purge failed", {
+          tenantId,
+          courseId,
+          error: enrollmentError,
+        });
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Failed to clear draft enrollments" }),
+        };
+      }
+    }
+
     if (shouldSyncEnrollments && enrollmentsTable) {
       const previousParticipantIds =
         item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
@@ -1030,10 +1132,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         seriesStartDate: nextSeriesStartDate,
         visibleFrom: nextVisibleFrom,
       });
-      const addValidFrom =
-        effectiveStatus === "draft" && !draftToActive
-          ? migrationValidFrom
-          : (nextOpenTermIso ?? upcomingTermIso ?? todayIso);
+      const addValidFrom = nextOpenTermIso ?? upcomingTermIso ?? todayIso;
       const removeValidUntil = lastClosedTermIso ?? todayIso;
       const dateMaps = enrollmentChangesToDateMaps(enrollmentChanges ?? undefined);
       try {
@@ -1043,46 +1142,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           tenantId,
           courseId: Number(courseId),
         });
-        const planned = planStemEnrollmentWrites({
-          courseId: Number(courseId),
-          tenantId,
-          previousParticipants: previousParticipantIds,
-          nextParticipants: nextParticipantIds,
-          existingEnrollments,
-          addValidFrom,
-          removeValidUntil,
-          addValidFromByParticipant: dateMaps.addValidFromByParticipant,
-          removeValidUntilByParticipant: dateMaps.removeValidUntilByParticipant,
-          bootstrapValidFrom: migrationValidFrom,
-          actorUserId: actorUserId ?? undefined,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        });
-        const allPuts = [...planned.puts];
-        const allDeletes = [...planned.deletes];
+        const allPuts: ReturnType<typeof planStemEnrollmentWrites>["puts"] = [];
+        const allDeletes: ReturnType<typeof planStemEnrollmentWrites>["deletes"] = [];
+        let planned: ReturnType<typeof planStemEnrollmentWrites> | null = null;
 
-        // #382: after stem sync, ensure every Planungsliste member has an open segment
-        // (recycle: closed history blocks bootstrap — materialize new opens explicitly).
         if (draftToActive) {
-          const deletedKeysForWorking = new Set(
-            allDeletes.map(
-              (enrollment) =>
-                `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`,
-            ),
+          // Premature draft opens would block materialization with stale validFrom — drop them.
+          // Closed history (#381) stays for recycle.
+          for (const enrollment of existingEnrollments) {
+            if (isEnrollmentOpen(enrollment)) {
+              allDeletes.push(enrollment);
+            }
+          }
+          const closedHistory = existingEnrollments.filter(
+            (enrollment) => !isEnrollmentOpen(enrollment),
           );
-          const putByKeyForWorking = new Map(
-            allPuts.map((enrollment) => [
-              `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`,
-              enrollment,
-            ]),
-          );
-          const workingAfterStem = [
-            ...existingEnrollments.filter((enrollment) => {
-              const key = `${enrollment.courseId}#${enrollment.participantId.toLowerCase()}#${enrollment.validFrom}`;
-              return !deletedKeysForWorking.has(key) && !putByKeyForWorking.has(key);
-            }),
-            ...allPuts,
-          ];
           const materializeValidFrom =
             migrationValidFrom !== ENROLLMENT_OPEN_START
               ? migrationValidFrom
@@ -1091,27 +1165,44 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             courseId: Number(courseId),
             tenantId,
             planungsliste: nextParticipantIds,
-            existingEnrollments: workingAfterStem,
+            existingEnrollments: closedHistory,
             validFrom: materializeValidFrom,
             source: "reactivation",
             actorUserId: actorUserId ?? undefined,
             createdAt: new Date().toISOString(),
           });
           allPuts.push(...materialized.puts);
-          if (materialized.puts.length > 0) {
-            console.info(
-              JSON.stringify({
-                actor: actorUserId,
-                timestamp: new Date().toISOString(),
-                courseId,
-                reason: "draft_to_active_planungsliste_materialize",
-                validFrom: materializeValidFrom,
-                added: materialized.addedParticipantIds,
-                skipped: materialized.skippedParticipantIds,
-                putCount: materialized.puts.length,
-              }),
-            );
-          }
+          console.info(
+            JSON.stringify({
+              actor: actorUserId,
+              timestamp: new Date().toISOString(),
+              courseId,
+              reason: "draft_to_active_planungsliste_materialize",
+              validFrom: materializeValidFrom,
+              purgedOpenCount: allDeletes.length,
+              added: materialized.addedParticipantIds,
+              skipped: materialized.skippedParticipantIds,
+              putCount: materialized.puts.length,
+            }),
+          );
+        } else {
+          planned = planStemEnrollmentWrites({
+            courseId: Number(courseId),
+            tenantId,
+            previousParticipants: previousParticipantIds,
+            nextParticipants: nextParticipantIds,
+            existingEnrollments,
+            addValidFrom,
+            removeValidUntil,
+            addValidFromByParticipant: dateMaps.addValidFromByParticipant,
+            removeValidUntilByParticipant: dateMaps.removeValidUntilByParticipant,
+            bootstrapValidFrom: migrationValidFrom,
+            actorUserId: actorUserId ?? undefined,
+            createdAt: new Date().toISOString(),
+            closedAt: new Date().toISOString(),
+          });
+          allPuts.push(...planned.puts);
+          allDeletes.push(...planned.deletes);
         }
 
         for (const enrollment of allPuts) {
@@ -1158,7 +1249,31 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           }),
           ...allPuts,
         ];
-        if (planned.puts.length > 0 || planned.deletes.length > 0) {
+
+        // #384 Active: persistierter Cache = stemOn(R), nicht Body 1:1 / parallele Wahrheit.
+        // Draft behält Planungsliste (Body bzw. #381-Vorschlag) unverändert.
+        if (effectiveStatus === "active") {
+          const referenceDateIso = nextOpenTermIso ?? upcomingTermIso ?? todayIso;
+          const previousCacheIds = nextParticipants
+            .map((entry) => entry.S ?? "")
+            .filter((entry) => entry.length > 0);
+          const derivedCacheIds = deriveActiveParticipantsCacheFromStem({
+            courseId: Number(courseId),
+            enrollments: enrollmentsAfterSync,
+            fallbackParticipants: previousCacheIds,
+            referenceDateIso,
+          });
+          nextParticipants = derivedCacheIds.map((entry) => ({ S: entry }));
+          updateItem.participants = { L: nextParticipants };
+          await client.send(
+            new PutItemCommand({
+              TableName: coursesTable,
+              Item: updateItem,
+            }),
+          );
+        }
+
+        if (planned && (planned.puts.length > 0 || planned.deletes.length > 0)) {
           console.info(
             JSON.stringify({
               actor: actorUserId,

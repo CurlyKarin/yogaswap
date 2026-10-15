@@ -101,8 +101,8 @@ export type Course = {
    */
   replanPending?: boolean;
   /**
-   * Aktueller Stamm-Cache: Nicknames (#317 hybrid).
-   * Parallel zu CourseEnrollments (#302); Occupancy pro Termin via `stemOn(date)` (#303).
+   * Draft = **Planungsliste**; Active = **Cache** `stemOn(R)` aus CourseEnrollments (#384 / #361).
+   * Nicknames (#317 hybrid). Occupancy pro Termin via `stemOn(date)` (#303) — nicht dieses Feld.
    */
   participants: string[];
   dates: string[]; // Liste der Termine

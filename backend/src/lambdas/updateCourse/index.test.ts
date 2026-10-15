@@ -432,6 +432,9 @@ describe("updateCourse Lambda", () => {
           },
         ],
       }) // enrollments sync query
+      .mockResolvedValueOnce({}) // purge premature open luna
+      .mockResolvedValueOnce({}) // materialize luna open
+      .mockResolvedValueOnce({}) // #384 active cache put from stemOn(R)
       .mockResolvedValueOnce({
         Item: {
           email: { S: "luna@example.com" },
@@ -490,9 +493,10 @@ describe("updateCourse Lambda", () => {
             validUntil: { S: "2026-06-30" },
           },
         ],
-      }) // enrollments query
+      }) // enrollments query (closed history only)
       .mockResolvedValueOnce({}) // materialize luna
       .mockResolvedValueOnce({}) // materialize kai
+      .mockResolvedValueOnce({}) // #384 active cache put
       .mockResolvedValueOnce({
         Item: {
           email: { S: "luna@example.com" },
@@ -971,11 +975,12 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/enrollmentChanges/);
   });
 
-  test("closes an enrollment while keeping the participant cache via enrollmentChanges", async () => {
+  test("closes enrollment and derives active cache from stemOn(R) (#384)", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({
         Item: {
           ...baseCourseItem("active"),
+          dates: { L: [{ S: "2099-06-07" }] },
           seriesStartDate: { S: "2099-01-01" },
           seriesEndDate: { S: "2099-12-31" },
           visibleFrom: { S: "2099-01-01" },
@@ -996,17 +1001,19 @@ describe("updateCourse Lambda", () => {
         ],
       }) // enrollments query
       .mockResolvedValueOnce({}) // enrollment put (close)
+      .mockResolvedValueOnce({}) // #384 cache put from stemOn(R)
       .mockResolvedValueOnce({ Items: [] }) // overrides
       .mockResolvedValueOnce({ Items: [] }); // swaps for luna
 
     const result = await handler(
       makeEvent({
         participants: ["luna"],
+        // validUntil before R → nicht mehr in stemOn(R)
         enrollmentChanges: [{ participantId: "luna", action: "remove", dateIso: "2026-08-14" }],
       }),
     );
     expect(result.statusCode).toBe(200);
-    expect(JSON.parse(result.body).participants).toEqual(["luna"]);
+    expect(JSON.parse(result.body).participants).toEqual([]);
     expect(PutItemCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         TableName: "test-courseEnrollments",
@@ -1017,6 +1024,51 @@ describe("updateCourse Lambda", () => {
         }),
       }),
     );
+    const coursePuts = (PutItemCommand as unknown as jest.Mock).mock.calls
+      .map((call) => call[0])
+      .filter((input) => input?.TableName === "test-courses");
+    expect(coursePuts.length).toBeGreaterThanOrEqual(2);
+    expect(coursePuts[coursePuts.length - 1].Item.participants.L).toEqual([]);
+  });
+
+  test("active cache keeps endet member while validUntil >= R (#384)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          dates: { L: [{ S: "2099-06-07" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // enrollment put (close at R)
+      .mockResolvedValueOnce({}) // #384 cache put
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [] });
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+        enrollmentChanges: [{ participantId: "luna", action: "remove", dateIso: "2099-06-07" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).participants).toEqual(["luna"]);
   });
 
   test("deletes a never-started enrollment instead of closing before validFrom", async () => {
@@ -1045,6 +1097,7 @@ describe("updateCourse Lambda", () => {
         ],
       }) // enrollments query
       .mockResolvedValueOnce({}) // enrollment delete
+      .mockResolvedValueOnce({}) // #384 active cache put
       .mockResolvedValueOnce({ Items: [] }) // overrides
       .mockResolvedValueOnce({ Items: [] }); // swaps for maja
 
@@ -1091,6 +1144,7 @@ describe("updateCourse Lambda", () => {
         ],
       }) // enrollments query
       .mockResolvedValueOnce({}) // enrollment put (correct until)
+      .mockResolvedValueOnce({}) // #384 active cache put
       .mockResolvedValueOnce({ Items: [] }) // overrides
       .mockResolvedValueOnce({ Items: [] }); // swaps for luna
 
@@ -1117,11 +1171,7 @@ describe("updateCourse Lambda", () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
       .mockResolvedValueOnce({}) // course put
-      .mockResolvedValueOnce({ Items: [] }) // enrollments query
-      .mockResolvedValueOnce({}) // enrollment puts (bootstrap/close/add)
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({});
+      .mockResolvedValueOnce({ Items: [] }); // draft purge query — no opens
 
     const result = await handler(
       makeEvent({
@@ -1138,11 +1188,55 @@ describe("updateCourse Lambda", () => {
       }),
     );
     expect(JSON.parse(result.body).participants).toEqual(["alice", "bob"]);
-    expect(QueryCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        TableName: "test-courseEnrollments",
+    // Draft: Planungsliste only — no enrollment puts
+    const enrollmentPuts = (PutItemCommand as unknown as jest.Mock).mock.calls
+      .map((call) => call[0])
+      .filter((input) => input?.TableName === "test-courseEnrollments");
+    expect(enrollmentPuts).toHaveLength(0);
+  });
+
+  test("draft participants save does not create enrollments and purges premature opens", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("draft"),
+          participants: { L: [{ S: "luna" }] },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+          },
+        ],
+      }) // draft purge query
+      .mockResolvedValueOnce({}); // delete premature open
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna", "kai"],
       }),
     );
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).participants.sort()).toEqual(["kai", "luna"]);
+    expect(DeleteItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: "test-courseEnrollments",
+        Key: expect.objectContaining({
+          courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+        }),
+      }),
+    );
+    const enrollmentPuts = (PutItemCommand as unknown as jest.Mock).mock.calls
+      .map((call) => call[0])
+      .filter((input) => input?.TableName === "test-courseEnrollments");
+    expect(enrollmentPuts).toHaveLength(0);
   });
 
   test("prunes out-of-window exceptions for bounded_series", async () => {
@@ -1305,6 +1399,7 @@ describe("updateCourse Lambda", () => {
       .mockResolvedValueOnce({ Items: [] }) // enrollments query
       .mockResolvedValueOnce({}) // enrollment put luna bootstrap
       .mockResolvedValueOnce({}) // enrollment put maya add
+      .mockResolvedValueOnce({}) // #384 active cache put
       .mockResolvedValueOnce({
         Items: [
           {
@@ -1374,6 +1469,7 @@ describe("updateCourse Lambda", () => {
       .mockResolvedValueOnce({}) // enrollment put luna bootstrap
       .mockResolvedValueOnce({}) // enrollment put karin bootstrap
       .mockResolvedValueOnce({}) // enrollment put karin close
+      .mockResolvedValueOnce({}) // #384 active cache put
       .mockResolvedValueOnce({
         Items: [
           {
@@ -1443,6 +1539,7 @@ describe("updateCourse Lambda", () => {
       .mockResolvedValueOnce({}) // enrollment put luna bootstrap
       .mockResolvedValueOnce({}) // enrollment put karin bootstrap
       .mockResolvedValueOnce({}) // enrollment put karin close
+      .mockResolvedValueOnce({}) // #384 active cache put
       .mockResolvedValueOnce({ Items: [] }) // overrides for course
       .mockResolvedValueOnce({
         Items: [
@@ -1508,6 +1605,7 @@ describe("updateCourse Lambda", () => {
       .mockResolvedValueOnce({ Items: [] }) // enrollments query
       .mockResolvedValueOnce({}) // enrollment put luna bootstrap
       .mockResolvedValueOnce({}) // enrollment put maya add
+      .mockResolvedValueOnce({}) // #384 active cache put
       .mockResolvedValueOnce({ Items: [] }) // overrides
       .mockResolvedValueOnce({
         Items: [
@@ -1594,7 +1692,8 @@ describe("updateCourse Lambda", () => {
           excludedDates: { L: [] },
         },
       })
-      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({ Items: [] }) // draft purge — no open enrollments
       .mockResolvedValueOnce({
         Items: [
           {
@@ -1608,7 +1707,7 @@ describe("updateCourse Lambda", () => {
           },
         ],
       })
-      .mockResolvedValueOnce({});
+      .mockResolvedValueOnce({}); // tombstone override delete
 
     const result = await handler(
       makeEvent({
