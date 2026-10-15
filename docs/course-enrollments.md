@@ -1,6 +1,6 @@
 # CourseEnrollments (Issue #302 / #293, #317 hybrid)
 
-Stamm-Mitgliedschaft als **Segmente mit Gültigkeit**, parallel zu `course.participants[]` (Cache aus Nicknames, vorerst behalten).
+Stamm-Mitgliedschaft als **Segmente mit Gültigkeit**. `course.participants[]` ist je nach Status **Planungsliste** (Draft) oder **Cache** `stemOn(R)` (Active) — keine parallele Wahrheit (#384 / #361).
 
 ## DynamoDB
 
@@ -54,15 +54,14 @@ Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehend
 
 ## Schreibpfade (#304)
 
-`updateCourse` mit `participants[]` (und Draft→Active):
+`updateCourse` mit `participants[]` / Status:
 
-1. Bestehende Segmente laden; Tabelle leer → Bootstrap aus bisherigem Stamm (`source: migration`)
-2. **Add:** neues offenes Segment  
-   - Active: `validFrom` = nächster Kurstermin (sonst heute)  
-   - Draft: `validFrom` = `seriesStartDate` / `visibleFrom` / Sentinel
-3. **Remove:** Segment schließen bzw. `validUntil` korrigieren (offenes oder bereits geschlossenes Segment, inklusiv). Default = letzter geschlossener Kurstermin (Cutoff/laufend/vergangen). Fallback ohne solchen Termin: heute.
-4. `course.participants[]` bleibt Cache der **aktuellen** Stamm-Liste an R (`stemOn(R)` / Dabei); kommende Segmente stehen in CourseEnrollments (#332)
-5. Override-/Swap-Cleanup bei Active bleibt (zukünftige Termine)
+1. **Draft:** nur Planungsliste (`participants[]`) — **keine** Enrollment-Writes. Vorhandene offene Segmente werden entfernt (Cleanup). Geschlossene Historie (#381) bleibt.
+2. **Active:** Segmente laden; Tabelle leer → Bootstrap aus bisherigem Stamm (`source: migration`)
+3. **Add (Active):** neues offenes Segment, `validFrom` = nächster Kurstermin (sonst heute)
+4. **Remove (Active):** Segment schließen bzw. `validUntil` korrigieren (offenes oder bereits geschlossenes Segment, inklusiv). Default = letzter geschlossener Kurstermin (Cutoff/laufend/vergangen). Fallback ohne solchen Termin: heute.
+5. **Active (#384):** nach Enrollment-Sync wird `course.participants[]` serverseitig aus `stemOn(R)` abgeleitet (Body nur Diff-Input, keine parallele Wahrheit).
+6. Override-/Swap-Cleanup bei Active bleibt (zukünftige Termine)
 
 ### inactive → draft / Planungsliste (#381)
 
@@ -78,11 +77,21 @@ Beim Statuswechsel **inactive → draft** (Wiederbeplanung):
 
 Beim Statuswechsel **draft → active**:
 
-1. Bestehende Stem-Sync (`planStemEnrollmentWrites`) wie bisher (Adds/Removes, Bootstrap wenn Tabelle leer)
-2. Zusätzlich: für jede Person auf der **Planungsliste** ohne offenes Segment → neues offenes Segment (`source: reactivation`)
+1. Offene Segmente (falls noch aus altem Draft-Sync) werden gelöscht — Planungsliste ist die Vorlage
+2. Für jede Person auf der **Planungsliste** → neues offenes Segment (`source: reactivation`), sofern nach Cleanup keines offen ist
 3. `validFrom` = Serienstart / `visibleFrom` (`resolveMigrationValidFrom`); Fallback nächster offener Termin / heute. Bei geschlossener Historie: frühestens Tag nach letztem `validUntil`
-4. Geschlossene Historie bleibt; `participants[]` bleibt die Planungsliste (= Cache der Dabei-Liste nach Materialisierung)
+4. Geschlossene Historie (#381) bleibt; danach setzt #384 den Active-Cache aus `stemOn(R)`
 5. Draft-UI unverändert flach (keine ab/bis)
+
+### Planungsliste (Draft) vs. Cache (Active) (#384)
+
+| Status | `course.participants[]` | Wahrheit |
+|--------|-------------------------|----------|
+| **draft** | **Planungsliste** — editierbar; Vorlage für draft→active; **keine** Enrollments | Liste selbst |
+| **active** | **Cache** = `stemOn(R)` — nur Ableitung nach Writes | CourseEnrollments |
+| **inactive** | ggf. Legacy/Reste; Soft-Delete räumt auf | Historie in Enrollments; Exit blockiert nicht |
+
+Reader (Sichtbarkeit, „nur meine Kurse“, Occupancy, Mails, Exit-Locks) bevorzugen Enrollments/`stemOn`; Cache nur Fallback ohne Segmente.
 
 ## Mitglieder-Dialog (#305)
 
@@ -175,6 +184,7 @@ Ohne Segmente: Fallback auf die Planungsliste/Cache bis Backfill (#385).
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
 - `stemOnDate` / `isEnrollmentActiveOnDate` / `resolveStemForDate` / `resolveEffectiveTermOccupancy` / `resolveLifecycleMailRecipientIds`
+- `deriveActiveParticipantsCacheFromStem` / `isActorOnCourseStem` / `hasPlannedEnrollmentStem` / `stemReferenceDateIso` (#384)
 - `migrateParticipantsToEnrollments` / `planMissingOpenEnrollmentsFromParticipants` / `planInactiveToDraftEnrollmentTransition` / `planDraftToActivePlanungslisteMaterialization` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
 - `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForParticipant` / `enrollmentRangesOverlap`
 - `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`
@@ -183,4 +193,4 @@ Backend: `courseEnrollmentDynamo.ts` (Put/Get/Query-Mapping).
 
 ## Nächste Schritte
 
-- Später: `participants[]` entfernen
+- Optional: Feld `participants[]` deprecaten/umbenennen (nicht Teil von #384)

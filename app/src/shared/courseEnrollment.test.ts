@@ -20,6 +20,10 @@ import {
   resolveStemForDate,
   stemOnDate,
   resolveLifecycleMailRecipientIds,
+  deriveActiveParticipantsCacheFromStem,
+  hasPlannedEnrollmentStem,
+  isActorOnCourseStem,
+  stemReferenceDateIso,
 } from "shared/courseEnrollment";
 import type { CourseEnrollment } from "shared/types";
 
@@ -270,6 +274,56 @@ describe("courseEnrollment", () => {
     ];
     expect(resolveStemForDate(course, enrollments, "2026-03-15")).toEqual(["luna"]);
     expect(resolveStemForDate(course, enrollments, "2026-04-01")).toEqual(["luna", "mia"]);
+  });
+
+  it("deriveActiveParticipantsCacheFromStem equals stemOn(R) (#384)", () => {
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 1, participantId: "luna", validFrom: "2026-01-01" },
+      {
+        courseId: 1,
+        participantId: "ghost",
+        validFrom: "2026-01-01",
+        validUntil: "2026-02-01",
+      },
+      { courseId: 1, participantId: "kai", validFrom: "2026-06-01" },
+    ];
+    expect(
+      deriveActiveParticipantsCacheFromStem({
+        courseId: 1,
+        enrollments,
+        fallbackParticipants: ["luna", "ghost", "stale"],
+        referenceDateIso: "2026-03-10",
+      }),
+    ).toEqual(["luna"]);
+    expect(
+      deriveActiveParticipantsCacheFromStem({
+        courseId: 1,
+        enrollments: [],
+        fallbackParticipants: ["luna", "ghost"],
+        referenceDateIso: "2026-03-10",
+      }),
+    ).toEqual(["luna", "ghost"]);
+  });
+
+  it("isActorOnCourseStem prefers enrollments over drift cache (#384)", () => {
+    const course = {
+      id: 1,
+      participants: ["ghost"],
+      dates: ["2026-03-10", "2026-03-17"],
+    };
+    const enrollments: CourseEnrollment[] = [
+      { courseId: 1, participantId: "luna", validFrom: "2026-01-01" },
+    ];
+    expect(isActorOnCourseStem(course, enrollments, { nickname: "luna" }, "2026-03-01")).toBe(true);
+    expect(isActorOnCourseStem(course, enrollments, { nickname: "ghost" }, "2026-03-01")).toBe(false);
+    expect(stemReferenceDateIso(["2026-03-10", "2026-03-17"], "2026-03-12")).toBe("2026-03-17");
+    expect(hasPlannedEnrollmentStem(enrollments, "2026-03-01")).toBe(true);
+    expect(
+      hasPlannedEnrollmentStem(
+        [{ validUntil: "2026-02-01" }],
+        "2026-03-01",
+      ),
+    ).toBe(false);
   });
 
   it("resolveLifecycleMailRecipientIds uses stemOn(R), not drift cache (#380)", () => {

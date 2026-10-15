@@ -38,8 +38,7 @@ import {
 } from "../api/courses";
 import type { ParticipantRosterEntry } from "../api/participants";
 import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
-import { includesParticipantRef } from "shared/participantActor";
-import type { EnrollmentChange } from "shared/courseEnrollment";
+import { isActorOnCourseStem, type EnrollmentChange } from "shared/courseEnrollment";
 import {
   looksLikeAutomaticallyInactive,
   wouldAutoDeactivateOnReconcile,
@@ -271,20 +270,28 @@ export default function CourseList({
     await onRefresh();
   }, [onRefresh]);
 
+  const todayIso = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
+
   const visibleCourses = useMemo(() => {
     return courses.filter((course) =>
       canSeeCourse(membershipForPermissions, tenant?.settings, course, {
         isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === actor.nickname.toLowerCase()),
-        isBookedByUser: includesParticipantRef(course.participants, actor),
+        isBookedByUser: isActorOnCourseStem(course, enrollments, actor, todayIso),
       }),
     );
-  }, [courses, membershipForPermissions, tenant?.settings, actor]);
+  }, [courses, membershipForPermissions, tenant?.settings, actor, enrollments, todayIso]);
 
   const participantCoursesToRender = useMemo(() => {
     const hasVisibleCourseDates = (c: Course) => getCourseDates(c).length > 0;
     const seeCtx = (course: Course) => ({
       isTaughtByUser: (course.instructors ?? []).some((p) => p.toLowerCase() === actor.nickname.toLowerCase()),
-      isBookedByUser: includesParticipantRef(course.participants, actor),
+      isBookedByUser: isActorOnCourseStem(course, enrollments, actor, todayIso),
     });
     return visibleCourses.filter((c) =>
       canShowParticipantCourseCard(membershipForPermissions, tenant?.settings, c, {
@@ -292,7 +299,7 @@ export default function CourseList({
         hasVisibleCourseDates: hasVisibleCourseDates(c),
       }),
     );
-  }, [visibleCourses, membershipForPermissions, tenant?.settings, actor]);
+  }, [visibleCourses, membershipForPermissions, tenant?.settings, actor, enrollments, todayIso]);
   const coursesToRender = canSeeCourseManagement ? visibleCourses : participantCoursesToRender;
   const deleteTargetCourse = deleteTargetId
     ? visibleCourses.find((course) => course.id === deleteTargetId)

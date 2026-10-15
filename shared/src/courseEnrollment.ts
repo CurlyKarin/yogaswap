@@ -3,6 +3,7 @@ import {
   type EffectiveTermParticipants,
 } from "./overrideOccupancy";
 import { courseBlockEndIso } from "./courseStatus";
+import { includesParticipantRef, type ParticipantActor } from "./participantActor";
 import type { Course, CourseDateOverride, CourseEnrollment, CourseEnrollmentSource } from "./types";
 
 /**
@@ -158,6 +159,63 @@ export function resolveLifecycleMailRecipientIds(input: {
     { id: input.courseId, participants: input.fallbackParticipants },
     input.enrollments,
     input.referenceDateIso,
+  );
+}
+
+/**
+ * #384 Active: persistierter `participants[]`-Cache = `stemOn(referenceDate)`.
+ * Draft behält die Planungsliste (nicht über diese Ableitung schreiben).
+ * Ohne Segmente: Fallback auf `fallbackParticipants`.
+ */
+export function deriveActiveParticipantsCacheFromStem(input: {
+  courseId: number;
+  enrollments: EnrollmentStemInput[] | null | undefined;
+  fallbackParticipants?: string[];
+  referenceDateIso: string;
+}): string[] {
+  return resolveStemForDate(
+    { id: input.courseId, participants: input.fallbackParticipants ?? [] },
+    input.enrollments,
+    input.referenceDateIso,
+  );
+}
+
+/** Referenztermin für Listen/Filter: nächster Termin ≥ heute, sonst letzter, sonst heute. */
+export function stemReferenceDateIso(dates: string[] | undefined, todayIso: string): string {
+  const sorted = [...(dates ?? [])].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  return sorted.find((d) => d >= todayIso) ?? sorted[sorted.length - 1] ?? todayIso;
+}
+
+/**
+ * #384 Active-Reader: Actor auf Stamm an Referenztermin (Enrollments/`stemOn`),
+ * ohne Segmente Fallback auf `course.participants`.
+ */
+export function isActorOnCourseStem(
+  course: Pick<Course, "id" | "participants" | "dates">,
+  enrollments: EnrollmentStemInput[] | null | undefined,
+  actor: ParticipantActor,
+  todayIso: string,
+): boolean {
+  const referenceDateIso = stemReferenceDateIso(course.dates, todayIso);
+  return includesParticipantRef(
+    resolveStemForDate(course, enrollments, referenceDateIso),
+    actor,
+  );
+}
+
+/**
+ * Geplante Stamm-Präsenz: offenes Segment oder `validUntil ≥ asOfIso`
+ * (für Policy-Locks; Cache allein reicht nach #384 nicht).
+ */
+export function hasPlannedEnrollmentStem(
+  enrollments: Array<Pick<CourseEnrollment, "validUntil">> | null | undefined,
+  asOfIso: string,
+): boolean {
+  return (enrollments ?? []).some(
+    (enrollment) =>
+      enrollment.validUntil == null ||
+      enrollment.validUntil === "" ||
+      enrollment.validUntil >= asOfIso,
   );
 }
 

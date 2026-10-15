@@ -1,6 +1,6 @@
-import type { Course, Swap } from "shared/types";
+import type { Course, CourseEnrollment, Swap } from "shared/types";
+import { isActorOnCourseStem } from "shared/courseEnrollment";
 import {
-  includesParticipantRef,
   matchesSwapParticipant,
   type ParticipantActor,
 } from "shared/participantActor";
@@ -10,6 +10,13 @@ function equalsIgnoreCase(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
 
+function todayIsoLocal(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /** True if the user is listed as instructor on at least one course. */
 export function hasInstructorAssignment(courses: Course[], nickname: string): boolean {
   return courses.some((course) =>
@@ -17,15 +24,17 @@ export function hasInstructorAssignment(courses: Course[], nickname: string): bo
   );
 }
 
-/** Stammplatz oder Instructor-Zuweisung am Kurs (nicht nur Tausch). */
+/** Stammplatz oder Instructor-Zuweisung am Kurs (nicht nur Tausch). #384: Stamm via stemOn. */
 export function hasStemOrInstructorInvolvement(
   course: Course,
   actor: ParticipantActor,
+  enrollments?: CourseEnrollment[] | null,
+  todayIso: string = todayIsoLocal(),
 ): boolean {
   if ((course.instructors ?? []).some((instructor) => equalsIgnoreCase(instructor, actor.nickname))) {
     return true;
   }
-  return includesParticipantRef(course.participants, actor);
+  return isActorOnCourseStem(course, enrollments, actor, todayIso);
 }
 
 /**
@@ -36,8 +45,9 @@ export function isPersonallyInvolvedInCourse(
   course: Course,
   actor: ParticipantActor,
   swaps: Swap[],
+  enrollments?: CourseEnrollment[] | null,
 ): boolean {
-  if (hasStemOrInstructorInvolvement(course, actor)) return true;
+  if (hasStemOrInstructorInvolvement(course, actor, enrollments)) return true;
   return swaps.some(
     (swap) =>
       matchesSwapParticipant(swap, actor) &&
@@ -72,8 +82,9 @@ export function narrowWeekOccurrencesForOnlyMyCourses(
   occurrences: WeekOccurrence[],
   actor: ParticipantActor,
   swaps: Swap[],
+  enrollments?: CourseEnrollment[] | null,
 ): WeekOccurrence[] {
-  if (hasStemOrInstructorInvolvement(course, actor)) return occurrences;
+  if (hasStemOrInstructorInvolvement(course, actor, enrollments)) return occurrences;
   const swapDates = personalSwapDateIsosForCourse(course.id, actor, swaps);
   if (swapDates.size === 0) return [];
   return occurrences.filter((occurrence) => swapDates.has(occurrence.dateIso));

@@ -9,10 +9,8 @@ import {
   UserTenantMembership,
   DEFAULT_TENANT_ID,
 } from "shared/types";
-import {
-  includesParticipantRef,
-  resolveActorParticipantRef,
-} from "shared/participantActor";
+import { isActorOnCourseStem } from "shared/courseEnrollment";
+import { resolveActorParticipantRef } from "shared/participantActor";
 import { canSeeCourse, canManageParticipants, canShowParticipantCourseCard, isActiveCourseForWeekView } from "shared/permissions";
 import { getCourses } from "../api/courses";
 import { getCourseEnrollments } from "../api/courseEnrollments";
@@ -135,14 +133,22 @@ export function useCoursesData({
     [participantRoster],
   );
 
+  const todayIso = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
+
   const courseContext = useCallback(
     (course: Course) => ({
       isTaughtByUser: (course.instructors ?? []).some(
         (p) => p.toLowerCase() === actor.nickname.toLowerCase(),
       ),
-      isBookedByUser: includesParticipantRef(course.participants, actor),
+      isBookedByUser: isActorOnCourseStem(course, enrollments, actor, todayIso),
     }),
-    [actor],
+    [actor, enrollments, todayIso],
   );
 
   const fetchData = useCallback(async () => {
@@ -260,19 +266,20 @@ export function useCoursesData({
 
       if (
         onlyMyCourses &&
-        !isPersonallyInvolvedInCourse(course, actor, swaps)
+        !isPersonallyInvolvedInCourse(course, actor, swaps, enrollments)
       ) {
         continue;
       }
 
       let weekOccurrences = occurrences;
       let cardDateIsos: string[] | undefined;
-      if (onlyMyCourses && !hasStemOrInstructorInvolvement(course, actor)) {
+      if (onlyMyCourses && !hasStemOrInstructorInvolvement(course, actor, enrollments)) {
         weekOccurrences = narrowWeekOccurrencesForOnlyMyCourses(
           course,
           occurrences,
           actor,
           swaps,
+          enrollments,
         );
         if (weekOccurrences.length === 0) continue;
         cardDateIsos = Array.from(personalSwapDateIsosForCourse(course.id, actor, swaps)).sort(
@@ -300,6 +307,7 @@ export function useCoursesData({
     onlyMyCourses,
     actor,
     swaps,
+    enrollments,
   ]);
 
   const earliestWeekAnchor = useMemo(

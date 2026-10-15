@@ -22,7 +22,7 @@ DynamoDB erlaubt keine Änderung von Partition- oder Sort-Key bestehender Tabell
 | weekday       | S   | –             | Wochentag (z. B. Mon, Tue) |
 | time          | S   | –             | Uhrzeit (z. B. 19:30) |
 | capacity      | N   | –             | Kapazität |
-| participants  | L   | –             | Stamm-Cache: **Nicknames** (#317 hybrid; UUID nur am Profil) |
+| participants  | L   | –             | Draft = Planungsliste; Active = Cache `stemOn(R)` (#384). **Nicknames** (#317 hybrid) |
 | dates         | L   | –             | Liste Termine (ISO-Datum) |
 
 - **Zugriff:** `Query` mit `KeyConditionExpression: tenantId = :tid`. Einzelner Kurs: `Query(tenantId, courseId)`.

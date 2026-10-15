@@ -121,9 +121,8 @@ export function useCourseCardTermState({
 
   const userNameLower = actorRef.toLowerCase();
   const isParticipant = includesParticipantRef(participants, actor);
-  const originallyParticipant = useTermScopedParticipantState
-    ? includesParticipantRef(stemForSelectedDate, actor)
-    : includesParticipantRef(course.participants, actor);
+  // #384: Stamm immer über stemOn / Enrollments (Cache nur Fallback ohne Segmente).
+  const originallyParticipant = includesParticipantRef(stemForSelectedDate, actor);
   const isShortNotice = isShortNoticeCancelled(override, userName);
   const hasCancelled = hasEffectiveCancellation(
     originallyParticipant,
