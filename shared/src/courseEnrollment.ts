@@ -130,13 +130,17 @@ export type EnrollmentStemInput = Pick<
 
 /**
  * Stamm an Termin T: aus CourseEnrollments via `stemOnDate`.
- * Ohne Segmente für den Kurs → Fallback auf `course.participants` (Cache / vor Migration).
+ * **Draft (#393 / #361):** Planungsliste (`course.participants`) — nicht geschlossene Historie.
+ * Active/sonst: Segmente; ohne Zeilen Fallback auf `course.participants` (Cache / vor Migration).
  */
 export function resolveStemForDate(
-  course: Pick<Course, "id" | "participants">,
+  course: Pick<Course, "id" | "participants" | "status">,
   enrollments: EnrollmentStemInput[] | null | undefined,
   dateIso: string,
 ): string[] {
+  if (course.status === "draft") {
+    return [...(course.participants ?? [])];
+  }
   const forCourse = (enrollments ?? []).filter((entry) => entry.courseId === course.id);
   if (forCourse.length === 0) {
     return [...(course.participants ?? [])];
@@ -189,9 +193,10 @@ export function stemReferenceDateIso(dates: string[] | undefined, todayIso: stri
 /**
  * #384 Active-Reader: Actor auf Stamm an Referenztermin (Enrollments/`stemOn`),
  * ohne Segmente Fallback auf `course.participants`.
+ * **Draft (#393):** Planungsliste.
  */
 export function isActorOnCourseStem(
-  course: Pick<Course, "id" | "participants" | "dates">,
+  course: Pick<Course, "id" | "participants" | "dates" | "status">,
   enrollments: EnrollmentStemInput[] | null | undefined,
   actor: ParticipantActor,
   todayIso: string,
@@ -219,9 +224,9 @@ export function hasPlannedEnrollmentStem(
   );
 }
 
-/** Occupancy an Termin T: stemOn(T) ⊕ Override-Deltas (#303). */
+/** Occupancy an Termin T: stemOn(T) ⊕ Override-Deltas (#303). Draft: Planungsliste (#393). */
 export function resolveEffectiveTermOccupancy(
-  course: Pick<Course, "id" | "participants">,
+  course: Pick<Course, "id" | "participants" | "status">,
   override: Pick<
     CourseDateOverride,
     "participants" | "cancelledParticipants" | "swapped" | "shortNoticeCancellations"

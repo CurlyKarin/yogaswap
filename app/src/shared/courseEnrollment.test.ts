@@ -276,6 +276,36 @@ describe("courseEnrollment", () => {
     expect(resolveStemForDate(course, enrollments, "2026-04-01")).toEqual(["luna", "mia"]);
   });
 
+  it("resolveStemForDate uses Planungsliste for draft even with closed history (#393)", () => {
+    const course = {
+      id: 6,
+      status: "draft" as const,
+      participants: ["luna", "kai", "maya"],
+    };
+    const enrollments: CourseEnrollment[] = [
+      {
+        courseId: 6,
+        participantId: "luna",
+        validFrom: "2026-01-01",
+        validUntil: "2026-06-30",
+      },
+      {
+        courseId: 6,
+        participantId: "ghost",
+        validFrom: "2026-01-01",
+        validUntil: "2026-03-01",
+      },
+    ];
+    expect(resolveStemForDate(course, enrollments, "2099-06-07")).toEqual([
+      "luna",
+      "kai",
+      "maya",
+    ]);
+    expect(
+      resolveStemForDate({ ...course, status: "active" }, enrollments, "2099-06-07"),
+    ).toEqual([]);
+  });
+
   it("deriveActiveParticipantsCacheFromStem equals stemOn(R) (#384)", () => {
     const enrollments: CourseEnrollment[] = [
       { courseId: 1, participantId: "luna", validFrom: "2026-01-01" },

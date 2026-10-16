@@ -91,7 +91,7 @@ Beim Statuswechsel **draft → active**:
 | **active** | **Cache** = `stemOn(R)` — nur Ableitung nach Writes | CourseEnrollments |
 | **inactive** | ggf. Legacy/Reste; Soft-Delete räumt auf | Historie in Enrollments; Exit blockiert nicht |
 
-Reader (Sichtbarkeit, „nur meine Kurse“, Occupancy, Mails, Exit-Locks) bevorzugen Enrollments/`stemOn`; Cache nur Fallback ohne Segmente.
+Reader: **Draft** Occupancy/Kurskarte = Planungsliste (`participants[]`), auch wenn geschlossene Enrollment-Historie existiert (#393). **Active:** Enrollments/`stemOn`; Cache nur Fallback ohne Segmente.
 
 ## Mitglieder-Dialog (#305)
 

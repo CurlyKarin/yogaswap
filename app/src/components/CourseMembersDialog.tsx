@@ -121,10 +121,11 @@ export default function CourseMembersDialog({
     if (!open) return;
     setSelectedParticipants(Array.from(new Set(initialParticipants)).sort((a, b) => a.localeCompare(b)));
     const forCourse = (enrollments ?? []).filter((entry) => entry.courseId === courseId);
+    // Draft (#393): Planungsliste is truth — do not seed UI from closed enrollment history.
     const initial =
-      forCourse.length > 0
-        ? forCourse
-        : syntheticOpenEnrollments(courseId ?? 0, initialParticipants);
+      isDraft || forCourse.length === 0
+        ? syntheticOpenEnrollments(courseId ?? 0, initialParticipants)
+        : forCourse;
     originalEnrollmentsRef.current = initial;
     setWorkingEnrollments(initial);
     setSearch("");
