@@ -7,7 +7,7 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { useCognitoAuth } from "../auth/useCognitoAuth";
 import { clearCognitoSession } from "../auth/cognitoSession";
 import { consumeSessionNotice } from "../auth/sessionExpiry";
-import { isDemoLoginEnabled } from "../lib/demoLoginFlag";
+import { isDemoLoginEnabled, SHOW_DEMO_LOGIN } from "../lib/demoLoginFlag";
 
 type Props = {
   onLogin: (user: User) => void;
@@ -22,8 +22,9 @@ type LoginRouteState = {
   prefillPassword?: unknown;
 };
 
-const DEMO_USERNAME = "Luna";
-const DEMO_PASSWORD = "Hallo123!";
+/** Nur im Demo-Build vorhanden (#392) — bei staging/prod wegoptimiert. */
+const DEMO_USERNAME = SHOW_DEMO_LOGIN ? "Luna" : "";
+const DEMO_PASSWORD = SHOW_DEMO_LOGIN ? "Hallo123!" : "";
 
 export default function Login({ onLogin, guestRoute = false, sessionNotice = "" }: Props) {
   const { state, pathname } = useLocation();
