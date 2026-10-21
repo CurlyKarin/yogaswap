@@ -152,7 +152,34 @@ if [ "$SKIP_BUILD" = false ]; then
         echo "   (sonst würden falsche Cognito-Werte eingebacken)."
         exit 1
     fi
+
+    # #392 / #100: Demo-Login in Prod nie. Staging darf es absichtlich (QA).
+    if [ "$VITE_MODE" = "prod" ]; then
+        if grep -E '^[[:space:]]*VITE_SHOW_DEMO_LOGIN[[:space:]]*=[[:space:]]*true([[:space:]]|$)' \
+            ".env.$VITE_MODE" >/dev/null 2>&1; then
+            echo "❌ VITE_SHOW_DEMO_LOGIN=true in app/.env.prod"
+            echo "   Prod darf kein Demo-Login einbetten (#392)."
+            echo "   Lokal und GitHub-Secret APP_ENV_PROD: Flag weglassen oder false."
+            exit 1
+        fi
+    fi
+    if [ "$VITE_MODE" = "staging" ]; then
+        if grep -E '^[[:space:]]*VITE_SHOW_DEMO_LOGIN[[:space:]]*=[[:space:]]*true([[:space:]]|$)' \
+            ".env.$VITE_MODE" >/dev/null 2>&1; then
+            echo "⚠️  VITE_SHOW_DEMO_LOGIN=true in app/.env.staging (Demo-Login auf Staging, #392)"
+        fi
+    fi
+
     npm run build -- --mode "$VITE_MODE"
+
+    # Prod: Demo-Passwort darf nicht im Bundle landen.
+    if [ "$VITE_MODE" = "prod" ]; then
+        if grep -Rql 'Hallo123!' build/assets 2>/dev/null; then
+            echo "❌ Demo-Credentials (Hallo123!) im Prod-Bundle gefunden (#392)"
+            echo "   Build abgebrochen — prüfe VITE_SHOW_DEMO_LOGIN und Login.tsx Tree-Shaking."
+            exit 1
+        fi
+    fi
     echo ""
 
     cd "$TF_DIR"
@@ -162,6 +189,7 @@ else
     echo "⏭️  Build übersprungen (--skip-build)"
     echo "    ⚠️  Es wird der zuletzt gebaute Stand aus app/build hochgeladen."
     echo "        Stelle sicher, dass dieser zur Umgebung '$ENV' passt!"
+    echo "        Prod: kein Demo-Login (#392)."
     echo ""
 fi
 

@@ -26,6 +26,7 @@ vi.mock("../auth/cognitoSession", () => ({
 }));
 
 vi.mock("../lib/demoLoginFlag", () => ({
+  SHOW_DEMO_LOGIN: true,
   isDemoLoginEnabled: vi.fn(() => true),
 }));
 

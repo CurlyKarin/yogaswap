@@ -20,6 +20,18 @@ Repo-Secret: `DEPLOY_ROLE_ARN` (OIDC-Rolle).
 
 Entsprechen den lokalen Dateien `projects/yogaswap/env.<workspace>.json` und `app/.env.<mode>`.
 
+### Demo-Login-Flag (#392 / #100)
+
+Default (unset) = aus. Explizit setzen, wo gewünscht:
+
+| Mode | `VITE_SHOW_DEMO_LOGIN` |
+|---|---|
+| `demo` (`APP_ENV_DEMO`) | **`true`** (sonst kein Luna nach CI-Deploy) |
+| `staging` (`APP_ENV_STAGING`) | weglassen/`false`, oder absichtlich **`true`** für QA |
+| `prod` (`APP_ENV_PROD`) | weglassen oder `false` — **nie `true`** |
+
+`scripts/deploy.sh`: Prod bricht ab bei Flag `true` oder `Hallo123!` im Bundle. Staging warnt nur bei `true`.
+
 ## Lokal
 
 ```bash
