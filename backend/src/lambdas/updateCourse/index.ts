@@ -32,11 +32,12 @@ import { resolveOperationalNickname, resolveOperationalNicknameList } from "../s
 import { notifyParticipantsPlannedEndDate } from "../shared/plannedEndDateNotifications";
 import {
   notifyCourseActivated,
-  notifyCourseMembershipAdded,
+  notifyCourseMembershipEvents,
   notifyInstructorParticipantListChanged,
 } from "../shared/notifications/courseMembershipNotifications";
 import {
   buildCourseEnrollmentSortKey,
+  classifyMembershipMailEvents,
   enrollmentChangesToDateMaps,
   migrateLegacyOverrideToDeltas,
   deriveActiveParticipantsCacheFromStem,
@@ -54,6 +55,7 @@ import {
   findLastClosedCourseTermIso,
   findNextOpenCourseTermIso,
   resolveCancellationSwapCutoffMinutes,
+  type CourseEnrollment,
   type EnrollmentChange,
 } from "@yogaswap/shared";
 import {
@@ -1053,6 +1055,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           (participants != null || Boolean(enrollmentChanges?.length))));
     /** Nach Sync: Segmente für Lifecycle-Mails (#380); sonst bei Bedarf nachgeladen. */
     let enrollmentsAfterSync: Awaited<ReturnType<typeof queryCourseEnrollments>> | null = null;
+    /** Vor Sync: für Zugehörigkeits-Mails (#310). */
+    let enrollmentsBeforeSync: CourseEnrollment[] | null = null;
+    let membershipMailRefIso: string | null = null;
 
     // Draft: vorzeitig angelegte Opens entfernen, wenn Planungsliste oder Kursfenster
     // geändert wird (Planungsliste ist Wahrheit; keine hängenden Segmente mit altem validFrom).
@@ -1142,6 +1147,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           tenantId,
           courseId: Number(courseId),
         });
+        enrollmentsBeforeSync = existingEnrollments;
+        membershipMailRefIso = nextOpenTermIso ?? upcomingTermIso ?? todayIso;
         const allPuts: ReturnType<typeof planStemEnrollmentWrites>["puts"] = [];
         const allDeletes: ReturnType<typeof planStemEnrollmentWrites>["deletes"] = [];
         let planned: ReturnType<typeof planStemEnrollmentWrites> | null = null;
@@ -1719,31 +1726,79 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
-    if (participants && effectiveStatus === "active") {
+    // #310: Zugehörigkeits-Mails nur bei active-Save (nicht draft→active — dort Kurs-aktiv-Mail).
+    const skipMembershipChangeMails = currentStatus === "draft" && nextStatus === "active";
+    if (
+      effectiveStatus === "active" &&
+      !skipMembershipChangeMails &&
+      (participants != null || Boolean(enrollmentChanges?.length))
+    ) {
       const previousParticipantsForMail =
         item.participants?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
       const previousParticipantsMailSet = new Set(
         previousParticipantsForMail.map((entry) => entry.toLowerCase()),
       );
       const mailDateMaps = enrollmentChangesToDateMaps(enrollmentChanges ?? undefined);
-      const addedParticipantsForMail = participants.filter(
+      const nextParticipantsForMail =
+        participants ??
+        previousParticipantsForMail;
+      const addedParticipantsForMail = nextParticipantsForMail.filter(
         (entry) => !previousParticipantsMailSet.has(entry.toLowerCase()),
       );
-      const nextParticipantsMailSet = new Set(participants.map((entry) => entry.toLowerCase()));
+      const nextParticipantsMailSet = new Set(nextParticipantsForMail.map((entry) => entry.toLowerCase()));
       const removedParticipantsForMail = previousParticipantsForMail.filter(
         (entry) => !nextParticipantsMailSet.has(entry.toLowerCase()),
       );
 
-      if (addedParticipantsForMail.length > 0 && !(currentStatus === "draft" && nextStatus === "active")) {
+      const refIso =
+        membershipMailRefIso ??
+        findNextOpenCourseTermIso(
+          nextDates,
+          nextTime,
+          resolveCancellationSwapCutoffMinutes(tenantSettings),
+        ) ??
+        findNextUpcomingOccurrenceIso(nextDates, nextTime) ??
+        toIsoDateOnlyLocal(new Date());
+
+      let membershipEvents = classifyMembershipMailEvents({
+        previousEnrollments: enrollmentsBeforeSync ?? [],
+        changes: enrollmentChanges ?? undefined,
+        refIso,
+      });
+
+      // Cache-only Beitritt ohne enrollmentChanges: weiterhin Beitritts-Mail.
+      if (membershipEvents.length === 0 && addedParticipantsForMail.length > 0) {
+        membershipEvents = addedParticipantsForMail.map((participantId) => ({
+          participantId,
+          kind: "joinAdd" as const,
+          termDateIso:
+            mailDateMaps.addValidFromByParticipant[participantId.toLowerCase()] ??
+            refIso,
+        }));
+      } else if (addedParticipantsForMail.length > 0) {
+        const covered = new Set(
+          membershipEvents.map((event) => event.participantId.toLowerCase()),
+        );
+        for (const participantId of addedParticipantsForMail) {
+          if (covered.has(participantId.toLowerCase())) continue;
+          membershipEvents.push({
+            participantId,
+            kind: "joinAdd",
+            termDateIso:
+              mailDateMaps.addValidFromByParticipant[participantId.toLowerCase()] ??
+              refIso,
+          });
+        }
+      }
+
+      if (membershipEvents.length > 0) {
         try {
-          const mailSummary = await notifyCourseMembershipAdded(client, {
+          const mailSummary = await notifyCourseMembershipEvents(client, {
             tenantId,
-            participantUserIds: addedParticipantsForMail,
+            events: membershipEvents,
             courseName: mailCourseName,
             weekday: mailWeekday,
             time: mailTime,
-            termDateIso: upcomingTermIso,
-            termDateByUser: mailDateMaps.addValidFromByParticipant,
             participantsTable,
             sesSourceEmail,
             baseUrl: baseUrlEnv,
@@ -1751,7 +1806,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           console.info("updateCourse course membership mail summary", {
             tenantId,
             courseId,
-            addedParticipants: addedParticipantsForMail,
+            events: membershipEvents,
             ...mailSummary,
           });
         } catch (notificationError) {

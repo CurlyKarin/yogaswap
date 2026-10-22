@@ -38,8 +38,13 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 | **Termin freigegeben (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantTermReleasedMail` | rechtzeitige Absage vor Cutoff; Hinweis Ersatztermin; **keine** Mail bei kurzfristiger Absage |
 | **Tausch erfolgreich** | `createSwap` (→ `active`), `updateSwap` (→ `active`), `processRingSwaps` | Tauschende Person | `buildSwapSuccessMail` + `.ics`-Anhang | `SendRawEmail`; ICS `METHOD:PUBLISH` |
 | **Kursbeitritt** | `updateCourse` | Neu hinzugefügte Stamm-TN | `buildCourseMembershipMail` mit **persönlichem ersten Termin** (`validFrom` / `enrollmentChanges.add`) | Nur bei `active`; nicht bei `draft`→`active` (dort Kurs-aktiv-Mail) |
+| **Beitrittstermin geändert** | `updateCourse` | Person mit verschobenem `validFrom` (Kommt/ab) | `buildCourseMembershipJoinChangedMail` | `#310`; nur `active` nach Speichern |
+| **Beitritt entfällt** | `updateCourse` | Kommt entfernt (Segment nie gestartet) | `buildCourseMembershipJoinCancelledMail` | `#310` |
+| **Kursaustritt** | `updateCourse` | `validUntil` erstmals gesetzt | `buildCourseMembershipExitMail` (letzter Termin inklusiv) | `#310` |
+| **Austrittstermin geändert** | `updateCourse` | `validUntil` verschoben | `buildCourseMembershipExitChangedMail` | `#310` |
+| **Austritt aufgehoben** | `updateCourse` | `validUntil` zurückgenommen | `buildCourseMembershipExitClearedMail` | `#310` |
 | **Kurs aktiv (draft→active)** | `updateCourse` | Alle Stamm-TN | `buildCourseActivatedMail` | Einmalig bei Statuswechsel |
-| **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Code vorhanden; **versendet erst**, wenn `instructors` am Kurs gesetzt — Bedarf/Leitung-Zuordnung noch klären |
+| **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Code vorhanden; **versendet erst**, wenn `instructors` am Kurs gesetzt — Bedarf/Leitung-Zuordnung noch klären; **nicht** Teil von `#310` |
 
 ### Template-Module
 
@@ -78,7 +83,6 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 | **Tausch abgelehnt / zurückgezogen** | `deleteSwap`, Ablehnung | optional später |
 | **Kurzfristige Absage (SN)** | `updateOverride` | Platz bleibt belegt — keine Bestätigungs-Mail |
 | **Absage zurücknehmen (RC)** | `updateOverride` | keine Mail |
-| **Entfernen aus Stammliste** | `updateCourse` `participants` | keine Mail |
 | **Tenant-/Studio-Einstellungen** | `updateTenantSettings` | — |
 
 ---
@@ -95,14 +99,24 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 
 **Nicht in MVP:** Tausch**anfragen** (eingehend/ausgehend) — potenziell zu viel Lärm; erst nach Erfahrung im Betrieb entscheiden.
 
-### Kursbeitritt — wann mailen?
+### Kurszugehörigkeit — wann mailen? (#310)
+
+Trigger: Mitglieder-Dialog **gespeichert** → `updateCourse` mit `enrollmentChanges` (und/oder `participants`). Nur Kurs **`active`**. Skip: `invited` / kein Profil. **Keine** dieser Mails in Draft oder beim Statuswechsel `draft`→`active` (dort nur Kurs-aktiv-Mail).
+
+| Situation | Mail |
+|-----------|------|
+| Neu dabei / Wiederaufnahme | Beitritt (`buildCourseMembershipMail`) |
+| „ab“ / Kommt-Start verschieben | Beitrittstermin geändert |
+| Kommt entfernen | Beitritt entfällt |
+| Austritt setzen (`validUntil`) | Kursaustritt (letzter Termin inklusiv) |
+| Austritt verschieben | Austrittstermin geändert |
+| Austritt zurücknehmen | Austritt aufgehoben |
+
+Klassifikation: `classifyMembershipMailEvents` in `shared` (Endzustand pro Person und Save). Trainer-Liste bleibt separat und ist nicht Scope von `#310`.
 
 | Situation | Empfänger | Anmerkung |
 |-----------|-----------|-----------|
-| Person wird zu **`active`** Kurs hinzugefügt (inkl. späteres **ab**-Datum) | die hinzugefügte Person; Text mit ihrem ersten Termin | Abgrenzung: Studio-**Einladung** (`createParticipants`) bleibt separat |
-| Kurs wechselt **`draft` → `active`** | alle aktuell in `course.participants` | einmalige „Kurs ist live“-Mail; nicht bei jedem späteren Edit |
-
-Keine Mail bei reinem Entfernen aus der Liste (dafür ggf. später separat).
+| Kurs wechselt **`draft` → `active`** | alle aktuell in `course.participants` (bzw. stem) | einmalige „Kurs ist live“-Mail; nicht bei jedem späteren Edit |
 
 ### Trainer / Kursleitung
 
