@@ -165,7 +165,7 @@ export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTempl
     : "";
   const joinSentence =
     input.termDateIso && input.time
-      ? `<p>du nimmst ab dem Termin am ${formatTermDateTimeDe(input.termDateIso, input.time)} am Kurs <strong>${input.courseName}</strong> teil.</p>`
+      ? `<p>du nimmst ab dem Termin ${formatTermDateTimeDe(input.termDateIso, input.time)} am Kurs <strong>${input.courseName}</strong> teil.</p>`
       : `<p>du wurdest zum Kurs <strong>${input.courseName}</strong>${weekdayTime} hinzugefügt.</p>`;
 
   return {
@@ -174,6 +174,111 @@ export function buildCourseMembershipMail(input: CourseInfoMailInput): MailTempl
       <p>Hallo ${greeting},</p>
       ${joinSentence}
       <p>Im YogaSwap-Portal kannst du Termine einsehen und Tauschvorgänge verwalten.</p>
+      ${loginHint}
+    `,
+  };
+}
+
+/** #310: Beitrittstermin („ab“) wurde verschoben. */
+export function buildCourseMembershipJoinChangedMail(input: CourseInfoMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
+  const loginHint = input.loginUrl
+    ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
+    : "";
+  const termSentence =
+    input.termDateIso && input.time
+      ? `<p>dein geplanter Beitritt zum Kurs <strong>${input.courseName}</strong> beginnt jetzt ab dem Termin ${formatTermDateTimeDe(input.termDateIso, input.time)}.</p>`
+      : `<p>dein geplanter Beitrittstermin für den Kurs <strong>${input.courseName}</strong> wurde geändert.</p>`;
+
+  return {
+    subject: `Beitrittstermin geändert: ${input.courseName}`,
+    html: `
+      <p>Hallo ${greeting},</p>
+      <p>es gab eine Änderung an deiner Kurszugehörigkeit.</p>
+      ${termSentence}
+      ${loginHint}
+    `,
+  };
+}
+
+/** #310: Geplanter Beitritt (Kommt) entfällt. */
+export function buildCourseMembershipJoinCancelledMail(input: CourseInfoMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
+  const loginHint = input.loginUrl
+    ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
+    : "";
+  const termSentence =
+    input.termDateIso && input.time
+      ? `<p>dein geplanter Beitritt zum Kurs <strong>${input.courseName}</strong> ab dem Termin ${formatTermDateTimeDe(input.termDateIso, input.time)} entfällt.</p>`
+      : `<p>dein geplanter Beitritt zum Kurs <strong>${input.courseName}</strong> entfällt.</p>`;
+
+  return {
+    subject: `Beitritt entfällt: ${input.courseName}`,
+    html: `
+      <p>Hallo ${greeting},</p>
+      ${termSentence}
+      ${loginHint}
+    `,
+  };
+}
+
+/** #310: Austritt / letzter Termin gesetzt. */
+export function buildCourseMembershipExitMail(input: CourseInfoMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
+  const loginHint = input.loginUrl
+    ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
+    : "";
+  const termSentence =
+    input.termDateIso && input.time
+      ? `<p>dein letzter Termin im Kurs <strong>${input.courseName}</strong> ist ${formatTermDateTimeDe(input.termDateIso, input.time)} (inklusive).</p>`
+      : `<p>für den Kurs <strong>${input.courseName}</strong> wurde ein Austritt festgelegt.</p>`;
+
+  return {
+    subject: `Kursaustritt: ${input.courseName}`,
+    html: `
+      <p>Hallo ${greeting},</p>
+      ${termSentence}
+      ${loginHint}
+    `,
+  };
+}
+
+/** #310: Austrittstermin verschoben. */
+export function buildCourseMembershipExitChangedMail(input: CourseInfoMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
+  const loginHint = input.loginUrl
+    ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
+    : "";
+  const termSentence =
+    input.termDateIso && input.time
+      ? `<p>dein letzter Termin im Kurs <strong>${input.courseName}</strong> ist jetzt ${formatTermDateTimeDe(input.termDateIso, input.time)} (inklusive).</p>`
+      : `<p>dein Austrittstermin für den Kurs <strong>${input.courseName}</strong> wurde geändert.</p>`;
+
+  return {
+    subject: `Austrittstermin geändert: ${input.courseName}`,
+    html: `
+      <p>Hallo ${greeting},</p>
+      <p>es gab eine Änderung an deiner Kurszugehörigkeit.</p>
+      ${termSentence}
+      ${loginHint}
+    `,
+  };
+}
+
+/** #310: Austritt zurückgenommen. */
+export function buildCourseMembershipExitClearedMail(input: CourseInfoMailInput): MailTemplate {
+  const greeting = resolveOperationalMailGreeting(input);
+  const weekdayTime = formatCourseScheduleHint(input.weekday, input.time);
+  const loginHint = input.loginUrl
+    ? `<p><a href="${input.loginUrl}">Zum YogaSwap-Login</a></p>`
+    : "";
+
+  return {
+    subject: `Austritt aufgehoben: ${input.courseName}`,
+    html: `
+      <p>Hallo ${greeting},</p>
+      <p>dein geplanter Austritt aus dem Kurs <strong>${input.courseName}</strong>${weekdayTime} wurde zurückgenommen.</p>
+      <p>Du bleibst damit weiterhin Stammmitglied im Kurs.</p>
       ${loginHint}
     `,
   };

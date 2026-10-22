@@ -36,10 +36,53 @@ const { mockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
 /** Leerer Tenant-Load → Default rollingPlanningHorizonWeeks (5). */
 const tenantSettingsLoadResponse = {};
 
+/** FIFO for non-participants Dynamo calls; participants lookups always empty unless overridden. */
+const dynamoSendQueue: unknown[] = [];
+
+function enqueueDynamoSend(...responses: unknown[]) {
+  dynamoSendQueue.push(...responses);
+}
+
 function mockAdminMembership() {
-  return mockSend.mockResolvedValueOnce({ Item: { role: { S: "admin" } } }).mockResolvedValueOnce(
-    tenantSettingsLoadResponse,
-  );
+  enqueueDynamoSend({ Item: { role: { S: "admin" } } }, tenantSettingsLoadResponse);
+  return {
+    mockResolvedValueOnce(value: unknown) {
+      enqueueDynamoSend(value);
+      return this;
+    },
+  };
+}
+
+/** Queued mail/profile GetItem responses — not enrollment Queries (`Items` alone). */
+function looksLikeParticipantReadResponse(
+  next: unknown,
+): next is { Item: Record<string, unknown> } {
+  if (!next || typeof next !== "object") return false;
+  const item = (next as { Item?: Record<string, unknown> }).Item;
+  if (!item) return false;
+  return Boolean(item.email || item.userId || item.authUserId || item.participantId);
+}
+
+/** FIFO queue + participants short-circuit so nickname-resolve does not steal other mocks. */
+function installDynamoSendHarness() {
+  dynamoSendQueue.length = 0;
+  mockSend.mockReset();
+  mockSend.mockImplementation(async (input: { TableName?: string }) => {
+    if (input?.TableName === "test-participants") {
+      if (looksLikeParticipantReadResponse(dynamoSendQueue[0])) {
+        return dynamoSendQueue.shift();
+      }
+      return {};
+    }
+    if (dynamoSendQueue.length === 0) {
+      return {};
+    }
+    return dynamoSendQueue.shift();
+  });
+  mockSend.mockResolvedValueOnce = ((value: unknown) => {
+    enqueueDynamoSend(value);
+    return mockSend;
+  }) as typeof mockSend.mockResolvedValueOnce;
 }
 
 function makeEvent(
@@ -101,8 +144,8 @@ describe("updateCourse Lambda", () => {
       COURSE_ENROLLMENTS_TABLE: "test-courseEnrollments",
       SES_SOURCE_EMAIL: "studio@example.com",
     };
-    mockSend.mockReset();
     mockSesSend.mockReset();
+    installDynamoSendHarness();
     (GetItemCommand as unknown as jest.Mock).mockClear();
     (PutItemCommand as unknown as jest.Mock).mockClear();
     (DeleteItemCommand as unknown as jest.Mock).mockClear();
@@ -130,7 +173,6 @@ describe("updateCourse Lambda", () => {
     const result = await handler(
       makeEvent({ overbookLimit: 3 }, "1", undefined),
     );
-
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
     expect(body.overbookLimit).toBe(3);
@@ -565,7 +607,7 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(participantsResult.body).error).toMatch(/inaktiven Kurses/);
     expect(PutItemCommand).not.toHaveBeenCalled();
 
-    mockSend.mockReset();
+    installDynamoSendHarness();
     (PutItemCommand as unknown as jest.Mock).mockClear();
     mockAdminMembership().mockResolvedValueOnce({ Item: baseCourseItem("inactive") });
     const enrollmentResult = await handler(
@@ -975,6 +1017,271 @@ describe("updateCourse Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/enrollmentChanges/);
   });
 
+  test("sends exit mail when validUntil is set on active course (#310)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          dates: { L: [{ S: "2099-06-07" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // enrollment put
+      .mockResolvedValueOnce({}) // cache put
+      .mockResolvedValueOnce({ Items: [] }) // overrides
+      .mockResolvedValueOnce({ Items: [] }) // swaps
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+        enrollmentChanges: [{ participantId: "luna", action: "remove", dateIso: "2099-06-07" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    expect(mockSesSend.mock.calls[0][0].Message.Subject.Data).toMatch(/Kursaustritt/i);
+    expect(mockSesSend.mock.calls[0][0].Message.Body.Html.Data).toMatch(/letzter Termin/i);
+  });
+
+  test("sends exit-changed mail when validUntil is corrected (#310)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          dates: { L: [{ S: "2099-06-07" }, { S: "2099-06-14" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2099-06-07" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+        enrollmentChanges: [{ participantId: "luna", action: "remove", dateIso: "2099-06-14" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    expect(mockSesSend.mock.calls[0][0].Message.Subject.Data).toMatch(/Austrittstermin geändert/i);
+  });
+
+  test("sends exit-cleared mail when validUntil is removed (#310)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          dates: { L: [{ S: "2099-06-07" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#luna#2026-01-01" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "luna" },
+            validFrom: { S: "2026-01-01" },
+            validUntil: { S: "2099-06-07" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // enrollment put (reopen)
+      .mockResolvedValueOnce({}) // cache put
+      // No override/swap cleanup: luna stays in participants[] and is not a stem-add.
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "luna@example.com" },
+          authUserId: { S: "auth-luna" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna"],
+        enrollmentChanges: [{ participantId: "luna", action: "add", dateIso: "2026-01-01" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    expect(mockSesSend.mock.calls[0][0].Message.Subject.Data).toMatch(/Austritt aufgehoben/i);
+  });
+
+  test("sends join-cancelled mail when upcoming Kommt is removed (#310)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [] },
+          dates: { L: [{ S: "2099-06-07" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#maja#2099-06-14" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "maja" },
+            validFrom: { S: "2099-06-14" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // delete
+      .mockResolvedValueOnce({}) // cache
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "maja@example.com" },
+          authUserId: { S: "auth-maja" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        participants: [],
+        enrollmentChanges: [{ participantId: "maja", action: "remove", dateIso: "2099-06-07" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    expect(mockSesSend.mock.calls[0][0].Message.Subject.Data).toMatch(/Beitritt entfällt/i);
+  });
+
+  test("sends join-changed mail when Kommt start date shifts (#310)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [] },
+          dates: { L: [{ S: "2099-06-07" }, { S: "2099-06-14" }, { S: "2099-06-21" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            tenantId: { S: "default-tenant" },
+            courseId_userId_validFrom: { S: "1#maja#2099-06-14" },
+            courseId: { S: "1" },
+            courseIdNumeric: { N: "1" },
+            participantId: { S: "maja" },
+            validFrom: { S: "2099-06-14" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}) // close previous open segment
+      .mockResolvedValueOnce({}) // put new open segment
+      .mockResolvedValueOnce({}) // cache
+      .mockResolvedValueOnce({ Items: [] }) // overrides (stem-add cleanup)
+      .mockResolvedValueOnce({ Items: [] }) // swaps
+      .mockResolvedValueOnce({
+        Item: {
+          email: { S: "maja@example.com" },
+          authUserId: { S: "auth-maja" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      });
+    mockSesSend.mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        participants: [],
+        enrollmentChanges: [{ participantId: "maja", action: "add", dateIso: "2099-06-21" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).toHaveBeenCalledTimes(1);
+    expect(mockSesSend.mock.calls[0][0].Message.Subject.Data).toMatch(/Beitrittstermin geändert/i);
+  });
+
+  test("does not send membership-change mails for draft courses (#310)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({ Items: [] }); // draft open-enrollment purge
+
+    const result = await handler(
+      makeEvent({
+        participants: ["luna", "maja"],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    expect(mockSesSend).not.toHaveBeenCalled();
+  });
+
   test("closes enrollment and derives active cache from stemOn(R) (#384)", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({
@@ -1165,6 +1472,82 @@ describe("updateCourse Lambda", () => {
         }),
       }),
     );
+  });
+
+  test("stores enrollment SK with profile nickname casing (ines → Ines)", async () => {
+    mockSend.mockImplementation(async (input: {
+      TableName?: string;
+      IndexName?: string;
+      Key?: { userId?: { S?: string } };
+    }) => {
+      if (input?.TableName === "test-participants") {
+        if (input.IndexName === "GSI_UserIdNormalized") {
+          return {
+            Items: [
+              {
+                tenantId: { S: "default-tenant" },
+                userId: { S: "Ines" },
+                userIdNormalized: { S: "ines" },
+                participantId: { S: "pid-ines" },
+              },
+            ],
+          };
+        }
+        if (input.Key?.userId?.S === "Ines") {
+          return {
+            Item: {
+              tenantId: { S: "default-tenant" },
+              userId: { S: "Ines" },
+              userIdNormalized: { S: "ines" },
+              participantId: { S: "pid-ines" },
+              email: { S: "ines@example.com" },
+              authUserId: { S: "auth-ines" },
+              inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+            },
+          };
+        }
+        return {};
+      }
+      if (dynamoSendQueue.length === 0) return {};
+      return dynamoSendQueue.shift();
+    });
+
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("active"),
+          participants: { L: [] },
+          dates: { L: [{ S: "2099-06-07" }] },
+          seriesStartDate: { S: "2099-01-01" },
+          seriesEndDate: { S: "2099-12-31" },
+          visibleFrom: { S: "2099-01-01" },
+          visibleUntil: { S: "2099-12-31" },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put
+      .mockResolvedValueOnce({ Items: [] }) // enrollments query
+      .mockResolvedValueOnce({}) // enrollment put
+      .mockResolvedValueOnce({}) // active cache put
+      .mockResolvedValueOnce({ Items: [] }) // overrides
+      .mockResolvedValueOnce({ Items: [] }); // swaps
+
+    const result = await handler(
+      makeEvent({
+        participants: ["ines"],
+        enrollmentChanges: [{ participantId: "ines", action: "add", dateIso: "2099-06-07" }],
+      }),
+    );
+    expect(result.statusCode).toBe(200);
+    const enrollmentPuts = (PutItemCommand as unknown as jest.Mock).mock.calls
+      .map((call) => call[0])
+      .filter((input) => input?.TableName === "test-courseEnrollments");
+    expect(enrollmentPuts.length).toBeGreaterThan(0);
+    const sks = enrollmentPuts.map((p) => p?.Item?.courseId_userId_validFrom?.S ?? "");
+    const participantIds = enrollmentPuts.map((p) => p?.Item?.participantId?.S);
+    expect(sks.some((sk) => sk.startsWith("1#Ines#"))).toBe(true);
+    expect(sks.some((sk) => sk.includes("#ines#"))).toBe(false);
+    expect(participantIds).toContain("Ines");
+    expect(participantIds).not.toContain("ines");
   });
 
   test("updates course participants list", async () => {

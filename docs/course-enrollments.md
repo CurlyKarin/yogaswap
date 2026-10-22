@@ -36,10 +36,10 @@ Eine Zeile ist identisch über den Sort Key `courseId#participantId#validFrom`. 
 | Neu zuordnen / kommt | Kein Segment vorhanden, oder letztes Segment **beendet vor** neuem Start (`validUntil < validFrom`) | **Neue** offene Zeile |
 | Austritt / Bis setzen | Offenes Segment, oder Korrektur einer schon geschlossenen Zeile | **Bestehende** Zeile: `validUntil` setzen |
 | Bis korrigieren (früher/später) | Dieselbe Mitgliedschaft, nur anderes Ende | **Bestehende** Zeile überschreiben, **keine** zweite Zeile |
-| Ende zurücknehmen | Offenes `validUntil` an derselben Zeile entfernen | **Bestehende** Zeile ohne `validUntil` |
-| Wieder aufnehmen | Nach echter Lücke: `validFrom` **nach** dem letzten `validUntil` (in der Vergangenheit) | **Neue** offene Zeile; alte Zeile bleibt als Historie |
+| Austritt zurücknehmen | `validUntil` **≥ R** (noch Dabei/endet) | **Bestehende** Zeile: `validUntil` entfernen |
+| Wieder aufnehmen | Letztes `validUntil` **&lt; R** (Ehemalig): `validFrom` **nach** dem letzten `validUntil` | **Neue** offene Zeile; alte Zeile bleibt als Historie — nie `validUntil` der alten Zeile löschen |
 | Kommt entfernen | Offenes Segment mit Start in der Zukunft, noch kein Termin besucht | **Zeile löschen**, kein `validUntil` vor `validFrom` |
-| Ab-Datum einer kommenden Mitgliedschaft | Offenes Segment, anderer Start | Alte Zeile schließen (Tag vor neuem Start), **dann** neue offene Zeile |
+| Ab-Datum einer kommenden Mitgliedschaft | Offenes Segment mit Start **nach R** („kommt“), anderer Start | **Dieselbe** Mitgliedschaft verschieben: alte SK löschen, neue offene Zeile mit neuem `validFrom` (kein geschlossenes Stub-Segment) |
 
 Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehenden Zeile liegt — dann nur diese Zeile anpassen (typisch: Bis-Korrektur, nicht Wiederaufnahme).
 
@@ -47,7 +47,7 @@ Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehend
 
 1. **Kein Overlap** – `enrollmentRangesOverlap(a, b)` verhindert das Anlegen einer neuen Zeile, wenn sie eine bestehende Zeile derselben Person überlappt.
 2. **Clamp bei Korrektur** – `clampUntilToAvoidOverlap` begrenzt ein neues `validUntil` so, dass es nicht in eine spätere Zeile derselben Person hineinragt.
-3. **Wieder aufnehmen nur nach realem Austritt** – Der Dialog erlaubt „Wieder aufnehmen" nur für Personen in der **Ehemalig-Liste** (letztes `validUntil` liegt in der Vergangenheit). Geplante Pausen (Austritt in Zukunft + geplanter Wiedereintritt) sind ein separates Feature.
+3. **Wieder aufnehmen nur nach realem Austritt** – Der Dialog erlaubt „Wieder aufnehmen" nur für Personen in der **Ehemalig-Liste** (`validUntil` &lt; R). Dann neues Segment; die Historie bleibt. Bis auf „offen“ (Reopen derselben Zeile) nur solange `validUntil` ≥ R. Geplante Pausen (Austritt + Rückkehr beide in der Zukunft) sind #309.
 4. **`validUntil` wird am selben Segment korrigiert** – `findLatestEnrollmentForParticipant` stellt sicher, dass die Korrektur immer die zuletzt angelegte Zeile trifft, egal ob offen oder schon geschlossen.
 5. **Historie bleibt erhalten** – Geschlossene Segmente werden nie gelöscht; `stemOn(T)` für vergangene Termine bleibt damit korrekt.
 6. **Austritt vor Kursstart** – Ein Segment, das noch nicht begonnen hat (`validUntil` würde vor `validFrom` liegen), wird **gelöscht**, nicht mit einem umgedrehten Intervall geschlossen.
@@ -180,6 +180,13 @@ Abgemeldete mit `validUntil` vor dem Referenztermin (R bzw. plannedEndDate) erha
 keine Mail — auch wenn sie noch im Drift-Cache `course.participants[]` stehen.
 Ohne Segmente: Fallback auf die Planungsliste/Cache bis Backfill (#385).
 
+## Zugehörigkeits-Mails (#310)
+
+Nach Speichern im Mitglieder-Dialog (`enrollmentChanges` auf `active` Kursen) klassifiziert
+`classifyMembershipMailEvents` den Endzustand pro Person (Beitritt / ab verschieben /
+Kommt entfällt / Austritt setzen·verschieben·aufheben). Details: `docs/email-notifications.md`.
+Keine Trainer-Mail in diesem Ticket.
+
 ## Shared API
 
 - `buildCourseEnrollmentSortKey` / `parseCourseEnrollmentSortKey`
@@ -187,7 +194,7 @@ Ohne Segmente: Fallback auf die Planungsliste/Cache bis Backfill (#385).
 - `deriveActiveParticipantsCacheFromStem` / `isActorOnCourseStem` / `hasPlannedEnrollmentStem` / `stemReferenceDateIso` (#384)
 - `migrateParticipantsToEnrollments` / `planMissingOpenEnrollmentsFromParticipants` / `planInactiveToDraftEnrollmentTransition` / `planDraftToActivePlanungslisteMaterialization` / `openEnrollmentUserIds` (Rückgabe: `participantId`-Liste)
 - `planStemEnrollmentWrites` / `buildOpenEnrollment` / `closeEnrollmentSegment` / `findOpenEnrollmentForParticipant` / `enrollmentRangesOverlap`
-- `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps`
+- `classifyMembersForDialog` / `formatMembersDialogHeadline` / `enrollmentChangesToDateMaps` / `classifyMembershipMailEvents` (#310)
 
 Backend: `courseEnrollmentDynamo.ts` (Put/Get/Query-Mapping).
 

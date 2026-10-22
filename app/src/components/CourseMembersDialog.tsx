@@ -257,10 +257,13 @@ export default function CourseMembersDialog({
 
   const undoIntervalRemove = (userId: string) => {
     if (saving || isInactive) return;
+    // Only clear until on segments that still count as Dabei/endet (until ≥ R).
+    // Past exits stay history; rejoin adds a new segment instead (#310).
     setWorkingEnrollments((prev) =>
       prev.map((entry) => {
         if (entry.participantId.toLowerCase() !== userId.toLowerCase()) return entry;
         if (!entry.validUntil) return entry;
+        if (isPastEnrollmentEnd(entry.validUntil, refIso)) return entry;
         const reopened = { ...entry };
         delete reopened.validUntil;
         return reopened;

@@ -24,6 +24,7 @@ import {
   hasPlannedEnrollmentStem,
   isActorOnCourseStem,
   stemReferenceDateIso,
+  classifyMembershipMailEvents,
 } from "shared/courseEnrollment";
 import type { CourseEnrollment } from "shared/types";
 
@@ -495,9 +496,9 @@ describe("courseEnrollment", () => {
     expect(planned.puts[0]).not.toHaveProperty("validUntil");
   });
 
-  it("planStemEnrollmentWrites reopens a closed segment via addValidFromByParticipant", () => {
+  it("planStemEnrollmentWrites reopens a closed segment only when until is still ahead of R", () => {
     const existing: CourseEnrollment[] = [
-      { courseId: 1, participantId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-14" },
+      { courseId: 1, participantId: "luna", validFrom: "2026-01-01", validUntil: "2026-09-08" },
     ];
     const planned = planStemEnrollmentWrites({
       courseId: 1,
@@ -517,6 +518,142 @@ describe("courseEnrollment", () => {
       }),
     ]);
     expect(planned.puts[0]).not.toHaveProperty("validUntil");
+  });
+
+  it("planStemEnrollmentWrites reopens preserving participantId casing for Dynamo SK", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, participantId: "Ines", validFrom: "2026-11-02", validUntil: "2026-11-09" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: ["ines"],
+      nextParticipants: ["ines"],
+      existingEnrollments: existing,
+      addValidFrom: "2026-11-02",
+      removeValidUntil: "2026-11-02",
+      addValidFromByParticipant: { ines: "2026-11-02" },
+    });
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        participantId: "Ines",
+        validFrom: "2026-11-02",
+        source: "manual",
+      }),
+    ]);
+    expect(planned.puts[0]).not.toHaveProperty("validUntil");
+    expect(buildCourseEnrollmentSortKey(1, planned.puts[0].participantId, "2026-11-02")).toBe(
+      "1#Ines#2026-11-02",
+    );
+  });
+
+  it("planStemEnrollmentWrites uses participantIdByNormalized for upcoming kommt SK", () => {
+    // Kommt is not in nextParticipants (stem at R); only date-map keys drive the add.
+    const planned = planStemEnrollmentWrites({
+      courseId: 9,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: [],
+      addValidFrom: "2026-10-19",
+      removeValidUntil: "2026-10-18",
+      addValidFromByParticipant: { ines: "2026-11-10" },
+      participantIdByNormalized: { ines: "Ines" },
+    });
+    expect(planned.addedParticipantIds).toEqual(["Ines"]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        participantId: "Ines",
+        validFrom: "2026-11-10",
+        source: "manual",
+      }),
+    ]);
+    expect(buildCourseEnrollmentSortKey(9, planned.puts[0].participantId, "2026-11-10")).toBe(
+      "9#Ines#2026-11-10",
+    );
+  });
+
+  it("planStemEnrollmentWrites shifts upcoming kommt validFrom without closing a stub", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 9, participantId: "Ines", validFrom: "2026-11-10" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 9,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: existing,
+      addValidFrom: "2026-10-19",
+      removeValidUntil: "2026-10-18",
+      addValidFromByParticipant: { ines: "2026-11-17" },
+      participantIdByNormalized: { ines: "Ines" },
+    });
+    expect(planned.deletes).toEqual([
+      expect.objectContaining({ participantId: "Ines", validFrom: "2026-11-10" }),
+    ]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        participantId: "Ines",
+        validFrom: "2026-11-17",
+        source: "manual",
+      }),
+    ]);
+    expect(planned.puts[0]).not.toHaveProperty("validUntil");
+    expect(planned.puts.some((row) => row.validFrom === "2026-11-10")).toBe(false);
+
+    // Cancelling the shifted kommt must not revive a closed 10.11 stub.
+    const afterCancel = planStemEnrollmentWrites({
+      courseId: 9,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: planned.puts,
+      addValidFrom: "2026-10-19",
+      removeValidUntil: "2026-10-18",
+      removeValidUntilByParticipant: { ines: "2026-10-18" },
+    });
+    expect(afterCancel.deletes).toEqual([
+      expect.objectContaining({ participantId: "Ines", validFrom: "2026-11-17" }),
+    ]);
+    expect(afterCancel.puts).toEqual([]);
+  });
+
+  it("planStemEnrollmentWrites does not clear past until when add reuses the old validFrom (#310)", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, participantId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-14" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: existing,
+      addValidFrom: "2026-09-01",
+      removeValidUntil: "2026-08-14",
+      addValidFromByParticipant: { luna: "2026-01-01" },
+    });
+    expect(planned.puts).toEqual([]);
+    expect(planned.addedParticipantIds).toEqual([]);
+  });
+
+  it("planStemEnrollmentWrites rejoins a former member with a new segment after past until (#310)", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 1, participantId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-14" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 1,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: existing,
+      addValidFrom: "2026-09-01",
+      removeValidUntil: "2026-08-14",
+      addValidFromByParticipant: { luna: "2026-09-08" },
+    });
+    expect(planned.addedParticipantIds).toEqual(["luna"]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        participantId: "luna",
+        validFrom: "2026-09-08",
+        source: "manual",
+      }),
+    ]);
+    expect(planned.puts[0]).not.toHaveProperty("validUntil");
+    expect(existing[0].validUntil).toBe("2026-08-14");
   });
 
   it("planStemEnrollmentWrites updates validUntil on an already-closed segment", () => {
@@ -714,5 +851,41 @@ describe("courseEnrollment", () => {
         incomingCount: 1,
       }),
     ).toBe("Teilnehmer 6/6 · 1 endet · 1 kommt neu dazu");
+  });
+
+  it("classifyMembershipMailEvents maps exit set, shift, clear and join cancel/shift (#310)", () => {
+    const previous: CourseEnrollment[] = [
+      { courseId: 1, participantId: "alice", validFrom: "2026-01-01" },
+      { courseId: 1, participantId: "bob", validFrom: "2026-01-01", validUntil: "2026-08-24" },
+      { courseId: 1, participantId: "cara", validFrom: "2026-01-01", validUntil: "2026-08-20" },
+      { courseId: 1, participantId: "dana", validFrom: "2026-09-02" },
+      { courseId: 1, participantId: "erin", validFrom: "2026-09-02" },
+      { courseId: 1, participantId: "ida", validFrom: "2026-01-01", validUntil: "2026-08-10" },
+    ];
+    expect(
+      classifyMembershipMailEvents({
+        previousEnrollments: previous,
+        changes: [
+          { participantId: "alice", action: "remove", dateIso: "2026-08-17" },
+          { participantId: "bob", action: "remove", dateIso: "2026-08-31" },
+          { participantId: "cara", action: "add", dateIso: "2026-01-01" },
+          { participantId: "dana", action: "remove", dateIso: "2026-08-17" },
+          { participantId: "erin", action: "add", dateIso: "2026-09-09" },
+          { participantId: "finn", action: "add", dateIso: "2026-08-24" },
+          { participantId: "ida", action: "add", dateIso: "2026-09-02" },
+        ],
+        refIso: "2026-08-17",
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        { participantId: "alice", kind: "exitSet", termDateIso: "2026-08-17" },
+        { participantId: "bob", kind: "exitShift", termDateIso: "2026-08-31" },
+        { participantId: "cara", kind: "exitClear", termDateIso: "2026-01-01" },
+        { participantId: "dana", kind: "joinCancel", termDateIso: "2026-09-02" },
+        { participantId: "erin", kind: "joinShift", termDateIso: "2026-09-09" },
+        { participantId: "finn", kind: "joinAdd", termDateIso: "2026-08-24" },
+        { participantId: "ida", kind: "joinAdd", termDateIso: "2026-09-02" },
+      ]),
+    );
   });
 });

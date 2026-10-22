@@ -1,5 +1,10 @@
 import {
   buildCourseActivatedMail,
+  buildCourseMembershipExitChangedMail,
+  buildCourseMembershipExitClearedMail,
+  buildCourseMembershipExitMail,
+  buildCourseMembershipJoinCancelledMail,
+  buildCourseMembershipJoinChangedMail,
   buildCourseMembershipMail,
   buildInstructorParticipantListChangedMail,
   buildPlannedEndDateClearedMail,
@@ -105,5 +110,66 @@ describe("courseMailTemplates", () => {
     });
     expect(mail.html).toMatch(/Luna \(ab 02\.09\.2026\)/);
     expect(mail.html).toMatch(/Bob \(letzter Termin 17\.08\.2026\)/);
+  });
+
+  test("buildCourseMembershipJoinChangedMail notes the new start term (#310)", () => {
+    const mail = buildCourseMembershipJoinChangedMail({
+      nickname: "Luna",
+      courseName: "Morgenyoga",
+      time: "18:00",
+      termDateIso: "2026-09-09",
+    });
+    expect(mail.subject).toMatch(/Beitrittstermin geändert/);
+    expect(mail.html).toMatch(/Änderung/);
+    expect(mail.html).toMatch(/09\.09\.2026/);
+  });
+
+  test("buildCourseMembershipJoinCancelledMail cancels planned join (#310)", () => {
+    const mail = buildCourseMembershipJoinCancelledMail({
+      nickname: "Luna",
+      courseName: "Morgenyoga",
+      time: "18:00",
+      termDateIso: "2026-09-02",
+    });
+    expect(mail.subject).toMatch(/Beitritt entfällt/);
+    expect(mail.html).toMatch(/entfällt/);
+    expect(mail.html).toMatch(/02\.09\.2026/);
+  });
+
+  test("buildCourseMembershipExitMail states inclusive last term (#310)", () => {
+    const mail = buildCourseMembershipExitMail({
+      nickname: "Luna",
+      courseName: "Morgenyoga",
+      time: "18:00",
+      termDateIso: "2026-08-17",
+    });
+    expect(mail.subject).toMatch(/Kursaustritt/);
+    expect(mail.html).toMatch(/letzter Termin/);
+    expect(mail.html).toMatch(/inklusive/);
+    expect(mail.html).toMatch(/17\.08\.2026/);
+  });
+
+  test("buildCourseMembershipExitChangedMail notes shifted exit (#310)", () => {
+    const mail = buildCourseMembershipExitChangedMail({
+      nickname: "Luna",
+      courseName: "Morgenyoga",
+      time: "18:00",
+      termDateIso: "2026-08-31",
+    });
+    expect(mail.subject).toMatch(/Austrittstermin geändert/);
+    expect(mail.html).toMatch(/Änderung/);
+    expect(mail.html).toMatch(/31\.08\.2026/);
+  });
+
+  test("buildCourseMembershipExitClearedMail confirms continued membership (#310)", () => {
+    const mail = buildCourseMembershipExitClearedMail({
+      nickname: "Luna",
+      courseName: "Morgenyoga",
+      weekday: "Mon",
+      time: "18:00",
+    });
+    expect(mail.subject).toMatch(/Austritt aufgehoben/);
+    expect(mail.html).toMatch(/zurückgenommen/);
+    expect(mail.html).toMatch(/Stammmitglied/);
   });
 });

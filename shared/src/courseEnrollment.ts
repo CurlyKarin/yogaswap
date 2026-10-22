@@ -681,6 +681,12 @@ export type PlanStemEnrollmentWritesInput = {
   addValidFromByParticipant?: Record<string, string>;
   /** Optional per-user validUntil (lowercase keys); updates open or already-closed segments. */
   removeValidUntilByParticipant?: Record<string, string>;
+  /**
+   * Canonical nickname casing for lowercase date-map keys (ines → Ines).
+   * Needed because addValidFromByParticipant keys are normalized; Object.keys would
+   * otherwise write lowercase Dynamo SKs for upcoming "kommt" members (#310).
+   */
+  participantIdByNormalized?: Record<string, string>;
   /** When table empty, seed open segments from previousParticipants with this validFrom. */
   bootstrapValidFrom?: string;
   actorUserId?: string;
@@ -706,10 +712,14 @@ export type PlanStemEnrollmentWritesResult = {
  * - **Set/correct validUntil**: always updates the existing row (open or closed), never opens a second segment.
  * - **Rejoin**: new open row only when validFrom is strictly after the last validUntil (real gap, no overlap).
  *   A rejoin with a future exit still present (planned pause) is NOT supported and must be handled separately.
+ * - **Reopen (clear until)**: overwriting a closed row with the same validFrom is allowed only when
+ *   that validUntil is still ≥ addValidFrom (exit still ahead — Dabei/endet). Past until stays history.
  * - **Overlap guard**: a new segment is skipped when it would overlap any existing segment for the same person.
  * - **Clamp on close**: validUntil is clamped to one day before the next segment's validFrom if necessary.
  * - **Never started**: if close would set validUntil before validFrom, delete the row
  *   (planned join cancelled). Do not persist inverted intervals.
+ * - **Kommt shift**: open segment with validFrom &gt; R and a new add date → delete old SK,
+ *   put open row at the new validFrom (no closed stub between the two starts).
  * - **History preserved**: closed rows with a real interval are never deleted.
  */
 export function planStemEnrollmentWrites(
@@ -777,7 +787,9 @@ export function planStemEnrollmentWrites(
 
   const addParticipantIds = uniqueCaseInsensitive([
     ...added,
-    ...Object.keys(input.addValidFromByParticipant ?? {}),
+    ...Object.keys(input.addValidFromByParticipant ?? {}).map(
+      (key) => input.participantIdByNormalized?.[key] ?? key,
+    ),
   ]);
 
   for (const participantId of addParticipantIds) {
@@ -788,27 +800,42 @@ export function planStemEnrollmentWrites(
     const existingOpen = findOpenEnrollmentForParticipant(working, participantId);
     if (existingOpen && existingOpen.validFrom === validFrom) continue;
     if (existingOpen && existingOpen.validFrom !== validFrom) {
-      const closeUntil =
-        validFrom > existingOpen.validFrom
-          ? addDaysIso(validFrom, -1)
-          : existingOpen.validFrom;
-      const closed = closeEnrollmentSegment(
-        existingOpen as CourseEnrollment,
-        closeUntil,
-        {
-          closedAt: input.closedAt ?? input.createdAt,
-          actorUserId: input.actorUserId,
-        },
-      );
-      working = working.map((entry) =>
-        entry.courseId === closed.courseId &&
-        entry.participantId.toLowerCase() === closed.participantId.toLowerCase() &&
-        entry.validFrom === closed.validFrom &&
-        isEnrollmentOpen(entry)
-          ? closed
-          : entry,
-      );
-      puts.push(closed);
+      // Upcoming "kommt" (start after R): move validFrom on the same membership.
+      // Close+new would leave a closed stub; cancelling the new start would revive it.
+      if (existingOpen.validFrom > input.addValidFrom) {
+        working = working.filter(
+          (entry) =>
+            !(
+              entry.participantId.toLowerCase() === existingOpen.participantId.toLowerCase() &&
+              entry.validFrom === existingOpen.validFrom
+            ),
+        );
+        deletes.push(existingOpen as CourseEnrollment);
+        // Fall through: Put open row at the new validFrom (new Dynamo SK).
+      } else {
+        // Already started (dabei): close current segment, then open a later one.
+        const closeUntil =
+          validFrom > existingOpen.validFrom
+            ? addDaysIso(validFrom, -1)
+            : existingOpen.validFrom;
+        const closed = closeEnrollmentSegment(
+          existingOpen as CourseEnrollment,
+          closeUntil,
+          {
+            closedAt: input.closedAt ?? input.createdAt,
+            actorUserId: input.actorUserId,
+          },
+        );
+        working = working.map((entry) =>
+          entry.courseId === closed.courseId &&
+          entry.participantId.toLowerCase() === closed.participantId.toLowerCase() &&
+          entry.validFrom === closed.validFrom &&
+          isEnrollmentOpen(entry)
+            ? closed
+            : entry,
+        );
+        puts.push(closed);
+      }
     }
     if (findOpenEnrollmentForParticipant(working, participantId)) continue;
     const proposed = { validFrom };
@@ -816,20 +843,48 @@ export function planStemEnrollmentWrites(
       (entry) =>
         entry.validFrom !== validFrom && enrollmentRangesOverlap(entry, proposed),
     );
-    // Covered by a closed segment already: correct that row, do not open a second one.
+    // Covered by a closed segment already: do not open a second overlapping one.
     if (overlapsExisting) continue;
+
+    // Same SK as a closed row would overwrite it. Reopen (clear until) only when the
+    // exit is still ahead of the add anchor (person still "endet" in Dabei). Past until
+    // must stay history — rejoin uses a later validFrom as a new segment (#310).
+    const existingForPerson = enrollmentsForParticipant(working, participantId);
+    const sameFromClosed = existingForPerson.find(
+      (entry) => entry.validFrom === validFrom && !isEnrollmentOpen(entry),
+    );
+    if (sameFromClosed) {
+      const closedUntil = sameFromClosed.validUntil ?? "";
+      if (!closedUntil || closedUntil < input.addValidFrom) {
+        continue;
+      }
+    }
+
+    // Same validFrom SK: keep that row's casing (Put/Delete identity). New segments use the
+    // requested id (resolved nickname) — do not inherit casing from older segments.
+    const sameFromRow = existingForPerson.find((entry) => entry.validFrom === validFrom);
+    const canonicalParticipantId = sameFromRow?.participantId ?? participantId;
+
     const open = buildOpenEnrollment({
       courseId: input.courseId,
-      participantId,
+      participantId: canonicalParticipantId,
       validFrom,
       tenantId: input.tenantId,
       source: "manual",
       actorUserId: input.actorUserId,
       createdAt: input.createdAt,
     });
-    working = [...working, open];
+    const replacesSameSk = existingForPerson.some((entry) => entry.validFrom === validFrom);
+    working = replacesSameSk
+      ? working.map((entry) =>
+          entry.participantId.toLowerCase() === participantId.toLowerCase() &&
+          entry.validFrom === validFrom
+            ? open
+            : entry,
+        )
+      : [...working, open];
     puts.push(open);
-    addedParticipantIds.push(participantId);
+    addedParticipantIds.push(canonicalParticipantId);
   }
 
   const closeParticipantIds = uniqueCaseInsensitive([
@@ -1045,14 +1100,156 @@ export function enrollmentChangesToDateMaps(
 ): {
   addValidFromByParticipant: Record<string, string>;
   removeValidUntilByParticipant: Record<string, string>;
+  /** Lowercase key → nickname casing from the change (for Dynamo SK writes). */
+  participantIdByNormalized: Record<string, string>;
 } {
   const addValidFromByParticipant: Record<string, string> = {};
   const removeValidUntilByParticipant: Record<string, string> = {};
+  const participantIdByNormalized: Record<string, string> = {};
   for (const change of changes ?? []) {
-    const key = change.participantId.trim().toLowerCase();
+    const trimmed = change.participantId.trim();
+    const key = trimmed.toLowerCase();
     if (!key || !change.dateIso) continue;
+    participantIdByNormalized[key] = trimmed;
     if (change.action === "add") addValidFromByParticipant[key] = change.dateIso;
     if (change.action === "remove") removeValidUntilByParticipant[key] = change.dateIso;
   }
-  return { addValidFromByParticipant, removeValidUntilByParticipant };
+  return {
+    addValidFromByParticipant,
+    removeValidUntilByParticipant,
+    participantIdByNormalized,
+  };
+}
+
+/** Participant-facing membership mails from members-dialog saves (#310). */
+export type MembershipMailKind =
+  | "joinAdd"
+  | "joinShift"
+  | "joinCancel"
+  | "exitSet"
+  | "exitShift"
+  | "exitClear";
+
+export type MembershipMailEvent = {
+  participantId: string;
+  kind: MembershipMailKind;
+  /** Start term (join*) or inclusive last term (exit*); exitClear may reuse validFrom. */
+  termDateIso: string;
+};
+
+/**
+ * One mail event per person for a save: end state from enrollmentChanges + previous segments.
+ * Trainer mails are out of scope (#310).
+ */
+export function classifyMembershipMailEvents(input: {
+  previousEnrollments: CourseEnrollment[];
+  changes: EnrollmentChange[] | undefined;
+  refIso: string;
+}): MembershipMailEvent[] {
+  const changes = input.changes ?? [];
+  if (changes.length === 0) return [];
+
+  type Bucket = {
+    participantId: string;
+    lastAdd?: EnrollmentChange;
+    lastRemove?: EnrollmentChange;
+  };
+  const byUser = new Map<string, Bucket>();
+  for (const change of changes) {
+    const key = change.participantId.trim().toLowerCase();
+    if (!key || !change.dateIso) continue;
+    const existing = byUser.get(key);
+    const bucket: Bucket = existing ?? { participantId: change.participantId.trim() };
+    if (change.action === "add") bucket.lastAdd = change;
+    if (change.action === "remove") bucket.lastRemove = change;
+    byUser.set(key, bucket);
+  }
+
+  const events: MembershipMailEvent[] = [];
+  for (const bucket of byUser.values()) {
+    const prev = pickRelevantEnrollmentForParticipant(
+      input.previousEnrollments,
+      bucket.participantId,
+      input.refIso,
+    );
+    const lastAdd = bucket.lastAdd;
+    const lastRemove = bucket.lastRemove;
+
+    // Prefer a single end-state mail when both actions appear in one save.
+    if (lastRemove && lastAdd) {
+      const prevUntil = prev?.validUntil ?? "";
+      if (prevUntil && prevUntil !== lastRemove.dateIso) {
+        events.push({
+          participantId: bucket.participantId,
+          kind: "exitShift",
+          termDateIso: lastRemove.dateIso,
+        });
+      } else {
+        events.push({
+          participantId: bucket.participantId,
+          kind: "exitSet",
+          termDateIso: lastRemove.dateIso,
+        });
+      }
+      continue;
+    }
+
+    if (lastRemove) {
+      const wasUpcomingKommt =
+        Boolean(prev) &&
+        isEnrollmentOpen(prev!) &&
+        prev!.validFrom > input.refIso;
+      if (wasUpcomingKommt) {
+        events.push({
+          participantId: bucket.participantId,
+          kind: "joinCancel",
+          termDateIso: prev!.validFrom,
+        });
+        continue;
+      }
+      const prevUntil = prev?.validUntil ?? "";
+      if (prevUntil && prevUntil !== lastRemove.dateIso) {
+        events.push({
+          participantId: bucket.participantId,
+          kind: "exitShift",
+          termDateIso: lastRemove.dateIso,
+        });
+      } else {
+        events.push({
+          participantId: bucket.participantId,
+          kind: "exitSet",
+          termDateIso: lastRemove.dateIso,
+        });
+      }
+      continue;
+    }
+
+    if (lastAdd) {
+      const prevUntil = prev?.validUntil ?? "";
+      // Austritt zurücknehmen: Bis noch ≥ R (Dabei/endet). Ehemalig (until < R) → Beitritt/Rejoin.
+      if (prevUntil && prevUntil >= input.refIso) {
+        events.push({
+          participantId: bucket.participantId,
+          kind: "exitClear",
+          termDateIso: lastAdd.dateIso,
+        });
+        continue;
+      }
+      if (prev && isEnrollmentOpen(prev) && prev.validFrom !== lastAdd.dateIso) {
+        events.push({
+          participantId: bucket.participantId,
+          kind: "joinShift",
+          termDateIso: lastAdd.dateIso,
+        });
+        continue;
+      }
+      events.push({
+        participantId: bucket.participantId,
+        kind: "joinAdd",
+        termDateIso: lastAdd.dateIso,
+      });
+    }
+  }
+
+  return events;
 }
