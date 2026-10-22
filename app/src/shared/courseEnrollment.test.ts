@@ -546,6 +546,74 @@ describe("courseEnrollment", () => {
     );
   });
 
+  it("planStemEnrollmentWrites uses participantIdByNormalized for upcoming kommt SK", () => {
+    // Kommt is not in nextParticipants (stem at R); only date-map keys drive the add.
+    const planned = planStemEnrollmentWrites({
+      courseId: 9,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: [],
+      addValidFrom: "2026-10-19",
+      removeValidUntil: "2026-10-18",
+      addValidFromByParticipant: { ines: "2026-11-10" },
+      participantIdByNormalized: { ines: "Ines" },
+    });
+    expect(planned.addedParticipantIds).toEqual(["Ines"]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        participantId: "Ines",
+        validFrom: "2026-11-10",
+        source: "manual",
+      }),
+    ]);
+    expect(buildCourseEnrollmentSortKey(9, planned.puts[0].participantId, "2026-11-10")).toBe(
+      "9#Ines#2026-11-10",
+    );
+  });
+
+  it("planStemEnrollmentWrites shifts upcoming kommt validFrom without closing a stub", () => {
+    const existing: CourseEnrollment[] = [
+      { courseId: 9, participantId: "Ines", validFrom: "2026-11-10" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 9,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: existing,
+      addValidFrom: "2026-10-19",
+      removeValidUntil: "2026-10-18",
+      addValidFromByParticipant: { ines: "2026-11-17" },
+      participantIdByNormalized: { ines: "Ines" },
+    });
+    expect(planned.deletes).toEqual([
+      expect.objectContaining({ participantId: "Ines", validFrom: "2026-11-10" }),
+    ]);
+    expect(planned.puts).toEqual([
+      expect.objectContaining({
+        participantId: "Ines",
+        validFrom: "2026-11-17",
+        source: "manual",
+      }),
+    ]);
+    expect(planned.puts[0]).not.toHaveProperty("validUntil");
+    expect(planned.puts.some((row) => row.validFrom === "2026-11-10")).toBe(false);
+
+    // Cancelling the shifted kommt must not revive a closed 10.11 stub.
+    const afterCancel = planStemEnrollmentWrites({
+      courseId: 9,
+      previousParticipants: [],
+      nextParticipants: [],
+      existingEnrollments: planned.puts,
+      addValidFrom: "2026-10-19",
+      removeValidUntil: "2026-10-18",
+      removeValidUntilByParticipant: { ines: "2026-10-18" },
+    });
+    expect(afterCancel.deletes).toEqual([
+      expect.objectContaining({ participantId: "Ines", validFrom: "2026-11-17" }),
+    ]);
+    expect(afterCancel.puts).toEqual([]);
+  });
+
   it("planStemEnrollmentWrites does not clear past until when add reuses the old validFrom (#310)", () => {
     const existing: CourseEnrollment[] = [
       { courseId: 1, participantId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-14" },

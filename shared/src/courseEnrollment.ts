@@ -681,6 +681,12 @@ export type PlanStemEnrollmentWritesInput = {
   addValidFromByParticipant?: Record<string, string>;
   /** Optional per-user validUntil (lowercase keys); updates open or already-closed segments. */
   removeValidUntilByParticipant?: Record<string, string>;
+  /**
+   * Canonical nickname casing for lowercase date-map keys (ines → Ines).
+   * Needed because addValidFromByParticipant keys are normalized; Object.keys would
+   * otherwise write lowercase Dynamo SKs for upcoming "kommt" members (#310).
+   */
+  participantIdByNormalized?: Record<string, string>;
   /** When table empty, seed open segments from previousParticipants with this validFrom. */
   bootstrapValidFrom?: string;
   actorUserId?: string;
@@ -712,6 +718,8 @@ export type PlanStemEnrollmentWritesResult = {
  * - **Clamp on close**: validUntil is clamped to one day before the next segment's validFrom if necessary.
  * - **Never started**: if close would set validUntil before validFrom, delete the row
  *   (planned join cancelled). Do not persist inverted intervals.
+ * - **Kommt shift**: open segment with validFrom &gt; R and a new add date → delete old SK,
+ *   put open row at the new validFrom (no closed stub between the two starts).
  * - **History preserved**: closed rows with a real interval are never deleted.
  */
 export function planStemEnrollmentWrites(
@@ -779,7 +787,9 @@ export function planStemEnrollmentWrites(
 
   const addParticipantIds = uniqueCaseInsensitive([
     ...added,
-    ...Object.keys(input.addValidFromByParticipant ?? {}),
+    ...Object.keys(input.addValidFromByParticipant ?? {}).map(
+      (key) => input.participantIdByNormalized?.[key] ?? key,
+    ),
   ]);
 
   for (const participantId of addParticipantIds) {
@@ -790,27 +800,42 @@ export function planStemEnrollmentWrites(
     const existingOpen = findOpenEnrollmentForParticipant(working, participantId);
     if (existingOpen && existingOpen.validFrom === validFrom) continue;
     if (existingOpen && existingOpen.validFrom !== validFrom) {
-      const closeUntil =
-        validFrom > existingOpen.validFrom
-          ? addDaysIso(validFrom, -1)
-          : existingOpen.validFrom;
-      const closed = closeEnrollmentSegment(
-        existingOpen as CourseEnrollment,
-        closeUntil,
-        {
-          closedAt: input.closedAt ?? input.createdAt,
-          actorUserId: input.actorUserId,
-        },
-      );
-      working = working.map((entry) =>
-        entry.courseId === closed.courseId &&
-        entry.participantId.toLowerCase() === closed.participantId.toLowerCase() &&
-        entry.validFrom === closed.validFrom &&
-        isEnrollmentOpen(entry)
-          ? closed
-          : entry,
-      );
-      puts.push(closed);
+      // Upcoming "kommt" (start after R): move validFrom on the same membership.
+      // Close+new would leave a closed stub; cancelling the new start would revive it.
+      if (existingOpen.validFrom > input.addValidFrom) {
+        working = working.filter(
+          (entry) =>
+            !(
+              entry.participantId.toLowerCase() === existingOpen.participantId.toLowerCase() &&
+              entry.validFrom === existingOpen.validFrom
+            ),
+        );
+        deletes.push(existingOpen as CourseEnrollment);
+        // Fall through: Put open row at the new validFrom (new Dynamo SK).
+      } else {
+        // Already started (dabei): close current segment, then open a later one.
+        const closeUntil =
+          validFrom > existingOpen.validFrom
+            ? addDaysIso(validFrom, -1)
+            : existingOpen.validFrom;
+        const closed = closeEnrollmentSegment(
+          existingOpen as CourseEnrollment,
+          closeUntil,
+          {
+            closedAt: input.closedAt ?? input.createdAt,
+            actorUserId: input.actorUserId,
+          },
+        );
+        working = working.map((entry) =>
+          entry.courseId === closed.courseId &&
+          entry.participantId.toLowerCase() === closed.participantId.toLowerCase() &&
+          entry.validFrom === closed.validFrom &&
+          isEnrollmentOpen(entry)
+            ? closed
+            : entry,
+        );
+        puts.push(closed);
+      }
     }
     if (findOpenEnrollmentForParticipant(working, participantId)) continue;
     const proposed = { validFrom };
@@ -835,12 +860,10 @@ export function planStemEnrollmentWrites(
       }
     }
 
-    // Preserve Dynamo SK casing (1#Ines#… vs 1#ines#…) when updating an existing row.
-    const canonicalParticipantId =
-      sameFromClosed?.participantId ??
-      existingForPerson.find((entry) => entry.validFrom === validFrom)?.participantId ??
-      existingForPerson[0]?.participantId ??
-      participantId;
+    // Same validFrom SK: keep that row's casing (Put/Delete identity). New segments use the
+    // requested id (resolved nickname) — do not inherit casing from older segments.
+    const sameFromRow = existingForPerson.find((entry) => entry.validFrom === validFrom);
+    const canonicalParticipantId = sameFromRow?.participantId ?? participantId;
 
     const open = buildOpenEnrollment({
       courseId: input.courseId,
@@ -1077,16 +1100,25 @@ export function enrollmentChangesToDateMaps(
 ): {
   addValidFromByParticipant: Record<string, string>;
   removeValidUntilByParticipant: Record<string, string>;
+  /** Lowercase key → nickname casing from the change (for Dynamo SK writes). */
+  participantIdByNormalized: Record<string, string>;
 } {
   const addValidFromByParticipant: Record<string, string> = {};
   const removeValidUntilByParticipant: Record<string, string> = {};
+  const participantIdByNormalized: Record<string, string> = {};
   for (const change of changes ?? []) {
-    const key = change.participantId.trim().toLowerCase();
+    const trimmed = change.participantId.trim();
+    const key = trimmed.toLowerCase();
     if (!key || !change.dateIso) continue;
+    participantIdByNormalized[key] = trimmed;
     if (change.action === "add") addValidFromByParticipant[key] = change.dateIso;
     if (change.action === "remove") removeValidUntilByParticipant[key] = change.dateIso;
   }
-  return { addValidFromByParticipant, removeValidUntilByParticipant };
+  return {
+    addValidFromByParticipant,
+    removeValidUntilByParticipant,
+    participantIdByNormalized,
+  };
 }
 
 /** Participant-facing membership mails from members-dialog saves (#310). */

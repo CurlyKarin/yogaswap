@@ -14,7 +14,7 @@ import {
   findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
-import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeriesRangeEditErrorMessage, looksLikeParticipantId, type Course } from "@yogaswap/shared";
+import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeriesRangeEditErrorMessage, type Course } from "@yogaswap/shared";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
@@ -414,35 +414,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   const participantsTable = process.env.PARTICIPANTS_TABLE;
-  const refsNeedingResolve = [
-    ...(participants ?? []),
-    ...(enrollmentChanges ?? []).map((change) => change.participantId),
-  ].filter((ref) => looksLikeParticipantId(ref));
-  if (participantsTable && refsNeedingResolve.length > 0) {
-    if (participants?.length) {
-      participants = await resolveOperationalNicknameList(
-        client,
-        participantsTable,
-        tenantId,
-        participants,
-      );
-    }
-    if (enrollmentChanges?.length) {
-      enrollmentChanges = await Promise.all(
-        enrollmentChanges.map(async (change) => ({
-          ...change,
-          participantId: looksLikeParticipantId(change.participantId)
-            ? await resolveOperationalNickname(
-                client,
-                participantsTable,
-                tenantId,
-                change.participantId,
-              )
-            : change.participantId,
-        })),
-      );
-    }
-  }
 
   try {
     const membershipResp = await client.send(
@@ -483,6 +454,31 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const item = courseResp.Item;
     if (!item) {
       return { statusCode: 404, body: JSON.stringify({ error: "Course not found" }) };
+    }
+
+    // Canonical nickname casing from profiles (ines → Ines) for enrollment SK stability.
+    if (participantsTable) {
+      if (participants?.length) {
+        participants = await resolveOperationalNicknameList(
+          client,
+          participantsTable,
+          tenantId,
+          participants,
+        );
+      }
+      if (enrollmentChanges?.length) {
+        enrollmentChanges = await Promise.all(
+          enrollmentChanges.map(async (change) => ({
+            ...change,
+            participantId: await resolveOperationalNickname(
+              client,
+              participantsTable,
+              tenantId,
+              change.participantId,
+            ),
+          })),
+        );
+      }
     }
 
     const existingCapacity = item.capacity?.N ? Number.parseInt(item.capacity.N, 10) : 0;
@@ -1203,6 +1199,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             removeValidUntil,
             addValidFromByParticipant: dateMaps.addValidFromByParticipant,
             removeValidUntilByParticipant: dateMaps.removeValidUntilByParticipant,
+            participantIdByNormalized: dateMaps.participantIdByNormalized,
             bootstrapValidFrom: migrationValidFrom,
             actorUserId: actorUserId ?? undefined,
             createdAt: new Date().toISOString(),
@@ -1421,7 +1418,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     if (plannedEndNotifyChange && plannedEndNotifyDateIso) {
-      const participantsTable = process.env.PARTICIPANTS_TABLE;
       const sesSourceEmail = process.env.SES_SOURCE_EMAIL;
       const baseUrlEnv = resolveAppBaseUrlForTenant(tenantId);
       const loginUrl = baseUrlEnv || undefined;
@@ -1679,7 +1675,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
-    const participantsTable = process.env.PARTICIPANTS_TABLE;
     const sesSourceEmail = process.env.SES_SOURCE_EMAIL;
     const baseUrlEnv = resolveAppBaseUrlForTenant(tenantId);
     const mailCourseName = nextName;

@@ -39,7 +39,7 @@ Eine Zeile ist identisch über den Sort Key `courseId#participantId#validFrom`. 
 | Austritt zurücknehmen | `validUntil` **≥ R** (noch Dabei/endet) | **Bestehende** Zeile: `validUntil` entfernen |
 | Wieder aufnehmen | Letztes `validUntil` **&lt; R** (Ehemalig): `validFrom` **nach** dem letzten `validUntil` | **Neue** offene Zeile; alte Zeile bleibt als Historie — nie `validUntil` der alten Zeile löschen |
 | Kommt entfernen | Offenes Segment mit Start in der Zukunft, noch kein Termin besucht | **Zeile löschen**, kein `validUntil` vor `validFrom` |
-| Ab-Datum einer kommenden Mitgliedschaft | Offenes Segment, anderer Start | Alte Zeile schließen (Tag vor neuem Start), **dann** neue offene Zeile |
+| Ab-Datum einer kommenden Mitgliedschaft | Offenes Segment mit Start **nach R** („kommt“), anderer Start | **Dieselbe** Mitgliedschaft verschieben: alte SK löschen, neue offene Zeile mit neuem `validFrom` (kein geschlossenes Stub-Segment) |
 
 Kein zweites Segment, wenn das neue `validFrom` noch im Zeitraum einer bestehenden Zeile liegt — dann nur diese Zeile anpassen (typisch: Bis-Korrektur, nicht Wiederaufnahme).
 
