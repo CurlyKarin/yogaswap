@@ -37,6 +37,8 @@ import {
   updateCourse,
 } from "../api/courses";
 import type { ParticipantRosterEntry } from "../api/participants";
+import { getParticipants } from "../api/participants";
+import type { InstructorCandidate } from "./CourseInstructorsField";
 import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
 import { isActorOnCourseStem, type EnrollmentChange } from "shared/courseEnrollment";
 import {
@@ -95,6 +97,7 @@ type CourseEditorState = {
   status: CourseStatus;
   planningMode: CoursePlanningMode;
   plannedEndDate: string | null;
+  instructors: string[];
 };
 
 type CourseCreateState = {
@@ -105,6 +108,7 @@ type CourseCreateState = {
   overbookLimit: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
+  instructors: string[];
 };
 
 const STATUS_OPTIONS: Array<{ value: CourseStatus; label: string }> = [
@@ -180,6 +184,29 @@ function toEditorState(course: Course): CourseEditorState {
     status: course.status ?? "active",
     planningMode: course.planningMode ?? "bounded_series",
     plannedEndDate: course.plannedEndDate?.trim() ? course.plannedEndDate.trim() : null,
+    instructors: [...(course.instructors ?? [])],
+  };
+}
+
+function sameInstructorList(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const normalize = (list: string[]) =>
+    list.map((entry) => entry.trim().toLowerCase()).sort((left, right) => left.localeCompare(right));
+  const left = normalize(a);
+  const right = normalize(b);
+  return left.every((entry, index) => entry === right[index]);
+}
+
+function emptyCreateState(): CourseCreateState {
+  return {
+    name: "",
+    weekday: "Mon",
+    time: "18:00",
+    capacity: "10",
+    overbookLimit: "0",
+    status: "draft",
+    planningMode: "bounded_series",
+    instructors: [],
   };
 }
 
@@ -209,17 +236,11 @@ export default function CourseList({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [createState, setCreateState] = useState<CourseCreateState>({
-    name: "",
-    weekday: "Mon",
-    time: "18:00",
-    capacity: "10",
-    overbookLimit: "0",
-    status: "draft",
-    planningMode: "bounded_series",
-  });
+  const [createState, setCreateState] = useState<CourseCreateState>(emptyCreateState);
   const [editState, setEditState] = useState<CourseEditorState | null>(null);
   const [editInitialState, setEditInitialState] = useState<CourseEditorState | null>(null);
+  const [instructorCandidates, setInstructorCandidates] = useState<InstructorCandidate[]>([]);
+  const [instructorCandidatesLoading, setInstructorCandidatesLoading] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [membersTargetId, setMembersTargetId] = useState<number | null>(null);
   const [datesTargetId, setDatesTargetId] = useState<number | null>(null);
@@ -317,18 +338,41 @@ export default function CourseList({
   const resetFormError = () => setFormError(null);
 
   const openCreateModal = () => {
-    setCreateState({
-      name: "",
-      weekday: "Mon",
-      time: "18:00",
-      capacity: "10",
-      overbookLimit: "0",
-      status: "draft",
-      planningMode: "bounded_series",
-    });
+    setCreateState(emptyCreateState());
     resetFormError();
     setCreateOpen(true);
   };
+
+  useEffect(() => {
+    if (!createOpen && !editOpen) return;
+    if (!canManageCourses) return;
+    let cancelled = false;
+    setInstructorCandidatesLoading(true);
+    void getParticipants({ includeOrphaned: false })
+      .then((items) => {
+        if (cancelled) return;
+        const candidates: InstructorCandidate[] = items
+          .filter((entry) => entry.role === "admin" || entry.role === "instructor")
+          .map((entry) => ({
+            userId: entry.userId,
+            displayName: entry.displayName,
+            role: entry.role,
+          }))
+          .sort((left, right) =>
+            (left.displayName || left.userId).localeCompare(right.displayName || right.userId, "de"),
+          );
+        setInstructorCandidates(candidates);
+      })
+      .catch(() => {
+        if (!cancelled) setInstructorCandidates([]);
+      })
+      .finally(() => {
+        if (!cancelled) setInstructorCandidatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, editOpen, canManageCourses]);
 
   const openEditModal = (course: Course) => {
     const next = toEditorState(course);
@@ -439,7 +483,8 @@ export default function CourseList({
       editState.overbookLimit !== editInitialState.overbookLimit ||
       editState.status !== editInitialState.status ||
       editState.planningMode !== editInitialState.planningMode ||
-      editState.plannedEndDate !== editInitialState.plannedEndDate);
+      editState.plannedEndDate !== editInitialState.plannedEndDate ||
+      !sameInstructorList(editState.instructors, editInitialState.instructors));
   const editOverbookChanged =
     !!editState && !!editInitialState && editState.overbookLimit !== editInitialState.overbookLimit;
   const canSubmitEdit = editOverbookingOnly
@@ -530,6 +575,7 @@ export default function CourseList({
         capacity,
         overbookLimit,
         status: createState.status,
+        instructors: createState.instructors,
         ...buildSchedulingFromMode(createState.planningMode),
       });
       closeCreateModal();
@@ -643,6 +689,7 @@ export default function CourseList({
         capacity,
         overbookLimit,
         status: editState.status,
+        instructors: editState.instructors,
         ...(planningModeChanged ? buildSchedulingFromMode(editState.planningMode) : {}),
         ...(plannedEndChanged
           ? { plannedEndDate: editState.plannedEndDate }
@@ -885,6 +932,8 @@ export default function CourseList({
         statusOptions={STATUS_OPTIONS}
         planningModeOptions={PLANNING_MODE_OPTIONS}
         planningModeHint={planningModeHint}
+        instructorCandidates={instructorCandidates}
+        instructorCandidatesLoading={instructorCandidatesLoading}
         onKeyDown={handleCreateDialogKeyDown}
         onClose={closeCreateModal}
         onSave={saveCreateCourse}
@@ -921,6 +970,8 @@ export default function CourseList({
         rollingInactiveHint={ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE}
         rollingPlanningHorizonWeeks={resolveRollingPlanningHorizonWeeks(tenant?.settings)}
         overbookingOnlyMode={editOverbookingOnly}
+        instructorCandidates={instructorCandidates}
+        instructorCandidatesLoading={instructorCandidatesLoading}
         onKeyDown={handleEditDialogKeyDown}
         onClose={closeEditModal}
         onSave={saveEditCourse}

@@ -35,6 +35,7 @@ type CreateCourseBody = {
   visibleUntil?: string;
   excludedDates?: string[];
   includedDates?: string[];
+  instructors?: string[];
 };
 
 function parseBody(event: APIGatewayProxyEvent): CreateCourseBody | null {
@@ -54,6 +55,23 @@ function normalizeDateListInput(value: unknown): string[] | null {
   const normalized = value.map((entry) => (typeof entry === "string" ? entry.trim() : ""));
   if (normalized.some((entry) => !ISO_DATE_ONLY.test(entry))) return null;
   return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeInstructorListInput(value: unknown): string[] | null {
+  if (value == null) return [];
+  if (!Array.isArray(value)) return null;
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") return null;
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+  return normalized;
 }
 
 function isValidDateRange(start?: string, end?: string): boolean {
@@ -103,6 +121,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     typeof body.visibleUntil === "string" ? body.visibleUntil.trim() : undefined;
   const excludedDatesInput = normalizeDateListInput(body.excludedDates);
   const includedDatesInput = normalizeDateListInput(body.includedDates);
+  const instructorsInput = Object.prototype.hasOwnProperty.call(body, "instructors")
+    ? normalizeInstructorListInput(body.instructors)
+    : [];
   const capacity = Number.isFinite(body.capacity) ? Number(body.capacity) : NaN;
   const overbookLimit = Number.isFinite(body.overbookLimit) ? Number(body.overbookLimit) : 0;
 
@@ -123,6 +144,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
   if (!COURSE_STATUSES.has(status)) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid status value" }) };
+  }
+  if (instructorsInput == null) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "instructors must be an array of non-empty strings" }),
+    };
   }
   if (planningMode && !COURSE_PLANNING_MODES.has(planningMode)) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid planningMode value" }) };
@@ -261,6 +288,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       overbookLimit: { N: String(overbookLimit) },
       status: { S: effectiveStatus },
       participants: { L: [] },
+      instructors: { L: instructorsInput.map((entry) => ({ S: entry })) },
       dates: { L: visibleDates.map((entry) => ({ S: entry })) },
     };
     if (planningMode) item.planningMode = { S: planningMode };
@@ -306,6 +334,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         includedDates,
         visibleDates,
         participants: [],
+        instructors: instructorsInput,
         dates: visibleDates,
       }),
     };

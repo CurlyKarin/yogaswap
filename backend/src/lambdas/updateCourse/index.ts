@@ -102,6 +102,7 @@ type UpdateCourseBody = {
   excludedDates?: string[];
   includedDates?: string[];
   participants?: string[];
+  instructors?: string[];
   enrollmentChanges?: EnrollmentChange[];
   /** Client may only clear (#331); set true happens on inactive→draft. */
   replanPending?: boolean;
@@ -133,6 +134,24 @@ function normalizeParticipantListInput(value: unknown): string[] | null {
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter((entry) => entry.length > 0);
   return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
+}
+
+/** Nicknames for course.instructors; case-insensitive unique, order preserved. */
+function normalizeInstructorListInput(value: unknown): string[] | null {
+  if (value == null) return [];
+  if (!Array.isArray(value)) return null;
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") return null;
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+  return normalized;
 }
 
 function normalizeEnrollmentChangesInput(value: unknown): EnrollmentChange[] | null {
@@ -318,6 +337,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     && !Object.prototype.hasOwnProperty.call(body, "excludedDates")
     && !Object.prototype.hasOwnProperty.call(body, "includedDates")
     && !Object.prototype.hasOwnProperty.call(body, "participants")
+    && !Object.prototype.hasOwnProperty.call(body, "instructors")
     && !Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
     && !Object.prototype.hasOwnProperty.call(body, "replanPending")
   ) {
@@ -343,6 +363,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     : undefined;
   let participants = Object.prototype.hasOwnProperty.call(body, "participants")
     ? normalizeParticipantListInput(body.participants)
+    : undefined;
+  let instructors = Object.prototype.hasOwnProperty.call(body, "instructors")
+    ? normalizeInstructorListInput(body.instructors)
     : undefined;
   let enrollmentChanges = Object.prototype.hasOwnProperty.call(body, "enrollmentChanges")
     ? normalizeEnrollmentChangesInput(body.enrollmentChanges)
@@ -404,6 +427,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify({ error: "participants must be an array of non-empty strings" }),
     };
   }
+  if (Object.prototype.hasOwnProperty.call(body, "instructors") && !instructors) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "instructors must be an array of non-empty strings" }),
+    };
+  }
   if (Object.prototype.hasOwnProperty.call(body, "enrollmentChanges") && !enrollmentChanges) {
     return {
       statusCode: 400,
@@ -456,7 +485,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 404, body: JSON.stringify({ error: "Course not found" }) };
     }
 
-    // Canonical nickname casing from profiles (ines → Ines) for enrollment SK stability.
+    // Canonical nickname casing from profiles (ines → Ines) for enrollment SK / instructor refs.
     if (participantsTable) {
       if (participants?.length) {
         participants = await resolveOperationalNicknameList(
@@ -464,6 +493,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           participantsTable,
           tenantId,
           participants,
+        );
+      }
+      if (instructors?.length) {
+        instructors = await resolveOperationalNicknameList(
+          client,
+          participantsTable,
+          tenantId,
+          instructors,
         );
       }
       if (enrollmentChanges?.length) {
@@ -948,6 +985,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
+    const nextInstructors =
+      instructors ??
+      item.instructors?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ??
+      [];
+
     const updateItem: Record<string, any> = {
       tenantId: { S: tenantId },
       courseId: { S: courseId },
@@ -960,6 +1002,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       overbookLimit: { N: String(nextOverbookLimit) },
       status: { S: effectiveStatus },
       participants: { L: nextParticipants },
+      instructors: { L: nextInstructors.map((entry) => ({ S: entry })) },
       dates: { L: nextDates.map((entry) => ({ S: entry })) },
     };
     if (nextPlanningMode) updateItem.planningMode = { S: nextPlanningMode };
@@ -1680,8 +1723,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const mailCourseName = nextName;
     const mailWeekday = nextWeekday;
     const mailTime = nextTime;
-    const instructorUserIds =
-      item.instructors?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+    const instructorUserIds = nextInstructors;
     const upcomingTermIso = findNextUpcomingOccurrenceIso(nextDates, nextTime);
 
     if (status && currentStatus === "draft" && nextStatus === "active") {
@@ -1869,6 +1911,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ...(nextReplanPending ? { replanPending: true } : {}),
         visibleDates: nextDates,
         participants: nextParticipants.map((p) => p.S).filter(Boolean),
+        instructors: nextInstructors,
         dates: nextDates,
       }),
     };

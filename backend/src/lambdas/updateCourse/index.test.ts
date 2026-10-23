@@ -1550,6 +1550,37 @@ describe("updateCourse Lambda", () => {
     expect(participantIds).not.toContain("ines");
   });
 
+  test("persists and returns instructors; preserves when omitted (#319)", async () => {
+    mockAdminMembership()
+      .mockResolvedValueOnce({
+        Item: {
+          ...baseCourseItem("draft"),
+          instructors: { L: [{ S: "Maya" }] },
+        },
+      })
+      .mockResolvedValueOnce({}) // course put (name only — instructors preserved)
+      .mockResolvedValueOnce({ Items: [] });
+
+    const preserveResult = await handler(makeEvent({ name: "Neu" }));
+    expect(preserveResult.statusCode).toBe(200);
+    expect(JSON.parse(preserveResult.body).instructors).toEqual(["Maya"]);
+    const preservePut = (PutItemCommand as unknown as jest.Mock).mock.calls.at(-1)?.[0];
+    expect(preservePut?.Item?.instructors?.L).toEqual([{ S: "Maya" }]);
+
+    installDynamoSendHarness();
+    (PutItemCommand as unknown as jest.Mock).mockClear();
+    mockAdminMembership()
+      .mockResolvedValueOnce({ Item: baseCourseItem("draft") })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Items: [] });
+
+    const patchResult = await handler(makeEvent({ instructors: ["Ines", "Maya"] }));
+    expect(patchResult.statusCode).toBe(200);
+    expect(JSON.parse(patchResult.body).instructors).toEqual(["Ines", "Maya"]);
+    const patchPut = (PutItemCommand as unknown as jest.Mock).mock.calls.at(-1)?.[0];
+    expect(patchPut?.Item?.instructors?.L).toEqual([{ S: "Ines" }, { S: "Maya" }]);
+  });
+
   test("updates course participants list", async () => {
     mockAdminMembership()
       .mockResolvedValueOnce({ Item: baseCourseItem("draft") })

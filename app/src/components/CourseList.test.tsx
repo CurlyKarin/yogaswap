@@ -321,7 +321,106 @@ describe("CourseList", () => {
           capacity: 12,
           planningMode: "bounded_series",
           visibilityMode: "fixed_window",
+          instructors: [],
         }),
+      );
+    });
+  });
+
+  it("speichert Kursleitung beim Anlegen und Bearbeiten (#319)", async () => {
+    const adminMembership: UserTenantMembership = {
+      ...baseMembership,
+      role: "admin",
+      userId: "admin",
+    };
+    mockedGetParticipants.mockResolvedValue([
+      {
+        tenantId: "default-tenant",
+        userId: "Maya",
+        displayName: "Maya",
+        status: "active",
+        role: "instructor",
+      },
+      {
+        tenantId: "default-tenant",
+        userId: "Ines",
+        displayName: "Ines",
+        status: "active",
+        role: "admin",
+      },
+      {
+        tenantId: "default-tenant",
+        userId: "Luna",
+        displayName: "Luna",
+        status: "active",
+        role: "participant",
+      },
+    ]);
+    mockedCreateCourse.mockResolvedValue({
+      id: 2,
+      name: "Mit Leitung",
+      weekday: "Tue",
+      time: "18:30",
+      capacity: 10,
+      status: "draft",
+      participants: [],
+      instructors: ["Maya"],
+      dates: [],
+    });
+    mockedUpdateCourse.mockResolvedValue({
+      id: 1,
+      name: "Kurs A",
+      weekday: "Mon",
+      time: "10:00",
+      capacity: 10,
+      status: "draft",
+      participants: [],
+      instructors: ["Maya", "Ines"],
+      dates: ["2099-06-16"],
+    });
+
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "draft",
+        participants: [],
+        instructors: ["Maya"],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    renderList({ courses: mockCourses, membership: adminMembership });
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByRole("button", { name: /kurs anlegen/i }).at(-1)!);
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Kursleitung Maya/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText(/Kursleitung Luna/i)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Kursname"), "Mit Leitung");
+    await user.click(screen.getByLabelText(/Kursleitung Maya/i));
+    await user.click(screen.getByRole("button", { name: /^anlegen$/i }));
+    await waitFor(() => {
+      expect(mockedCreateCourse).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Mit Leitung", instructors: ["Maya"] }),
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: /kurs bearbeiten kurs a/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Kursleitung Maya/i)).toBeChecked();
+    });
+    await user.click(screen.getByLabelText(/Kursleitung Ines/i));
+    await user.click(screen.getByRole("button", { name: /^speichern$/i }));
+    await waitFor(() => {
+      expect(mockedUpdateCourse).toHaveBeenCalledWith(
+        "1",
+        expect.objectContaining({ instructors: ["Maya", "Ines"] }),
       );
     });
   });

@@ -2,6 +2,7 @@ import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
 import CourseModalFrame from "./CourseModalFrame";
 import CourseCapacityFields from "./CourseCapacityFields";
+import CourseInstructorsField, { type InstructorCandidate } from "./CourseInstructorsField";
 import TermDateSelect from "./TermDateSelect";
 
 type CourseCreateState = {
@@ -12,6 +13,7 @@ type CourseCreateState = {
   overbookLimit: string;
   status: CourseStatus;
   planningMode: CoursePlanningMode;
+  instructors: string[];
 };
 
 type WeekdayOption = { value: string; label: string };
@@ -29,6 +31,8 @@ type CourseCreateDialogProps = {
   statusOptions: readonly StatusOption[];
   planningModeOptions: readonly PlanningModeOption[];
   planningModeHint: (mode: CoursePlanningMode) => string;
+  instructorCandidates: InstructorCandidate[];
+  instructorCandidatesLoading?: boolean;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onClose: () => void;
   onSave: () => void;
@@ -46,6 +50,8 @@ export default function CourseCreateDialog({
   statusOptions,
   planningModeOptions,
   planningModeHint,
+  instructorCandidates,
+  instructorCandidatesLoading = false,
   onKeyDown,
   onClose,
   onSave,
@@ -122,6 +128,13 @@ export default function CourseCreateDialog({
             }
           />
           <p className="course-editor-inline-hint">{planningModeHint(state.planningMode)}</p>
+          <CourseInstructorsField
+            selected={state.instructors}
+            candidates={instructorCandidates}
+            loading={instructorCandidatesLoading}
+            disabled={saving}
+            onChange={(instructors) => onChange({ ...state, instructors })}
+          />
           {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}
         </div>
         <div className="modal-actions dialog-actions">
