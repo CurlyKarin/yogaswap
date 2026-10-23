@@ -56,6 +56,8 @@ export type CreateCourseRequest = {
   excludedDates?: string[];
   includedDates?: string[];
   participants?: string[];
+  /** Kursleitung (Nicknames); leer = keine Zuordnung (#319). */
+  instructors?: string[];
   /** #331: beim Speichern der Termine auf false setzen */
   replanPending?: boolean;
 };

@@ -115,6 +115,24 @@ describe("CourseCard", () => {
     expect(select).toHaveClass("term-date-select");
   });
 
+  it("zeigt Kursleitung kompakt auf der Kachel (#319)", () => {
+    renderCourseCard({
+      course: { ...baseCourse, instructors: ["Maya", "Ines"] },
+      allCourses: [{ ...baseCourse, instructors: ["Maya", "Ines"] }],
+    });
+
+    expect(screen.getByLabelText(/Kursleitung: Maya, Ines/i)).toHaveTextContent(
+      "Kursleitung: Maya, Ines",
+    );
+  });
+
+  it("blendet Kursleitung aus wenn keine zugeordnet ist (#319)", () => {
+    renderCourseCard({
+      course: { ...baseCourse, instructors: [] },
+    });
+    expect(screen.queryByText(/Kursleitung:/i)).not.toBeInTheDocument();
+  });
+
   it("verknüpft Teilnehmer-Chips mit beschrifteter Liste", () => {
     renderCourseCard({
       overrides: [

@@ -3,6 +3,7 @@ import type { CoursePlanningMode, CourseStatus } from "shared/types";
 import CourseModalFrame from "./CourseModalFrame";
 import CoursePlannedEndField from "./CoursePlannedEndField";
 import CourseCapacityFields from "./CourseCapacityFields";
+import CourseInstructorsField, { type InstructorCandidate } from "./CourseInstructorsField";
 import TermDateSelect from "./TermDateSelect";
 
 type CourseEditorState = {
@@ -15,6 +16,7 @@ type CourseEditorState = {
   status: CourseStatus;
   planningMode: CoursePlanningMode;
   plannedEndDate: string | null;
+  instructors: string[];
 };
 
 type WeekdayOption = { value: string; label: string };
@@ -38,6 +40,8 @@ type CourseEditDialogProps = {
   rollingInactiveHint?: string | null;
   rollingPlanningHorizonWeeks?: number;
   overbookingOnlyMode?: boolean;
+  instructorCandidates?: InstructorCandidate[];
+  instructorCandidatesLoading?: boolean;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onClose: () => void;
   onSave: () => void;
@@ -61,6 +65,8 @@ export default function CourseEditDialog({
   rollingInactiveHint = null,
   rollingPlanningHorizonWeeks = 5,
   overbookingOnlyMode = false,
+  instructorCandidates = [],
+  instructorCandidatesLoading = false,
   onKeyDown,
   onClose,
   onSave,
@@ -173,6 +179,15 @@ export default function CourseEditDialog({
               rollingPlanningHorizonWeeks={rollingPlanningHorizonWeeks}
               saving={saving}
               onChange={(plannedEndDate) => onChange({ ...state, plannedEndDate })}
+            />
+          )}
+          {!overbookingOnlyMode && (
+            <CourseInstructorsField
+              selected={state.instructors}
+              candidates={instructorCandidates}
+              loading={instructorCandidatesLoading}
+              disabled={saving}
+              onChange={(instructors) => onChange({ ...state, instructors })}
             />
           )}
           {formError && <p style={{ color: "crimson", margin: 0 }}>{formError}</p>}

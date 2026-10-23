@@ -135,6 +135,19 @@ export default function CourseCardDetails({
                 {schedule.roomLabel}
               </div>
             )}
+            {(course.instructors?.length ?? 0) > 0 && (
+              <div
+                className="course-instructors-display"
+                aria-label={`Kursleitung: ${(course.instructors ?? [])
+                  .map((ref) => displayNameForParticipantRef(ref, participantNameByRef))
+                  .join(", ")}`}
+              >
+                Kursleitung:{" "}
+                {(course.instructors ?? [])
+                  .map((ref) => displayNameForParticipantRef(ref, participantNameByRef))
+                  .join(", ")}
+              </div>
+            )}
           </div>
         </div>
         {(showPastGraceMarker ||

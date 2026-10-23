@@ -73,6 +73,7 @@ describe("getCourses Lambda", () => {
         includedDates: [],
         visibleDates: ["2025-10-01", "2025-10-08"],
         participants: ["Anna", "Ben"],
+        instructors: [],
         dates: ["2025-10-01", "2025-10-08"],
       },
     ]);

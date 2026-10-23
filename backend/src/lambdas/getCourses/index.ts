@@ -50,6 +50,9 @@ function mapItemToCourseResponse(
     participants: item.participants?.L
       ? item.participants.L.map((p) => p.S).filter(Boolean)
       : [],
+    instructors: item.instructors?.L
+      ? item.instructors.L.map((p) => p.S).filter(Boolean)
+      : [],
     dates: visibleDates,
   };
 }
