@@ -104,15 +104,26 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain('href="https://beharmony.app.yogaswap.de"');
     expect(mail.html).toContain("Zur YogaSwap-Anmeldung");
     expect(mail.html).toContain("Bitte diesen Namen fuer die Anmeldung merken");
-    // Token-CTA + Body-Login + Footer-Login
+    // Token-CTA + Body-Login + Footer-Login (Hilfe ohne zusaetzlichen Studio-Link)
     expect(mail.html.match(/<a href=/g)?.length).toBe(3);
     expect(mail.html).toContain('href="https://beharmony.app.yogaswap.de/invite?token=abc"');
+    expect(mail.html).toContain(">Zur YogaSwap-Anmeldung</a>");
+    expect(mail.html).toContain("Passwort vergessen?");
+    expect(mail.html).toContain("Login-Namen <strong>Testi</strong>");
     expect(mail.html).toContain('Anmeldung: <a href="https://beharmony.app.yogaswap.de">');
+    expect(mail.html).not.toContain(
+      'style="font-size:13px;line-height:1.4;color:#555;">https://beharmony.app.yogaswap.de</p>',
+    );
     expect(mail.text).toContain("Schritt 1 — Zugang einrichten (einmalig):");
     expect(mail.text).toContain(
       "Passwort festlegen: https://beharmony.app.yogaswap.de/invite?token=abc",
     );
     expect(mail.text).toContain("Schritt 2 — spaeter anmelden:");
+    expect(mail.text).toContain(
+      "Zur YogaSwap-Anmeldung: https://beharmony.app.yogaswap.de",
+    );
+    expect(mail.text).toContain("Passwort vergessen?");
+    expect(mail.text).toContain('Login-Namen "Testi"');
     expect(mail.text).toContain("Anmeldung: https://beharmony.app.yogaswap.de");
   });
 
