@@ -265,12 +265,12 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
 
   // Tenant-Login-URL (#403): getrennt vom einmaligen Token-Link; Body-CTA (nicht nur Text-Footer).
   const studioLoginUrl = input.studioUrl?.trim() || "";
+  // Studio-URL: einmal im Body-CTA, einmal im Footer (#403 follow-up) — kein dritter Klartext-Doppel.
   const step2Html = studioLoginUrl
     ? `
         <p><strong>Schritt 2 — spaeter anmelden:</strong></p>
         <p>Nach der Einrichtung meldest Du Dich unter dieser Adresse an (am besten als Lesezeichen speichern):</p>
         <p><a href="${studioLoginUrl}">Zur YogaSwap-Anmeldung</a></p>
-        <p style="font-size:13px;line-height:1.4;color:#555;">${studioLoginUrl}</p>
       `
     : `
         <p><strong>Schritt 2 — spaeter anmelden:</strong></p>
@@ -280,12 +280,16 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
     ? [
         "Schritt 2 — spaeter anmelden:",
         "Nach der Einrichtung meldest Du Dich unter dieser Adresse an (am besten als Lesezeichen speichern):",
-        studioLoginUrl,
+        `Zur YogaSwap-Anmeldung: ${studioLoginUrl}`,
       ]
     : [
         "Schritt 2 — spaeter anmelden:",
         "Nach der Einrichtung meldest Du Dich ueber die YogaSwap-Adresse Deines Studios an.",
       ];
+
+  // Kein dritter Studio-URL-Link: verweist auf Schritt-2-/Footer-Anmeldung (#403).
+  const tokenHelpHtml = `<p>Funktioniert der Link zum Passwort festlegen nicht? Oeffne die normale Studio-Anmeldung (siehe oben bzw. im Footer), waehle <strong>Passwort vergessen?</strong> und gib dort Deinen Login-Namen <strong>${input.nickname}</strong> ein — so kannst Du den Vorgang selbst erneut anstossen.</p>`;
+  const tokenHelpText = `Funktioniert der Link zum Passwort festlegen nicht? Oeffne die normale Studio-Anmeldung (siehe oben bzw. im Footer), waehle "Passwort vergessen?" und gib dort Deinen Login-Namen "${input.nickname}" ein — so kannst Du den Vorgang selbst erneut anstossen.`;
 
   return composeMail({
     subject: `${studio}: Einladung`,
@@ -300,6 +304,7 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
         <p>Oeffne den folgenden Link und lege Dein Passwort fest. Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode — diesen gibst Du auf der Passwort-Seite ein.</p>
         <p><a href="${input.link}">Passwort fuer YogaSwap festlegen</a></p>
         ${step2Html}
+        ${tokenHelpHtml}
         <p>Falls Du diese Einladung nicht erwartet hast, kannst Du die E-Mail ignorieren oder Dein Studio kontaktieren.</p>
       `,
     textBody: [
@@ -313,6 +318,8 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
       `Passwort festlegen: ${input.link}`,
       "",
       ...step2Text,
+      "",
+      tokenHelpText,
       "",
       "Falls Du diese Einladung nicht erwartet hast, kannst Du die E-Mail ignorieren oder Dein Studio kontaktieren.",
     ].join("\n"),

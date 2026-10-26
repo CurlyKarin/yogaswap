@@ -1,0 +1,23 @@
+---
+description: Keine automatischen Commits oder PRs — erst nach Freigabe / eigenem Test
+alwaysApply: true
+---
+
+# Keine automatischen Commits / PRs
+
+- **Nicht** von sich aus `git commit`, `git push` oder `gh pr create` ausführen.
+- Änderungen lokal fertigstellen und zum **selbst Testen** belassen.
+- Commit und/oder PR **nur**, wenn die Nutzerin das **ausdrücklich** verlangt (z.B. „committen“, „PR erstellen“, „pushen“).
+- Nach dem Implementieren kurz sagen, was bereit zum Testen ist — nicht ungefragt committen.
+
+## Ausnahme
+
+- Ein **bereits existierender PR** ist fehlgeschlagen (CI/Checks): dann darf der Agent Fixes committen und auf denselben PR-Branch pushen, damit der Check erneut laufen kann — **ohne** neuen PR anzulegen.
+- Auch dann: keine Force-Pushes, keine Hook-Umgehungen, außer explizit verlangt.
+
+## Beispiele
+
+- ✅ Feature umgesetzt → „Bereit zum Testen auf Branch X / lokal“ — warten
+- ✅ Nutzerin: „bitte committen und PR“ → dann commit + PR
+- ✅ Offener PR, CI rot → Fix committen + push auf denselben Branch
+- ❌ Nach „setze #403 um“ sofort commit + PR ohne Auftrag
