@@ -707,8 +707,13 @@ locals {
       s3_resources = []
       additional_policies = [
         {
-          Effect   = "Allow"
-          Action   = ["cognito-idp:AdminResetUserPassword"]
+          Effect = "Allow"
+          # AdminGetUser + AdminSetUserPassword: bridge FORCE_CHANGE_PASSWORD → CONFIRMED before reset (#401)
+          Action = [
+            "cognito-idp:AdminResetUserPassword",
+            "cognito-idp:AdminGetUser",
+            "cognito-idp:AdminSetUserPassword",
+          ]
           Resource = aws_cognito_user_pool.yogaswap.arn
         }
       ]
