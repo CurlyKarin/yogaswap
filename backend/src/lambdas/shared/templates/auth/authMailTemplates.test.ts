@@ -84,10 +84,47 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
     expect(mail.html).toContain("Passwort fuer YogaSwap festlegen");
     expect(mail.html).not.toContain("Klicke hier");
-    // nur ein HTML-Link (CTA), kein zweiter Footer-Link
-    expect(mail.html.match(/<a href=/g)?.length).toBe(1);
     expect(mail.text).toContain("Passwort festlegen: https://example.com/invite-token");
     expect(mail.text).toContain("https://beharmony.app.yogaswap.de");
+  });
+
+  test("buildInviteMail explains first setup and studio login URL (#403)", () => {
+    const mail = buildInviteMail({
+      locale: "de",
+      nickname: "Testi",
+      link: "https://beharmony.app.yogaswap.de/invite?token=abc",
+      studioName: "beharmony",
+      studioUrl: "https://beharmony.app.yogaswap.de",
+    });
+
+    expect(mail.html).toContain("Schritt 1 — Zugang einrichten (einmalig)");
+    expect(mail.html).toContain("Bestaetigungscode");
+    expect(mail.html).toContain("Schritt 2 — spaeter anmelden");
+    expect(mail.html).toContain('href="https://beharmony.app.yogaswap.de"');
+    expect(mail.html).toContain("Zur YogaSwap-Anmeldung");
+    expect(mail.html).toContain("Bitte diesen Namen fuer die Anmeldung merken");
+    // Token-CTA + Studio-Login; Footer ohne zusaetzliche Links
+    expect(mail.html.match(/<a href=/g)?.length).toBe(2);
+    expect(mail.html).toContain('href="https://beharmony.app.yogaswap.de/invite?token=abc"');
+    expect(mail.text).toContain("Schritt 1 — Zugang einrichten (einmalig):");
+    expect(mail.text).toContain(
+      "Passwort festlegen: https://beharmony.app.yogaswap.de/invite?token=abc",
+    );
+    expect(mail.text).toContain("Schritt 2 — spaeter anmelden:");
+    expect(mail.text).toContain("https://beharmony.app.yogaswap.de");
+  });
+
+  test("buildInviteMail without studioUrl still explains step 2 (#403)", () => {
+    const mail = buildInviteMail({
+      locale: "de",
+      nickname: "Karin",
+      link: "https://example.com/invite-token",
+    });
+
+    expect(mail.html).toContain("Schritt 2 — spaeter anmelden");
+    expect(mail.html).toContain("YogaSwap-Adresse Deines Studios");
+    expect(mail.html.match(/<a href=/g)?.length).toBe(1);
+    expect(mail.text).toContain("YogaSwap-Adresse Deines Studios");
   });
 
   test("buildInviteMail greets with displayName and keeps nickname as login (#327)", () => {

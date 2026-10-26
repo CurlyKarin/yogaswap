@@ -67,7 +67,10 @@ function forStudioAccessText(studio: string): string {
 type StudioMailFields = {
   locale?: string;
   studioName?: string | null;
-  /** Studio-/App-URL nur im Plain-Text-Footer (kein zweiter HTML-Link → bessere Zustellbarkeit). */
+  /**
+   * Tenant-/App-Basis-URL. Invite-Mail: sichtbarer Anmelde-Link im Body (#403).
+   * Sonst: Plain-Text-Footer (HTML-Footer ohne Links → Zustellbarkeit).
+   */
   studioUrl?: string | null;
   /** Studio-Kontakt aus Tenant-Settings (#272); fehlt → kein Kontakthinweis. */
   studioContact?: StudioContact | null;
@@ -252,6 +255,30 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
     ? `"${studio}" hat dich zu YogaSwap eingeladen, einer Plattform zum Tauschen von Yogakurs-Terminen.`
     : `Du wurdest zu YogaSwap eingeladen, einer Plattform zum Tauschen von Yogakurs-Terminen.`;
 
+  // Tenant-Login-URL (#403): getrennt vom einmaligen Token-Link; Body-CTA (nicht nur Text-Footer).
+  const studioLoginUrl = input.studioUrl?.trim() || "";
+  const step2Html = studioLoginUrl
+    ? `
+        <p><strong>Schritt 2 — spaeter anmelden:</strong></p>
+        <p>Nach der Einrichtung meldest Du Dich unter dieser Adresse an (am besten als Lesezeichen speichern):</p>
+        <p><a href="${studioLoginUrl}">Zur YogaSwap-Anmeldung</a></p>
+        <p style="font-size:13px;line-height:1.4;color:#555;">${studioLoginUrl}</p>
+      `
+    : `
+        <p><strong>Schritt 2 — spaeter anmelden:</strong></p>
+        <p>Nach der Einrichtung meldest Du Dich ueber die YogaSwap-Adresse Deines Studios an.</p>
+      `;
+  const step2Text = studioLoginUrl
+    ? [
+        "Schritt 2 — spaeter anmelden:",
+        "Nach der Einrichtung meldest Du Dich unter dieser Adresse an (am besten als Lesezeichen speichern):",
+        studioLoginUrl,
+      ]
+    : [
+        "Schritt 2 — spaeter anmelden:",
+        "Nach der Einrichtung meldest Du Dich ueber die YogaSwap-Adresse Deines Studios an.",
+      ];
+
   return composeMail({
     subject: `${studio}: Einladung`,
     studioName: studio,
@@ -260,20 +287,25 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
     htmlBody: `
         <h2>Willkommen ${greeting}!</h2>
         <p>${inviteHtml}</p>
-        <p>${loginNameLineHtml(input.nickname)}</p>
+        <p>${loginNameLineHtml(input.nickname)} Bitte diesen Namen fuer die Anmeldung merken.</p>
+        <p><strong>Schritt 1 — Zugang einrichten (einmalig):</strong></p>
+        <p>Oeffne den folgenden Link und lege Dein Passwort fest. Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode — diesen gibst Du auf der Passwort-Seite ein.</p>
         <p><a href="${input.link}">Passwort fuer YogaSwap festlegen</a></p>
-        <p>Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode.</p>
+        ${step2Html}
         <p>Falls Du diese Einladung nicht erwartet hast, kannst Du die E-Mail ignorieren oder Dein Studio kontaktieren.</p>
       `,
     textBody: [
       `Willkommen ${greeting}!`,
       "",
       inviteText,
-      loginNameLineText(input.nickname),
+      `${loginNameLineText(input.nickname)} Bitte diesen Namen fuer die Anmeldung merken.`,
       "",
+      "Schritt 1 — Zugang einrichten (einmalig):",
+      "Oeffne den folgenden Link und lege Dein Passwort fest. Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode — diesen gibst Du auf der Passwort-Seite ein.",
       `Passwort festlegen: ${input.link}`,
       "",
-      "Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode.",
+      ...step2Text,
+      "",
       "Falls Du diese Einladung nicht erwartet hast, kannst Du die E-Mail ignorieren oder Dein Studio kontaktieren.",
     ].join("\n"),
   });
