@@ -94,6 +94,8 @@ export function useCoursesData({
   const [courses, setCourses] = useState<Course[]>([]);
   const [participantRoster, setParticipantRoster] = useState<ParticipantRosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  /** Soft-Refresh (#399): Daten neu laden, ohne die Liste durch loading zu leeren. */
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Phase-2-Fehler (#372): Kurse bleiben sichtbar, Tausch/Roster fehlen. */
   const [deferredError, setDeferredError] = useState<string | null>(null);
@@ -151,12 +153,17 @@ export function useCoursesData({
     [actor, enrollments, todayIso],
   );
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { soft?: boolean }) => {
+    const soft = options?.soft === true;
     const generation = ++fetchGenerationRef.current;
     const isCurrent = () => generation === fetchGenerationRef.current;
 
     try {
-      setLoading(true);
+      if (soft) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setDeferredError(null);
 
       // Phase 1 (#328): kritischer Pfad — UI kann mit Kursen/Occupancy rendern.
@@ -171,18 +178,22 @@ export function useCoursesData({
       setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
       setError(null);
       // #372: Bei onlyMyCourses hängen Zeilen an Swaps — Loading bis Phase 2, kein leerer Flash.
-      if (!onlyMyCourses) {
+      // Soft-Refresh (#399): loading bleibt false — bestehende Kacheln stehen.
+      if (!soft && !onlyMyCourses) {
         setLoading(false);
       }
     } catch (err) {
       console.error("Error in useCoursesData (critical path):", err);
       if (!isCurrent()) return;
       setError("Failed to load data");
-      setSwaps([]);
-      setEnrollments([]);
-      setParticipantRoster([]);
+      if (!soft) {
+        setSwaps([]);
+        setEnrollments([]);
+        setParticipantRoster([]);
+      }
       setDeferredError(null);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -210,9 +221,12 @@ export function useCoursesData({
     } finally {
       if (isCurrent()) {
         setLoading(false);
+        setRefreshing(false);
       }
     }
   }, [canSeeCourseManagement, actorRef, onlyMyCourses]);
+
+  const softRefresh = useCallback(() => fetchData({ soft: true }), [fetchData]);
 
   useEffect(() => {
     fetchData();
@@ -322,9 +336,11 @@ export function useCoursesData({
 
   return {
     loading,
+    refreshing,
     error,
     deferredError,
     fetchData,
+    softRefresh,
     courses,
     overrides: swapHandlers.overrides,
     enrollments,

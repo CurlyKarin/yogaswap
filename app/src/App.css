@@ -264,7 +264,8 @@ body {
 }
 
 .course-week-nav-core,
-.course-week-nav-shortcuts {
+.course-week-nav-primary,
+.course-week-nav-icons {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -322,6 +323,32 @@ body {
 
 .course-week-nav-my-courses.is-active:hover {
   background: #1f2937;
+}
+
+/* Soft-Refresh Kursdaten (#399) — Icon-only, Stil wie week-nav-btn */
+.course-views-toolbar > .course-views-refresh-btn {
+  margin-left: auto;
+}
+
+.course-views-refresh-btn.is-busy:disabled {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.course-views-refresh-btn .is-spinning {
+  animation: course-views-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes course-views-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-views-refresh-btn .is-spinning {
+    animation: none;
+  }
 }
 
 .course-week-panel,
@@ -2265,6 +2292,7 @@ a:focus-visible {
     padding: 6px 10px;
     font-size: 13px;
   }
+  /* Admin/Leitung mobil: Zeile 1 = Ansichts-Toggle + Icons; Zeile 2 = KW-Nav inkl. Heute */
   .course-views-toolbar:has(.course-views-toggle) {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -2280,12 +2308,17 @@ a:focus-visible {
   .course-views-toolbar:has(.course-views-toggle) .course-week-nav {
     display: contents;
   }
-  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-shortcuts {
+  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-icons {
     grid-column: 2;
     grid-row: 1;
-    justify-self: start;
+    justify-self: end;
   }
-  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-core {
+  .course-views-toolbar:has(.course-views-toggle) > .course-views-refresh-btn {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-primary {
     grid-column: 1 / -1;
     grid-row: 2;
     justify-content: center;
@@ -2295,7 +2328,7 @@ a:focus-visible {
     width: 100%;
     justify-content: center;
   }
-  .course-views-toolbar:not(:has(.course-views-toggle)) .course-week-nav-shortcuts {
+  .course-views-toolbar:not(:has(.course-views-toggle)) .course-week-nav-icons {
     order: -1;
   }
   .course-week-nav-label {

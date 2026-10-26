@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, User as UserIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, User as UserIcon } from "lucide-react";
 import CourseList from "./CourseList";
 import CourseWeekView from "./CourseWeekView";
 import { User, Tenant, UserTenantMembership, DEFAULT_TENANT_ID } from "shared/types";
@@ -19,6 +19,9 @@ import { pickTodayFocusTarget } from "../lib/weekTodayFocus";
 import { getActorUserId } from "../api/delegation";
 import { useCoursesData } from "../hooks/useCoursesData";
 import type { TodayFocusRequest } from "./CourseWeekView";
+
+/** Mindestabstand zwischen automatischen Soft-Refreshes bei Tab-Visibility (#399). */
+const SOFT_REFRESH_VISIBILITY_DEBOUNCE_MS = 30_000;
 
 export type CourseViewMode = "week" | "courses";
 
@@ -70,9 +73,11 @@ export default function CoursesShell({
 
   const {
     loading,
+    refreshing,
     error,
     deferredError,
     fetchData,
+    softRefresh,
     courses,
     weekCourseRows,
     hiddenPastCourseCount,
@@ -98,6 +103,25 @@ export default function CoursesShell({
     weekAnchor,
     onlyMyCourses,
   });
+
+  const lastVisibilitySoftRefreshAtRef = useRef(0);
+
+  // #399: Tab wieder sichtbar → Kursdaten soft refreshen (debounced; Session bleibt #318 in App).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastVisibilitySoftRefreshAtRef.current < SOFT_REFRESH_VISIBILITY_DEBOUNCE_MS) {
+        return;
+      }
+      lastVisibilitySoftRefreshAtRef.current = now;
+      void softRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [softRefresh]);
 
   const hasAssignment = useMemo(
     () => hasInstructorAssignment(courses, currentUser.nickname),
@@ -186,6 +210,22 @@ export default function CoursesShell({
   const nextWeekBtnRef = useRef<HTMLButtonElement>(null);
   const [weekLimitAnnouncement, setWeekLimitAnnouncement] = useState("");
 
+  const softRefreshButton = (
+    <button
+      type="button"
+      className={`course-week-nav-btn course-views-refresh-btn${refreshing ? " is-busy" : ""}`}
+      aria-label={refreshing ? "Kursdaten werden aktualisiert" : "Kursdaten aktualisieren"}
+      title="Kursdaten aktualisieren"
+      aria-busy={refreshing || undefined}
+      disabled={refreshing || loading}
+      onClick={() => {
+        void softRefresh();
+      }}
+    >
+      <RefreshCw size={18} aria-hidden="true" className={refreshing ? "is-spinning" : undefined} />
+    </button>
+  );
+
   useEffect(() => {
     if (canGoToPreviousWeek) {
       setWeekLimitAnnouncement("");
@@ -250,49 +290,54 @@ export default function CoursesShell({
             <span id="course-week-nav-next-limit" className="visually-hidden">
               Späteste sichtbare Kalenderwoche erreicht
             </span>
-            <div className="course-week-nav-core">
-              <button
-                ref={prevWeekBtnRef}
-                type="button"
-                className="course-week-nav-btn"
-                aria-label="Vorherige Woche"
-                disabled={!canGoToPreviousWeek}
-                aria-describedby={!canGoToPreviousWeek ? "course-week-nav-prev-limit" : undefined}
-                onClick={() =>
-                  setWeekAnchor((prev) => {
-                    const next = addWeeks(prev, -1);
-                    return next.getTime() < earliestWeekAnchor.getTime() ? earliestWeekAnchor : next;
-                  })
-                }
-              >
-                <ChevronLeft size={18} aria-hidden="true" />
-              </button>
-              <span
-                id="course-week-nav-label"
-                className="course-week-nav-label"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {weekLabel}
-              </span>
-              <button
-                ref={nextWeekBtnRef}
-                type="button"
-                className="course-week-nav-btn"
-                aria-label="Nächste Woche"
-                disabled={!canGoToNextWeek}
-                aria-describedby={!canGoToNextWeek ? "course-week-nav-next-limit" : undefined}
-                onClick={() =>
-                  setWeekAnchor((prev) => {
-                    const next = addWeeks(prev, 1);
-                    return next.getTime() > latestWeekAnchor.getTime() ? latestWeekAnchor : next;
-                  })
-                }
-              >
-                <ChevronRight size={18} aria-hidden="true" />
-              </button>
-            </div>
-            <div className="course-week-nav-shortcuts">
+            {/* Desktop: alles in einer Zeile. Mobile+Toggle: Heute bei KW-Nav, Icons neben Ansichts-Toggle. */}
+            <div className="course-week-nav-primary">
+              <div className="course-week-nav-core">
+                <button
+                  ref={prevWeekBtnRef}
+                  type="button"
+                  className="course-week-nav-btn"
+                  aria-label="Vorherige Woche"
+                  disabled={!canGoToPreviousWeek}
+                  aria-describedby={!canGoToPreviousWeek ? "course-week-nav-prev-limit" : undefined}
+                  onClick={() =>
+                    setWeekAnchor((prev) => {
+                      const next = addWeeks(prev, -1);
+                      return next.getTime() < earliestWeekAnchor.getTime()
+                        ? earliestWeekAnchor
+                        : next;
+                    })
+                  }
+                >
+                  <ChevronLeft size={18} aria-hidden="true" />
+                </button>
+                <span
+                  id="course-week-nav-label"
+                  className="course-week-nav-label"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {weekLabel}
+                </span>
+                <button
+                  ref={nextWeekBtnRef}
+                  type="button"
+                  className="course-week-nav-btn"
+                  aria-label="Nächste Woche"
+                  disabled={!canGoToNextWeek}
+                  aria-describedby={!canGoToNextWeek ? "course-week-nav-next-limit" : undefined}
+                  onClick={() =>
+                    setWeekAnchor((prev) => {
+                      const next = addWeeks(prev, 1);
+                      return next.getTime() > latestWeekAnchor.getTime()
+                        ? latestWeekAnchor
+                        : next;
+                    })
+                  }
+                >
+                  <ChevronRight size={18} aria-hidden="true" />
+                </button>
+              </div>
               <button
                 type="button"
                 className="course-week-nav-today"
@@ -302,6 +347,8 @@ export default function CoursesShell({
               >
                 Heute
               </button>
+            </div>
+            <div className="course-week-nav-icons">
               <button
                 type="button"
                 className={`course-week-nav-btn course-week-nav-my-courses${onlyMyCourses ? " is-active" : ""}`}
@@ -324,9 +371,12 @@ export default function CoursesShell({
               >
                 <UserIcon size={18} aria-hidden="true" />
               </button>
+              {softRefreshButton}
             </div>
           </nav>
         )}
+
+        {viewMode === "courses" && softRefreshButton}
       </div>
 
       {viewMode === "week" && (

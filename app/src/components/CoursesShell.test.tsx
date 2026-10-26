@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CoursesShell from "./CoursesShell";
 import { User, Tenant, UserTenantMembership } from "shared/types";
@@ -62,6 +62,8 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
       participantId?: string;
     }>;
     fetchData: ReturnType<typeof vi.fn>;
+    softRefresh: ReturnType<typeof vi.fn>;
+    refreshing: boolean;
     confirmSwap: ReturnType<typeof vi.fn>;
     requestSwap: ReturnType<typeof vi.fn>;
     cancelSwap: ReturnType<typeof vi.fn>;
@@ -70,10 +72,13 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     canManageGuestSeats: boolean;
     earliestWeekAnchor: Date;
     latestWeekAnchor: Date;
+    actor: { nickname: string; participantId?: string };
+    participantNameByRef: Map<string, string>;
   };
 
   const createCoursesDataMock = (overrides: Partial<MockCoursesData> = {}): MockCoursesData => ({
     loading: false,
+    refreshing: false,
     error: null,
     deferredError: null,
     courses: [],
@@ -84,6 +89,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     swaps: [],
     participantRoster: [],
     fetchData: vi.fn(async () => undefined),
+    softRefresh: vi.fn(async () => undefined),
     confirmSwap: vi.fn(),
     requestSwap: vi.fn(),
     cancelSwap: vi.fn(),
@@ -92,6 +98,8 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     canManageGuestSeats: false,
     earliestWeekAnchor: new Date(2026, 0, 5),
     latestWeekAnchor: new Date(2027, 0, 4),
+    actor: { nickname: "maya", participantId: "maya" },
+    participantNameByRef: new Map(),
     ...overrides,
   });
 
@@ -552,5 +560,63 @@ describe("CoursesShell", () => {
     const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
     expect(toggle).not.toBeDisabled();
     expect(toggle).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("Aktualisieren-Button ruft softRefresh auf und behält die Wochenansicht (#399)", async () => {
+    const user = userEvent.setup();
+    const softRefresh = vi.fn(async () => undefined);
+    mockUseCoursesData.mockReturnValue(createCoursesDataMock({ softRefresh }));
+
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    const toolbar = document.getElementById("course-toolbar");
+    expect(toolbar).toBeTruthy();
+    const refreshBtn = within(toolbar as HTMLElement).getByRole("button", {
+      name: /kursdaten aktualisieren/i,
+    });
+    await user.click(refreshBtn);
+
+    expect(softRefresh).toHaveBeenCalledTimes(1);
+    // Soft-Refresh: View-State bleibt (kein Full Reload / kein View-Wechsel)
+    expect(screen.getByText("CourseWeekView Mock")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /kalenderwoche/i })).toBeInTheDocument();
+  });
+
+  it("visibilitychange triggert softRefresh mit Debounce (#399)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const softRefresh = vi.fn(async () => undefined);
+    mockUseCoursesData.mockReturnValue(createCoursesDataMock({ softRefresh }));
+
+    render(
+      <CoursesShell
+        currentUser={baseUser}
+        tenant={baseTenant}
+        membership={participantMembership}
+      />,
+    );
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(softRefresh).toHaveBeenCalledTimes(1);
+
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(softRefresh).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(softRefresh).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
   });
 });
