@@ -31,6 +31,12 @@ function mapTokenStartErrorMessage(rawMessage: string): string {
   if (msg.includes("Token superseded by newer link")) {
     return "Dieser Link wurde durch einen neueren Link ersetzt. Bitte nutze die zuletzt gesendete E-Mail.";
   }
+  if (msg.includes("Token already used")) {
+    return "Dieser Einladungslink wurde bereits verwendet. Bitte die Studioleitung um einen neuen Link bitten.";
+  }
+  if (msg.includes("not allowed for this account state")) {
+    return "Passwort setzen ist fuer diesen Account gerade nicht moeglich. Bitte die Studioleitung um eine erneute Einladung bitten.";
+  }
   return msg;
 }
 

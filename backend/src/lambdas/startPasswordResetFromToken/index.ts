@@ -1,9 +1,12 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import {
+  AdminGetUserCommand,
   AdminResetUserPasswordCommand,
+  AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import crypto from "crypto";
 import { dynamoClient } from "../shared/dynamoClient";
 
 const cognito = new CognitoIdentityProviderClient({});
@@ -13,6 +16,78 @@ const AUDIT_EVENT = "auth_token_password_reset";
 // Note: We deliberately re-use the lightweight shared dynamoClient pattern in other lambdas,
 // but for isolation (and easier test mocking) we instantiate here.
 const dynamo = dynamoClient;
+
+/** Cognito AdminResetUserPassword requires CONFIRMED; new invites stay FORCE_CHANGE_PASSWORD (#401). */
+function generateBridgePassword(): string {
+  // Mix of classes to satisfy typical Cognito password policies.
+  return `${crypto.randomBytes(18).toString("base64url")}Aa1!`;
+}
+
+async function releaseTokenUsedAt(params: {
+  tokensTable: string;
+  tenantId: string;
+  token: string;
+}): Promise<void> {
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: params.tokensTable,
+        Key: {
+          tenantId: { S: params.tenantId },
+          token: { S: params.token },
+        },
+        UpdateExpression: "REMOVE usedAt",
+        ConditionExpression: "attribute_exists(usedAt)",
+      }),
+    );
+  } catch (releaseErr: unknown) {
+    const name = (releaseErr as { name?: string })?.name;
+    if (name === "ConditionalCheckFailedException") return;
+    console.warn("AUDIT", {
+      event: AUDIT_EVENT,
+      stage: "release_usedAt_failed",
+      tenantId: params.tenantId,
+      reason: name || "unknown_error",
+    });
+  }
+}
+
+/**
+ * AdminResetUserPassword fails for FORCE_CHANGE_PASSWORD ("cannot be reset in the current state").
+ * Bridge to CONFIRMED with a throwaway permanent password so the code-email flow can run (#401).
+ */
+async function ensureResettableCognitoState(params: {
+  userPoolId: string;
+  cognitoUsername: string;
+  tenantId: string;
+  purpose: string;
+}): Promise<void> {
+  const user = await cognito.send(
+    new AdminGetUserCommand({
+      UserPoolId: params.userPoolId,
+      Username: params.cognitoUsername,
+    }),
+  );
+  const status = user.UserStatus?.trim();
+  if (status !== "FORCE_CHANGE_PASSWORD") return;
+
+  console.info("AUDIT", {
+    event: AUDIT_EVENT,
+    stage: "bridge_force_change_password",
+    tenantId: params.tenantId,
+    purpose: params.purpose,
+    cognitoUsername: params.cognitoUsername,
+  });
+
+  await cognito.send(
+    new AdminSetUserPasswordCommand({
+      UserPoolId: params.userPoolId,
+      Username: params.cognitoUsername,
+      Password: generateBridgePassword(),
+      Permanent: true,
+    }),
+  );
+}
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const tokensTable = process.env.AUTH_TOKENS_TABLE;
@@ -38,6 +113,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
+  let tokenConsumed = false;
+  let purposeForAudit: string | null = null;
 
   try {
     console.info("AUDIT", {
@@ -70,6 +147,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const purpose = item.purpose?.S?.trim();
+    purposeForAudit = purpose ?? null;
     if (!purpose || !ALLOWED_PURPOSES.has(purpose)) {
       console.warn("AUDIT", {
         event: AUDIT_EVENT,
@@ -147,9 +225,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
-    // Consume-before-trigger strategy:
-    // We intentionally mark usedAt BEFORE calling Cognito to prevent replay/race re-use.
-    // If Cognito fails afterwards, admin can issue a new token via re-invite/reset action.
+    // Prepare Cognito BEFORE consuming the app token so FORCE_CHANGE failures keep the link usable (#401).
+    await ensureResettableCognitoState({
+      userPoolId,
+      cognitoUsername,
+      tenantId,
+      purpose,
+    });
+
+    // Consume-before-trigger: prevent replay while Cognito reset runs.
+    // On Cognito failure we release usedAt so the same invite link remains retryable (#401).
     try {
       await dynamo.send(
         new UpdateItemCommand({
@@ -165,8 +250,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           },
         }),
       );
+      tokenConsumed = true;
     } catch (e: unknown) {
-      const name = (e as any)?.name as string | undefined;
+      const name = (e as { name?: string })?.name;
       if (name === "ConditionalCheckFailedException") {
         console.warn("AUDIT", {
           event: AUDIT_EVENT,
@@ -209,13 +295,25 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     };
   } catch (err: unknown) {
-    const name = (err as any)?.name as string | undefined;
+    const name = (err as { name?: string })?.name;
     console.warn("AUDIT", {
       event: AUDIT_EVENT,
       stage: "cognito_error",
       tenantId,
       reason: name || "unknown_error",
+      purpose: purposeForAudit,
     });
+
+    if (tokenConsumed) {
+      await releaseTokenUsedAt({ tokensTable, tenantId, token });
+      console.info("AUDIT", {
+        event: AUDIT_EVENT,
+        stage: "release_usedAt",
+        tenantId,
+        purpose: purposeForAudit,
+      });
+    }
+
     if (name === "UserNotFoundException") {
       return { statusCode: 404, body: JSON.stringify({ error: "User not found" }) };
     }
@@ -260,4 +358,3 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 };
-

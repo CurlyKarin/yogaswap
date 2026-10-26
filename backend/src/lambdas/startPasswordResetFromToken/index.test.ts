@@ -15,6 +15,8 @@ jest.mock("@aws-sdk/client-cognito-identity-provider", () => {
   const mockSend = jest.fn();
   return {
     CognitoIdentityProviderClient: jest.fn(() => ({ send: mockSend })),
+    AdminGetUserCommand: jest.fn((input) => input),
+    AdminSetUserPasswordCommand: jest.fn((input) => input),
     AdminResetUserPasswordCommand: jest.fn((input) => input),
     mockSend,
   };
@@ -22,6 +24,10 @@ jest.mock("@aws-sdk/client-cognito-identity-provider", () => {
 
 const { mockSend: dynamoMockSend } = jest.requireMock("@aws-sdk/client-dynamodb");
 const { mockSend: cognitoMockSend } = jest.requireMock("@aws-sdk/client-cognito-identity-provider");
+
+function mockConfirmedCognitoUser() {
+  cognitoMockSend.mockResolvedValueOnce({ UserStatus: "CONFIRMED" }); // AdminGetUser
+}
 
 describe("startPasswordResetFromToken Lambda", () => {
   const OLD_ENV = process.env;
@@ -73,15 +79,120 @@ describe("startPasswordResetFromToken Lambda", () => {
         latestAuthTokenNonce: { S: "nonce-1" },
       },
     }); // Participant lookup
-    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
-    cognitoMockSend.mockResolvedValueOnce({});
+    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem consume
+    mockConfirmedCognitoUser();
+    cognitoMockSend.mockResolvedValueOnce({}); // AdminResetUserPassword
 
     const result = await handler(makeEvent());
 
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).username).toBe("Alice");
     expect(JSON.parse(result.body).userId).toBe("alice");
-    expect(cognitoMockSend).toHaveBeenCalledTimes(1);
+    expect(cognitoMockSend).toHaveBeenCalledTimes(2);
+  });
+
+  test("bridges FORCE_CHANGE_PASSWORD with permanent password before AdminReset (#401)", async () => {
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        purpose: { S: "invite-activation" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: "opaque-uuid" },
+        userId: { S: "alice" },
+        tokenNonce: { S: "nonce-1" },
+      },
+    });
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        userId: { S: "alice" },
+        latestAuthTokenNonce: { S: "nonce-1" },
+      },
+    });
+    dynamoMockSend.mockResolvedValueOnce({}); // consume
+    cognitoMockSend
+      .mockResolvedValueOnce({ UserStatus: "FORCE_CHANGE_PASSWORD" }) // AdminGetUser
+      .mockResolvedValueOnce({}) // AdminSetUserPassword Permanent
+      .mockResolvedValueOnce({}); // AdminResetUserPassword
+
+    const result = await handler(makeEvent());
+
+    expect(result.statusCode).toBe(200);
+    expect(cognitoMockSend).toHaveBeenCalledTimes(3);
+    expect(cognitoMockSend.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        Username: "opaque-uuid",
+        Permanent: true,
+        Password: expect.any(String),
+      }),
+    );
+    expect(cognitoMockSend.mock.calls[2][0]).toEqual(
+      expect.objectContaining({
+        Username: "opaque-uuid",
+      }),
+    );
+  });
+
+  test("releases usedAt when Cognito reset fails after consume (#401)", async () => {
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        purpose: { S: "invite-activation" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: "Alice" },
+      },
+    }); // GetItem
+    dynamoMockSend.mockResolvedValueOnce({}); // consume
+    dynamoMockSend.mockResolvedValueOnce({}); // release usedAt
+    mockConfirmedCognitoUser();
+
+    const deliveryError = new Error("Code delivery failed");
+    (deliveryError as any).name = "CodeDeliveryFailureException";
+    cognitoMockSend.mockRejectedValueOnce(deliveryError); // AdminResetUserPassword
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/could not be delivered/i);
+    expect(dynamoMockSend).toHaveBeenCalledTimes(3);
+    expect(dynamoMockSend.mock.calls[2][0]).toEqual(
+      expect.objectContaining({
+        UpdateExpression: "REMOVE usedAt",
+      }),
+    );
+  });
+
+  test("does not consume token when FORCE_CHANGE bridge fails (#401)", async () => {
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValueOnce(nowMs);
+
+    dynamoMockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "tenant-1" },
+        token: { S: "t1" },
+        purpose: { S: "invite-activation" },
+        expiresAt: { N: String(Math.floor(nowMs / 1000) + 3600) },
+        cognitoUsername: { S: "Alice" },
+      },
+    });
+    cognitoMockSend
+      .mockResolvedValueOnce({ UserStatus: "FORCE_CHANGE_PASSWORD" })
+      .mockRejectedValueOnce(
+        Object.assign(new Error("set password failed"), { name: "InvalidPasswordException" }),
+      );
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(500);
+    expect(JSON.parse(result.body).error).toMatch(/Failed to start password reset/i);
+    // Only GetItem — no consume UpdateItem
+    expect(dynamoMockSend).toHaveBeenCalledTimes(1);
   });
 
   test("returns 400 when token is superseded by newer nonce", async () => {
@@ -173,6 +284,7 @@ describe("startPasswordResetFromToken Lambda", () => {
         cognitoUsername: { S: "Alice" },
       },
     }); // GetItem
+    mockConfirmedCognitoUser();
 
     const condErr = new Error("ConditionalCheckFailed");
     (condErr as any).name = "ConditionalCheckFailedException";
@@ -181,7 +293,7 @@ describe("startPasswordResetFromToken Lambda", () => {
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(400);
     expect(JSON.parse(result.body).error).toMatch(/already used or expired/i);
-    expect(cognitoMockSend).not.toHaveBeenCalled();
+    expect(cognitoMockSend).toHaveBeenCalledTimes(1); // AdminGetUser only
   });
 
   test("returns 400 for InvalidParameterException from Cognito", async () => {
@@ -197,7 +309,9 @@ describe("startPasswordResetFromToken Lambda", () => {
         cognitoUsername: { S: "Alice" },
       },
     }); // GetItem
-    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
+    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem consume
+    dynamoMockSend.mockResolvedValueOnce({}); // release usedAt
+    mockConfirmedCognitoUser();
 
     const invalidParamError = new Error("Cannot deliver code");
     (invalidParamError as any).name = "InvalidParameterException";
@@ -221,7 +335,9 @@ describe("startPasswordResetFromToken Lambda", () => {
         cognitoUsername: { S: "Alice" },
       },
     }); // GetItem
-    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
+    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem consume
+    dynamoMockSend.mockResolvedValueOnce({}); // release usedAt
+    mockConfirmedCognitoUser();
 
     const notAuthorized = new Error("User password cannot be reset in the current state.");
     (notAuthorized as any).name = "NotAuthorizedException";
@@ -245,7 +361,9 @@ describe("startPasswordResetFromToken Lambda", () => {
         cognitoUsername: { S: "Alice" },
       },
     }); // GetItem
-    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
+    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem consume
+    dynamoMockSend.mockResolvedValueOnce({}); // release usedAt
+    mockConfirmedCognitoUser();
 
     const deliveryError = new Error("Code delivery failed");
     (deliveryError as any).name = "CodeDeliveryFailureException";
@@ -269,7 +387,9 @@ describe("startPasswordResetFromToken Lambda", () => {
         cognitoUsername: { S: "Alice" },
       },
     }); // GetItem
-    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem
+    dynamoMockSend.mockResolvedValueOnce({}); // UpdateItem consume
+    dynamoMockSend.mockResolvedValueOnce({}); // release usedAt
+    mockConfirmedCognitoUser();
 
     const throttled = new Error("Too many requests");
     (throttled as any).name = "TooManyRequestsException";
@@ -294,12 +414,13 @@ describe("startPasswordResetFromToken Lambda", () => {
       },
     });
     dynamoMockSend.mockResolvedValueOnce({});
+    mockConfirmedCognitoUser();
     cognitoMockSend.mockResolvedValueOnce({});
 
     const result = await handler(makeEvent());
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).success).toBe(true);
-    expect(cognitoMockSend).toHaveBeenCalledTimes(1);
+    expect(cognitoMockSend).toHaveBeenCalledTimes(2);
   });
 
   test("AdminResetUserPassword uses opaque cognitoUsername from token (#324)", async () => {
@@ -326,6 +447,7 @@ describe("startPasswordResetFromToken Lambda", () => {
       },
     });
     dynamoMockSend.mockResolvedValueOnce({});
+    mockConfirmedCognitoUser();
     cognitoMockSend.mockResolvedValueOnce({});
 
     const result = await handler(makeEvent());
@@ -333,11 +455,10 @@ describe("startPasswordResetFromToken Lambda", () => {
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).username).toBe(opaque);
     expect(JSON.parse(result.body).userId).toBe("alice");
-    expect(cognitoMockSend).toHaveBeenCalledWith(
+    expect(cognitoMockSend.mock.calls[1][0]).toEqual(
       expect.objectContaining({
         Username: opaque,
       }),
     );
   });
 });
-
