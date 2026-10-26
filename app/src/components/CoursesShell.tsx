@@ -290,49 +290,54 @@ export default function CoursesShell({
             <span id="course-week-nav-next-limit" className="visually-hidden">
               Späteste sichtbare Kalenderwoche erreicht
             </span>
-            <div className="course-week-nav-core">
-              <button
-                ref={prevWeekBtnRef}
-                type="button"
-                className="course-week-nav-btn"
-                aria-label="Vorherige Woche"
-                disabled={!canGoToPreviousWeek}
-                aria-describedby={!canGoToPreviousWeek ? "course-week-nav-prev-limit" : undefined}
-                onClick={() =>
-                  setWeekAnchor((prev) => {
-                    const next = addWeeks(prev, -1);
-                    return next.getTime() < earliestWeekAnchor.getTime() ? earliestWeekAnchor : next;
-                  })
-                }
-              >
-                <ChevronLeft size={18} aria-hidden="true" />
-              </button>
-              <span
-                id="course-week-nav-label"
-                className="course-week-nav-label"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {weekLabel}
-              </span>
-              <button
-                ref={nextWeekBtnRef}
-                type="button"
-                className="course-week-nav-btn"
-                aria-label="Nächste Woche"
-                disabled={!canGoToNextWeek}
-                aria-describedby={!canGoToNextWeek ? "course-week-nav-next-limit" : undefined}
-                onClick={() =>
-                  setWeekAnchor((prev) => {
-                    const next = addWeeks(prev, 1);
-                    return next.getTime() > latestWeekAnchor.getTime() ? latestWeekAnchor : next;
-                  })
-                }
-              >
-                <ChevronRight size={18} aria-hidden="true" />
-              </button>
-            </div>
-            <div className="course-week-nav-shortcuts">
+            {/* Desktop: alles in einer Zeile. Mobile+Toggle: Heute bei KW-Nav, Icons neben Ansichts-Toggle. */}
+            <div className="course-week-nav-primary">
+              <div className="course-week-nav-core">
+                <button
+                  ref={prevWeekBtnRef}
+                  type="button"
+                  className="course-week-nav-btn"
+                  aria-label="Vorherige Woche"
+                  disabled={!canGoToPreviousWeek}
+                  aria-describedby={!canGoToPreviousWeek ? "course-week-nav-prev-limit" : undefined}
+                  onClick={() =>
+                    setWeekAnchor((prev) => {
+                      const next = addWeeks(prev, -1);
+                      return next.getTime() < earliestWeekAnchor.getTime()
+                        ? earliestWeekAnchor
+                        : next;
+                    })
+                  }
+                >
+                  <ChevronLeft size={18} aria-hidden="true" />
+                </button>
+                <span
+                  id="course-week-nav-label"
+                  className="course-week-nav-label"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {weekLabel}
+                </span>
+                <button
+                  ref={nextWeekBtnRef}
+                  type="button"
+                  className="course-week-nav-btn"
+                  aria-label="Nächste Woche"
+                  disabled={!canGoToNextWeek}
+                  aria-describedby={!canGoToNextWeek ? "course-week-nav-next-limit" : undefined}
+                  onClick={() =>
+                    setWeekAnchor((prev) => {
+                      const next = addWeeks(prev, 1);
+                      return next.getTime() > latestWeekAnchor.getTime()
+                        ? latestWeekAnchor
+                        : next;
+                    })
+                  }
+                >
+                  <ChevronRight size={18} aria-hidden="true" />
+                </button>
+              </div>
               <button
                 type="button"
                 className="course-week-nav-today"
@@ -342,6 +347,8 @@ export default function CoursesShell({
               >
                 Heute
               </button>
+            </div>
+            <div className="course-week-nav-icons">
               <button
                 type="button"
                 className={`course-week-nav-btn course-week-nav-my-courses${onlyMyCourses ? " is-active" : ""}`}
