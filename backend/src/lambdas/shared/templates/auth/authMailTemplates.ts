@@ -68,8 +68,8 @@ type StudioMailFields = {
   locale?: string;
   studioName?: string | null;
   /**
-   * Tenant-/App-Basis-URL. Invite-Mail: sichtbarer Anmelde-Link im Body (#403).
-   * Sonst: Plain-Text-Footer (HTML-Footer ohne Links → Zustellbarkeit).
+   * Tenant-/App-Basis-URL. Invite-Mail: Body-CTA (#403); alle composeMail-Templates:
+   * HTML- und Text-Footer als „Anmeldung:“-Zeile, wenn gesetzt.
    */
   studioUrl?: string | null;
   /** Studio-Kontakt aus Tenant-Settings (#272); fehlt → kein Kontakthinweis. */
@@ -99,15 +99,23 @@ function normalizeLocale(locale?: string): AuthMailLocale {
   return "de";
 }
 
-/** HTML-Footer: ohne zusaetzliche Links (Spam-Filter). Studio-Kontakt als Klartext (#272). */
+/**
+ * HTML-Footer fuer Auth-Mails (#272/#403).
+ * Studio-URL als Anmelde-Link, wenn gesetzt; Kontakt ohne mailto (Zustellbarkeit).
+ */
 export function buildAuthMailFooterHtml(
   studioName?: string | null,
+  studioUrl?: string | null,
   studioContact?: StudioContact | null,
 ): string {
   const studio = resolveStudioDisplayName(studioName);
   const lines = [PLATFORM_BLURB];
   if (hasNamedStudio(studio)) {
     lines.push(`Studio: <strong>${studio}</strong>`);
+  }
+  const url = studioUrl?.trim();
+  if (url) {
+    lines.push(`Anmeldung: <a href="${url}">${url}</a>`);
   }
   const contactLine = formatStudioContactHtml(studioContact);
   if (contactLine) {
@@ -119,7 +127,7 @@ export function buildAuthMailFooterHtml(
   );
 }
 
-/** Plain-Text-Footer; Studio-URL optional als reiner Text (kein zweites HTML-Anchor). */
+/** Plain-Text-Footer; Studio-URL als Anmeldezeile, wenn gesetzt (#403). */
 export function buildAuthMailFooterText(
   studioName?: string | null,
   studioUrl?: string | null,
@@ -130,24 +138,24 @@ export function buildAuthMailFooterText(
   if (hasNamedStudio(studio)) {
     lines.push(`Studio: ${studio}`);
   }
+  const url = studioUrl?.trim();
+  if (url) {
+    lines.push(`Anmeldung: ${url}`);
+  }
   const contactLine = formatStudioContactText(studioContact);
   if (contactLine) {
     lines.push(contactLine);
   }
-  const url = studioUrl?.trim();
-  if (url) {
-    lines.push(url);
-  }
   return lines.join("\n");
 }
 
-/** @deprecated Use buildAuthMailFooterHtml — kept for existing imports/tests. */
+/** @deprecated Prefer buildAuthMailFooterHtml — kept for existing imports/tests. */
 export function buildAuthMailFooter(
   studioName?: string | null,
-  _studioUrl?: string | null,
+  studioUrl?: string | null,
   studioContact?: StudioContact | null,
 ): string {
-  return buildAuthMailFooterHtml(studioName, studioContact);
+  return buildAuthMailFooterHtml(studioName, studioUrl, studioContact);
 }
 
 function composeMail(params: {
@@ -160,7 +168,7 @@ function composeMail(params: {
 }): MailTemplate {
   return {
     subject: params.subject,
-    html: `${params.htmlBody.trim()}\n${buildAuthMailFooterHtml(params.studioName, params.studioContact)}`,
+    html: `${params.htmlBody.trim()}\n${buildAuthMailFooterHtml(params.studioName, params.studioUrl, params.studioContact)}`,
     text: `${params.textBody.trim()}\n\n--\n${buildAuthMailFooterText(params.studioName, params.studioUrl, params.studioContact)}`,
   };
 }
