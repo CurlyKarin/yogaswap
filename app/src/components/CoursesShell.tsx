@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, User as UserIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, User as UserIcon } from "lucide-react";
 import CourseList from "./CourseList";
 import CourseWeekView from "./CourseWeekView";
 import { User, Tenant, UserTenantMembership, DEFAULT_TENANT_ID } from "shared/types";
@@ -19,6 +19,9 @@ import { pickTodayFocusTarget } from "../lib/weekTodayFocus";
 import { getActorUserId } from "../api/delegation";
 import { useCoursesData } from "../hooks/useCoursesData";
 import type { TodayFocusRequest } from "./CourseWeekView";
+
+/** Mindestabstand zwischen automatischen Soft-Refreshes bei Tab-Visibility (#399). */
+const SOFT_REFRESH_VISIBILITY_DEBOUNCE_MS = 30_000;
 
 export type CourseViewMode = "week" | "courses";
 
@@ -70,9 +73,11 @@ export default function CoursesShell({
 
   const {
     loading,
+    refreshing,
     error,
     deferredError,
     fetchData,
+    softRefresh,
     courses,
     weekCourseRows,
     hiddenPastCourseCount,
@@ -98,6 +103,25 @@ export default function CoursesShell({
     weekAnchor,
     onlyMyCourses,
   });
+
+  const lastVisibilitySoftRefreshAtRef = useRef(0);
+
+  // #399: Tab wieder sichtbar → Kursdaten soft refreshen (debounced; Session bleibt #318 in App).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastVisibilitySoftRefreshAtRef.current < SOFT_REFRESH_VISIBILITY_DEBOUNCE_MS) {
+        return;
+      }
+      lastVisibilitySoftRefreshAtRef.current = now;
+      void softRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [softRefresh]);
 
   const hasAssignment = useMemo(
     () => hasInstructorAssignment(courses, currentUser.nickname),
@@ -185,6 +209,22 @@ export default function CoursesShell({
   const prevWeekBtnRef = useRef<HTMLButtonElement>(null);
   const nextWeekBtnRef = useRef<HTMLButtonElement>(null);
   const [weekLimitAnnouncement, setWeekLimitAnnouncement] = useState("");
+
+  const softRefreshButton = (
+    <button
+      type="button"
+      className={`course-week-nav-btn course-views-refresh-btn${refreshing ? " is-busy" : ""}`}
+      aria-label={refreshing ? "Kursdaten werden aktualisiert" : "Kursdaten aktualisieren"}
+      title="Kursdaten aktualisieren"
+      aria-busy={refreshing || undefined}
+      disabled={refreshing || loading}
+      onClick={() => {
+        void softRefresh();
+      }}
+    >
+      <RefreshCw size={18} aria-hidden="true" className={refreshing ? "is-spinning" : undefined} />
+    </button>
+  );
 
   useEffect(() => {
     if (canGoToPreviousWeek) {
@@ -324,9 +364,12 @@ export default function CoursesShell({
               >
                 <UserIcon size={18} aria-hidden="true" />
               </button>
+              {softRefreshButton}
             </div>
           </nav>
         )}
+
+        {viewMode === "courses" && softRefreshButton}
       </div>
 
       {viewMode === "week" && (

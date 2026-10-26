@@ -324,6 +324,32 @@ body {
   background: #1f2937;
 }
 
+/* Soft-Refresh Kursdaten (#399) — Icon-only, Stil wie week-nav-btn */
+.course-views-toolbar > .course-views-refresh-btn {
+  margin-left: auto;
+}
+
+.course-views-refresh-btn.is-busy:disabled {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.course-views-refresh-btn .is-spinning {
+  animation: course-views-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes course-views-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-views-refresh-btn .is-spinning {
+    animation: none;
+  }
+}
+
 .course-week-panel,
 .course-list-panel {
   margin: 0;

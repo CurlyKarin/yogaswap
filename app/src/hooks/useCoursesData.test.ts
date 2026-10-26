@@ -311,4 +311,59 @@ describe("useCoursesData", () => {
     expect(callOrder.indexOf("swaps:active")).toBeGreaterThan(callOrder.indexOf("swaps:pending"));
     expect(callOrder.indexOf("roster")).toBeGreaterThan(callOrder.indexOf("swaps:active"));
   });
+
+  it("softRefresh setzt refreshing, nicht loading (#399)", async () => {
+    let resolveCourses: (value: Course[]) => void = () => undefined;
+    mockedGetCourses.mockImplementation(
+      () =>
+        new Promise<Course[]>((resolve) => {
+          resolveCourses = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() =>
+      useCoursesData({
+        currentUser: baseUser,
+        membership,
+        weekAnchor,
+      }),
+    );
+
+    // Initialer Hard-Load abwarten — mockCourses-Promise blockiert; erst einmal auflösen.
+    await act(async () => {
+      resolveCourses([mockCourse]);
+    });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.courses).toHaveLength(1);
+    });
+
+    let resolveSoftCourses: (value: Course[]) => void = () => undefined;
+    mockedGetCourses.mockImplementation(
+      () =>
+        new Promise<Course[]>((resolve) => {
+          resolveSoftCourses = resolve;
+        }),
+    );
+
+    act(() => {
+      void result.current.softRefresh();
+    });
+
+    await waitFor(() => {
+      expect(result.current.refreshing).toBe(true);
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.courses).toHaveLength(1);
+
+    const updated = { ...mockCourse, name: "Yoga Soft" };
+    await act(async () => {
+      resolveSoftCourses([updated]);
+    });
+    await waitFor(() => {
+      expect(result.current.refreshing).toBe(false);
+      expect(result.current.courses[0]?.name).toBe("Yoga Soft");
+    });
+    expect(result.current.loading).toBe(false);
+  });
 });
