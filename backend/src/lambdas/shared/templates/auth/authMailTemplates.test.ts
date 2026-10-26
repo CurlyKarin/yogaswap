@@ -23,11 +23,12 @@ describe("authMailTemplates", () => {
     expect(resolveStudioDisplayName("Beharmony")).toBe("Beharmony");
   });
 
-  test("HTML footer has studio name but no extra links", () => {
+  test("HTML footer includes studio login URL when provided (#403)", () => {
     const footer = buildAuthMailFooter("Beharmony", "https://beharmony.app.yogaswap.de");
     expect(footer).toContain("YogaSwap ist eine Plattform zum Tauschen");
     expect(footer).toContain("Beharmony");
-    expect(footer).not.toContain("<a href");
+    expect(footer).toContain('Anmeldung: <a href="https://beharmony.app.yogaswap.de">');
+    expect(footer).toContain("https://beharmony.app.yogaswap.de</a>");
   });
 
   test("HTML footer includes studio contact without mailto links (#272)", () => {
@@ -84,10 +85,49 @@ describe("authMailTemplates", () => {
     expect(mail.html).toContain("Dein Login-Name lautet <strong>Karin</strong>");
     expect(mail.html).toContain("Passwort fuer YogaSwap festlegen");
     expect(mail.html).not.toContain("Klicke hier");
-    // nur ein HTML-Link (CTA), kein zweiter Footer-Link
-    expect(mail.html.match(/<a href=/g)?.length).toBe(1);
     expect(mail.text).toContain("Passwort festlegen: https://example.com/invite-token");
     expect(mail.text).toContain("https://beharmony.app.yogaswap.de");
+  });
+
+  test("buildInviteMail explains first setup and studio login URL (#403)", () => {
+    const mail = buildInviteMail({
+      locale: "de",
+      nickname: "Testi",
+      link: "https://beharmony.app.yogaswap.de/invite?token=abc",
+      studioName: "beharmony",
+      studioUrl: "https://beharmony.app.yogaswap.de",
+    });
+
+    expect(mail.html).toContain("Schritt 1 — Zugang einrichten (einmalig)");
+    expect(mail.html).toContain("Bestaetigungscode");
+    expect(mail.html).toContain("Schritt 2 — spaeter anmelden");
+    expect(mail.html).toContain('href="https://beharmony.app.yogaswap.de"');
+    expect(mail.html).toContain("Zur YogaSwap-Anmeldung");
+    expect(mail.html).toContain("Bitte diesen Namen fuer die Anmeldung merken");
+    // Token-CTA + Body-Login + Footer-Login
+    expect(mail.html.match(/<a href=/g)?.length).toBe(3);
+    expect(mail.html).toContain('href="https://beharmony.app.yogaswap.de/invite?token=abc"');
+    expect(mail.html).toContain('Anmeldung: <a href="https://beharmony.app.yogaswap.de">');
+    expect(mail.text).toContain("Schritt 1 — Zugang einrichten (einmalig):");
+    expect(mail.text).toContain(
+      "Passwort festlegen: https://beharmony.app.yogaswap.de/invite?token=abc",
+    );
+    expect(mail.text).toContain("Schritt 2 — spaeter anmelden:");
+    expect(mail.text).toContain("Anmeldung: https://beharmony.app.yogaswap.de");
+  });
+
+  test("buildInviteMail without studioUrl still explains step 2 (#403)", () => {
+    const mail = buildInviteMail({
+      locale: "de",
+      nickname: "Karin",
+      link: "https://example.com/invite-token",
+    });
+
+    expect(mail.html).toContain("Schritt 2 — spaeter anmelden");
+    expect(mail.html).toContain("YogaSwap-Adresse Deines Studios");
+    expect(mail.html.match(/<a href=/g)?.length).toBe(1);
+    expect(mail.text).toContain("YogaSwap-Adresse Deines Studios");
+    expect(mail.html).not.toContain("Anmeldung: <a href");
   });
 
   test("buildInviteMail greets with displayName and keeps nickname as login (#327)", () => {

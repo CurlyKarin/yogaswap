@@ -67,7 +67,10 @@ function forStudioAccessText(studio: string): string {
 type StudioMailFields = {
   locale?: string;
   studioName?: string | null;
-  /** Studio-/App-URL nur im Plain-Text-Footer (kein zweiter HTML-Link → bessere Zustellbarkeit). */
+  /**
+   * Tenant-/App-Basis-URL. Invite-Mail: Body-CTA (#403); alle composeMail-Templates:
+   * HTML- und Text-Footer als „Anmeldung:“-Zeile, wenn gesetzt.
+   */
   studioUrl?: string | null;
   /** Studio-Kontakt aus Tenant-Settings (#272); fehlt → kein Kontakthinweis. */
   studioContact?: StudioContact | null;
@@ -96,15 +99,23 @@ function normalizeLocale(locale?: string): AuthMailLocale {
   return "de";
 }
 
-/** HTML-Footer: ohne zusaetzliche Links (Spam-Filter). Studio-Kontakt als Klartext (#272). */
+/**
+ * HTML-Footer fuer Auth-Mails (#272/#403).
+ * Studio-URL als Anmelde-Link, wenn gesetzt; Kontakt ohne mailto (Zustellbarkeit).
+ */
 export function buildAuthMailFooterHtml(
   studioName?: string | null,
+  studioUrl?: string | null,
   studioContact?: StudioContact | null,
 ): string {
   const studio = resolveStudioDisplayName(studioName);
   const lines = [PLATFORM_BLURB];
   if (hasNamedStudio(studio)) {
     lines.push(`Studio: <strong>${studio}</strong>`);
+  }
+  const url = studioUrl?.trim();
+  if (url) {
+    lines.push(`Anmeldung: <a href="${url}">${url}</a>`);
   }
   const contactLine = formatStudioContactHtml(studioContact);
   if (contactLine) {
@@ -116,7 +127,7 @@ export function buildAuthMailFooterHtml(
   );
 }
 
-/** Plain-Text-Footer; Studio-URL optional als reiner Text (kein zweites HTML-Anchor). */
+/** Plain-Text-Footer; Studio-URL als Anmeldezeile, wenn gesetzt (#403). */
 export function buildAuthMailFooterText(
   studioName?: string | null,
   studioUrl?: string | null,
@@ -127,24 +138,24 @@ export function buildAuthMailFooterText(
   if (hasNamedStudio(studio)) {
     lines.push(`Studio: ${studio}`);
   }
+  const url = studioUrl?.trim();
+  if (url) {
+    lines.push(`Anmeldung: ${url}`);
+  }
   const contactLine = formatStudioContactText(studioContact);
   if (contactLine) {
     lines.push(contactLine);
   }
-  const url = studioUrl?.trim();
-  if (url) {
-    lines.push(url);
-  }
   return lines.join("\n");
 }
 
-/** @deprecated Use buildAuthMailFooterHtml — kept for existing imports/tests. */
+/** @deprecated Prefer buildAuthMailFooterHtml — kept for existing imports/tests. */
 export function buildAuthMailFooter(
   studioName?: string | null,
-  _studioUrl?: string | null,
+  studioUrl?: string | null,
   studioContact?: StudioContact | null,
 ): string {
-  return buildAuthMailFooterHtml(studioName, studioContact);
+  return buildAuthMailFooterHtml(studioName, studioUrl, studioContact);
 }
 
 function composeMail(params: {
@@ -157,7 +168,7 @@ function composeMail(params: {
 }): MailTemplate {
   return {
     subject: params.subject,
-    html: `${params.htmlBody.trim()}\n${buildAuthMailFooterHtml(params.studioName, params.studioContact)}`,
+    html: `${params.htmlBody.trim()}\n${buildAuthMailFooterHtml(params.studioName, params.studioUrl, params.studioContact)}`,
     text: `${params.textBody.trim()}\n\n--\n${buildAuthMailFooterText(params.studioName, params.studioUrl, params.studioContact)}`,
   };
 }
@@ -252,6 +263,30 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
     ? `"${studio}" hat dich zu YogaSwap eingeladen, einer Plattform zum Tauschen von Yogakurs-Terminen.`
     : `Du wurdest zu YogaSwap eingeladen, einer Plattform zum Tauschen von Yogakurs-Terminen.`;
 
+  // Tenant-Login-URL (#403): getrennt vom einmaligen Token-Link; Body-CTA (nicht nur Text-Footer).
+  const studioLoginUrl = input.studioUrl?.trim() || "";
+  const step2Html = studioLoginUrl
+    ? `
+        <p><strong>Schritt 2 — spaeter anmelden:</strong></p>
+        <p>Nach der Einrichtung meldest Du Dich unter dieser Adresse an (am besten als Lesezeichen speichern):</p>
+        <p><a href="${studioLoginUrl}">Zur YogaSwap-Anmeldung</a></p>
+        <p style="font-size:13px;line-height:1.4;color:#555;">${studioLoginUrl}</p>
+      `
+    : `
+        <p><strong>Schritt 2 — spaeter anmelden:</strong></p>
+        <p>Nach der Einrichtung meldest Du Dich ueber die YogaSwap-Adresse Deines Studios an.</p>
+      `;
+  const step2Text = studioLoginUrl
+    ? [
+        "Schritt 2 — spaeter anmelden:",
+        "Nach der Einrichtung meldest Du Dich unter dieser Adresse an (am besten als Lesezeichen speichern):",
+        studioLoginUrl,
+      ]
+    : [
+        "Schritt 2 — spaeter anmelden:",
+        "Nach der Einrichtung meldest Du Dich ueber die YogaSwap-Adresse Deines Studios an.",
+      ];
+
   return composeMail({
     subject: `${studio}: Einladung`,
     studioName: studio,
@@ -260,20 +295,25 @@ export function buildInviteMail(input: InviteMailInput): MailTemplate {
     htmlBody: `
         <h2>Willkommen ${greeting}!</h2>
         <p>${inviteHtml}</p>
-        <p>${loginNameLineHtml(input.nickname)}</p>
+        <p>${loginNameLineHtml(input.nickname)} Bitte diesen Namen fuer die Anmeldung merken.</p>
+        <p><strong>Schritt 1 — Zugang einrichten (einmalig):</strong></p>
+        <p>Oeffne den folgenden Link und lege Dein Passwort fest. Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode — diesen gibst Du auf der Passwort-Seite ein.</p>
         <p><a href="${input.link}">Passwort fuer YogaSwap festlegen</a></p>
-        <p>Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode.</p>
+        ${step2Html}
         <p>Falls Du diese Einladung nicht erwartet hast, kannst Du die E-Mail ignorieren oder Dein Studio kontaktieren.</p>
       `,
     textBody: [
       `Willkommen ${greeting}!`,
       "",
       inviteText,
-      loginNameLineText(input.nickname),
+      `${loginNameLineText(input.nickname)} Bitte diesen Namen fuer die Anmeldung merken.`,
       "",
+      "Schritt 1 — Zugang einrichten (einmalig):",
+      "Oeffne den folgenden Link und lege Dein Passwort fest. Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode — diesen gibst Du auf der Passwort-Seite ein.",
       `Passwort festlegen: ${input.link}`,
       "",
-      "Danach erhaeltst Du eine weitere E-Mail mit einem Bestaetigungscode.",
+      ...step2Text,
+      "",
       "Falls Du diese Einladung nicht erwartet hast, kannst Du die E-Mail ignorieren oder Dein Studio kontaktieren.",
     ].join("\n"),
   });
