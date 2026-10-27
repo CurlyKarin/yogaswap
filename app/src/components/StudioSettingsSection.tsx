@@ -188,25 +188,37 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
               disabled={saving}
             />
           </label>
-
-          <label className="dialog-field studio-settings-checkbox-field">
-            <span className="dialog-field-label studio-field-label">
-              <input
-                type="checkbox"
-                checked={notifyInstructorsOnStemChange}
-                onChange={(e) => setNotifyInstructorsOnStemChange(e.target.checked)}
-                disabled={saving}
-              />{" "}
-              Kursleitung bei Stamm-Änderungen per Mail informieren
-            </span>
-            <span className="muted small">
-              Betrifft Beitritt/Austritt am Kursstamm. Standard aus — sinnvoll, wenn Leitung und
-              Studio-Admin dieselbe Person sind.
-            </span>
-          </label>
         </div>
 
         <hr className="studio-settings-divider" />
+
+        <details className="studio-settings-subdetails">
+          <summary className="studio-settings-summary studio-settings-summary--sub">
+            <h4 id="studio-settings-notifications-heading" className="studio-settings-summary-title">
+              E-Mail-Benachrichtigungen
+            </h4>
+          </summary>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Wer bei welchen Ereignissen eine Mail erhält. Standard: nur betroffene Mitglieder.
+          </p>
+          <div
+            className="studio-settings-grid"
+            role="group"
+            aria-labelledby="studio-settings-notifications-heading"
+          >
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="Betrifft Beitritt und Austritt am Kursstamm. Standard aus — sinnvoll, wenn Leitung und Studio-Admin dieselbe Person sind und keine doppelte Mail gewünscht ist.">
+                <input
+                  type="checkbox"
+                  checked={notifyInstructorsOnStemChange}
+                  onChange={(e) => setNotifyInstructorsOnStemChange(e.target.checked)}
+                  disabled={saving}
+                />{" "}
+                Kursleitung bei Stamm-Änderungen informieren
+              </FieldLabelWithTooltip>
+            </label>
+          </div>
+        </details>
 
         <details className="studio-settings-subdetails">
           <summary className="studio-settings-summary studio-settings-summary--sub">

@@ -36,13 +36,21 @@ function getStudioDetails(): HTMLDetailsElement {
   return details;
 }
 
-function getRollingDetails(): HTMLDetailsElement {
-  const heading = screen.getByRole("heading", { level: 4, name: /durchlaufende kurse/i });
+function getSubdetails(name: RegExp): HTMLDetailsElement {
+  const heading = screen.getByRole("heading", { level: 4, name });
   const details = heading.closest("details");
   if (!(details instanceof HTMLDetailsElement)) {
-    throw new Error("Rolling courses details not found");
+    throw new Error(`Studio settings subdetails not found: ${name}`);
   }
   return details;
+}
+
+function getRollingDetails(): HTMLDetailsElement {
+  return getSubdetails(/durchlaufende kurse/i);
+}
+
+function getNotificationsDetails(): HTMLDetailsElement {
+  return getSubdetails(/e-mail-benachrichtigungen/i);
 }
 
 function expandStudioSettings() {
@@ -52,12 +60,20 @@ function expandStudioSettings() {
   }
 }
 
-function expandRollingCourses() {
+function expandSubdetails(getDetails: () => HTMLDetailsElement) {
   expandStudioSettings();
-  const details = getRollingDetails();
+  const details = getDetails();
   if (!details.open) {
     fireEvent.click(details.querySelector("summary")!);
   }
+}
+
+function expandRollingCourses() {
+  expandSubdetails(getRollingDetails);
+}
+
+function expandNotifications() {
+  expandSubdetails(getNotificationsDetails);
 }
 
 describe("StudioSettingsSection", () => {
@@ -66,14 +82,20 @@ describe("StudioSettingsSection", () => {
     cleanup();
   });
 
-  it("klappt Studio-Einstellungen und Durchlaufende Kurse standardmäßig zu", () => {
+  it("klappt Studio-Einstellungen und Unterabschnitte standardmäßig zu", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
     expect(getStudioDetails().open).toBe(false);
     expect(screen.getByRole("textbox", { name: /studioname/i })).not.toBeVisible();
 
     expandStudioSettings();
     expect(getStudioDetails().open).toBe(true);
+    expect(getNotificationsDetails().open).toBe(false);
     expect(getRollingDetails().open).toBe(false);
+    expect(
+      screen.getByRole("checkbox", {
+        name: /kursleitung bei stamm-änderungen informieren/i,
+      }),
+    ).not.toBeVisible();
     expect(screen.getByLabelText(/nachlauf nach kursende/i)).not.toBeVisible();
   });
 
@@ -128,10 +150,10 @@ describe("StudioSettingsSection", () => {
       makeTenant({ notifyInstructorsOnStemChange: true }),
     );
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={onSaved} />);
-    expandStudioSettings();
+    expandNotifications();
 
     const checkbox = screen.getByRole("checkbox", {
-      name: /kursleitung bei stamm-änderungen per mail informieren/i,
+      name: /kursleitung bei stamm-änderungen informieren/i,
     });
     expect(checkbox).not.toBeChecked();
     fireEvent.click(checkbox);
@@ -151,20 +173,37 @@ describe("StudioSettingsSection", () => {
     expect(screen.getByRole("textbox", { name: /studioname/i })).toBeVisible();
   });
 
-  it("gruppiert Felder in Allgemein und Durchlaufende Kurse", () => {
+  it("gruppiert Felder in Allgemein, E-Mail-Benachrichtigungen und Durchlaufende Kurse", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expandNotifications();
     expandRollingCourses();
 
     expect(screen.getByRole("heading", { level: 4, name: /allgemein/i })).toBeInTheDocument();
     expect(
+      screen.getByRole("heading", { level: 4, name: /e-mail-benachrichtigungen/i }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("heading", { level: 4, name: /durchlaufende kurse/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /allgemein/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /e-mail-benachrichtigungen/i })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /durchlaufende kurse/i })).toBeInTheDocument();
 
     const generalGroup = screen.getByRole("group", { name: /allgemein/i });
     expect(generalGroup).toContainElement(screen.getByRole("textbox", { name: /studioname/i }));
     expect(generalGroup).toContainElement(getCutoffInput());
+    expect(generalGroup).not.toContainElement(
+      screen.getByRole("checkbox", {
+        name: /kursleitung bei stamm-änderungen informieren/i,
+      }),
+    );
+
+    const notificationsGroup = screen.getByRole("group", { name: /e-mail-benachrichtigungen/i });
+    expect(notificationsGroup).toContainElement(
+      within(notificationsGroup).getByRole("checkbox", {
+        name: /kursleitung bei stamm-änderungen informieren/i,
+      }),
+    );
 
     const rollingGroup = screen.getByRole("group", { name: /durchlaufende kurse/i });
     expect(rollingGroup).toContainElement(
