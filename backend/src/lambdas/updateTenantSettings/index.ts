@@ -24,6 +24,17 @@ const MVP_SETTINGS_KEYS = [
   "cancellationSwapCutoffMinutesBeforeStart",
 ] as const;
 
+const BOOLEAN_SETTINGS_KEYS = [
+  "notifyInstructorsOnStemChange",
+  "notifyInstructorsOnTermParticipationChange",
+] as const;
+
+/** Optional windows: null clears the key (#398). */
+const CLEARABLE_NUMBER_SETTINGS_KEYS = [
+  "instructorTermNotifyFromHoursBeforeStart",
+  "instructorTermNotifyUntilMinutesBeforeStart",
+] as const;
+
 const CONTACT_SETTINGS_KEYS = ["contactEmail", "contactName"] as const;
 
 function parseBody(event: APIGatewayProxyEvent): StudioSettingsPatch | null {
@@ -47,6 +58,20 @@ function mergeTenantSettings(
       (next as Record<string, number>)[key] = patch[key] as number;
     }
   }
+  for (const key of BOOLEAN_SETTINGS_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(patch, key)) {
+      (next as Record<string, boolean>)[key] = patch[key] as boolean;
+    }
+  }
+  for (const key of CLEARABLE_NUMBER_SETTINGS_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
+    const raw = patch[key];
+    if (raw == null) {
+      delete next[key];
+    } else {
+      (next as Record<string, number>)[key] = raw as number;
+    }
+  }
   for (const key of CONTACT_SETTINGS_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
     const raw = patch[key];
@@ -64,6 +89,8 @@ function hasUpdatablePatch(patch: StudioSettingsPatch): boolean {
   return (
     Object.prototype.hasOwnProperty.call(patch, "name") ||
     MVP_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
+    BOOLEAN_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
+    CLEARABLE_NUMBER_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
     CONTACT_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key))
   );
 }

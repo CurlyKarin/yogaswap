@@ -48,4 +48,50 @@ describe("resolveSelfServiceAbsenceKind", () => {
       }),
     ).toBeNull();
   });
+
+  test("detects RC Absage zurückgenommen", () => {
+    expect(
+      resolveSelfServiceAbsenceKind({
+        actorNickname: "luna",
+        courseTime,
+        dateIso,
+        before: {
+          courseId: 1,
+          date: dateIso,
+          participants: ["bob"],
+          cancelledParticipants: ["luna"],
+        },
+        after: {
+          courseId: 1,
+          date: dateIso,
+          participants: ["luna", "bob"],
+          cancelledParticipants: [],
+        },
+        baseParticipants,
+      }),
+    ).toBe("absence_withdrawn");
+  });
+
+  test("detects SN Absage zurückgenommen", () => {
+    expect(
+      resolveSelfServiceAbsenceKind({
+        actorNickname: "luna",
+        courseTime,
+        dateIso,
+        before: {
+          courseId: 1,
+          date: dateIso,
+          participants: ["luna"],
+          shortNoticeCancellations: ["luna"],
+        },
+        after: {
+          courseId: 1,
+          date: dateIso,
+          participants: ["luna"],
+          shortNoticeCancellations: [],
+        },
+        baseParticipants: ["luna"],
+      }),
+    ).toBe("absence_withdrawn");
+  });
 });

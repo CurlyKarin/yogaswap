@@ -6,6 +6,10 @@ import {
   resolveEffectiveTermParticipants,
 } from "@yogaswap/shared";
 
+export type SelfServiceAbsenceKind =
+  | "term_released"
+  | "absence_withdrawn";
+
 export function resolveSelfServiceAbsenceKind(input: {
   actorNickname: string;
   courseTime: string;
@@ -15,7 +19,7 @@ export function resolveSelfServiceAbsenceKind(input: {
   after: CourseDateOverride;
   baseParticipants: string[];
   now?: Date;
-}): "term_released" | null {
+}): SelfServiceAbsenceKind | null {
   const { actorNickname, courseTime, dateIso, tenantSettings, before, after, baseParticipants } = input;
   const now = input.now ?? new Date();
   const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
@@ -32,9 +36,23 @@ export function resolveSelfServiceAbsenceKind(input: {
   const wasParticipant = includesUserCaseInsensitive(beforeEffective.participants, actorNickname);
   const isParticipant = includesUserCaseInsensitive(afterEffective.participants, actorNickname);
   const isSn = includesUserCaseInsensitive(after.shortNoticeCancellations, actorNickname);
+  const wasSn = includesUserCaseInsensitive(before?.shortNoticeCancellations, actorNickname);
 
   if (wasParticipant && !isParticipant && !isSn && !inCutoff) {
     return "term_released";
   }
+
+  const beforeCancelled = beforeEffective.cancelledParticipants.length
+    ? beforeEffective.cancelledParticipants
+    : (before?.cancelledParticipants ?? []);
+  const wasRc = includesUserCaseInsensitive(beforeCancelled, actorNickname);
+  const stillRc = includesUserCaseInsensitive(afterEffective.cancelledParticipants, actorNickname);
+  if (wasRc && !stillRc && isParticipant) {
+    return "absence_withdrawn";
+  }
+  if (wasSn && !isSn) {
+    return "absence_withdrawn";
+  }
+
   return null;
 }

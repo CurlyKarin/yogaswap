@@ -1,4 +1,9 @@
-import { buildParticipantTermReleasedMail, buildStudioTermCancelledMail } from "./termMailTemplates";
+import {
+  buildInstructorTermParticipationChangedMail,
+  buildParticipantAbsenceWithdrawnMail,
+  buildParticipantTermReleasedMail,
+  buildStudioTermCancelledMail,
+} from "./termMailTemplates";
 
 describe("termMailTemplates", () => {
   const base = {
@@ -33,4 +38,32 @@ describe("termMailTemplates", () => {
     expect(mail.html).toMatch(/Warteliste/);
   });
 
+  test("buildInstructorTermParticipationChangedMail describes short-notice absence (#398)", () => {
+    const mail = buildInstructorTermParticipationChangedMail({
+      ...base,
+      nickname: "Trainer",
+      kind: "short_notice",
+      memberNickname: "Kaja",
+    });
+    expect(mail.subject).toMatch(/Kurzfristige Absage/);
+    expect(mail.html).toMatch(/Kaja/);
+    expect(mail.html).toMatch(/belegt/);
+  });
+
+  test("buildInstructorTermParticipationChangedMail describes absence withdrawn (#398)", () => {
+    const mail = buildInstructorTermParticipationChangedMail({
+      ...base,
+      nickname: "Trainer",
+      kind: "term_release_cleared",
+      memberNickname: "Kaja",
+    });
+    expect(mail.subject).toMatch(/Absage zurückgenommen/);
+    expect(mail.html).toMatch(/wieder teil/);
+  });
+
+  test("buildParticipantAbsenceWithdrawnMail confirms return to term", () => {
+    const mail = buildParticipantAbsenceWithdrawnMail(base);
+    expect(mail.subject).toMatch(/Absage zurückgenommen/);
+    expect(mail.html).toMatch(/wieder teil/);
+  });
 });

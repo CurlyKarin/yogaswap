@@ -12,6 +12,10 @@ export type StudioSettingsPatch = {
   cancellationSwapCutoffMinutesBeforeStart?: number;
   contactEmail?: string | null;
   contactName?: string | null;
+  notifyInstructorsOnStemChange?: boolean;
+  notifyInstructorsOnTermParticipationChange?: boolean;
+  instructorTermNotifyFromHoursBeforeStart?: number | null;
+  instructorTermNotifyUntilMinutesBeforeStart?: number | null;
 };
 
 const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -74,6 +78,47 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     if (label.length > 80) {
       return "Kontaktname darf höchstens 80 Zeichen haben.";
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "notifyInstructorsOnStemChange")) {
+    if (typeof patch.notifyInstructorsOnStemChange !== "boolean") {
+      return "Mitteilung an Kursleitung bei Stamm-Änderungen muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "notifyInstructorsOnTermParticipationChange")) {
+    if (typeof patch.notifyInstructorsOnTermParticipationChange !== "boolean") {
+      return "Mitteilung an Kursleitung bei Termin-Teilnahme muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyFromHoursBeforeStart")) {
+    const raw = patch.instructorTermNotifyFromHoursBeforeStart;
+    if (raw != null) {
+      if (!Number.isInteger(raw) || raw < 1 || raw > 168) {
+        return "Startzeitraum für Kursleitungs-Mails muss eine ganze Zahl zwischen 1 und 168 Stunden sein.";
+      }
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyUntilMinutesBeforeStart")) {
+    const raw = patch.instructorTermNotifyUntilMinutesBeforeStart;
+    if (raw != null) {
+      if (!Number.isInteger(raw) || raw < 0 || raw > 24 * 60 || raw % 15 !== 0) {
+        return "Bis-Zeitraum für Kursleitungs-Mails muss eine ganze Zahl zwischen 0 und 1440 in 15-Minuten-Schritten sein.";
+      }
+    }
+  }
+  const fromHours =
+    patch.instructorTermNotifyFromHoursBeforeStart !== undefined
+      ? patch.instructorTermNotifyFromHoursBeforeStart
+      : undefined;
+  const untilMinutes =
+    patch.instructorTermNotifyUntilMinutesBeforeStart !== undefined
+      ? patch.instructorTermNotifyUntilMinutesBeforeStart
+      : undefined;
+  if (
+    typeof fromHours === "number" &&
+    typeof untilMinutes === "number" &&
+    fromHours * 60 <= untilMinutes
+  ) {
+    return "Startzeitraum muss vor dem Bis-Zeitraum liegen (Stunden-Fenster größer als Minuten-Grenze).";
   }
   return null;
 }

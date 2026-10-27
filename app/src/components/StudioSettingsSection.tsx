@@ -1,8 +1,13 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import type { Tenant } from "shared/types";
 import {
+  DEFAULT_INSTRUCTOR_TERM_NOTIFY_FROM_HOURS,
   resolveCancellationSwapCutoffMinutes,
   resolveInactiveGraceDays,
+  resolveInstructorTermNotifyFromHoursBeforeStart,
+  resolveInstructorTermNotifyUntilMinutesBeforeStart,
+  resolveNotifyInstructorsOnStemChange,
+  resolveNotifyInstructorsOnTermParticipationChange,
   resolveRollingPlanningHorizonWeeks,
   resolveSwapWindow,
   validateStudioSettingsPatch,
@@ -54,6 +59,10 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const graceDefault = resolveInactiveGraceDays(tenant.settings);
   const horizonDefault = resolveRollingPlanningHorizonWeeks(tenant.settings);
   const cutoffDefault = resolveCancellationSwapCutoffMinutes(tenant.settings);
+  const stemNotifyDefault = resolveNotifyInstructorsOnStemChange(tenant.settings);
+  const termNotifyDefault = resolveNotifyInstructorsOnTermParticipationChange(tenant.settings);
+  const fromHoursDefault = resolveInstructorTermNotifyFromHoursBeforeStart(tenant.settings);
+  const untilMinutesDefault = resolveInstructorTermNotifyUntilMinutesBeforeStart(tenant.settings);
 
   const [name, setName] = useState(tenant.name);
   const [contactEmail, setContactEmail] = useState(tenant.settings?.contactEmail ?? "");
@@ -63,12 +72,26 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const [maxOffsetDays, setMaxOffsetDays] = useState(String(swapDefaults.maxOffsetDays));
   const [rollingPlanningHorizonWeeks, setRollingPlanningHorizonWeeks] = useState(String(horizonDefault));
   const [cancellationSwapCutoffMinutes, setCancellationSwapCutoffMinutes] = useState(String(cutoffDefault));
+  const [notifyInstructorsOnStemChange, setNotifyInstructorsOnStemChange] = useState(stemNotifyDefault);
+  const [notifyInstructorsOnTermParticipationChange, setNotifyInstructorsOnTermParticipationChange] =
+    useState(termNotifyDefault);
+  const [termNotifyFromEnabled, setTermNotifyFromEnabled] = useState(fromHoursDefault != null);
+  const [termNotifyFromHours, setTermNotifyFromHours] = useState(
+    String(fromHoursDefault ?? DEFAULT_INSTRUCTOR_TERM_NOTIFY_FROM_HOURS),
+  );
+  const [termNotifyUntilEnabled, setTermNotifyUntilEnabled] = useState(untilMinutesDefault != null);
+  const [termNotifyUntilMinutes, setTermNotifyUntilMinutes] = useState(
+    String(untilMinutesDefault ?? cutoffDefault),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     const swap = resolveSwapWindow(tenant.settings);
+    const cutoff = resolveCancellationSwapCutoffMinutes(tenant.settings);
+    const fromHours = resolveInstructorTermNotifyFromHoursBeforeStart(tenant.settings);
+    const untilMinutes = resolveInstructorTermNotifyUntilMinutesBeforeStart(tenant.settings);
     setName(tenant.name);
     setContactEmail(tenant.settings?.contactEmail ?? "");
     setContactName(tenant.settings?.contactName ?? "");
@@ -76,7 +99,15 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setMinOffsetDays(String(swap.minOffsetDays));
     setMaxOffsetDays(String(swap.maxOffsetDays));
     setRollingPlanningHorizonWeeks(String(resolveRollingPlanningHorizonWeeks(tenant.settings)));
-    setCancellationSwapCutoffMinutes(String(resolveCancellationSwapCutoffMinutes(tenant.settings)));
+    setCancellationSwapCutoffMinutes(String(cutoff));
+    setNotifyInstructorsOnStemChange(resolveNotifyInstructorsOnStemChange(tenant.settings));
+    setNotifyInstructorsOnTermParticipationChange(
+      resolveNotifyInstructorsOnTermParticipationChange(tenant.settings),
+    );
+    setTermNotifyFromEnabled(fromHours != null);
+    setTermNotifyFromHours(String(fromHours ?? DEFAULT_INSTRUCTOR_TERM_NOTIFY_FROM_HOURS));
+    setTermNotifyUntilEnabled(untilMinutes != null);
+    setTermNotifyUntilMinutes(String(untilMinutes ?? cutoff));
     setError(null);
     setSuccess(null);
   }, [tenant]);
@@ -91,6 +122,16 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
       maxOffsetDays: Number.parseInt(maxOffsetDays, 10),
       rollingPlanningHorizonWeeks: Number.parseInt(rollingPlanningHorizonWeeks, 10),
       cancellationSwapCutoffMinutesBeforeStart: Number.parseInt(cancellationSwapCutoffMinutes, 10),
+      notifyInstructorsOnStemChange,
+      notifyInstructorsOnTermParticipationChange,
+      instructorTermNotifyFromHoursBeforeStart:
+        notifyInstructorsOnTermParticipationChange && termNotifyFromEnabled
+          ? Number.parseInt(termNotifyFromHours, 10)
+          : null,
+      instructorTermNotifyUntilMinutesBeforeStart:
+        notifyInstructorsOnTermParticipationChange && termNotifyUntilEnabled
+          ? Number.parseInt(termNotifyUntilMinutes, 10)
+          : null,
     };
     const validationError = validateStudioSettingsPatch(patch);
     if (validationError) {
@@ -184,6 +225,113 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
             />
           </label>
         </div>
+
+        <hr className="studio-settings-divider" />
+
+        <details className="studio-settings-subdetails">
+          <summary className="studio-settings-summary studio-settings-summary--sub">
+            <h4 id="studio-settings-notifications-heading" className="studio-settings-summary-title">
+              E-Mail-Benachrichtigungen
+            </h4>
+          </summary>
+          <div
+            className="studio-settings-grid"
+            role="group"
+            aria-labelledby="studio-settings-notifications-heading"
+          >
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="Betrifft Beitritt und Austritt am Kursstamm. Standard aus — sinnvoll, wenn Leitung und Studio-Admin dieselbe Person sind und keine doppelte Mail gewünscht ist.">
+                <input
+                  type="checkbox"
+                  checked={notifyInstructorsOnStemChange}
+                  onChange={(e) => setNotifyInstructorsOnStemChange(e.target.checked)}
+                  disabled={saving}
+                />{" "}
+                Kursleitung bei Stamm-Änderungen informieren
+              </FieldLabelWithTooltip>
+            </label>
+
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="Absagen (rechtzeitig oder kurzfristig) und erfolgreiche Tausche am Kurstermin an die eingetragene Kursleitung. Studio-weit; persönliche Einstellungen pro Leitung kommen später. Standard aus.">
+                <input
+                  type="checkbox"
+                  checked={notifyInstructorsOnTermParticipationChange}
+                  onChange={(e) => setNotifyInstructorsOnTermParticipationChange(e.target.checked)}
+                  disabled={saving}
+                />{" "}
+                Kursleitung bei Termin-Teilnahmeänderungen informieren
+              </FieldLabelWithTooltip>
+            </label>
+
+            {notifyInstructorsOnTermParticipationChange && (
+              <div className="studio-settings-notify-refinements" role="group" aria-label="Zeitfenster für Termin-Mails">
+                <label className="dialog-field studio-settings-checkbox-field">
+                  <FieldLabelWithTooltip tooltip="Mails erst, wenn der Termin näher als die gewählte Stundenzahl liegt. Beim Einschalten Vorschlag 24 Stunden.">
+                    <input
+                      type="checkbox"
+                      checked={termNotifyFromEnabled}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setTermNotifyFromEnabled(on);
+                        if (on && !termNotifyFromHours.trim()) {
+                          setTermNotifyFromHours(String(DEFAULT_INSTRUCTOR_TERM_NOTIFY_FROM_HOURS));
+                        }
+                      }}
+                      disabled={saving}
+                    />{" "}
+                    Startzeitraum begrenzen (Stunden vor Termin)
+                  </FieldLabelWithTooltip>
+                </label>
+                {termNotifyFromEnabled && (
+                  <label className="dialog-field">
+                    <span className="dialog-field-label">Stunden vor Terminbeginn</span>
+                    <NumberStepInput
+                      min={1}
+                      max={168}
+                      step={1}
+                      value={termNotifyFromHours}
+                      onChange={setTermNotifyFromHours}
+                      disabled={saving}
+                      aria-label="Startzeitraum in Stunden vor Terminbeginn"
+                    />
+                  </label>
+                )}
+
+                <label className="dialog-field studio-settings-checkbox-field">
+                  <FieldLabelWithTooltip tooltip="Keine Mails mehr, sobald der Termin näher als die gewählte Minutenzahl liegt (oft die Absagefrist). Beim Einschalten Vorschlag: aktuelle Absagefrist.">
+                    <input
+                      type="checkbox"
+                      checked={termNotifyUntilEnabled}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setTermNotifyUntilEnabled(on);
+                        if (on) {
+                          setTermNotifyUntilMinutes(cancellationSwapCutoffMinutes || "60");
+                        }
+                      }}
+                      disabled={saving}
+                    />{" "}
+                    Bis-Zeitraum begrenzen (Minuten vor Termin)
+                  </FieldLabelWithTooltip>
+                </label>
+                {termNotifyUntilEnabled && (
+                  <label className="dialog-field">
+                    <span className="dialog-field-label">Minuten vor Terminbeginn</span>
+                    <NumberStepInput
+                      min={0}
+                      max={1440}
+                      step={15}
+                      value={termNotifyUntilMinutes}
+                      onChange={setTermNotifyUntilMinutes}
+                      disabled={saving}
+                      aria-label="Bis-Zeitraum in Minuten vor Terminbeginn"
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+          </div>
+        </details>
 
         <hr className="studio-settings-divider" />
 

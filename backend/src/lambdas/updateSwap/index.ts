@@ -5,6 +5,7 @@ import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getDelegationErrorResponse } from "../shared/delegation";
 import { notifySwapSuccess } from "../shared/notifications/swapSuccessNotification";
+import { notifyInstructorsOfActiveSwap } from "../shared/notifications/instructorSwapNotifications";
 import { resolveSwapUserKey } from "../shared/swapQueryHelpers";
 
 const client = dynamoClient;
@@ -125,6 +126,35 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         console.info("updateSwap swap success mail summary", { tenantId, swapId, ...mailSummary });
       } catch (notificationError) {
         console.warn("updateSwap swap success notification failed", { tenantId, swapId, error: notificationError });
+      }
+      try {
+        const instructorSummary = await notifyInstructorsOfActiveSwap({
+          client,
+          tenantId,
+          swap: {
+            participantId: user,
+            fromCourseId: Number(fromCourseId),
+            fromDate,
+            toCourseId: Number(toCourseId),
+            toDate,
+          },
+          coursesTable: process.env.COURSES_TABLE,
+          tenantsTable: process.env.TENANTS_TABLE,
+          participantsTable: process.env.PARTICIPANTS_TABLE,
+          sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+          baseUrl: resolveAppBaseUrlForTenant(tenantId) || undefined,
+        });
+        console.info("updateSwap instructor swap mail summary", {
+          tenantId,
+          swapId,
+          ...instructorSummary,
+        });
+      } catch (notificationError) {
+        console.warn("updateSwap instructor swap notification failed", {
+          tenantId,
+          swapId,
+          error: notificationError,
+        });
       }
     }
 

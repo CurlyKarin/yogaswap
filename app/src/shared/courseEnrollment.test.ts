@@ -614,6 +614,25 @@ describe("courseEnrollment", () => {
     expect(afterCancel.puts).toEqual([]);
   });
 
+  it("planStemEnrollmentWrites does not collapse upcoming kommt to R on cache-only re-add", () => {
+    // After #384 stemOn(R) cache drop, a later save can list the person in nextParticipants
+    // without enrollmentChanges — must keep the upcoming validFrom (not move to R).
+    const existing: CourseEnrollment[] = [
+      { courseId: 9, participantId: "Kaja", validFrom: "2026-11-03" },
+    ];
+    const planned = planStemEnrollmentWrites({
+      courseId: 9,
+      previousParticipants: [],
+      nextParticipants: ["Kaja"],
+      existingEnrollments: existing,
+      addValidFrom: "2026-10-27",
+      removeValidUntil: "2026-10-26",
+    });
+    expect(planned.deletes).toEqual([]);
+    expect(planned.puts).toEqual([]);
+    expect(planned.addedParticipantIds).toEqual([]);
+  });
+
   it("planStemEnrollmentWrites does not clear past until when add reuses the old validFrom (#310)", () => {
     const existing: CourseEnrollment[] = [
       { courseId: 1, participantId: "luna", validFrom: "2026-01-01", validUntil: "2026-08-14" },

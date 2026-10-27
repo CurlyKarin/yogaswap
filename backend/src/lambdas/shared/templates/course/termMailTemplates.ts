@@ -64,3 +64,75 @@ export function buildParticipantTermReleasedMail(input: TermMailInput): MailTemp
     `,
   };
 }
+
+/** Absage zurückgenommen (RC oder SN) — wieder Teilnahme. */
+export function buildParticipantAbsenceWithdrawnMail(input: TermMailInput): MailTemplate {
+  const when = termLine(input.dateIso, input.time);
+  const greeting = resolveOperationalMailGreeting(input);
+  return {
+    subject: `Absage zurückgenommen: ${input.courseName}`,
+    html: `
+      <p>Hallo ${greeting},</p>
+      <p>du nimmst am ${when} im Kurs <strong>${input.courseName}</strong> wieder teil. Deine Absage wurde zurückgenommen.</p>
+      ${loginHint(input.loginUrl)}
+    `,
+  };
+}
+
+export type InstructorTermParticipationKind =
+  | "term_released"
+  | "term_release_cleared"
+  | "short_notice"
+  | "short_notice_cleared"
+  | "swap_joined"
+  | "swap_left";
+
+type InstructorTermParticipationMailInput = TermMailInput & {
+  kind: InstructorTermParticipationKind;
+  memberNickname: string;
+};
+
+/** Kursleitung: Änderung der Termin-Teilnahme (#398). */
+export function buildInstructorTermParticipationChangedMail(
+  input: InstructorTermParticipationMailInput,
+): MailTemplate {
+  const when = termLine(input.dateIso, input.time);
+  const greeting = resolveOperationalMailGreeting(input);
+  const member = input.memberNickname;
+  let actionLine: string;
+  let subjectPrefix: string;
+  switch (input.kind) {
+    case "term_released":
+      subjectPrefix = "Absage";
+      actionLine = `<p><strong>${member}</strong> hat den Platz am ${when} im Kurs <strong>${input.courseName}</strong> freigegeben (rechtzeitig).</p>`;
+      break;
+    case "term_release_cleared":
+      subjectPrefix = "Absage zurückgenommen";
+      actionLine = `<p><strong>${member}</strong> nimmt am ${when} im Kurs <strong>${input.courseName}</strong> wieder teil (rechtzeitige Absage zurückgenommen).</p>`;
+      break;
+    case "short_notice":
+      subjectPrefix = "Kurzfristige Absage";
+      actionLine = `<p><strong>${member}</strong> hat kurzfristig für den ${when} im Kurs <strong>${input.courseName}</strong> abgesagt (Platz bleibt belegt).</p>`;
+      break;
+    case "short_notice_cleared":
+      subjectPrefix = "Absage zurückgenommen";
+      actionLine = `<p><strong>${member}</strong> hat die kurzfristige Absage für den ${when} im Kurs <strong>${input.courseName}</strong> zurückgenommen und nimmt wieder teil.</p>`;
+      break;
+    case "swap_joined":
+      subjectPrefix = "Tausch";
+      actionLine = `<p><strong>${member}</strong> nimmt nach Tausch am ${when} im Kurs <strong>${input.courseName}</strong> teil.</p>`;
+      break;
+    case "swap_left":
+      subjectPrefix = "Tausch";
+      actionLine = `<p><strong>${member}</strong> hat nach Tausch den Termin am ${when} im Kurs <strong>${input.courseName}</strong> verlassen.</p>`;
+      break;
+  }
+  return {
+    subject: `${subjectPrefix}: ${input.courseName} (${member})`,
+    html: `
+      <p>Hallo ${greeting},</p>
+      ${actionLine}
+      ${loginHint(input.loginUrl)}
+    `,
+  };
+}

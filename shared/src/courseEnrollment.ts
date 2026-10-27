@@ -803,6 +803,14 @@ export function planStemEnrollmentWrites(
       // Upcoming "kommt" (start after R): move validFrom on the same membership.
       // Close+new would leave a closed stub; cancelling the new start would revive it.
       if (existingOpen.validFrom > input.addValidFrom) {
+        // Only when the dialog sent an explicit add date. Cache-only re-add (person in
+        // nextParticipants because stem cache lagged behind enrollments) must not collapse
+        // an upcoming start down to R — that produced wrong "ab heute" + join mails.
+        const explicitAddFrom =
+          input.addValidFromByParticipant?.[participantId.toLowerCase()];
+        if (!explicitAddFrom) {
+          continue;
+        }
         working = working.filter(
           (entry) =>
             !(
