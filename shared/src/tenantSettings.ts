@@ -41,6 +41,11 @@ export function resolveInactiveGraceDays(settings?: TenantSettings): number {
     : DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END;
 }
 
+/** Stamm-Mails an Kursleitung (#398). Default aus — vermeidet Selbstbenachrichtigung Admin=Leitung. */
+export function resolveNotifyInstructorsOnStemChange(settings?: TenantSettings): boolean {
+  return settings?.notifyInstructorsOnStemChange === true;
+}
+
 export type StudioSettingsPatch = {
   name?: string;
   inactiveGraceDaysAfterCourseEnd?: number;
@@ -52,6 +57,8 @@ export type StudioSettingsPatch = {
   contactEmail?: string | null;
   /** Anzeigename zum Kontakt; leer = entfernen (Fallback Tenant-Name). */
   contactName?: string | null;
+  /** Stamm-Mails an course.instructors (#398). */
+  notifyInstructorsOnStemChange?: boolean;
 };
 
 const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -113,6 +120,11 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     const label = typeof raw === "string" ? raw.trim() : "";
     if (label.length > 80) {
       return "Kontaktname darf höchstens 80 Zeichen haben.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "notifyInstructorsOnStemChange")) {
+    if (typeof patch.notifyInstructorsOnStemChange !== "boolean") {
+      return "Mitteilung an Kursleitung bei Stamm-Änderungen muss ein Schalter (ja/nein) sein.";
     }
   }
   return null;

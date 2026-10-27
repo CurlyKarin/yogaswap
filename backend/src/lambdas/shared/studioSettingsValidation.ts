@@ -12,6 +12,7 @@ export type StudioSettingsPatch = {
   cancellationSwapCutoffMinutesBeforeStart?: number;
   contactEmail?: string | null;
   contactName?: string | null;
+  notifyInstructorsOnStemChange?: boolean;
 };
 
 const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -73,6 +74,11 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     const label = typeof raw === "string" ? raw.trim() : "";
     if (label.length > 80) {
       return "Kontaktname darf höchstens 80 Zeichen haben.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "notifyInstructorsOnStemChange")) {
+    if (typeof patch.notifyInstructorsOnStemChange !== "boolean") {
+      return "Mitteilung an Kursleitung bei Stamm-Änderungen muss ein Schalter (ja/nein) sein.";
     }
   }
   return null;

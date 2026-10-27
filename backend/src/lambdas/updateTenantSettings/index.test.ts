@@ -99,6 +99,25 @@ describe("updateTenantSettings Lambda", () => {
     expect(PutItemCommand).toHaveBeenCalled();
   });
 
+  test("stores notifyInstructorsOnStemChange (#398)", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Pilot" },
+          settings: { M: {} },
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent({ notifyInstructorsOnStemChange: true }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).settings).toMatchObject({
+      notifyInstructorsOnStemChange: true,
+    });
+  });
+
   test("stores and clears studio contact email (#272)", async () => {
     mockSend
       .mockResolvedValueOnce({ Item: { role: { S: "admin" } } })

@@ -251,6 +251,11 @@ export interface TenantSettings {
    * Anzeigename zum Kontakt (z. B. „Studio-Team“). Fehlt → Tenant-Name als Label.
    */
   contactName?: string;
+  /**
+   * Mail an `course.instructors` bei Stamm-Änderungen (Mitglieder-Dialog / updateCourse).
+   * Default (undefined/false): aus — Pilot oft Admin=Leitung (#398).
+   */
+  notifyInstructorsOnStemChange?: boolean;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

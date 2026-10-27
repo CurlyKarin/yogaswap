@@ -44,7 +44,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 | **Austrittstermin geändert** | `updateCourse` | `validUntil` verschoben | `buildCourseMembershipExitChangedMail` | `#310` |
 | **Austritt aufgehoben** | `updateCourse` | `validUntil` zurückgenommen | `buildCourseMembershipExitClearedMail` | `#310` |
 | **Kurs aktiv (draft→active)** | `updateCourse` | Alle Stamm-TN | `buildCourseActivatedMail` | Einmalig bei Statuswechsel |
-| **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Code vorhanden; **versendet erst**, wenn `instructors` am Kurs gesetzt — Bedarf/Leitung-Zuordnung noch klären; **nicht** Teil von `#310` |
+| **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Nur wenn `instructors` gesetzt **und** Studio-Setting `notifyInstructorsOnStemChange` (#398, Default **aus**) |
 
 ### Template-Module
 
@@ -120,11 +120,11 @@ Klassifikation: `classifyMembershipMailEvents` in `shared` (Endzustand pro Perso
 
 ### Trainer / Kursleitung
 
-**Stand:** Technisch vorbereitet (`buildInstructorParticipantListChangedMail` bei Stamm-Änderung), aber **praktisch inaktiv** — Kursen ist meist noch keine Leitung (`course.instructors`) zugeordnet. Bedarf und Kanal (Einzelmail vs. Digest) zuerst im Betrieb klären; kein Blocker für MVP Teilnehmer:innen.
+**Stand (#398):** Stamm-Mail an `course.instructors` nur wenn Studio-Setting `notifyInstructorsOnStemChange === true` (Default **aus** — Pilot oft Admin=Leitung). Zusätzlich müssen `instructors` am Kurs gesetzt sein.
 
 | Geplant / Code | Status |
 |----------------|--------|
-| Teilnehmerliste geändert (add/remove Stamm) | Code in `updateCourse`; Versand nur bei gesetzten `instructors` |
+| Teilnehmerliste geändert (add/remove Stamm) | Code in `updateCourse`; Kill-Switch `notifyInstructorsOnStemChange` |
 | Terminabsage im eigenen Kurs | nicht umgesetzt; heute nur Studio-Report bei `cancelCourseDate` |
 
 | Bewusst nicht MVP | Grund |

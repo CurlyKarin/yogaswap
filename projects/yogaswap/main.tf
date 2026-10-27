@@ -307,6 +307,8 @@ locals {
     "update_course" = {
       name             = "update-course"
       file_name        = "updateCourse.zip"
+      # Membership + optional instructor SES after Dynamo writes; default 3s times out mid-mail.
+      timeout          = 15
       table_arns       = [module.courses_table.table_arn, module.memberships_table.table_arn, module.course_overrides_table.table_arn, module.swaps_table.table_arn, module.tenants_table.table_arn, module.participants_table.table_arn, module.course_enrollments_table.table_arn]
       dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan"]
       tables = {

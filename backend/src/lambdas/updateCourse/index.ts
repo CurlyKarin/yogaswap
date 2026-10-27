@@ -25,6 +25,7 @@ import {
 } from "../shared/courseEditPolicy";
 import {
   loadTenantSettings,
+  resolveNotifyInstructorsOnStemChange,
   resolveRollingPlanningHorizonWeeks,
 } from "../shared/tenantSettingsLoader";
 import { generateCourseUid, resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
@@ -42,6 +43,7 @@ import {
   migrateLegacyOverrideToDeltas,
   deriveActiveParticipantsCacheFromStem,
   hasPlannedEnrollmentStem,
+  findOpenEnrollmentForParticipant,
   isEnrollmentOpen,
   planDraftToActivePlanungslisteMaterialization,
   planInactiveToDraftEnrollmentTransition,
@@ -1779,12 +1781,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const nextParticipantsForMail =
         participants ??
         previousParticipantsForMail;
-      const addedParticipantsForMail = nextParticipantsForMail.filter(
-        (entry) => !previousParticipantsMailSet.has(entry.toLowerCase()),
+      // Dabei-Cache + enrollmentChanges (kommt/Ende): sonst fehlen Kursleitungs-Mails
+      // für reine „kommt“-Adds und Datums-Maps greifen nicht.
+      const addedFromChangesForMail = (enrollmentChanges ?? [])
+        .filter((change) => change.action === "add")
+        .map((change) => change.participantId);
+      const removedFromChangesForMail = (enrollmentChanges ?? [])
+        .filter((change) => change.action === "remove")
+        .map((change) => change.participantId);
+      const addedParticipantsForMail = Array.from(
+        new Map(
+          [
+            ...nextParticipantsForMail.filter(
+              (entry) => !previousParticipantsMailSet.has(entry.toLowerCase()),
+            ),
+            ...addedFromChangesForMail,
+          ].map((entry) => [entry.toLowerCase(), entry] as const),
+        ).values(),
       );
       const nextParticipantsMailSet = new Set(nextParticipantsForMail.map((entry) => entry.toLowerCase()));
-      const removedParticipantsForMail = previousParticipantsForMail.filter(
-        (entry) => !nextParticipantsMailSet.has(entry.toLowerCase()),
+      const removedParticipantsForMail = Array.from(
+        new Map(
+          [
+            ...previousParticipantsForMail.filter(
+              (entry) => !nextParticipantsMailSet.has(entry.toLowerCase()),
+            ),
+            ...removedFromChangesForMail,
+          ].map((entry) => [entry.toLowerCase(), entry] as const),
+        ).values(),
       );
 
       const refIso =
@@ -1804,20 +1828,28 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
 
       // Cache-only Beitritt ohne enrollmentChanges: weiterhin Beitritts-Mail.
+      // Skip people who already have an open enrollment (stem-cache lag / #384) — otherwise
+      // a later save invents a joinAdd at refIso (heute) and mails a wrong start date.
+      const isCacheOnlyNewJoin = (participantId: string): boolean =>
+        !findOpenEnrollmentForParticipant(enrollmentsBeforeSync ?? [], participantId);
+
       if (membershipEvents.length === 0 && addedParticipantsForMail.length > 0) {
-        membershipEvents = addedParticipantsForMail.map((participantId) => ({
-          participantId,
-          kind: "joinAdd" as const,
-          termDateIso:
-            mailDateMaps.addValidFromByParticipant[participantId.toLowerCase()] ??
-            refIso,
-        }));
+        membershipEvents = addedParticipantsForMail
+          .filter(isCacheOnlyNewJoin)
+          .map((participantId) => ({
+            participantId,
+            kind: "joinAdd" as const,
+            termDateIso:
+              mailDateMaps.addValidFromByParticipant[participantId.toLowerCase()] ??
+              refIso,
+          }));
       } else if (addedParticipantsForMail.length > 0) {
         const covered = new Set(
           membershipEvents.map((event) => event.participantId.toLowerCase()),
         );
         for (const participantId of addedParticipantsForMail) {
           if (covered.has(participantId.toLowerCase())) continue;
+          if (!isCacheOnlyNewJoin(participantId)) continue;
           membershipEvents.push({
             participantId,
             kind: "joinAdd",
@@ -1855,17 +1887,36 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }
       }
 
+      // #398: Stamm-Mails an Kursleitung nur bei Studio-Setting (Default aus).
+      // Cache-lag: Person schon mit offenem Segment → kein „neu hinzugefügt“ an Kursleitung.
+      const instructorAdded = addedParticipantsForMail.filter(
+        (participantId) =>
+          Boolean(mailDateMaps.addValidFromByParticipant[participantId.toLowerCase()]) ||
+          isCacheOnlyNewJoin(participantId),
+      );
+      const instructorRemoved = removedParticipantsForMail.filter((participantId) => {
+        if (mailDateMaps.removeValidUntilByParticipant[participantId.toLowerCase()]) {
+          return true;
+        }
+        // Cache drop of upcoming kommt is not a real leave.
+        const open = findOpenEnrollmentForParticipant(
+          enrollmentsBeforeSync ?? [],
+          participantId,
+        );
+        return !(open && open.validFrom > refIso);
+      });
       if (
+        resolveNotifyInstructorsOnStemChange(tenantSettings) &&
         instructorUserIds.length > 0 &&
-        (addedParticipantsForMail.length > 0 || removedParticipantsForMail.length > 0)
+        (instructorAdded.length > 0 || instructorRemoved.length > 0)
       ) {
         try {
           const mailSummary = await notifyInstructorParticipantListChanged(client, {
             tenantId,
             instructorUserIds,
             courseName: mailCourseName,
-            addedParticipants: addedParticipantsForMail,
-            removedParticipants: removedParticipantsForMail,
+            addedParticipants: instructorAdded,
+            removedParticipants: instructorRemoved,
             addedFromByUser: mailDateMaps.addValidFromByParticipant,
             removedUntilByUser: mailDateMaps.removeValidUntilByParticipant,
             participantsTable,

@@ -76,38 +76,44 @@ export async function notifyCourseMembershipEvents(
   const loginUrl = resolveLoginUrl(params.baseUrl);
   const totals = { ...empty };
 
-  for (const event of params.events) {
-    const summary = await sendMailToParticipantUserIds(client, {
-      participantsTable: params.participantsTable,
-      sesSourceEmail: params.sesSourceEmail,
-      tenantId: params.tenantId,
-      participantUserIds: [event.participantId],
-      buildMail: (recipient) => {
-        const common = {
-          nickname: recipient.nickname,
-          displayName: recipient.displayName,
-          courseName: params.courseName,
-          weekday: params.weekday,
-          time: params.time,
-          termDateIso: event.termDateIso,
-          loginUrl,
-        };
-        switch (event.kind) {
-          case "joinAdd":
-            return buildCourseMembershipMail(common);
-          case "joinShift":
-            return buildCourseMembershipJoinChangedMail(common);
-          case "joinCancel":
-            return buildCourseMembershipJoinCancelledMail(common);
-          case "exitSet":
-            return buildCourseMembershipExitMail(common);
-          case "exitShift":
-            return buildCourseMembershipExitChangedMail(common);
-          case "exitClear":
-            return buildCourseMembershipExitClearedMail(common);
-        }
-      },
-    });
+  // Parallel SES: sequential awaits burned updateCourse's short Lambda timeout when
+  // membership + instructor mails ran after Dynamo writes.
+  const summaries = await Promise.all(
+    params.events.map((event) =>
+      sendMailToParticipantUserIds(client, {
+        participantsTable: params.participantsTable,
+        sesSourceEmail: params.sesSourceEmail,
+        tenantId: params.tenantId,
+        participantUserIds: [event.participantId],
+        buildMail: (recipient) => {
+          const common = {
+            nickname: recipient.nickname,
+            displayName: recipient.displayName,
+            courseName: params.courseName,
+            weekday: params.weekday,
+            time: params.time,
+            termDateIso: event.termDateIso,
+            loginUrl,
+          };
+          switch (event.kind) {
+            case "joinAdd":
+              return buildCourseMembershipMail(common);
+            case "joinShift":
+              return buildCourseMembershipJoinChangedMail(common);
+            case "joinCancel":
+              return buildCourseMembershipJoinCancelledMail(common);
+            case "exitSet":
+              return buildCourseMembershipExitMail(common);
+            case "exitShift":
+              return buildCourseMembershipExitChangedMail(common);
+            case "exitClear":
+              return buildCourseMembershipExitClearedMail(common);
+          }
+        },
+      }),
+    ),
+  );
+  for (const summary of summaries) {
     totals.mailSentCount += summary.mailSentCount;
     totals.mailSkippedNoProfileCount += summary.mailSkippedNoProfileCount;
     totals.mailSkippedInvitedCount += summary.mailSkippedInvitedCount;

@@ -115,10 +115,33 @@ describe("StudioSettingsSection", () => {
           minOffsetDays: -7,
           maxOffsetDays: 7,
           rollingPlanningHorizonWeeks: 5,
+          notifyInstructorsOnStemChange: false,
         }),
       );
     });
     expect(onSaved).toHaveBeenCalledWith(updatedTenant);
+  });
+
+  it("sendet Stamm-Mitteilung an Kursleitung im Patch (#398)", async () => {
+    const onSaved = vi.fn();
+    mockedUpdateTenantSettings.mockResolvedValue(
+      makeTenant({ notifyInstructorsOnStemChange: true }),
+    );
+    render(<StudioSettingsSection tenant={makeTenant()} onSaved={onSaved} />);
+    expandStudioSettings();
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: /kursleitung bei stamm-änderungen per mail informieren/i,
+    });
+    expect(checkbox).not.toBeChecked();
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: /studio-einstellungen speichern/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateTenantSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ notifyInstructorsOnStemChange: true }),
+      );
+    });
   });
 
   it("stellt Landmark und beschriftete Formularfelder bereit", () => {

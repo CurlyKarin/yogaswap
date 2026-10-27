@@ -55,3 +55,8 @@ export function resolveRollingPlanningHorizonWeeks(settings?: TenantSettings): n
   }
   return DEFAULT_ROLLING_PLANNING_HORIZON_WEEKS;
 }
+
+/** Kopie von `shared/src/tenantSettings.ts` (resolveNotifyInstructorsOnStemChange). #398 */
+export function resolveNotifyInstructorsOnStemChange(settings?: TenantSettings): boolean {
+  return settings?.notifyInstructorsOnStemChange === true;
+}

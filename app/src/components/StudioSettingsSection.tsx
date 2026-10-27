@@ -3,6 +3,7 @@ import type { Tenant } from "shared/types";
 import {
   resolveCancellationSwapCutoffMinutes,
   resolveInactiveGraceDays,
+  resolveNotifyInstructorsOnStemChange,
   resolveRollingPlanningHorizonWeeks,
   resolveSwapWindow,
   validateStudioSettingsPatch,
@@ -54,6 +55,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const graceDefault = resolveInactiveGraceDays(tenant.settings);
   const horizonDefault = resolveRollingPlanningHorizonWeeks(tenant.settings);
   const cutoffDefault = resolveCancellationSwapCutoffMinutes(tenant.settings);
+  const stemNotifyDefault = resolveNotifyInstructorsOnStemChange(tenant.settings);
 
   const [name, setName] = useState(tenant.name);
   const [contactEmail, setContactEmail] = useState(tenant.settings?.contactEmail ?? "");
@@ -63,6 +65,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const [maxOffsetDays, setMaxOffsetDays] = useState(String(swapDefaults.maxOffsetDays));
   const [rollingPlanningHorizonWeeks, setRollingPlanningHorizonWeeks] = useState(String(horizonDefault));
   const [cancellationSwapCutoffMinutes, setCancellationSwapCutoffMinutes] = useState(String(cutoffDefault));
+  const [notifyInstructorsOnStemChange, setNotifyInstructorsOnStemChange] = useState(stemNotifyDefault);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -77,6 +80,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setMaxOffsetDays(String(swap.maxOffsetDays));
     setRollingPlanningHorizonWeeks(String(resolveRollingPlanningHorizonWeeks(tenant.settings)));
     setCancellationSwapCutoffMinutes(String(resolveCancellationSwapCutoffMinutes(tenant.settings)));
+    setNotifyInstructorsOnStemChange(resolveNotifyInstructorsOnStemChange(tenant.settings));
     setError(null);
     setSuccess(null);
   }, [tenant]);
@@ -91,6 +95,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
       maxOffsetDays: Number.parseInt(maxOffsetDays, 10),
       rollingPlanningHorizonWeeks: Number.parseInt(rollingPlanningHorizonWeeks, 10),
       cancellationSwapCutoffMinutesBeforeStart: Number.parseInt(cancellationSwapCutoffMinutes, 10),
+      notifyInstructorsOnStemChange,
     };
     const validationError = validateStudioSettingsPatch(patch);
     if (validationError) {
@@ -182,6 +187,22 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
               onChange={setCancellationSwapCutoffMinutes}
               disabled={saving}
             />
+          </label>
+
+          <label className="dialog-field studio-settings-checkbox-field">
+            <span className="dialog-field-label studio-field-label">
+              <input
+                type="checkbox"
+                checked={notifyInstructorsOnStemChange}
+                onChange={(e) => setNotifyInstructorsOnStemChange(e.target.checked)}
+                disabled={saving}
+              />{" "}
+              Kursleitung bei Stamm-Änderungen per Mail informieren
+            </span>
+            <span className="muted small">
+              Betrifft Beitritt/Austritt am Kursstamm. Standard aus — sinnvoll, wenn Leitung und
+              Studio-Admin dieselbe Person sind.
+            </span>
           </label>
         </div>
 
