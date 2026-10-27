@@ -21,6 +21,7 @@ import { loadTenantSettings } from '../shared/tenantSettingsLoader';
 import { mapOverrideItem, mapStringList } from '../shared/overrideDynamo';
 import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
 import { notifySwapSuccess } from '../shared/notifications/swapSuccessNotification';
+import { notifyInstructorsOfActiveSwap } from '../shared/notifications/instructorSwapNotifications';
 import { resolveOperationalNickname } from '../shared/participantResolver';
 
 const client = dynamoClient;
@@ -309,6 +310,35 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         console.info("createSwap swap success mail summary", { tenantId, swapId, ...mailSummary });
       } catch (notificationError) {
         console.warn("createSwap swap success notification failed", { tenantId, swapId, error: notificationError });
+      }
+      try {
+        const instructorSummary = await notifyInstructorsOfActiveSwap({
+          client,
+          tenantId,
+          swap: {
+            participantId: swap.participantId,
+            fromCourseId: Number(swap.fromCourseId),
+            fromDate: swap.fromDate,
+            toCourseId: Number(swap.toCourseId),
+            toDate: swap.toDate,
+          },
+          coursesTable,
+          tenantsTable: process.env.TENANTS_TABLE,
+          participantsTable: process.env.PARTICIPANTS_TABLE,
+          sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+          baseUrl: resolveAppBaseUrlForTenant(tenantId) || undefined,
+        });
+        console.info("createSwap instructor swap mail summary", {
+          tenantId,
+          swapId,
+          ...instructorSummary,
+        });
+      } catch (notificationError) {
+        console.warn("createSwap instructor swap notification failed", {
+          tenantId,
+          swapId,
+          error: notificationError,
+        });
       }
     }
 

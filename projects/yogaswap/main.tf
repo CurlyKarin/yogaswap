@@ -70,6 +70,7 @@ locals {
     "create_swap" = {
       name      = "create-swap"
       file_name = "createSwap.zip"
+      timeout   = 15
       table_arns = [
         module.swaps_table.table_arn,
         module.courses_table.table_arn,
@@ -105,16 +106,19 @@ locals {
     "update_swap" = {
       name      = "update-swap"
       file_name = "updateSwap.zip"
+      timeout   = 15
       table_arns = [
         module.swaps_table.table_arn,
         module.courses_table.table_arn,
         module.participants_table.table_arn,
+        module.tenants_table.table_arn,
       ]
       dynamodb_actions = ["dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
       tables = {
         "SWAPS_TABLE"        = module.swaps_table.table_name
         "COURSES_TABLE"      = module.courses_table.table_name
         "PARTICIPANTS_TABLE" = module.participants_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -181,6 +185,7 @@ locals {
     "update_override" = {
       name      = "update-override"
       file_name = "updateOverride.zip"
+      timeout   = 15
       table_arns = [
         module.course_overrides_table.table_arn,
         module.courses_table.table_arn,
@@ -253,6 +258,7 @@ locals {
     "process_ring_swaps" = {
       name             = "process-ring-swaps"
       file_name        = "processRingSwaps.zip"
+      timeout          = 15
       table_arns       = [module.swaps_table.table_arn, module.course_overrides_table.table_arn, module.courses_table.table_arn, module.tenants_table.table_arn, module.participants_table.table_arn]
       dynamodb_actions = ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:TransactWriteItems"]
       tables = {

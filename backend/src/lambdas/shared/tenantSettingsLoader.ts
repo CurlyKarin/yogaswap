@@ -60,3 +60,10 @@ export function resolveRollingPlanningHorizonWeeks(settings?: TenantSettings): n
 export function resolveNotifyInstructorsOnStemChange(settings?: TenantSettings): boolean {
   return settings?.notifyInstructorsOnStemChange === true;
 }
+
+/** Kopie von `shared/src/tenantSettings.ts`. #398 */
+export function resolveNotifyInstructorsOnTermParticipationChange(
+  settings?: TenantSettings,
+): boolean {
+  return settings?.notifyInstructorsOnTermParticipationChange === true;
+}

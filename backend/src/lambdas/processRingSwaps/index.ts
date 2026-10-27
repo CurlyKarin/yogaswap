@@ -23,6 +23,7 @@ import {
   type RejectedRingLog,
 } from "../shared/ringSwapLogging";
 import { notifySwapSuccess } from "../shared/notifications/swapSuccessNotification";
+import { notifyInstructorsOfActiveSwap } from "../shared/notifications/instructorSwapNotifications";
 import { resolveParticipantRefAliases } from "../shared/participantResolver";
 import { queryCourseEnrollments } from "../shared/courseEnrollmentDynamo";
 import { dynamoItemToSwap } from "../shared/swapDynamo";
@@ -224,6 +225,29 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               user: activatedSwap.participantId,
               ...mailSummary,
             });
+            if (activatedSwap.participantId) {
+              const instructorSummary = await notifyInstructorsOfActiveSwap({
+                client,
+                tenantId,
+                swap: {
+                  participantId: activatedSwap.participantId,
+                  fromCourseId: activatedSwap.fromCourseId,
+                  fromDate: activatedSwap.fromDate,
+                  toCourseId: activatedSwap.toCourseId,
+                  toDate: activatedSwap.toDate,
+                },
+                coursesTable,
+                tenantsTable: process.env.TENANTS_TABLE,
+                participantsTable: process.env.PARTICIPANTS_TABLE,
+                sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+                baseUrl: loginUrl,
+              });
+              console.info("processRingSwaps instructor swap mail summary", {
+                tenantId,
+                user: activatedSwap.participantId,
+                ...instructorSummary,
+              });
+            }
           }
         } catch (notificationError) {
           console.warn("processRingSwaps swap success notification failed", {

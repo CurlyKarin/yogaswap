@@ -14,10 +14,21 @@ import {
 } from '../shared/cutoffOverrideValidation';
 import { mapOverrideItem, mapStringList, stringListAttribute, anonymousTrialCountAttribute } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
-import { resolveEffectiveTermOccupancy, resolveStemForDate, validateAnonymousTrialCount } from '@yogaswap/shared';
+import {
+  resolveEffectiveTermOccupancy,
+  resolveStemForDate,
+  shouldNotifyInstructorsForTermParticipation,
+  validateAnonymousTrialCount,
+} from '@yogaswap/shared';
+import type { TenantSettings } from '@yogaswap/shared';
 import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
 import { resolveSelfServiceAbsenceKind } from '../shared/notifications/resolveSelfServiceAbsenceKind';
-import { notifyParticipantTermReleased } from '../shared/notifications/termAbsenceNotifications';
+import { detectInstructorTermParticipationEvents } from '../shared/notifications/detectInstructorTermParticipationEvents';
+import {
+  notifyInstructorsTermParticipationChanged,
+  notifyParticipantAbsenceWithdrawn,
+  notifyParticipantTermReleased,
+} from '../shared/notifications/termAbsenceNotifications';
 
 const client = dynamoClient;
 
@@ -121,6 +132,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     const courseTime = courseResp.Item.time?.S ?? '';
     const courseName = courseResp.Item.name?.S ?? `Kurs ${legacyCourseId}`;
+    const courseInstructors =
+      courseResp.Item.instructors?.L?.map((entry) => entry.S?.trim() ?? "").filter(Boolean) ?? [];
     const baseParticipants = mapStringList(courseResp.Item.participants);
     const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
     const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
@@ -159,11 +172,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const subjectNickname = actingForUserId ?? userId;
     let selfServiceAbsenceKind: ReturnType<typeof resolveSelfServiceAbsenceKind> = null;
+    let tenantSettings: TenantSettings | undefined;
+    let mergedAfterForMail: ReturnType<typeof mergeOverrideUpdate> | null = null;
     if (touchesCutoffFields && subjectNickname && tenantsTable) {
-      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
       const merged = mergeOverrideUpdate(before, baseParticipants, updates);
       merged.courseId = Number(legacyCourseId);
       merged.date = date;
+      mergedAfterForMail = merged;
 
       const invariantError = validateShortNoticeParticipantsInvariant(merged, stemOnDate);
       if (invariantError) {
@@ -307,6 +323,83 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           date,
           error: notificationError,
         });
+      }
+    }
+
+    if (selfServiceAbsenceKind === "absence_withdrawn" && subjectNickname) {
+      try {
+        const baseUrl = resolveAppBaseUrlForTenant(tenantId);
+        const mailSummary = await notifyParticipantAbsenceWithdrawn(client, {
+          tenantId,
+          userId: subjectNickname,
+          courseName,
+          dateIso: date,
+          time: courseTime,
+          participantsTable: process.env.PARTICIPANTS_TABLE,
+          sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+          baseUrl,
+        });
+        console.info("updateOverride absence withdrawn mail summary", {
+          tenantId,
+          courseId: legacyCourseId,
+          date,
+          userId: subjectNickname,
+          ...mailSummary,
+        });
+      } catch (notificationError) {
+        console.warn("updateOverride absence withdrawn notification failed", {
+          tenantId,
+          courseId: legacyCourseId,
+          date,
+          error: notificationError,
+        });
+      }
+    }
+
+    // #398: Kursleitung bei Termin-Absagen (RC/SN), wenn Studio-Setting + Zeitfenster.
+    if (
+      mergedAfterForMail &&
+      courseInstructors.length > 0 &&
+      shouldNotifyInstructorsForTermParticipation(tenantSettings, date, courseTime)
+    ) {
+      const instructorEvents = detectInstructorTermParticipationEvents({
+        before,
+        after: mergedAfterForMail,
+        stemParticipants: stemOnDate,
+      });
+      if (instructorEvents.length > 0) {
+        try {
+          const baseUrl = resolveAppBaseUrlForTenant(tenantId);
+          for (const event of instructorEvents) {
+            const mailSummary = await notifyInstructorsTermParticipationChanged(client, {
+              tenantId,
+              instructorUserIds: courseInstructors,
+              kind: event.kind,
+              memberNickname: event.memberNickname,
+              courseName,
+              dateIso: date,
+              time: courseTime,
+              participantsTable: process.env.PARTICIPANTS_TABLE,
+              sesSourceEmail: process.env.SES_SOURCE_EMAIL,
+              baseUrl,
+            });
+            console.info("updateOverride instructor term participation mail summary", {
+              tenantId,
+              courseId: legacyCourseId,
+              date,
+              kind: event.kind,
+              memberNickname: event.memberNickname,
+              ...mailSummary,
+            });
+          }
+        } catch (notificationError) {
+          console.warn("updateOverride instructor term participation notification failed", {
+            tenantId,
+            courseId: legacyCourseId,
+            date,
+            error: notificationError,
+          });
+        }
       }
     }
 

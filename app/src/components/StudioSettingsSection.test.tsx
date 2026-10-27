@@ -138,6 +138,9 @@ describe("StudioSettingsSection", () => {
           maxOffsetDays: 7,
           rollingPlanningHorizonWeeks: 5,
           notifyInstructorsOnStemChange: false,
+          notifyInstructorsOnTermParticipationChange: false,
+          instructorTermNotifyFromHoursBeforeStart: null,
+          instructorTermNotifyUntilMinutesBeforeStart: null,
         }),
       );
     });
@@ -162,6 +165,45 @@ describe("StudioSettingsSection", () => {
     await waitFor(() => {
       expect(mockedUpdateTenantSettings).toHaveBeenCalledWith(
         expect.objectContaining({ notifyInstructorsOnStemChange: true }),
+      );
+    });
+  });
+
+  it("sendet Termin-Teilnahme-Mitteilung inkl. Zeitfenster im Patch (#398)", async () => {
+    mockedUpdateTenantSettings.mockResolvedValue(
+      makeTenant({
+        notifyInstructorsOnTermParticipationChange: true,
+        instructorTermNotifyFromHoursBeforeStart: 24,
+        instructorTermNotifyUntilMinutesBeforeStart: 60,
+      }),
+    );
+    render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expandNotifications();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /kursleitung bei termin-teilnahmeänderungen informieren/i,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /startzeitraum begrenzen/i,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /bis-zeitraum begrenzen/i,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /studio-einstellungen speichern/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateTenantSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notifyInstructorsOnTermParticipationChange: true,
+          instructorTermNotifyFromHoursBeforeStart: 24,
+          instructorTermNotifyUntilMinutesBeforeStart: 60,
+        }),
       );
     });
   });

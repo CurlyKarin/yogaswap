@@ -1,4 +1,4 @@
-import { DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END } from "./courseStatus";
+import { buildCourseOccurrenceLocal, DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END } from "./courseStatus";
 import type { TenantSettings } from "./types";
 
 export const DEFAULT_SWAP_MIN_OFFSET_DAYS = -7;
@@ -46,6 +46,69 @@ export function resolveNotifyInstructorsOnStemChange(settings?: TenantSettings):
   return settings?.notifyInstructorsOnStemChange === true;
 }
 
+/** Termin-Teilnahme-Mails an Kursleitung (#398 Absage/Tausch). Default aus. */
+export function resolveNotifyInstructorsOnTermParticipationChange(
+  settings?: TenantSettings,
+): boolean {
+  return settings?.notifyInstructorsOnTermParticipationChange === true;
+}
+
+/** Vorschlag beim Aktivieren des Start-Fensters (#398). */
+export const DEFAULT_INSTRUCTOR_TERM_NOTIFY_FROM_HOURS = 24;
+
+/** Start-Fenster: Stunden vor Termin (1–168), sonst undefined = aus. */
+export function resolveInstructorTermNotifyFromHoursBeforeStart(
+  settings?: TenantSettings,
+): number | undefined {
+  const value = settings?.instructorTermNotifyFromHoursBeforeStart;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 168) {
+    return value;
+  }
+  return undefined;
+}
+
+/** Bis-Fenster: Minuten vor Termin (0–1440), sonst undefined = aus. */
+export function resolveInstructorTermNotifyUntilMinutesBeforeStart(
+  settings?: TenantSettings,
+): number | undefined {
+  const value = settings?.instructorTermNotifyUntilMinutesBeforeStart;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 24 * 60) {
+    return value;
+  }
+  return undefined;
+}
+
+/**
+ * Ob jetzt eine Kursleitungs-Mail zu einem Termin-Event gesendet werden soll (#398).
+ * Master aus → false. Optional Start (erst ab X h vorher) und Bis (nur bis Y min vorher).
+ */
+export function shouldNotifyInstructorsForTermParticipation(
+  settings: TenantSettings | undefined,
+  dateIso: string,
+  courseTime: string,
+  now: Date = new Date(),
+): boolean {
+  if (!resolveNotifyInstructorsOnTermParticipationChange(settings)) return false;
+  const start = buildCourseOccurrenceLocal(dateIso, courseTime);
+  if (!start) return false;
+  const msUntil = start.getTime() - now.getTime();
+  if (msUntil < 0) return false;
+
+  const fromHours = resolveInstructorTermNotifyFromHoursBeforeStart(settings);
+  if (fromHours != null) {
+    const windowOpensMs = fromHours * 60 * 60 * 1000;
+    if (msUntil > windowOpensMs) return false;
+  }
+
+  const untilMinutes = resolveInstructorTermNotifyUntilMinutesBeforeStart(settings);
+  if (untilMinutes != null) {
+    const windowClosesMs = untilMinutes * 60 * 1000;
+    if (msUntil <= windowClosesMs) return false;
+  }
+
+  return true;
+}
+
 export type StudioSettingsPatch = {
   name?: string;
   inactiveGraceDaysAfterCourseEnd?: number;
@@ -59,6 +122,12 @@ export type StudioSettingsPatch = {
   contactName?: string | null;
   /** Stamm-Mails an course.instructors (#398). */
   notifyInstructorsOnStemChange?: boolean;
+  /** Termin-Teilnahme-Mails an course.instructors (#398). */
+  notifyInstructorsOnTermParticipationChange?: boolean;
+  /** Start-Fenster Stunden; null = entfernen. */
+  instructorTermNotifyFromHoursBeforeStart?: number | null;
+  /** Bis-Fenster Minuten; null = entfernen. */
+  instructorTermNotifyUntilMinutesBeforeStart?: number | null;
 };
 
 const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -126,6 +195,42 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
     if (typeof patch.notifyInstructorsOnStemChange !== "boolean") {
       return "Mitteilung an Kursleitung bei Stamm-Änderungen muss ein Schalter (ja/nein) sein.";
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "notifyInstructorsOnTermParticipationChange")) {
+    if (typeof patch.notifyInstructorsOnTermParticipationChange !== "boolean") {
+      return "Mitteilung an Kursleitung bei Termin-Teilnahme muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyFromHoursBeforeStart")) {
+    const raw = patch.instructorTermNotifyFromHoursBeforeStart;
+    if (raw != null) {
+      if (!Number.isInteger(raw) || raw < 1 || raw > 168) {
+        return "Startzeitraum für Kursleitungs-Mails muss eine ganze Zahl zwischen 1 und 168 Stunden sein.";
+      }
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyUntilMinutesBeforeStart")) {
+    const raw = patch.instructorTermNotifyUntilMinutesBeforeStart;
+    if (raw != null) {
+      if (!Number.isInteger(raw) || raw < 0 || raw > 24 * 60 || raw % 15 !== 0) {
+        return "Bis-Zeitraum für Kursleitungs-Mails muss eine ganze Zahl zwischen 0 und 1440 in 15-Minuten-Schritten sein.";
+      }
+    }
+  }
+  const fromHours =
+    patch.instructorTermNotifyFromHoursBeforeStart !== undefined
+      ? patch.instructorTermNotifyFromHoursBeforeStart
+      : undefined;
+  const untilMinutes =
+    patch.instructorTermNotifyUntilMinutesBeforeStart !== undefined
+      ? patch.instructorTermNotifyUntilMinutesBeforeStart
+      : undefined;
+  if (
+    typeof fromHours === "number" &&
+    typeof untilMinutes === "number" &&
+    fromHours * 60 <= untilMinutes
+  ) {
+    return "Startzeitraum muss vor dem Bis-Zeitraum liegen (Stunden-Fenster größer als Minuten-Grenze).";
   }
   return null;
 }

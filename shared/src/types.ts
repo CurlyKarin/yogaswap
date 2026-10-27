@@ -256,6 +256,22 @@ export interface TenantSettings {
    * Default (undefined/false): aus — Pilot oft Admin=Leitung (#398).
    */
   notifyInstructorsOnStemChange?: boolean;
+  /**
+   * Mail an `course.instructors` bei Termin-Teilnahmeänderungen (Absage RC/SN, Tausch).
+   * Studio-weit (#398). Später ggf. persönliche Overrides pro Leitung — noch offen.
+   * Default (undefined/false): aus.
+   */
+  notifyInstructorsOnTermParticipationChange?: boolean;
+  /**
+   * Optional: Mails erst ab so vielen Stunden vor Terminbeginn (#398).
+   * Fehlt = kein Start-Fenster (sofort bei Event, sofern Master an und Bis erlaubt).
+   */
+  instructorTermNotifyFromHoursBeforeStart?: number;
+  /**
+   * Optional: Mails nur bis so viele Minuten vor Terminbeginn (#398; oft = Absagefrist).
+   * Fehlt = kein Bis-Fenster (bis Terminstart, sofern Master an und Start erlaubt).
+   */
+  instructorTermNotifyUntilMinutesBeforeStart?: number;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

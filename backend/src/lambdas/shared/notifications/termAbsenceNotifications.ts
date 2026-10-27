@@ -1,7 +1,10 @@
 import { sendMailToParticipantUserIds } from "./sendParticipantEmail";
 import {
+  buildInstructorTermParticipationChangedMail,
+  buildParticipantAbsenceWithdrawnMail,
   buildParticipantTermReleasedMail,
   buildStudioTermCancelledMail,
+  type InstructorTermParticipationKind,
 } from "../templates/course/termMailTemplates";
 import { loadStudioMailContext } from "../studioContact";
 
@@ -74,6 +77,81 @@ export async function notifyParticipantTermReleased(
         courseName: params.courseName,
         dateIso: params.dateIso,
         time: params.time,
+        loginUrl,
+      }),
+  });
+}
+
+export async function notifyParticipantAbsenceWithdrawn(
+  client: import("@aws-sdk/client-dynamodb").DynamoDBClient,
+  params: {
+    tenantId: string;
+    userId: string;
+    courseName: string;
+    dateIso: string;
+    time: string;
+    participantsTable?: string;
+    sesSourceEmail?: string;
+    baseUrl?: string;
+  },
+) {
+  const loginUrl = resolveLoginUrl(params.baseUrl);
+  return sendMailToParticipantUserIds(client, {
+    participantsTable: params.participantsTable,
+    sesSourceEmail: params.sesSourceEmail,
+    tenantId: params.tenantId,
+    participantUserIds: [params.userId],
+    buildMail: (recipient) =>
+      buildParticipantAbsenceWithdrawnMail({
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
+        courseName: params.courseName,
+        dateIso: params.dateIso,
+        time: params.time,
+        loginUrl,
+      }),
+  });
+}
+
+/** Kursleitung über Termin-Teilnahmeänderung informieren (#398). */
+export async function notifyInstructorsTermParticipationChanged(
+  client: import("@aws-sdk/client-dynamodb").DynamoDBClient,
+  params: {
+    tenantId: string;
+    instructorUserIds: string[];
+    kind: InstructorTermParticipationKind;
+    memberNickname: string;
+    courseName: string;
+    dateIso: string;
+    time: string;
+    participantsTable?: string;
+    sesSourceEmail?: string;
+    baseUrl?: string;
+  },
+) {
+  if (params.instructorUserIds.length === 0) {
+    return {
+      mailSentCount: 0,
+      mailSkippedNoProfileCount: 0,
+      mailSkippedInvitedCount: 0,
+      mailFailedCount: 0,
+    };
+  }
+  const loginUrl = resolveLoginUrl(params.baseUrl);
+  return sendMailToParticipantUserIds(client, {
+    participantsTable: params.participantsTable,
+    sesSourceEmail: params.sesSourceEmail,
+    tenantId: params.tenantId,
+    participantUserIds: params.instructorUserIds,
+    buildMail: (recipient) =>
+      buildInstructorTermParticipationChangedMail({
+        nickname: recipient.nickname,
+        displayName: recipient.displayName,
+        courseName: params.courseName,
+        dateIso: params.dateIso,
+        time: params.time,
+        kind: params.kind,
+        memberNickname: params.memberNickname,
         loginUrl,
       }),
   });

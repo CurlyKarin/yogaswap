@@ -36,6 +36,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 | **Geplantes Kursende aufgehoben** | `updateCourse` → `notifyParticipantsPlannedEndDate` | Alle `course.participants` | `buildPlannedEndDateClearedMail` | wie oben |
 | **Nachrücken Warteliste** | `processPromotions` | Nachgerückte Person | `buildWaitlistPromotionMail` + `.ics` | wie Tausch erfolgreich |
 | **Termin freigegeben (Selbst)** | `updateOverride` | handelnde Person | `buildParticipantTermReleasedMail` | rechtzeitige Absage vor Cutoff; Hinweis Ersatztermin; **keine** Mail bei kurzfristiger Absage |
+| **Absage zurückgenommen** | `updateOverride` | handelnde Person | `buildParticipantAbsenceWithdrawnMail` | RC- oder SN-Rücknahme — wieder Teilnahme |
 | **Tausch erfolgreich** | `createSwap` (→ `active`), `updateSwap` (→ `active`), `processRingSwaps` | Tauschende Person | `buildSwapSuccessMail` + `.ics`-Anhang | `SendRawEmail`; ICS `METHOD:PUBLISH` |
 | **Kursbeitritt** | `updateCourse` | Neu hinzugefügte Stamm-TN | `buildCourseMembershipMail` mit **persönlichem ersten Termin** (`validFrom` / `enrollmentChanges.add`) | Nur bei `active`; nicht bei `draft`→`active` (dort Kurs-aktiv-Mail) |
 | **Beitrittstermin geändert** | `updateCourse` | Person mit verschobenem `validFrom` (Kommt/ab) | `buildCourseMembershipJoinChangedMail` | `#310`; nur `active` nach Speichern |
@@ -45,6 +46,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 | **Austritt aufgehoben** | `updateCourse` | `validUntil` zurückgenommen | `buildCourseMembershipExitClearedMail` | `#310` |
 | **Kurs aktiv (draft→active)** | `updateCourse` | Alle Stamm-TN | `buildCourseActivatedMail` | Einmalig bei Statuswechsel |
 | **Trainer: Teilnehmerliste** | `updateCourse` | `course.instructors` | `buildInstructorParticipantListChangedMail` | Nur wenn `instructors` gesetzt **und** Studio-Setting `notifyInstructorsOnStemChange` (#398, Default **aus**) |
+| **Trainer: Termin-Absage / Tausch** | `updateOverride`, `createSwap` / `updateSwap` / `processRingSwaps` | `course.instructors` | `buildInstructorTermParticipationChangedMail` | Nur wenn `notifyInstructorsOnTermParticipationChange` (#398, Default **aus**); optional Start-/Bis-Zeitfenster |
 
 ### Template-Module
 
@@ -81,8 +83,7 @@ Technik: **AWS SES** — `SendEmail` (HTML) und `SendRawEmail` (HTML + `.ics`-An
 |---------|------|-----------|
 | **Tauschanfrage** (`pending`) | `createSwap`, Gegenpartei wartet | zu viel Lärm für MVP; Digest später |
 | **Tausch abgelehnt / zurückgezogen** | `deleteSwap`, Ablehnung | optional später |
-| **Kurzfristige Absage (SN)** | `updateOverride` | Platz bleibt belegt — keine Bestätigungs-Mail |
-| **Absage zurücknehmen (RC)** | `updateOverride` | keine Mail |
+| **Kurzfristige Absage (SN)** | `updateOverride` | Platz bleibt belegt — keine Bestätigungs-Mail an die Person (Rücknahme: siehe oben) |
 | **Tenant-/Studio-Einstellungen** | `updateTenantSettings` | — |
 
 ---
@@ -120,22 +121,22 @@ Klassifikation: `classifyMembershipMailEvents` in `shared` (Endzustand pro Perso
 
 ### Trainer / Kursleitung
 
-**Stand (#398):** Stamm-Mail an `course.instructors` nur wenn Studio-Setting `notifyInstructorsOnStemChange === true` (Default **aus** — Pilot oft Admin=Leitung). Zusätzlich müssen `instructors` am Kurs gesetzt sein.
+**Stand (#398):** Studio-Einstellungen unter **E-Mail-Benachrichtigungen** (Default jeweils **aus** — Pilot oft Admin=Leitung). Empfänger immer nur `course.instructors`.
 
-| Geplant / Code | Status |
+| Studio-Setting | Events |
 |----------------|--------|
-| Teilnehmerliste geändert (add/remove Stamm) | Code in `updateCourse`; Kill-Switch `notifyInstructorsOnStemChange` |
-| Terminabsage im eigenen Kurs | nicht umgesetzt; heute nur Studio-Report bei `cancelCourseDate` |
+| `notifyInstructorsOnStemChange` | Stamm Beitritt/Austritt (`updateCourse`) |
+| `notifyInstructorsOnTermParticipationChange` | Termin-Absage RC/SN und Rücknahme (`updateOverride`), erfolgreicher Tausch (Herkunft + Ziel) |
+| optional `instructorTermNotifyFromHoursBeforeStart` | erst ab X Stunden vor Termin (Vorschlag UI: 24) |
+| optional `instructorTermNotifyUntilMinutesBeforeStart` | nur bis Y Minuten vor Termin, 15-Min-Schritte (Vorschlag UI: Absagefrist) |
+
+Persönliche Overrides: Studio-Defaults zuerst (#398). Profil-/Rollen-Prefs → [#93](https://github.com/CurlyKarin/yogaswap/issues/93) (Trainer/Admin ggf. weitere Einstellungen bzw. Wahl, für welche Rolle die Prefs gelten — Admin=Leitung oft dieselbe Person).
 
 | Bewusst nicht MVP | Grund |
 |-------------------|--------|
 | **Gäste** | meist selbst durch Leitung eingetragen |
 | **Tauschanfragen** (jede Richtung) | zu granular; siehe Digest-Zukunft |
-| **Einzelmail pro Kleinigkeit** | siehe Zukunftsplanung |
-
-Zugeordnete Instructor:innen aus `course.instructors` (nicht ganzes Studio), sofern nicht anders konfiguriert.
-
-Zugeordnete Instructor:innen aus `course.instructors` (nicht ganzes Studio), sofern aktiviert.
+| **Studio-Terminabsage** an Kursleitung | heute Teilnehmer + optional `STUDIO_NOTIFICATION_EMAILS` |
 
 ### Kalender-Anhang (ICS)
 
