@@ -41,6 +41,8 @@ body {
   flex: 1;
   min-height: 0;
   width: 100%;
+  /* hidden first: older WebViews (Ecosia/Android) lack overflow: clip (#409). */
+  overflow-x: hidden;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: none;
@@ -61,6 +63,7 @@ body {
   body {
     height: auto;
     min-height: 100%;
+    overflow-x: hidden;
     overflow-x: clip;
     overflow-y: auto;
   }
@@ -597,6 +600,12 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   width: 100%;
+  align-items: start;
+}
+
+.grid > * {
+  min-width: 0;
+  align-self: start;
 }
 
 /* Karten/Kacheln */
@@ -608,7 +617,9 @@ body {
   text-align: left;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
   min-width: 0;
+  height: auto;
   overflow: hidden;
+  overflow-wrap: break-word;
 }
 
 .course-card:focus {
@@ -637,12 +648,20 @@ body {
 
 .course-head {
   display: flex;
+  flex-wrap: nowrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
   padding-bottom: 0.75rem;
   margin-bottom: 0.75rem;
   border-bottom: 1px solid #e8e8e8;
+  min-width: 0;
+}
+
+.course-head > :not(:first-child) {
+  margin-left: 8px;
+  margin-inline-start: 8px;
 }
 
 .course-head-title {
@@ -665,7 +684,21 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  align-content: flex-start;
   column-gap: 0.35rem;
+  row-gap: 0;
+}
+
+.course-schedule-primary > :not(:first-child) {
+  margin-left: 0.35rem;
+  margin-inline-start: 0.35rem;
+}
+
+@supports (column-gap: 0.35rem) {
+  .course-schedule-primary > :not(:first-child) {
+    margin-left: 0;
+    margin-inline-start: 0;
+  }
 }
 
 .course-schedule-separator {
@@ -793,9 +826,18 @@ body {
 
 .course-row {
   display: flex;
+  flex-wrap: nowrap;
   align-items: flex-start;
-  gap: 0.75rem;
+  align-content: flex-start;
+  /* Spacing via Kind-Margin: Flex-gap fehlt auf manchen Android-WebViews (#409). */
+  gap: 0;
   margin: 8px 0;
+  min-width: 0;
+}
+
+.course-row > :not(:first-child) {
+  margin-left: 0.75rem;
+  margin-inline-start: 0.75rem;
 }
 
 .course-row-label,
@@ -808,8 +850,10 @@ body {
 
 .course-row-value,
 .course-row.list-row .chips {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  /* Verhindert gestreckte Chip-Zeilen mit Riesenabständen (#409). */
+  align-self: flex-start;
 }
 
 .course-row > select,
@@ -937,10 +981,13 @@ body {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid #e8e8e8;
+  min-width: 0;
 }
 
 .course-card-footer-notice {
   margin-bottom: 0.5rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .course-card-footer-notice:last-child {
@@ -953,7 +1000,9 @@ body {
 
 .course-row.list-row {
   display: flex;
+  flex-wrap: nowrap;
   align-items: flex-start;
+  align-content: flex-start;
 }
 
 .guest-seats-row {
@@ -1007,13 +1056,28 @@ body {
   font-size: 14px;
 }
 
+/*
+ * Teilnehmer-Chips (#409 Ecosia/Android):
+ * - align-content:flex-start, sonst Riesenleeräume zwischen Wrap-Zeilen
+ * - Abstand per Kind-Margin statt flex gap (Flex-gap oft jünger als Grid-gap)
+ */
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 0;
   list-style: none;
   margin: 0;
   padding: 0;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+}
+.chips > .chip {
+  margin: 0 0.5rem 0.5rem 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .chip {
   background: #f0f0f0;
@@ -1130,8 +1194,13 @@ body {
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
   margin-top: 12px;
+}
+
+.actions > * {
+  margin: 0 8px 8px 0;
 }
 
 button {
@@ -2384,7 +2453,12 @@ a:focus-visible {
   .course-head {
     flex-direction: row;
     align-items: flex-start;
-    gap: 0.5rem;
+    align-content: flex-start;
+    gap: 0;
+  }
+  .course-head > :not(:first-child) {
+    margin-left: 0.5rem;
+    margin-inline-start: 0.5rem;
   }
   .course-head-title {
     flex: unset;
@@ -2416,6 +2490,7 @@ a:focus-visible {
   .modal-backdrop {
     align-items: flex-end;
     overflow: hidden;
+    overflow-x: hidden;
     overflow-x: clip;
     padding: 0;
   }
