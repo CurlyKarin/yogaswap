@@ -214,7 +214,9 @@ body {
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  align-content: flex-start;
+  /* Margin statt Flex-gap (#409 ältere Android-WebViews). */
+  gap: 0;
   /* Volle Breite inkl. Container-Gutter, damit Kacheln nicht seitlich durchscheinen (#287). */
   margin: 0 calc(-1 * var(--app-gutter, 20px)) 16px;
   padding: 10px var(--app-gutter, 20px) 10px;
@@ -224,6 +226,10 @@ body {
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   scroll-margin-top: var(--app-top-offset, 3.25rem);
+}
+
+.course-views-toolbar > * {
+  margin: 6px;
 }
 
 .course-views-toggle {
@@ -262,8 +268,13 @@ body {
 .course-week-nav {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
   flex-wrap: wrap;
+}
+
+.course-week-nav > * {
+  margin: 4px;
 }
 
 .course-week-nav-core,
@@ -271,8 +282,15 @@ body {
 .course-week-nav-icons {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
   flex-wrap: wrap;
+}
+
+.course-week-nav-core > *,
+.course-week-nav-primary > *,
+.course-week-nav-icons > * {
+  margin: 4px;
 }
 
 .course-week-nav-label {
@@ -390,7 +408,11 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
+}
+
+.course-week-day-list > * + * {
+  margin-top: 16px;
 }
 
 .course-week-day-title {
@@ -406,7 +428,11 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
+}
+
+.course-week-occurrence-list > * + * {
+  margin-top: 6px;
 }
 
 .course-week-occurrence-btn {
@@ -414,7 +440,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
   padding: 10px 12px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -434,6 +461,10 @@ body {
   background: #f9fafb;
   border-style: dashed;
   opacity: 0.92;
+}
+
+.course-week-occurrence-btn > * {
+  margin: 0 8px 4px 0;
 }
 
 .course-week-occurrence-time {
@@ -464,17 +495,28 @@ body {
 
 .course-management-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  align-content: flex-start;
+  gap: 0;
   margin: 0 0 12px;
   text-align: left;
+}
+
+.course-management-toolbar > :not(:first-child) {
+  margin-left: 12px;
+  margin-inline-start: 12px;
 }
 
 .course-management-title-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
+}
+
+.course-management-title-group > * + * {
+  margin-top: 2px;
 }
 
 .course-management-title {
@@ -484,20 +526,29 @@ body {
 
 .course-card-actions-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  align-content: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 0;
   margin: 0 0 6px;
 }
 
 .course-card-actions-status {
   font-size: 12px;
   color: #4b5563;
+  margin: 0 8px 4px 0;
 }
 
 .course-card-actions-buttons {
   display: inline-flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0;
+}
+
+.course-card-actions-buttons > * {
+  margin: 0 4px 0 0;
 }
 
 .app-safari-chrome-fill {
@@ -526,9 +577,11 @@ body {
   top: 0;
   z-index: 100;
   display: flex;
+  flex-wrap: nowrap;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  align-content: flex-start;
+  gap: 0;
   /* Kein margin-bottom: sonst transparente Lücke zwischen sticky Header und Toolbar. */
   margin: 0 calc(-1 * var(--app-gutter, 20px));
   /* Safe-Area: sonst liegt „YogaSwap“ unter Notch/Statusleiste (viewport-fit=cover). */
@@ -540,6 +593,11 @@ body {
   max-width: calc(100% + 2 * var(--app-gutter, 20px));
   box-sizing: border-box;
   overflow: visible;
+}
+
+.app-top > :not(:first-child) {
+  margin-left: 12px;
+  margin-inline-start: 12px;
 }
 
 .app-top-title {
@@ -578,16 +636,29 @@ body {
 }
 .userbox {
   display: flex;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 0;
   align-items: center;
+  align-content: flex-start;
   flex-shrink: 0;
   min-width: 0;
 }
 
+.userbox > :not(:first-child) {
+  margin-left: 8px;
+  margin-inline-start: 8px;
+}
+
 .header-action-group {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
+}
+
+.header-action-group > * {
+  margin: 0 8px 0 0;
 }
 
 .header-action-btn {
@@ -1327,7 +1398,12 @@ a:focus-visible {
 }
 
 .modal-backdrop {
-  position: fixed; inset: 0;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  inset: 0;
   background: rgba(0,0,0,0.4);
   display: flex;
   justify-content: center;
@@ -1342,8 +1418,8 @@ a:focus-visible {
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
   text-align: left;
   position: relative;
-  max-height: calc(100dvh - 32px);
   max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   overflow-y: auto;
 }
 .modal:focus {
@@ -1360,7 +1436,20 @@ a:focus-visible {
   min-width: 0;
 }
 .modal-actions {
-  margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0;
+  justify-content: flex-end;
+}
+
+.modal-actions > * {
+  margin: 0 0 0 8px;
+}
+
+.modal-actions > :first-child {
+  margin-left: 0;
 }
 .dialog-stack {
   display: flex;
@@ -1837,7 +1926,12 @@ a:focus-visible {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 0.5rem 1.25rem;
+  align-content: flex-start;
+  gap: 0;
+}
+
+.app-footer > * {
+  margin: 0.25rem 0.625rem;
 }
 .app-footer a {
   color: #555;
@@ -1851,7 +1945,9 @@ a:focus-visible {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
+  align-content: flex-start;
   justify-content: center;
+  gap: 0;
 }
 
 .app-footer .sep {
@@ -2344,10 +2440,16 @@ a:focus-visible {
   .app-top {
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
+    align-content: flex-start;
+    gap: 0;
     padding-top: max(8px, env(safe-area-inset-top, 0px));
     padding-bottom: 8px;
     text-align: left;
+  }
+  .app-top > :not(:first-child) {
+    margin-top: 8px;
+    margin-left: 0;
+    margin-inline-start: 0;
   }
   .app-top-title {
     font-size: 1.375rem;
@@ -2357,30 +2459,54 @@ a:focus-visible {
   .userbox {
     justify-content: space-between;
     flex-wrap: wrap;
+    align-content: flex-start;
     width: 100%;
     margin-left: 0;
-    gap: 8px;
+    gap: 0;
     font-size: 14px;
+  }
+  .userbox > :not(:first-child) {
+    margin-left: 8px;
+    margin-inline-start: 8px;
   }
   .userbox-greeting {
     max-width: none;
   }
   .header-action-group {
-    gap: 4px;
+    gap: 0;
     flex-shrink: 0;
+  }
+  .header-action-group > * {
+    margin: 0 4px 0 0;
   }
   .header-action-btn {
     padding: 6px 10px;
     font-size: 13px;
   }
+  /*
+   * Fallback ohne :has (ältere WebViews): Toolbar stapeln.
+   * Mit :has überschreibt die Grid-Variante darunter.
+   */
+  .course-views-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    align-content: flex-start;
+  }
+  .course-views-toolbar > * {
+    margin: 5px 0;
+  }
   /* Admin/Leitung mobil: Zeile 1 = Ansichts-Toggle + Icons; Zeile 2 = KW-Nav inkl. Heute */
   .course-views-toolbar:has(.course-views-toggle) {
     display: grid;
+    flex-direction: unset;
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto auto;
     align-items: center;
     column-gap: 8px;
     row-gap: 10px;
+  }
+  .course-views-toolbar:has(.course-views-toggle) > * {
+    margin: 0;
   }
   .course-views-toolbar:has(.course-views-toggle) .course-views-toggle {
     grid-column: 1;
@@ -2443,6 +2569,12 @@ a:focus-visible {
   .course-management-toolbar {
     flex-direction: column;
     align-items: flex-start;
+    align-content: flex-start;
+  }
+  .course-management-toolbar > :not(:first-child) {
+    margin-top: 8px;
+    margin-left: 0;
+    margin-inline-start: 0;
   }
   .admin-panel {
     padding: 0.75rem;
@@ -2500,10 +2632,13 @@ a:focus-visible {
     margin: 0;
     padding: 0;
     border-radius: 16px 16px 0 0;
+    max-height: 92vh;
+    max-height: min(92vh, calc(100vh - env(safe-area-inset-top, 0px)));
     max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px)));
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    overflow-x: hidden;
     overflow-x: clip;
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.18);
     box-sizing: border-box;
@@ -2522,6 +2657,7 @@ a:focus-visible {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     overflow-x: clip;
     padding: 12px 16px 0;
     -webkit-overflow-scrolling: touch;
@@ -2539,6 +2675,11 @@ a:focus-visible {
     border-top: 1px solid #e5e7eb;
     justify-content: stretch;
     flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 0;
+  }
+  .modal-actions > * {
+    margin: 0 4px 8px 0;
   }
   .modal-actions.dialog-actions {
     width: 100%;
@@ -2548,6 +2689,8 @@ a:focus-visible {
     min-width: 0;
   }
   .modal-body [role="listbox"] {
+    max-height: 280px !important;
+    max-height: min(40vh, 280px) !important;
     max-height: min(40dvh, 280px) !important;
   }
 }
