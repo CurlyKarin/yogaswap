@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_MULTI_TENANT_PARENT_HOST?: string;
   /** Demo-Login-Vorbefüllung (Luna). true nur in demo, false/unset in staging + prod (#100). */
   readonly VITE_SHOW_DEMO_LOGIN?: string;
+  /** Layout-Diagnosebanner #409 erzwingen („1“). Staging/DEV sind ohnehin aktiv. */
+  readonly VITE_LAYOUT_DEBUG?: string;
 }
 
 interface ImportMeta {

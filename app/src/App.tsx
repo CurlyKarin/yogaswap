@@ -26,6 +26,7 @@ import { getParticipants, type ParticipantWithStatus } from "./api/participants"
 import { setActingForUserId, setActorUserId } from "./api/delegation";
 import { filterParticipantsBySearch } from "./lib/participants";
 import { scrollIntoViewWithStickyChrome } from "./lib/scrollWithStickyChrome";
+import LayoutDebugBanner from "./components/LayoutDebugBanner";
 
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 const Impressum = lazy(() => import("./components/Impressum"));
@@ -539,6 +540,8 @@ function MainApp() {
         }}
         onClose={() => setDelegationPickerOpen(false)}
       />
+      {/* DOM am Ende, optisch fixed oben — Skip-Links bleiben erste Tab-Stops (#409). */}
+      <LayoutDebugBanner />
     </div>
   );
 }

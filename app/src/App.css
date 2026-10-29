@@ -1,10 +1,14 @@
 /* Dokument scrollt nicht — nur .app-scroll-root. Verhindert Safari-Mac-Bleed in Titelleiste/Tabs (#287). */
 html {
   height: 100%;
+  max-width: 100%;
   background-color: #f5f5f5;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Verhindert, dass breite Kinder den Layout-Viewport aufblasen (#409 Android). */
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -12,7 +16,10 @@ body {
   padding: 0;
   display: block;
   height: 100%;
+  max-width: 100%;
   overflow: hidden;
+  overflow-x: hidden;
+  overflow-x: clip;
   background-color: #f5f5f5;
   color: #213547;
   color-scheme: only light;
@@ -23,6 +30,7 @@ body {
 #root {
   height: 100%;
   min-height: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   background-color: #f5f5f5;
@@ -35,12 +43,16 @@ body {
   display: flex;
   flex-direction: column;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .app-scroll-root {
   flex: 1;
   min-height: 0;
   width: 100%;
+  /* hidden first: older WebViews (Ecosia/Android) lack overflow: clip (#409). */
+  overflow-x: hidden;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: none;
@@ -61,6 +73,7 @@ body {
   body {
     height: auto;
     min-height: 100%;
+    overflow-x: hidden;
     overflow-x: clip;
     overflow-y: auto;
   }
@@ -102,8 +115,10 @@ body {
   margin: 0 auto;
   --app-gutter: 20px;
   padding: var(--app-gutter);
-  max-width: 1120px; /* mehr Platz fuer Admin-Tabelle auf Desktop */
+  /* min(..., 100%): kein Aufblasen über den Parent (#409). */
+  max-width: min(1120px, 100%);
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   --delegation-accent-border: #f59e0b;
   --delegation-accent-bg: #fffbeb;
@@ -190,6 +205,51 @@ body {
   margin: 1rem;
 }
 
+/* Temporär #409: Layout-Diagnose auf Staging/DEV — Screenshot an Entwicklerin. */
+.layout-debug-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10050;
+  margin: 0;
+  padding: 8px 10px 10px;
+  background: #1e3a5f;
+  color: #f8fafc;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.layout-debug-banner.is-warn {
+  background: #7f1d1d;
+}
+
+.layout-debug-banner-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.layout-debug-banner-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.layout-debug-banner-close {
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  cursor: pointer;
+}
+
 #main-content {
   scroll-margin-top: 12px;
 }
@@ -211,6 +271,7 @@ body {
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  align-content: flex-start;
   gap: 12px;
   /* Volle Breite inkl. Container-Gutter, damit Kacheln nicht seitlich durchscheinen (#287). */
   margin: 0 calc(-1 * var(--app-gutter, 20px)) 16px;
@@ -259,6 +320,7 @@ body {
 .course-week-nav {
   display: inline-flex;
   align-items: center;
+  align-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -268,6 +330,7 @@ body {
 .course-week-nav-icons {
   display: inline-flex;
   align-items: center;
+  align-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -276,8 +339,12 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: #111827;
-  min-width: 12rem;
+  /* min-width nur als Wunsch — darf schrumpfen, sonst Viewport-Aufblasen (#409). */
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .course-week-nav-btn,
@@ -387,7 +454,11 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
+}
+
+.course-week-day-list > * + * {
+  margin-top: 16px;
 }
 
 .course-week-day-title {
@@ -403,7 +474,11 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
+}
+
+.course-week-occurrence-list > * + * {
+  margin-top: 6px;
 }
 
 .course-week-occurrence-btn {
@@ -411,7 +486,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
   padding: 10px 12px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -431,6 +507,10 @@ body {
   background: #f9fafb;
   border-style: dashed;
   opacity: 0.92;
+}
+
+.course-week-occurrence-btn > * {
+  margin: 0 8px 4px 0;
 }
 
 .course-week-occurrence-time {
@@ -461,17 +541,28 @@ body {
 
 .course-management-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  align-content: flex-start;
+  gap: 0;
   margin: 0 0 12px;
   text-align: left;
+}
+
+.course-management-toolbar > :not(:first-child) {
+  margin-left: 12px;
+  margin-inline-start: 12px;
 }
 
 .course-management-title-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
+}
+
+.course-management-title-group > * + * {
+  margin-top: 2px;
 }
 
 .course-management-title {
@@ -481,20 +572,29 @@ body {
 
 .course-card-actions-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  align-content: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 0;
   margin: 0 0 6px;
 }
 
 .course-card-actions-status {
   font-size: 12px;
   color: #4b5563;
+  margin: 0 8px 4px 0;
 }
 
 .course-card-actions-buttons {
   display: inline-flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0;
+}
+
+.course-card-actions-buttons > * {
+  margin: 0 4px 0 0;
 }
 
 .app-safari-chrome-fill {
@@ -517,7 +617,7 @@ body {
   background-color: #f5f5f5;
 }
 
-/* Header */
+/* Header — Sticky-Geometrie nicht mit Gap-Polyfills anfassen (#287 Safari-Mac / #409). */
 .app-top {
   position: sticky;
   top: 0;
@@ -597,6 +697,12 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   width: 100%;
+  align-items: start;
+}
+
+.grid > * {
+  min-width: 0;
+  align-self: start;
 }
 
 /* Karten/Kacheln */
@@ -608,7 +714,9 @@ body {
   text-align: left;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
   min-width: 0;
+  height: auto;
   overflow: hidden;
+  overflow-wrap: break-word;
 }
 
 .course-card:focus {
@@ -637,12 +745,20 @@ body {
 
 .course-head {
   display: flex;
+  flex-wrap: nowrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
   padding-bottom: 0.75rem;
   margin-bottom: 0.75rem;
   border-bottom: 1px solid #e8e8e8;
+  min-width: 0;
+}
+
+.course-head > :not(:first-child) {
+  margin-left: 8px;
+  margin-inline-start: 8px;
 }
 
 .course-head-title {
@@ -665,7 +781,21 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  align-content: flex-start;
   column-gap: 0.35rem;
+  row-gap: 0;
+}
+
+.course-schedule-primary > :not(:first-child) {
+  margin-left: 0.35rem;
+  margin-inline-start: 0.35rem;
+}
+
+@supports (column-gap: 0.35rem) {
+  .course-schedule-primary > :not(:first-child) {
+    margin-left: 0;
+    margin-inline-start: 0;
+  }
 }
 
 .course-schedule-separator {
@@ -793,9 +923,18 @@ body {
 
 .course-row {
   display: flex;
+  flex-wrap: nowrap;
   align-items: flex-start;
-  gap: 0.75rem;
+  align-content: flex-start;
+  /* Spacing via Kind-Margin: Flex-gap fehlt auf manchen Android-WebViews (#409). */
+  gap: 0;
   margin: 8px 0;
+  min-width: 0;
+}
+
+.course-row > :not(:first-child) {
+  margin-left: 0.75rem;
+  margin-inline-start: 0.75rem;
 }
 
 .course-row-label,
@@ -808,8 +947,10 @@ body {
 
 .course-row-value,
 .course-row.list-row .chips {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  /* Verhindert gestreckte Chip-Zeilen mit Riesenabständen (#409). */
+  align-self: flex-start;
 }
 
 .course-row > select,
@@ -937,10 +1078,13 @@ body {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid #e8e8e8;
+  min-width: 0;
 }
 
 .course-card-footer-notice {
   margin-bottom: 0.5rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .course-card-footer-notice:last-child {
@@ -953,7 +1097,9 @@ body {
 
 .course-row.list-row {
   display: flex;
+  flex-wrap: nowrap;
   align-items: flex-start;
+  align-content: flex-start;
 }
 
 .guest-seats-row {
@@ -1007,13 +1153,28 @@ body {
   font-size: 14px;
 }
 
+/*
+ * Teilnehmer-Chips (#409 Ecosia/Android):
+ * - align-content:flex-start, sonst Riesenleeräume zwischen Wrap-Zeilen
+ * - Abstand per Kind-Margin statt flex gap (Flex-gap oft jünger als Grid-gap)
+ */
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 0;
   list-style: none;
   margin: 0;
   padding: 0;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+}
+.chips > .chip {
+  margin: 0 0.5rem 0.5rem 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .chip {
   background: #f0f0f0;
@@ -1130,8 +1291,13 @@ body {
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-content: flex-start;
+  gap: 0;
   margin-top: 12px;
+}
+
+.actions > * {
+  margin: 0 8px 8px 0;
 }
 
 button {
@@ -1258,7 +1424,12 @@ a:focus-visible {
 }
 
 .modal-backdrop {
-  position: fixed; inset: 0;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  inset: 0;
   background: rgba(0,0,0,0.4);
   display: flex;
   justify-content: center;
@@ -1273,8 +1444,8 @@ a:focus-visible {
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
   text-align: left;
   position: relative;
-  max-height: calc(100dvh - 32px);
   max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   overflow-y: auto;
 }
 .modal:focus {
@@ -1291,7 +1462,20 @@ a:focus-visible {
   min-width: 0;
 }
 .modal-actions {
-  margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0;
+  justify-content: flex-end;
+}
+
+.modal-actions > * {
+  margin: 0 0 0 8px;
+}
+
+.modal-actions > :first-child {
+  margin-left: 0;
 }
 .dialog-stack {
   display: flex;
@@ -1768,7 +1952,12 @@ a:focus-visible {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 0.5rem 1.25rem;
+  align-content: flex-start;
+  gap: 0;
+}
+
+.app-footer > * {
+  margin: 0.25rem 0.625rem;
 }
 .app-footer a {
   color: #555;
@@ -1782,7 +1971,9 @@ a:focus-visible {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
+  align-content: flex-start;
   justify-content: center;
+  gap: 0;
 }
 
 .app-footer .sep {
@@ -1865,6 +2056,7 @@ a:focus-visible {
 
 /* Participants table (AdminPanel) */
 .participants-table {
+  max-width: 100%;
   max-height: 360px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1873,9 +2065,12 @@ a:focus-visible {
   padding: 0.5rem 0;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
+  /* Inline-Size-Containment: min-width:700px innen darf html-scrollWidth nicht aufblasen (#409). */
+  contain: inline-size;
 }
 
 .participants-table-scroll {
+  max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0 0.5rem;
@@ -1883,8 +2078,11 @@ a:focus-visible {
 }
 
 .participants-table-inner {
+  /* Breite nur innerhalb .participants-table-scroll — nicht die Seite aufblasen (#409). */
   min-width: 700px;
   width: max-content;
+  max-width: none;
+  box-sizing: border-box;
 }
 
 .admin-panel {
@@ -1895,6 +2093,9 @@ a:focus-visible {
   background: #fff;
   box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .admin-panel-fallback {
@@ -2262,7 +2463,11 @@ a:focus-visible {
 @media (max-width: 1023px) {
   .grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 640px) {
+/*
+ * Handy-Layout auch wenn Content den Layout-Viewport >640px aufgeblasen hat
+ * (Android Chrome: innerWidth z.B. 667 bei 360er Screen → sonst 2-Spalten-Grid, #409).
+ */
+@media (max-width: 640px), ((hover: none) and (pointer: coarse) and (max-width: 900px)) {
   .app-container {
     max-width: 100%;
     width: 100%;
@@ -2344,7 +2549,7 @@ a:focus-visible {
     order: -1;
   }
   .course-week-nav-label {
-    min-width: 9rem;
+    min-width: 0;
     font-size: 13px;
   }
   .delegation-banner {
@@ -2374,6 +2579,12 @@ a:focus-visible {
   .course-management-toolbar {
     flex-direction: column;
     align-items: flex-start;
+    align-content: flex-start;
+  }
+  .course-management-toolbar > :not(:first-child) {
+    margin-top: 8px;
+    margin-left: 0;
+    margin-inline-start: 0;
   }
   .admin-panel {
     padding: 0.75rem;
@@ -2384,7 +2595,12 @@ a:focus-visible {
   .course-head {
     flex-direction: row;
     align-items: flex-start;
-    gap: 0.5rem;
+    align-content: flex-start;
+    gap: 0;
+  }
+  .course-head > :not(:first-child) {
+    margin-left: 0.5rem;
+    margin-inline-start: 0.5rem;
   }
   .course-head-title {
     flex: unset;
@@ -2416,6 +2632,7 @@ a:focus-visible {
   .modal-backdrop {
     align-items: flex-end;
     overflow: hidden;
+    overflow-x: hidden;
     overflow-x: clip;
     padding: 0;
   }
@@ -2425,10 +2642,13 @@ a:focus-visible {
     margin: 0;
     padding: 0;
     border-radius: 16px 16px 0 0;
+    max-height: 92vh;
+    max-height: min(92vh, calc(100vh - env(safe-area-inset-top, 0px)));
     max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px)));
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    overflow-x: hidden;
     overflow-x: clip;
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.18);
     box-sizing: border-box;
@@ -2447,6 +2667,7 @@ a:focus-visible {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     overflow-x: clip;
     padding: 12px 16px 0;
     -webkit-overflow-scrolling: touch;
@@ -2464,6 +2685,11 @@ a:focus-visible {
     border-top: 1px solid #e5e7eb;
     justify-content: stretch;
     flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 0;
+  }
+  .modal-actions > * {
+    margin: 0 4px 8px 0;
   }
   .modal-actions.dialog-actions {
     width: 100%;
@@ -2473,6 +2699,8 @@ a:focus-visible {
     min-width: 0;
   }
   .modal-body [role="listbox"] {
+    max-height: 280px !important;
+    max-height: min(40vh, 280px) !important;
     max-height: min(40dvh, 280px) !important;
   }
 }
