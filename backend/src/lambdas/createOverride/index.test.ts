@@ -16,6 +16,12 @@ beforeEach(() => {
   dynamoMock.reset();
   process.env.OVERRIDES_TABLE = 'yogaswap-backend-demo-courseOverrides-table';
   process.env.COURSES_TABLE = 'yogaswap-backend-demo-courses-table';
+  delete process.env.TENANTS_TABLE;
+  jest.useRealTimers();
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('createOverride Lambda', () => {
@@ -266,5 +272,106 @@ describe('createOverride Lambda', () => {
     expect(result.statusCode).toBe(500);
     expect(JSON.parse(result.body)).toEqual({ error: 'Failed to create override' });
     expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(1);
+  });
+
+  it('rejects RC create inside cutoff (parity with updateOverride)', async () => {
+    process.env.TENANTS_TABLE = 'yogaswap-tenants';
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 9, 30, 16, 50, 0));
+
+    dynamoMock
+      .on(GetItemCommand)
+      .resolvesOnce({
+        Item: {
+          ...mockCourseItem,
+          time: { S: '18:00' },
+          participants: { L: [{ S: 'Barbara' }] },
+        },
+      })
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          settings: {
+            M: { cancellationSwapCutoffMinutesBeforeStart: { N: '120' } },
+          },
+        },
+      });
+
+    const event: Partial<APIGatewayProxyEvent> = {
+      body: JSON.stringify({
+        courseId: 1,
+        date: '2026-10-30',
+        participants: [],
+        cancelledParticipants: ['Barbara'],
+        swapped: [],
+        waitlist: [],
+        shortNoticeCancellations: [],
+      }),
+      requestContext: {
+        authorizer: { jwt: { claims: { nickname: 'Barbara' } } },
+      } as unknown as APIGatewayProxyEvent['requestContext'],
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/kurzfristige Absage/i);
+    expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(0);
+  });
+
+  it('allows SN create inside cutoff', async () => {
+    process.env.TENANTS_TABLE = 'yogaswap-tenants';
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 9, 30, 16, 50, 0));
+
+    dynamoMock
+      .on(GetItemCommand)
+      .resolvesOnce({
+        Item: {
+          ...mockCourseItem,
+          time: { S: '18:00' },
+          participants: { L: [{ S: 'Barbara' }] },
+        },
+      })
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          settings: {
+            M: { cancellationSwapCutoffMinutesBeforeStart: { N: '120' } },
+          },
+        },
+      })
+      .resolvesOnce({ Item: undefined })
+      .resolvesOnce({
+        Item: {
+          ...mockCourseItem,
+          time: { S: '18:00' },
+          participants: { L: [{ S: 'Barbara' }] },
+        },
+      });
+    dynamoMock.on(PutItemCommand).resolves({});
+
+    const event: Partial<APIGatewayProxyEvent> = {
+      body: JSON.stringify({
+        courseId: 1,
+        date: '2026-10-30',
+        participants: [],
+        cancelledParticipants: [],
+        swapped: [],
+        waitlist: [],
+        shortNoticeCancellations: ['Barbara'],
+      }),
+      requestContext: {
+        authorizer: { jwt: { claims: { nickname: 'Barbara' } } },
+      } as unknown as APIGatewayProxyEvent['requestContext'],
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(200);
+    expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(1);
+    expect(
+      dynamoMock.commandCalls(PutItemCommand)[0].args[0].input.Item?.shortNoticeCancellations,
+    ).toEqual({ L: [{ S: 'Barbara' }] });
   });
 });

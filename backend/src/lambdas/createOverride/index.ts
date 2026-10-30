@@ -1,6 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import type { CourseDateOverride } from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
@@ -9,6 +10,11 @@ import { mapOverrideItem, mapStringList, anonymousTrialCountAttribute } from '..
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
 import { resolveEffectiveTermOccupancy, resolveStemForDate, validateAnonymousTrialCount } from '@yogaswap/shared';
 import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
+import { loadTenantSettings } from '../shared/tenantSettingsLoader';
+import {
+  validateSelfServiceOverrideTransition,
+  validateShortNoticeParticipantsInvariant,
+} from '../shared/cutoffOverrideValidation';
 
 function normalizedRoster(values: string[]): string[] {
   return values.map((entry) => entry.trim().toLowerCase()).sort();
@@ -93,8 +99,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 404, body: JSON.stringify({ error: 'Course not found' }) };
     }
     const capacityFields = courseCapacityFromDynamoItem(courseResp.Item);
+    const courseTime = courseResp.Item.time?.S ?? "";
     const baseParticipants = mapStringList(courseResp.Item.participants);
     const enrollmentsTable = process.env.COURSE_ENROLLMENTS_TABLE;
+    const tenantsTable = process.env.TENANTS_TABLE;
     const enrollments = enrollmentsTable
       ? await queryCourseEnrollments({
           client,
@@ -129,6 +137,38 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       sameParticipantRoster(effective.participants, stemOnDate);
     if (capacityError && !waitlistEnrollmentOnly) {
       return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+    }
+
+    // Parität zu updateOverride: Cutoff/SN auch beim ersten Write (#414 Folge / Staging-Bug).
+    const subjectNickname = actingForUserId ?? userId;
+    if (subjectNickname && tenantsTable) {
+      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      const after: CourseDateOverride = {
+        courseId: Number(legacyCourseId),
+        date: override.date,
+        participants,
+        cancelledParticipants: cancelledParticipants ?? [],
+        swapped,
+        waitlist,
+        shortNoticeCancellations,
+        ...(anonymousTrialCount > 0 ? { anonymousTrialCount } : {}),
+      };
+      const invariantError = validateShortNoticeParticipantsInvariant(after, stemOnDate);
+      if (invariantError) {
+        return { statusCode: 400, body: JSON.stringify({ error: invariantError }) };
+      }
+      const transitionError = validateSelfServiceOverrideTransition({
+        actorNickname: subjectNickname,
+        courseTime,
+        dateIso: override.date,
+        tenantSettings,
+        before: null,
+        after,
+        baseParticipants: stemOnDate,
+      });
+      if (transitionError) {
+        return { statusCode: 400, body: JSON.stringify({ error: transitionError }) };
+      }
     }
 
     const existingResp = await client.send(

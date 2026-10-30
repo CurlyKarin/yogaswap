@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Swap, CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import type { ParticipantActor } from "shared/participantActor";
 import { formatAbsenceAnnouncement } from "../lib/courseCardLabels";
+import { buildTermStaffFooterLines } from "../lib/termSwapMovements";
 import CourseCardDetails from "./CourseCardDetails";
 import CourseTermActions from "./CourseTermActions";
 import {
@@ -75,7 +76,20 @@ export default function CourseCard({
     initialSelectedDate,
     includePastTermsInSelect,
   });
-  const { selectedDate, setSelectedDate, selectedDateKey, userName, hasNoUpcomingDates, inactiveNotice, excludedTermNotice, previewTermNotice, pastTermNotice, showPreviewMarker } = termState;
+  const {
+    selectedDate,
+    setSelectedDate,
+    selectedDateKey,
+    userName,
+    hasNoUpcomingDates,
+    inactiveNotice,
+    excludedTermNotice,
+    previewTermNotice,
+    pastTermNotice,
+    showPreviewMarker,
+    cancelledParticipants,
+    shortNotice,
+  } = termState;
 
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [absenceSaving, setAbsenceSaving] = useState(false);
@@ -98,8 +112,35 @@ export default function CourseCard({
     [course, guestSeatSaving, onAdjustGuestCount, selectedDateKey],
   );
 
-  const notEnrolledInTermHint = (
+  // Kursverwaltung: Tausch-Linien im Fußbereich (#414) — kein Teilnehmer-Fußhinweis.
+  const notEnrolledInTermHint = showOverbookingDetails ? null : (
     <div className="muted">Nicht in diesem Termin eingetragen</div>
+  );
+
+  const termStaffFooterLines = useMemo(
+    () =>
+      showOverbookingDetails && !excludedTermNotice
+        ? buildTermStaffFooterLines({
+            courseId: course.id,
+            dateIso: selectedDateKey,
+            swaps,
+            allCourses,
+            cancelledParticipants,
+            shortNoticeCancellations: shortNotice,
+            participantNameByRef,
+          })
+        : [],
+    [
+      showOverbookingDetails,
+      excludedTermNotice,
+      course.id,
+      selectedDateKey,
+      swaps,
+      allCourses,
+      cancelledParticipants,
+      shortNotice,
+      participantNameByRef,
+    ],
   );
 
   const titleId = useId();
@@ -201,6 +242,20 @@ export default function CourseCard({
           <div className="course-card-footer-notice" role="status">
             <span className="muted small">{inactiveNotice}</span>
           </div>
+        )}
+        {termStaffFooterLines.length > 0 && (
+          <details className="course-card-footer-notice term-staff-footer" open>
+            <summary className="muted small term-staff-footer-summary">
+              Absagen &amp; Tausche ({termStaffFooterLines.length})
+            </summary>
+            <div className="term-swap-movements" role="status">
+              {termStaffFooterLines.map((entry) => (
+                <div key={entry.key} className="muted small term-swap-movement">
+                  {entry.line}
+                </div>
+              ))}
+            </div>
+          </details>
         )}
         <CourseTermActions
         course={course}

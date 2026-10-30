@@ -326,6 +326,62 @@ describe("CourseCard", () => {
     expect(cancelledChip).toHaveAttribute("aria-label", "alice, du, rechtzeitig abgesagt");
   });
 
+  it("listet Absagen und Tausche im Fuß nur mit Kursverwaltung (#414)", () => {
+    const targetCourse: Course = {
+      ...baseCourse,
+      id: 2,
+      name: "Yoga Advanced",
+      dates: ["2099-06-17"],
+      participants: [],
+    };
+    const activeSwap: Swap = {
+      participantId: "alice",
+      fromCourseId: 1,
+      fromDate: "2099-06-16",
+      toCourseId: 2,
+      toDate: "2099-06-17",
+      status: "active",
+    };
+    // Beobachter bob: nicht am Termin, kein eigener Tausch → Fußhinweis in Teilnehmer-Sicht.
+    const staffishOverride: CourseDateOverride = {
+      ...baseOverride,
+      participants: [],
+      cancelledParticipants: ["alice", "barbara"],
+      shortNoticeCancellations: ["carol"],
+      swapped: [],
+    };
+
+    const participantView = renderCourseCard({
+      actor: { nickname: "bob" },
+      currentUser: { nickname: "bob", email: "", role: "participant" },
+      overrides: [staffishOverride],
+      swaps: [activeSwap],
+      allCourses: [baseCourse, targetCourse],
+      showOverbookingDetails: false,
+    });
+    expect(
+      participantView.queryByText("alice → Yoga Advanced · 17.06.2099"),
+    ).not.toBeInTheDocument();
+    expect(participantView.getByText("Nicht in diesem Termin eingetragen")).toBeInTheDocument();
+    participantView.unmount();
+
+    renderCourseCard({
+      actor: { nickname: "bob" },
+      currentUser: { nickname: "bob", email: "", role: "admin" },
+      overrides: [staffishOverride],
+      swaps: [activeSwap],
+      allCourses: [baseCourse, targetCourse],
+      showOverbookingDetails: true,
+    });
+    expect(screen.getByText(/Absagen & Tausche \(3\)/i)).toBeInTheDocument();
+    expect(screen.getByText("carol · kurzfristig abgesagt")).toBeInTheDocument();
+    expect(screen.getByText("barbara · abgesagt, noch ohne Anfrage")).toBeInTheDocument();
+    expect(screen.getByText("alice → Yoga Advanced · 17.06.2099")).toBeInTheDocument();
+    // alice hat ausgehenden Tausch → keine „noch ohne Anfrage“-Zeile
+    expect(screen.queryByText(/alice · abgesagt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Nicht in diesem Termin eingetragen")).not.toBeInTheDocument();
+  });
+
   it("färbt fremde RC-Absagen blass rot, ohne chip-self", () => {
     const overrideCancelled: CourseDateOverride = {
       ...baseOverride,
