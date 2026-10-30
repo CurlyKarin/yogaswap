@@ -1,0 +1,26 @@
+---
+description: gh/GitHub-API immer außerhalb der Agent-Sandbox ausführen
+alwaysApply: true
+---
+
+# GitHub CLI / API — volle Shell-Rechte
+
+Die Agent-Sandbox blockiert oft `api.github.com` und den macOS-Keyring (`gh` Auth). Dann wirken `gh`/`git push` fälschlich kaputt (`Forbidden`, GraphQL-Fehler), obwohl im normalen Terminal alles geht.
+
+## Pflicht
+
+Bei **jedem** dieser Befehle die Shell mit `required_permissions: ["all"]` starten (nicht nur `network`/`full_network`):
+
+- `gh` (issue, pr, api, run, …)
+- `git push` / `git pull` gegen GitHub (HTTPS + Keyring)
+- Skripte, die intern `gh` aufrufen (`scripts/create-*.sh`, …)
+
+## Nicht
+
+- Bei Sandbox-`Forbidden` annehmen, dass Login/Token der Nutzerin fehlt
+- Die Nutzerin Bitten, `gh` „zu reparieren“, bevor mit `all` erneut versucht wurde
+- Lange Umwege über manuelle Terminal-Skripte, nur weil die Sandbox greift
+
+## Kurz
+
+`gh` / GitHub-Auth im Agenten → immer **`all`**, sonst Keyring/API-Fail.
