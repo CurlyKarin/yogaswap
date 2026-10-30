@@ -14,6 +14,23 @@ type AuthReturn = {
   logout: () => Promise<void>;
 };
 
+/** Amplify liefert bei RESET_REQUIRED kein Throw, sondern signInStep RESET_PASSWORD (#413). */
+function messageForIncompleteSignIn(signInStep: string | undefined): string {
+  if (!signInStep || signInStep === "DONE") {
+    return "Login fehlgeschlagen. Bitte erneut versuchen.";
+  }
+  if (signInStep === "RESET_PASSWORD") {
+    return "Für diesen Zugang ist ein Passwort-Reset nötig. Bitte nutze „Passwort vergessen?“.";
+  }
+  if (signInStep.includes("NEW_PASSWORD_REQUIRED")) {
+    return "Dieser Zugang erwartet einen veralteten Temp-Passwort-Flow. Bitte nutze „Passwort vergessen?“.";
+  }
+  if (signInStep === "CONFIRM_SIGN_UP") {
+    return "Dieser Zugang ist noch nicht bestätigt. Bitte den Link aus der Einladungs-Mail nutzen.";
+  }
+  return "Login konnte nicht abgeschlossen werden. Bitte erneut versuchen oder „Passwort vergessen?“ nutzen.";
+}
+
 export const useCognitoAuth = (): AuthReturn => {
   const [user, setUser] = useState<User | null>(loadCurrentUser());
   const [isLoading, setIsLoading] = useState(false);
@@ -63,23 +80,29 @@ export const useCognitoAuth = (): AuthReturn => {
         }
       }
 
-      if (result.nextStep?.signInStep?.includes("NEW_PASSWORD_REQUIRED")) {
+      const signInStep = result.nextStep?.signInStep;
+      const signedInCompletely = result.isSignedIn === true && signInStep === "DONE";
+      if (!signedInCompletely) {
         await clearCognitoSession();
         setUser(null);
-        setError(
-          "Dieser Zugang erwartet einen veralteten Temp-Passwort-Flow. Bitte nutze 'Passwort vergessen?'.",
-        );
+        setError(messageForIncompleteSignIn(signInStep));
         return false;
       }
 
       const session = await fetchAuthSession();
       const payload = session.tokens?.idToken?.payload;
+      if (!payload) {
+        await clearCognitoSession();
+        setUser(null);
+        setError("Login fehlgeschlagen. Bitte erneut versuchen.");
+        return false;
+      }
 
       const nextUser: User = {
         // Actor = Studio-Login-Name (Tenant), nicht opaque Cognito-Username / JWT-nickname anderer Studios.
-        nickname: studioNickname || (payload?.nickname as string) || credentials.username,
-        email: payload?.email as string,
-        role: (payload?.["custom:role"] as UserRole) || "participant",
+        nickname: studioNickname || (payload.nickname as string) || credentials.username,
+        email: payload.email as string,
+        role: (payload["custom:role"] as UserRole) || "participant",
       };
 
       saveCurrentUser(nextUser);

@@ -48,7 +48,7 @@ describe("useCognitoAuth", () => {
   });
 
   it("cleared Session vor signIn (#338)", async () => {
-    mockedSignIn.mockResolvedValue({ nextStep: { signInStep: "DONE" } });
+    mockedSignIn.mockResolvedValue({ isSignedIn: true, nextStep: { signInStep: "DONE" } });
     mockedFetchAuthSession.mockResolvedValue({
       tokens: {
         idToken: {
@@ -79,7 +79,7 @@ describe("useCognitoAuth", () => {
       cognitoUsername: "11111111-2222-4333-8444-555555555555",
       nickname: "admin_prod",
     });
-    mockedSignIn.mockResolvedValue({ nextStep: { signInStep: "DONE" } });
+    mockedSignIn.mockResolvedValue({ isSignedIn: true, nextStep: { signInStep: "DONE" } });
     mockedFetchAuthSession.mockResolvedValue({
       tokens: {
         idToken: {
@@ -125,7 +125,7 @@ describe("useCognitoAuth", () => {
   it("retry bei Already-Authenticated nach Message ohne Exception-Namen (#338)", async () => {
     mockedSignIn
       .mockRejectedValueOnce(new Error("There is already a signed in user."))
-      .mockResolvedValueOnce({ nextStep: { signInStep: "DONE" } });
+      .mockResolvedValueOnce({ isSignedIn: true, nextStep: { signInStep: "DONE" } });
     mockedFetchAuthSession.mockResolvedValue({
       tokens: {
         idToken: {
@@ -147,5 +147,38 @@ describe("useCognitoAuth", () => {
     expect(ok).toBe(true);
     expect(mockedSignIn).toHaveBeenCalledTimes(2);
     expect(mockedClearCognitoSession.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("RESET_PASSWORD bleibt auf Login mit Hinweis (#413)", async () => {
+    mockedSignIn.mockResolvedValue({
+      isSignedIn: false,
+      nextStep: { signInStep: "RESET_PASSWORD" },
+    });
+
+    const { result } = renderHook(() => useCognitoAuth());
+    let ok = true;
+    await act(async () => {
+      ok = await result.current.login({ username: "Ida", password: "egal" });
+    });
+
+    expect(ok).toBe(false);
+    expect(mockedSaveCurrentUser).not.toHaveBeenCalled();
+    expect(result.current.error).toMatch(/Passwort-Reset nötig/i);
+    expect(result.current.error).toMatch(/Passwort vergessen/i);
+  });
+
+  it("ohne idToken kein Login-Erfolg (#413)", async () => {
+    mockedSignIn.mockResolvedValue({ isSignedIn: true, nextStep: { signInStep: "DONE" } });
+    mockedFetchAuthSession.mockResolvedValue({ tokens: undefined });
+
+    const { result } = renderHook(() => useCognitoAuth());
+    let ok = true;
+    await act(async () => {
+      ok = await result.current.login({ username: "alice", password: "secret" });
+    });
+
+    expect(ok).toBe(false);
+    expect(mockedSaveCurrentUser).not.toHaveBeenCalled();
+    expect(result.current.error).toMatch(/Login fehlgeschlagen/i);
   });
 });
