@@ -601,77 +601,47 @@ export function useCourseSwaps(
           return;
         }
 
-        // Funktion zum Aktualisieren oder Erstellen eines Overrides
-        const updateOrCreateOverride = (
-          prev: CourseDateOverride[],
-          nextOverride: CourseDateOverride,
-          idx: number,
-          courseId: number,
-          dateIso: string
-        ) => {
-          const updated = [...prev];
-          if (idx >= 0) {
-            updated[idx] = nextOverride;
-            updateOverride(courseId, dateIso, {
-              participants: nextOverride.participants,
-              cancelledParticipants: nextOverride.cancelledParticipants ?? [],
-              swapped: nextOverride.swapped,
-              waitlist: nextOverride.waitlist,
-            });
-          } else {
-            updated.push(nextOverride);
-            createOverride(nextOverride);
-          }
-          console.log('call updateOrCreateOverride:', prev, nextOverride, idx, courseId, dateIso);
-          return updated;
+        // Overrides zuerst serverseitig persistieren (wie Absage), erst dann Swap aktiv.
+        // Früher: API-Calls in setOverrides ohne await → Race: Ziel ok, Ursprung fehlt (#411).
+        const originIdx = findOverrideIndex(filteredOverrides, fromCourse.id, fromDateIso);
+        const originOverride = toDeltaOverrideBase(
+          fromCourse,
+          fromCourse.id,
+          fromDateIso,
+          originIdx >= 0 ? filteredOverrides[originIdx] : null,
+        );
+        const onOriginStem = isOnStemForDate(fromCourse, enrollments, fromDateIso, actor);
+        const originNextOverride: CourseDateOverride = {
+          ...originOverride,
+          participants: [],
+          cancelledParticipants: onOriginStem
+            ? withRegularCancellation(originOverride.cancelledParticipants, userName)
+            : [...(originOverride.cancelledParticipants ?? [])],
+          swapped: removeUserCaseInsensitive(originOverride.swapped ?? [], userName),
+          waitlist: removeUserCaseInsensitive(originOverride.waitlist ?? [], userName),
         };
 
-        setOverrides((prev: CourseDateOverride[]) => {
-          let updated = [...prev];
+        const targetIdx = findOverrideIndex(filteredOverrides, toCourseId, toDateIso);
+        const targetOverride = toDeltaOverrideBase(
+          targetCourse,
+          toCourseId,
+          toDateIso,
+          targetIdx >= 0 ? filteredOverrides[targetIdx] : null,
+        );
+        const targetNextOverride: CourseDateOverride = {
+          ...targetOverride,
+          participants: [],
+          cancelledParticipants: targetOverride.cancelledParticipants ?? [],
+          swapped: addUserUniqueCaseInsensitive(targetOverride.swapped ?? [], userName),
+          waitlist: removeUserCaseInsensitive(targetOverride.waitlist ?? [], userName),
+        };
 
-          // Ursprungstermin: Stamm → cancelledParticipants; Swap-in → aus swapped
-          const originIdx = updated.findIndex(
-            (o: CourseDateOverride) => o.courseId === fromCourse.id && o.date === fromDateIso
-          );
-          const originOverride = toDeltaOverrideBase(
-            fromCourse,
-            fromCourse.id,
-            fromDateIso,
-            originIdx >= 0 ? updated[originIdx] : null,
-          );
-          const onOriginStem = isOnStemForDate(fromCourse, enrollments, fromDateIso, actor);
-          const originNextOverride: CourseDateOverride = {
-            ...originOverride,
-            participants: [],
-            cancelledParticipants: onOriginStem
-              ? withRegularCancellation(originOverride.cancelledParticipants, userName)
-              : [...(originOverride.cancelledParticipants ?? [])],
-            swapped: removeUserCaseInsensitive(originOverride.swapped ?? [], userName),
-            waitlist: removeUserCaseInsensitive(originOverride.waitlist ?? [], userName),
-          };
-          console.log('call updateOrCreateOverride');
-          updated = updateOrCreateOverride(updated, originNextOverride, originIdx, fromCourse.id, fromDateIso);
-
-          // Zieltermin: User → swapped
-          const targetIdx = updated.findIndex(
-            (o: CourseDateOverride) => o.courseId === toCourseId && o.date === toDateIso
-          );
-          const targetOverride = toDeltaOverrideBase(
-            targetCourse,
-            toCourseId,
-            toDateIso,
-            targetIdx >= 0 ? updated[targetIdx] : null,
-          );
-          const targetNextOverride: CourseDateOverride = {
-            ...targetOverride,
-            participants: [],
-            cancelledParticipants: targetOverride.cancelledParticipants ?? [],
-            swapped: addUserUniqueCaseInsensitive(targetOverride.swapped ?? [], userName),
-            waitlist: removeUserCaseInsensitive(targetOverride.waitlist ?? [], userName),
-          };
-          updated = updateOrCreateOverride(updated, targetNextOverride, targetIdx, toCourseId, toDateIso);
-
-          return updated;
+        await persistCourseDateOverride(fromCourse.id, fromDateIso, originNextOverride, originIdx >= 0);
+        await persistCourseDateOverride(toCourseId, toDateIso, targetNextOverride, targetIdx >= 0);
+        setOverrides((prev) => {
+          let next = upsertCourseDateOverride(prev, originNextOverride, fromCourse.id, fromDateIso);
+          next = upsertCourseDateOverride(next, targetNextOverride, toCourseId, toDateIso);
+          return next;
         });
 
         // Swap-Verwaltung

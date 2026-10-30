@@ -87,6 +87,14 @@ test("executes selected ring cycle transactionally", async () => {
   expect(body.diagnostics.detectedCycles).toBe(1);
   expect(body.diagnostics.executedCycles).toBe(1);
   expect(ddbMock.commandCalls(TransactWriteItemsCommand)).toHaveLength(1);
+
+  const transact = ddbMock.commandCalls(TransactWriteItemsCommand)[0].args[0].input;
+  const overridePuts = (transact.TransactItems ?? []).filter((item) => item.Put?.TableName === "test-overrides");
+  expect(overridePuts.length).toBeGreaterThanOrEqual(2);
+  for (const put of overridePuts) {
+    const cancelled = put.Put?.Item?.cancelledParticipants?.L ?? [];
+    expect(cancelled.length).toBeGreaterThanOrEqual(1);
+  }
 });
 
 test("returns analysis only when no cycles are executable", async () => {
