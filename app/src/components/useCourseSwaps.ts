@@ -487,11 +487,21 @@ export function useCourseSwaps(
 
       return true;
     } catch (err) {
-        console.error('Error in onToggleAbsence:', err);
-        alert("Fehler beim Speichern der Absage. Bitte erneut versuchen.");
-        await fetchData();
-        return false;
-      }
+      console.error('Error in onToggleAbsence:', err);
+      const apiError =
+        err &&
+        typeof err === "object" &&
+        "response" in err &&
+        (err as { response?: { data?: { error?: unknown } } }).response?.data?.error;
+      const detail = typeof apiError === "string" && apiError.trim() ? apiError.trim() : null;
+      alert(
+        detail
+          ? `Absage konnte nicht gespeichert werden: ${detail}`
+          : "Fehler beim Speichern der Absage. Bitte erneut versuchen.",
+      );
+      await fetchData();
+      return false;
+    }
     },
     // courses, currentUser.nickname kept so callback updates when they change
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setOverrides/setSwaps stable; courses/nickname intentional

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Swap, CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import type { ParticipantActor } from "shared/participantActor";
 import { formatAbsenceAnnouncement } from "../lib/courseCardLabels";
-import { buildTermSwapMovements } from "../lib/termSwapMovements";
+import { buildTermStaffFooterLines } from "../lib/termSwapMovements";
 import CourseCardDetails from "./CourseCardDetails";
 import CourseTermActions from "./CourseTermActions";
 import {
@@ -76,7 +76,20 @@ export default function CourseCard({
     initialSelectedDate,
     includePastTermsInSelect,
   });
-  const { selectedDate, setSelectedDate, selectedDateKey, userName, hasNoUpcomingDates, inactiveNotice, excludedTermNotice, previewTermNotice, pastTermNotice, showPreviewMarker } = termState;
+  const {
+    selectedDate,
+    setSelectedDate,
+    selectedDateKey,
+    userName,
+    hasNoUpcomingDates,
+    inactiveNotice,
+    excludedTermNotice,
+    previewTermNotice,
+    pastTermNotice,
+    showPreviewMarker,
+    cancelledParticipants,
+    shortNotice,
+  } = termState;
 
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [absenceSaving, setAbsenceSaving] = useState(false);
@@ -104,14 +117,16 @@ export default function CourseCard({
     <div className="muted">Nicht in diesem Termin eingetragen</div>
   );
 
-  const termSwapMovements = useMemo(
+  const termStaffFooterLines = useMemo(
     () =>
       showOverbookingDetails && !excludedTermNotice
-        ? buildTermSwapMovements({
+        ? buildTermStaffFooterLines({
             courseId: course.id,
             dateIso: selectedDateKey,
             swaps,
             allCourses,
+            cancelledParticipants,
+            shortNoticeCancellations: shortNotice,
             participantNameByRef,
           })
         : [],
@@ -122,6 +137,8 @@ export default function CourseCard({
       selectedDateKey,
       swaps,
       allCourses,
+      cancelledParticipants,
+      shortNotice,
       participantNameByRef,
     ],
   );
@@ -226,14 +243,19 @@ export default function CourseCard({
             <span className="muted small">{inactiveNotice}</span>
           </div>
         )}
-        {termSwapMovements.length > 0 && (
-          <div className="course-card-footer-notice term-swap-movements" role="status">
-            {termSwapMovements.map((movement) => (
-              <div key={movement.key} className="muted small term-swap-movement">
-                {movement.line}
-              </div>
-            ))}
-          </div>
+        {termStaffFooterLines.length > 0 && (
+          <details className="course-card-footer-notice term-staff-footer" open>
+            <summary className="muted small term-staff-footer-summary">
+              Absagen &amp; Tausche ({termStaffFooterLines.length})
+            </summary>
+            <div className="term-swap-movements" role="status">
+              {termStaffFooterLines.map((entry) => (
+                <div key={entry.key} className="muted small term-swap-movement">
+                  {entry.line}
+                </div>
+              ))}
+            </div>
+          </details>
         )}
         <CourseTermActions
         course={course}

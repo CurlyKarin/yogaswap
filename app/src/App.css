@@ -1102,11 +1102,35 @@ body {
   align-content: flex-start;
 }
 
+.term-staff-footer {
+  min-width: 0;
+}
+
+.term-staff-footer-summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.term-staff-footer-summary::-webkit-details-marker {
+  display: none;
+}
+
+.term-staff-footer-summary::before {
+  content: "▾ ";
+  display: inline;
+}
+
+.term-staff-footer:not([open]) > .term-staff-footer-summary::before {
+  content: "▸ ";
+}
+
 .term-swap-movements {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   min-width: 0;
+  margin-top: 0.35rem;
 }
 
 .term-swap-movement {

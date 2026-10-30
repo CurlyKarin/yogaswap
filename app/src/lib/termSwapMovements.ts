@@ -1,8 +1,13 @@
 import { formatCourseIsoDateDe } from "shared/courseStatus";
+import { sameParticipantRef } from "shared/participantActor";
 import type { Course, Swap } from "shared/types";
 import { displayNameForParticipantRef } from "./participants";
 
 export type TermSwapMovementKind = "outgoing_active" | "incoming_active" | "outgoing_pending" | "incoming_pending";
+
+export type TermAbsenceNoteKind = "absence_short_notice" | "absence_open";
+
+export type TermStaffFooterKind = TermAbsenceNoteKind | TermSwapMovementKind;
 
 export type TermSwapMovement = {
   key: string;
@@ -12,6 +17,13 @@ export type TermSwapMovement = {
   /** Lesbare Einzeile ohne Personennamen (Richtung + Kurs/Datum) */
   directionLabel: string;
   /** Volle Zeile für UI / aria */
+  line: string;
+};
+
+export type TermStaffFooterLine = {
+  key: string;
+  kind: TermStaffFooterKind;
+  personLabel: string;
   line: string;
 };
 
@@ -98,4 +110,100 @@ export function buildTermSwapMovements(params: {
     if (byKind !== 0) return byKind;
     return a.personLabel.localeCompare(b.personLabel, "de");
   });
+}
+
+function hasOutgoingSwapFromTerm(
+  swaps: Swap[],
+  courseId: number,
+  dateIso: string,
+  participantRef: string,
+): boolean {
+  return swaps.some(
+    (swap) =>
+      swap.fromCourseId === courseId &&
+      swap.fromDate === dateIso &&
+      sameParticipantRef(swap.participantId ?? "", participantRef),
+  );
+}
+
+/**
+ * Absagen für Kursverwaltung im Fuß (#414):
+ * - kurzfristig
+ * - rechtzeitig ohne ausgehenden Tausch/Anfrage („noch ohne Anfrage“ → Trainerin kann anbieten)
+ * Rechtzeitige Absagen mit ausgehendem Tausch entfallen hier (stehen schon in den Pfeilzeilen).
+ */
+export function buildTermAbsenceNotes(params: {
+  courseId: number;
+  dateIso: string;
+  swaps: Swap[];
+  cancelledParticipants: string[];
+  shortNoticeCancellations: string[];
+  participantNameByRef?: Map<string, string>;
+}): TermStaffFooterLine[] {
+  const {
+    courseId,
+    dateIso,
+    swaps,
+    cancelledParticipants,
+    shortNoticeCancellations,
+    participantNameByRef,
+  } = params;
+
+  const lines: TermStaffFooterLine[] = [];
+
+  for (const ref of shortNoticeCancellations) {
+    const trimmed = ref.trim();
+    if (!trimmed) continue;
+    const personLabel = displayNameForParticipantRef(trimmed, participantNameByRef);
+    lines.push({
+      key: `sn|${trimmed.toLowerCase()}`,
+      kind: "absence_short_notice",
+      personLabel,
+      line: `${personLabel} · kurzfristig abgesagt`,
+    });
+  }
+
+  for (const ref of cancelledParticipants) {
+    const trimmed = ref.trim();
+    if (!trimmed) continue;
+    if (hasOutgoingSwapFromTerm(swaps, courseId, dateIso, trimmed)) continue;
+    const personLabel = displayNameForParticipantRef(trimmed, participantNameByRef);
+    lines.push({
+      key: `rc|${trimmed.toLowerCase()}`,
+      kind: "absence_open",
+      personLabel,
+      line: `${personLabel} · abgesagt, noch ohne Anfrage`,
+    });
+  }
+
+  const kindOrder: Record<TermAbsenceNoteKind, number> = {
+    absence_short_notice: 0,
+    absence_open: 1,
+  };
+  return lines.sort((a, b) => {
+    const byKind =
+      kindOrder[a.kind as TermAbsenceNoteKind] - kindOrder[b.kind as TermAbsenceNoteKind];
+    if (byKind !== 0) return byKind;
+    return a.personLabel.localeCompare(b.personLabel, "de");
+  });
+}
+
+/** Absagen zuerst, dann Tauschpfeile — eine Liste für den Kartenfuß. */
+export function buildTermStaffFooterLines(params: {
+  courseId: number;
+  dateIso: string;
+  swaps: Swap[];
+  allCourses: Course[];
+  cancelledParticipants: string[];
+  shortNoticeCancellations: string[];
+  participantNameByRef?: Map<string, string>;
+}): TermStaffFooterLine[] {
+  const absences = buildTermAbsenceNotes(params);
+  const swaps = buildTermSwapMovements(params).map((m) => ({
+    key: m.key,
+    kind: m.kind as TermStaffFooterKind,
+    personLabel: m.personLabel,
+    line: m.line,
+  }));
+  return [...absences, ...swaps];
 }

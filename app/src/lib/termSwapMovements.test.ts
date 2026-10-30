@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { Course, Swap } from "shared/types";
-import { buildTermSwapMovements, swapsTouchingTerm } from "./termSwapMovements";
+import {
+  buildTermAbsenceNotes,
+  buildTermStaffFooterLines,
+  buildTermSwapMovements,
+  swapsTouchingTerm,
+} from "./termSwapMovements";
 
 const yogaBasic: Course = {
   tenantId: "default-tenant",
@@ -75,5 +80,54 @@ describe("buildTermSwapMovements", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]?.line).toBe("Alice Muster ← Yoga Basic · 16.06.2099");
     expect(lines[0]?.kind).toBe("incoming_active");
+  });
+});
+
+describe("buildTermAbsenceNotes", () => {
+  it("unterscheidet kurzfristig und ohne Ersatz (#414)", () => {
+    const lines = buildTermAbsenceNotes({
+      courseId: 1,
+      dateIso: "2099-06-16",
+      swaps: [],
+      cancelledParticipants: ["barbara"],
+      shortNoticeCancellations: ["carol"],
+      participantNameByRef: new Map([
+        ["barbara", "Barbara"],
+        ["carol", "Carol"],
+      ]),
+    });
+
+    expect(lines.map((l) => l.line)).toEqual([
+      "Carol · kurzfristig abgesagt",
+      "Barbara · abgesagt, noch ohne Anfrage",
+    ]);
+  });
+
+  it("lässt rechtzeitige Absage mit ausgehendem Tausch weg (steht in Pfeilzeile)", () => {
+    const lines = buildTermAbsenceNotes({
+      courseId: 1,
+      dateIso: "2099-06-16",
+      swaps: [activeOut],
+      cancelledParticipants: ["alice"],
+      shortNoticeCancellations: [],
+    });
+    expect(lines).toEqual([]);
+  });
+});
+
+describe("buildTermStaffFooterLines", () => {
+  it("reiht Absagen vor Tauschpfeile", () => {
+    const lines = buildTermStaffFooterLines({
+      courseId: 1,
+      dateIso: "2099-06-16",
+      swaps: [activeOut],
+      allCourses: [yogaBasic, yogaAdvanced],
+      cancelledParticipants: ["barbara"],
+      shortNoticeCancellations: [],
+    });
+    expect(lines.map((l) => l.line)).toEqual([
+      "barbara · abgesagt, noch ohne Anfrage",
+      "alice → Yoga Advanced · 17.06.2099",
+    ]);
   });
 });

@@ -326,7 +326,7 @@ describe("CourseCard", () => {
     expect(cancelledChip).toHaveAttribute("aria-label", "alice, du, rechtzeitig abgesagt");
   });
 
-  it("listet Tauschbewegungen nur mit Kursverwaltung und unterdrückt Teilnehmer-Fußhinweis (#414)", () => {
+  it("listet Absagen und Tausche im Fuß nur mit Kursverwaltung (#414)", () => {
     const targetCourse: Course = {
       ...baseCourse,
       id: 2,
@@ -346,7 +346,8 @@ describe("CourseCard", () => {
     const staffishOverride: CourseDateOverride = {
       ...baseOverride,
       participants: [],
-      cancelledParticipants: ["alice"],
+      cancelledParticipants: ["alice", "barbara"],
+      shortNoticeCancellations: ["carol"],
       swapped: [],
     };
 
@@ -372,7 +373,12 @@ describe("CourseCard", () => {
       allCourses: [baseCourse, targetCourse],
       showOverbookingDetails: true,
     });
+    expect(screen.getByText(/Absagen & Tausche \(3\)/i)).toBeInTheDocument();
+    expect(screen.getByText("carol · kurzfristig abgesagt")).toBeInTheDocument();
+    expect(screen.getByText("barbara · abgesagt, noch ohne Anfrage")).toBeInTheDocument();
     expect(screen.getByText("alice → Yoga Advanced · 17.06.2099")).toBeInTheDocument();
+    // alice hat ausgehenden Tausch → keine „noch ohne Anfrage“-Zeile
+    expect(screen.queryByText(/alice · abgesagt/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Nicht in diesem Termin eingetragen")).not.toBeInTheDocument();
   });
 

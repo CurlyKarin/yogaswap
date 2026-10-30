@@ -172,12 +172,18 @@ locals {
     "create_override" = {
       name             = "create-override"
       file_name        = "createOverride.zip"
-      table_arns       = [module.course_overrides_table.table_arn, module.courses_table.table_arn, module.course_enrollments_table.table_arn]
+      table_arns = [
+        module.course_overrides_table.table_arn,
+        module.courses_table.table_arn,
+        module.course_enrollments_table.table_arn,
+        module.tenants_table.table_arn,
+      ]
       dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"]
       tables = {
         "OVERRIDES_TABLE"          = module.course_overrides_table.table_name
         "COURSES_TABLE"            = module.courses_table.table_name
         "COURSE_ENROLLMENTS_TABLE" = module.course_enrollments_table.table_name
+        "TENANTS_TABLE"            = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
