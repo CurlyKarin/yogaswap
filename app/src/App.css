@@ -1102,6 +1102,17 @@ body {
   align-content: flex-start;
 }
 
+.term-swap-movements {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.term-swap-movement {
+  line-height: 1.35;
+}
+
 .guest-seats-row {
   align-items: center;
 }

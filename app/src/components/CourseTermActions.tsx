@@ -58,7 +58,8 @@ type CourseTermActionsProps = {
   absenceSaving: boolean;
   absenceButtonRef: RefObject<HTMLButtonElement | null>;
   showSwapModal: boolean;
-  notEnrolledInTermHint: ReactNode;
+  /** null = kein Teilnehmer-Hinweis (z. B. Kursverwaltung mit Tausch-Übersicht #414). */
+  notEnrolledInTermHint: ReactNode | null;
   onToggleAbsence: (outcome: AbsenceToggleOutcome) => void;
   onOpenSwapModal: () => void;
   onCloseSwapModal: () => void;

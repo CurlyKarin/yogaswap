@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Swap, CourseDateOverride, Course, CourseEnrollment, User, TenantSettings } from "shared/types";
 import type { ParticipantActor } from "shared/participantActor";
 import { formatAbsenceAnnouncement } from "../lib/courseCardLabels";
+import { buildTermSwapMovements } from "../lib/termSwapMovements";
 import CourseCardDetails from "./CourseCardDetails";
 import CourseTermActions from "./CourseTermActions";
 import {
@@ -98,8 +99,31 @@ export default function CourseCard({
     [course, guestSeatSaving, onAdjustGuestCount, selectedDateKey],
   );
 
-  const notEnrolledInTermHint = (
+  // Kursverwaltung: Tausch-Linien im Fußbereich (#414) — kein Teilnehmer-Fußhinweis.
+  const notEnrolledInTermHint = showOverbookingDetails ? null : (
     <div className="muted">Nicht in diesem Termin eingetragen</div>
+  );
+
+  const termSwapMovements = useMemo(
+    () =>
+      showOverbookingDetails && !excludedTermNotice
+        ? buildTermSwapMovements({
+            courseId: course.id,
+            dateIso: selectedDateKey,
+            swaps,
+            allCourses,
+            participantNameByRef,
+          })
+        : [],
+    [
+      showOverbookingDetails,
+      excludedTermNotice,
+      course.id,
+      selectedDateKey,
+      swaps,
+      allCourses,
+      participantNameByRef,
+    ],
   );
 
   const titleId = useId();
@@ -200,6 +224,15 @@ export default function CourseCard({
         {inactiveNotice && !pastTermNotice && (
           <div className="course-card-footer-notice" role="status">
             <span className="muted small">{inactiveNotice}</span>
+          </div>
+        )}
+        {termSwapMovements.length > 0 && (
+          <div className="course-card-footer-notice term-swap-movements" role="status">
+            {termSwapMovements.map((movement) => (
+              <div key={movement.key} className="muted small term-swap-movement">
+                {movement.line}
+              </div>
+            ))}
           </div>
         )}
         <CourseTermActions
