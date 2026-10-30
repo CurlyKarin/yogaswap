@@ -45,6 +45,10 @@ export async function executeRingCyclePlan(input: ExecuteRingCyclePlanInput): Pr
 
   for (const write of plan.overrideWrites) {
     const courseId_date = `${write.override.courseId}_${write.override.date}`;
+    const cancelledParticipants = write.override.cancelledParticipants ?? [];
+    const swapped = write.override.swapped ?? [];
+    const waitlist = write.override.waitlist ?? [];
+    const shortNoticeCancellations = write.override.shortNoticeCancellations ?? [];
     if (write.mode === "create") {
       transactItems.push({
         Put: {
@@ -55,10 +59,12 @@ export async function executeRingCyclePlan(input: ExecuteRingCyclePlanInput): Pr
             courseId: { S: write.override.courseId.toString() },
             date: { S: write.override.date },
             participants: { L: write.override.participants.map((p) => ({ S: p })) },
-            swapped: { L: (write.override.swapped ?? []).map((s) => ({ S: s })) },
-            waitlist: { L: (write.override.waitlist ?? []).map((w) => ({ S: w })) },
+            // Ohne cancelledParticipants bleibt Stamm am Ursprung sichtbar (Ringtausch-Bug).
+            cancelledParticipants: { L: cancelledParticipants.map((p) => ({ S: p })) },
+            swapped: { L: swapped.map((s) => ({ S: s })) },
+            waitlist: { L: waitlist.map((w) => ({ S: w })) },
             shortNoticeCancellations: {
-              L: (write.override.shortNoticeCancellations ?? []).map((w) => ({ S: w })),
+              L: shortNoticeCancellations.map((w) => ({ S: w })),
             },
           },
           ConditionExpression: "attribute_not_exists(courseId_date)",
@@ -72,16 +78,23 @@ export async function executeRingCyclePlan(input: ExecuteRingCyclePlanInput): Pr
             tenantId: { S: tenantId },
             courseId_date: { S: courseId_date },
           },
-          UpdateExpression: "SET #participants = :participants, #swapped = :swapped, #waitlist = :waitlist",
+          UpdateExpression:
+            "SET #participants = :participants, #cancelledParticipants = :cancelledParticipants, #swapped = :swapped, #waitlist = :waitlist, #shortNoticeCancellations = :shortNoticeCancellations",
           ExpressionAttributeNames: {
             "#participants": "participants",
+            "#cancelledParticipants": "cancelledParticipants",
             "#swapped": "swapped",
             "#waitlist": "waitlist",
+            "#shortNoticeCancellations": "shortNoticeCancellations",
           },
           ExpressionAttributeValues: {
             ":participants": { L: write.override.participants.map((p) => ({ S: p })) },
-            ":swapped": { L: (write.override.swapped ?? []).map((s) => ({ S: s })) },
-            ":waitlist": { L: (write.override.waitlist ?? []).map((w) => ({ S: w })) },
+            ":cancelledParticipants": { L: cancelledParticipants.map((p) => ({ S: p })) },
+            ":swapped": { L: swapped.map((s) => ({ S: s })) },
+            ":waitlist": { L: waitlist.map((w) => ({ S: w })) },
+            ":shortNoticeCancellations": {
+              L: shortNoticeCancellations.map((w) => ({ S: w })),
+            },
           },
         },
       });
