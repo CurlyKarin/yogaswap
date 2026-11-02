@@ -61,33 +61,39 @@ body {
 }
 
 /*
- * iOS Safari: innerer Scroll-Container + sticky + scrollIntoView/Tastatur bricht Header.
- * Auf Touch-Geräten scrollt wieder das Dokument (Desktop Safari-Mac-Bleed-Fix bleibt).
+ * Touch: Dokument/Viewport scrollt (kein innerer Scroll-Root) — iOS Safari + sticky +
+ * Tastatur/scrollIntoView war mit .app-scroll-root unzuverlässig (#287 / #409).
+ *
+ * Wichtig (#423): overflow-x auf body zerlegt position:sticky relativ zum Viewport.
+ * Horizontal clip (#409) bleibt auf html; body overflow visible, damit Header +
+ * Kurs-Toolbar wieder kleben.
  */
 @media (hover: none) and (pointer: coarse) {
   html {
     height: auto;
     min-height: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   body {
     height: auto;
     min-height: 100%;
-    overflow-x: hidden;
-    overflow-x: clip;
-    overflow-y: auto;
+    overflow: visible;
   }
 
   #root {
     height: auto;
     min-height: 100%;
     display: block;
+    max-width: 100%;
   }
 
   .app-shell {
     display: block;
     min-height: 100dvh;
     min-height: 100vh;
+    max-width: 100%;
   }
 
   .app-scroll-root {
@@ -95,10 +101,12 @@ body {
     min-height: 0;
     overflow: visible;
     -webkit-overflow-scrolling: auto;
+    max-width: 100%;
   }
 
   .app-top,
   .course-views-toolbar {
+    position: sticky;
     -webkit-backface-visibility: visible;
     backface-visibility: visible;
   }
