@@ -84,6 +84,7 @@ describe("useCognitoAuth", () => {
       tokens: {
         idToken: {
           payload: {
+            sub: "sub-admin-prod",
             nickname: "admin_prod",
             email: "a@example.com",
             "custom:role": "admin",
@@ -104,7 +105,39 @@ describe("useCognitoAuth", () => {
       password: "secret",
     });
     expect(mockedSaveCurrentUser).toHaveBeenCalledWith(
-      expect.objectContaining({ nickname: "admin_prod" }),
+      expect.objectContaining({ nickname: "admin_prod", authUserId: "sub-admin-prod" }),
+    );
+  });
+
+  it("Actor bleibt Studio-Nickname trotz abweichendem JWT-nickname (#412)", async () => {
+    mockedResolveLogin.mockResolvedValue({
+      cognitoUsername: "anton",
+      nickname: "Anton",
+    });
+    mockedSignIn.mockResolvedValue({ isSignedIn: true, nextStep: { signInStep: "DONE" } });
+    mockedFetchAuthSession.mockResolvedValue({
+      tokens: {
+        idToken: {
+          payload: {
+            sub: "sub-anton",
+            "cognito:username": "anton",
+            nickname: "tim.tom",
+            email: "anton@example.com",
+            "custom:role": "participant",
+          },
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useCognitoAuth());
+    let ok = false;
+    await act(async () => {
+      ok = await result.current.login({ username: "Anton", password: "secret" });
+    });
+
+    expect(ok).toBe(true);
+    expect(mockedSaveCurrentUser).toHaveBeenCalledWith(
+      expect.objectContaining({ nickname: "Anton", authUserId: "sub-anton" }),
     );
   });
 
