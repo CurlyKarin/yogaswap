@@ -97,6 +97,10 @@ vi.mock("./api/tenantContext", async (importOriginal) => {
   };
 });
 
+vi.mock("./api/auth", () => ({
+  resolveLogin: vi.fn(),
+}));
+
 vi.mock("./api/participants", () => ({
   getParticipants: vi.fn(),
 }));
@@ -148,6 +152,68 @@ async function renderLoggedInAdmin() {
     expect(screen.getByText(/hi, admin/i)).toBeInTheDocument();
   });
 }
+
+describe("App session restore (#412)", () => {
+  beforeEach(async () => {
+    cleanup();
+    vi.clearAllMocks();
+    coursesShellMock.mockClear();
+    setActingForUserId(null);
+    setActorUserId(null);
+    const { useAppAuth } = await import("./auth/useAppAuth");
+    vi.mocked(useAppAuth).mockReturnValue(createMockUseAppAuth());
+  });
+
+  it("zeigt Studio-Login-Name statt abweichendem JWT-nickname nach Reload", async () => {
+    const { fetchAuthSession } = await import("aws-amplify/auth");
+    const { getTenantContext } = await import("./api/tenantContext");
+    const { loadCurrentUser } = await import("shared/lib/storage");
+    const { resolveLogin } = await import("./api/auth");
+
+    vi.mocked(loadCurrentUser).mockReturnValue({
+      nickname: "Anton",
+      email: "anton@example.com",
+      role: "participant",
+      authUserId: "sub-anton",
+    });
+    vi.mocked(fetchAuthSession).mockResolvedValue({
+      tokens: {
+        idToken: {
+          payload: {
+            sub: "sub-anton",
+            "cognito:username": "anton",
+            nickname: "tim.tom",
+            email: "anton@example.com",
+            "custom:role": "participant",
+          },
+        },
+      },
+    } as unknown as never);
+    vi.mocked(getTenantContext).mockResolvedValue({
+      tenantId: "default-tenant",
+      userId: "Anton",
+      tenant: { tenantId: "default-tenant", name: "Default" },
+      membership: {
+        tenantId: "default-tenant",
+        userId: "Anton",
+        participantId: "Anton",
+        role: "participant",
+      },
+    } as unknown as never);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/hi, anton/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/hi, tim\.tom/i)).not.toBeInTheDocument();
+    expect(resolveLogin).not.toHaveBeenCalled();
+  });
+});
 
 describe("App shell a11y", () => {
   beforeEach(async () => {

@@ -98,11 +98,15 @@ export const useCognitoAuth = (): AuthReturn => {
         return false;
       }
 
+      const cognitoSub =
+        typeof payload.sub === "string" && payload.sub.trim() ? payload.sub.trim() : null;
       const nextUser: User = {
         // Actor = Studio-Login-Name (Tenant), nicht opaque Cognito-Username / JWT-nickname anderer Studios.
         nickname: studioNickname || (payload.nickname as string) || credentials.username,
         email: payload.email as string,
         role: (payload["custom:role"] as UserRole) || "participant",
+        // Bindet Reload an dieselbe Cognito-Identität (#412).
+        authUserId: cognitoSub,
       };
 
       saveCurrentUser(nextUser);

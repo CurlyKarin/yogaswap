@@ -10,7 +10,7 @@ import Invite from "./components/Invite";
 import ForgotPassword from "./components/ForgotPassword";
 import DelegationPickerDialog from "./components/DelegationPickerDialog";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
-import { User, UserRole, Tenant, UserTenantMembership } from "shared/types";
+import { User, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
 import { fetchAuthSession } from "aws-amplify/auth";
 import {
@@ -19,6 +19,8 @@ import {
   reconcileLocalUserWithCognitoSession,
   startSessionIdleWatchdog,
 } from "./auth/sessionExpiry";
+import { restoreStudioUserFromSession } from "./auth/restoreSessionUser";
+import { resolveLogin } from "./api/auth";
 import { getTenantContext, TenantNotFoundError } from "./api/tenantContext";
 import UnknownStudio from "./components/UnknownStudio";
 import { canInviteParticipants, canManageParticipants } from "shared/permissions";
@@ -83,29 +85,26 @@ function MainApp() {
     };
   }, []);
 
-  // App.tsx
+  // Session-Restore: Studio-Login-Name behalten, nicht blind JWT-nickname (#412 / #324).
   useEffect(() => {
     const initAuth = async () => {
-      // Always verify Cognito session first. localStorage is only a fallback cache.
       try {
         const session = await fetchAuthSession();
-        if (session.tokens?.idToken) {
-          const payload = session.tokens.idToken.payload;
-
-          const user: User = {
-            nickname: payload.nickname as string,
-            email: payload.email as string,
-            role: (payload['custom:role'] as UserRole) || 'participant',
-          };
-
-          saveCurrentUser(user);  // Checkmark Speichern für später!
+        const payload = session.tokens?.idToken?.payload;
+        if (payload) {
+          const stored = loadCurrentUser();
+          const user = await restoreStudioUserFromSession({
+            payload: payload as Record<string, unknown>,
+            stored,
+            resolveLogin,
+          });
+          saveCurrentUser(user);
           setActorUserId(user.nickname);
           setCurrentUser(user);
-          console.log('User aus Cognito-Session geladen:', user);
           return;
         }
-      } catch (err) {
-        console.log('Keine aktive Session:', err);
+      } catch {
+        // keine aktive Cognito-Session
       }
 
       // No valid session: clear stale storage and logged-in state.
@@ -117,7 +116,7 @@ function MainApp() {
       setActorUserId(null);
     };
 
-    initAuth();
+    void initAuth();
   }, []);
 
   // Anderer Tab hat ausgeloggt / Session gecleared (#338).
