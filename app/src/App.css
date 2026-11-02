@@ -1533,6 +1533,13 @@ a:focus-visible {
   line-height: 1;
   vertical-align: middle;
 }
+/* #416: Abstand in der Aktionszeile muss .modal-action-btn { margin: 0 } schlagen (Desktop). */
+.modal-actions > .modal-action-btn {
+  margin: 0 0 0 8px;
+}
+.modal-actions > .modal-action-btn:first-child {
+  margin-left: 0;
+}
 .modal-action-btn.btn-primary {
   margin-top: 0;
 }
@@ -2724,6 +2731,10 @@ a:focus-visible {
     gap: 0;
   }
   .modal-actions > * {
+    margin: 0 4px 8px 0;
+  }
+  /* #416: gleiche Spezifität wie Desktop-Override, sonst klebt der Desktop-Margin auch hier. */
+  .modal-actions > .modal-action-btn {
     margin: 0 4px 8px 0;
   }
   .modal-actions.dialog-actions {
