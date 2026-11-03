@@ -199,6 +199,11 @@ export interface TenantSettings {
    */
   instructorCanManageParticipants?: boolean;
   /**
+   * Dürfen Instructor:innen die Fremdverwaltung (Vertretung) nutzen? (#141)
+   * Default für undefined: true. Unabhängig von Teilnehmerprofil-Verwaltung / Gästen.
+   */
+  instructorCanUseDelegation?: boolean;
+  /**
    * Darf Instructor-Delegation in Kursen ohne explizite Instructor-Zuordnung
    * genutzt werden?
    *

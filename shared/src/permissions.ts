@@ -54,12 +54,29 @@ export function canManageParticipants(
 }
 
 /**
+ * Darf diese Membership Fremdverwaltung (Vertretung) nutzen? (#141)
+ * - Admin: immer ja
+ * - Instructor: TenantSettings.instructorCanUseDelegation (Default true)
+ * - Participant: nie
+ */
+export function canUseDelegation(
+  membership: UserTenantMembership,
+  settings: TenantSettings | undefined,
+): boolean {
+  if (membership.role === "admin") return true;
+  if (membership.role === "instructor") {
+    return settings?.instructorCanUseDelegation ?? true;
+  }
+  return false;
+}
+
+/**
  * Darf ein Actor den Vertretungsmodus fuer einen Kurs starten?
  *
  * Regeln (MVP-kompatibel):
  * - Admin: immer ja
  * - Instructor:
- *   - braucht grundsaetzlich Teilnehmerverwaltungsrecht
+ *   - braucht Studio-Freigabe Fremdverwaltung (`canUseDelegation`)
  *   - wenn der Kurs Instructor-Zuordnungen hat: nur, wenn selbst zugeordnet
  *   - wenn der Kurs keine Instructor-Zuordnungen hat: durch Setting steuerbar
  *     (Default `true`, um aktuelles Verhalten nicht zu brechen)
@@ -75,7 +92,7 @@ export function canStartDelegationForCourse(
 ): boolean {
   if (membership.role === "admin") return true;
   if (membership.role !== "instructor") return false;
-  if (!canManageParticipants(membership, settings)) return false;
+  if (!canUseDelegation(membership, settings)) return false;
 
   const hasExplicitCourseInstructors = (context.course.instructors?.length ?? 0) > 0;
   if (hasExplicitCourseInstructors) {

@@ -23,7 +23,7 @@ import { restoreStudioUserFromSession } from "./auth/restoreSessionUser";
 import { resolveLogin } from "./api/auth";
 import { getTenantContext, TenantNotFoundError } from "./api/tenantContext";
 import UnknownStudio from "./components/UnknownStudio";
-import { canInviteParticipants, canManageParticipants } from "shared/permissions";
+import { canInviteParticipants, canUseDelegation } from "shared/permissions";
 import { getParticipants, type ParticipantWithStatus } from "./api/participants";
 import { setActingForUserId, setActorUserId } from "./api/delegation";
 import { filterParticipantsBySearch } from "./lib/participants";
@@ -233,9 +233,7 @@ function MainApp() {
           setCanInvite(
             canInviteParticipants(ctx.membership, ctx.tenant?.settings),
           );
-          setCanDelegate(
-            canManageParticipants(ctx.membership, ctx.tenant?.settings),
-          );
+          setCanDelegate(canUseDelegation(ctx.membership, ctx.tenant?.settings));
         } else {
           // Fallback: Admins ohne Membership dürfen weiterhin einladen
           setCanInvite(currentUser.role === "admin");

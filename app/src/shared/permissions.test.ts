@@ -7,6 +7,7 @@ import {
   canSeeAllCourses,
   canSeeCourse,
   canShowParticipantCourseCard,
+  canUseDelegation,
   isActiveCourseForWeekView,
 } from "shared/permissions";
 import type {
@@ -121,6 +122,38 @@ describe("permissions", () => {
 
     it("verbietet Participant die Teilnehmerverwaltung", () => {
       expect(canManageParticipants(participantMembership, defaultSettings)).toBe(false);
+    });
+  });
+
+  describe("canUseDelegation", () => {
+    it("erlaubt Admins immer Fremdverwaltung", () => {
+      expect(canUseDelegation(adminMembership, undefined)).toBe(true);
+      expect(
+        canUseDelegation(adminMembership, { ...defaultSettings, instructorCanUseDelegation: false }),
+      ).toBe(true);
+    });
+
+    it("erlaubt Instructor standardmäßig (undefined => true)", () => {
+      expect(canUseDelegation(instructorMembership, undefined)).toBe(true);
+    });
+
+    it("respektiert instructorCanUseDelegation im Tenant-Setting", () => {
+      expect(
+        canUseDelegation(instructorMembership, {
+          ...defaultSettings,
+          instructorCanUseDelegation: true,
+        }),
+      ).toBe(true);
+      expect(
+        canUseDelegation(instructorMembership, {
+          ...defaultSettings,
+          instructorCanUseDelegation: false,
+        }),
+      ).toBe(false);
+    });
+
+    it("verbietet Participant die Fremdverwaltung", () => {
+      expect(canUseDelegation(participantMembership, defaultSettings)).toBe(false);
     });
   });
 
@@ -406,6 +439,19 @@ describe("permissions", () => {
           {
             course: courseWithoutInstructors,
             isActorAssignedInstructor: false,
+          },
+        ),
+      ).toBe(false);
+    });
+
+    it("blockiert Instructor wenn Fremdverwaltung studioweit aus ist", () => {
+      expect(
+        canStartDelegationForCourse(
+          instructorMembership,
+          { ...defaultSettings, instructorCanUseDelegation: false },
+          {
+            course: courseWithInstructors,
+            isActorAssignedInstructor: true,
           },
         ),
       ).toBe(false);

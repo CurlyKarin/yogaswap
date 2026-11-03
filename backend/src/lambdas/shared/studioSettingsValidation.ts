@@ -16,6 +16,9 @@ export type StudioSettingsPatch = {
   notifyInstructorsOnTermParticipationChange?: boolean;
   instructorTermNotifyFromHoursBeforeStart?: number | null;
   instructorTermNotifyUntilMinutesBeforeStart?: number | null;
+  instructorCanUseDelegation?: boolean;
+  instructorCanManageDelegationWithoutCourseAssignment?: boolean;
+  delegationCanManageActiveParticipants?: boolean;
 };
 
 const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -87,6 +90,21 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
   if (Object.prototype.hasOwnProperty.call(patch, "notifyInstructorsOnTermParticipationChange")) {
     if (typeof patch.notifyInstructorsOnTermParticipationChange !== "boolean") {
       return "Mitteilung an Kursleitung bei Termin-Teilnahme muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanUseDelegation")) {
+    if (typeof patch.instructorCanUseDelegation !== "boolean") {
+      return "Fremdverwaltung für Kursleitung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanManageDelegationWithoutCourseAssignment")) {
+    if (typeof patch.instructorCanManageDelegationWithoutCourseAssignment !== "boolean") {
+      return "Fremdverwaltung ohne Kurszuordnung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "delegationCanManageActiveParticipants")) {
+    if (typeof patch.delegationCanManageActiveParticipants !== "boolean") {
+      return "Vertretung aktiver Mitglieder muss ein Schalter (ja/nein) sein.";
     }
   }
   if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyFromHoursBeforeStart")) {

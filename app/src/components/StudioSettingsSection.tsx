@@ -6,6 +6,9 @@ import {
   resolveInactiveGraceDays,
   resolveInstructorTermNotifyFromHoursBeforeStart,
   resolveInstructorTermNotifyUntilMinutesBeforeStart,
+  resolveDelegationCanManageActiveParticipants,
+  resolveInstructorCanManageDelegationWithoutCourseAssignment,
+  resolveInstructorCanUseDelegation,
   resolveNotifyInstructorsOnStemChange,
   resolveNotifyInstructorsOnTermParticipationChange,
   resolveRollingPlanningHorizonWeeks,
@@ -63,6 +66,11 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const termNotifyDefault = resolveNotifyInstructorsOnTermParticipationChange(tenant.settings);
   const fromHoursDefault = resolveInstructorTermNotifyFromHoursBeforeStart(tenant.settings);
   const untilMinutesDefault = resolveInstructorTermNotifyUntilMinutesBeforeStart(tenant.settings);
+  const instructorDelegationDefault = resolveInstructorCanUseDelegation(tenant.settings);
+  const delegationWithoutAssignmentDefault =
+    resolveInstructorCanManageDelegationWithoutCourseAssignment(tenant.settings);
+  const delegationActiveParticipantsDefault =
+    resolveDelegationCanManageActiveParticipants(tenant.settings);
 
   const [name, setName] = useState(tenant.name);
   const [contactEmail, setContactEmail] = useState(tenant.settings?.contactEmail ?? "");
@@ -82,6 +90,14 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const [termNotifyUntilEnabled, setTermNotifyUntilEnabled] = useState(untilMinutesDefault != null);
   const [termNotifyUntilMinutes, setTermNotifyUntilMinutes] = useState(
     String(untilMinutesDefault ?? cutoffDefault),
+  );
+  const [instructorCanUseDelegation, setInstructorCanUseDelegation] = useState(
+    instructorDelegationDefault,
+  );
+  const [instructorCanManageDelegationWithoutCourseAssignment, setInstructorCanManageDelegationWithoutCourseAssignment] =
+    useState(delegationWithoutAssignmentDefault);
+  const [delegationCanManageActiveParticipants, setDelegationCanManageActiveParticipants] = useState(
+    delegationActiveParticipantsDefault,
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +124,13 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setTermNotifyFromHours(String(fromHours ?? DEFAULT_INSTRUCTOR_TERM_NOTIFY_FROM_HOURS));
     setTermNotifyUntilEnabled(untilMinutes != null);
     setTermNotifyUntilMinutes(String(untilMinutes ?? cutoff));
+    setInstructorCanUseDelegation(resolveInstructorCanUseDelegation(tenant.settings));
+    setInstructorCanManageDelegationWithoutCourseAssignment(
+      resolveInstructorCanManageDelegationWithoutCourseAssignment(tenant.settings),
+    );
+    setDelegationCanManageActiveParticipants(
+      resolveDelegationCanManageActiveParticipants(tenant.settings),
+    );
     setError(null);
     setSuccess(null);
   }, [tenant]);
@@ -132,6 +155,9 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
         notifyInstructorsOnTermParticipationChange && termNotifyUntilEnabled
           ? Number.parseInt(termNotifyUntilMinutes, 10)
           : null,
+      instructorCanUseDelegation,
+      instructorCanManageDelegationWithoutCourseAssignment,
+      delegationCanManageActiveParticipants,
     };
     const validationError = validateStudioSettingsPatch(patch);
     if (validationError) {
@@ -225,6 +251,63 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
             />
           </label>
         </div>
+
+        <hr className="studio-settings-divider" />
+
+        <details className="studio-settings-subdetails">
+          <summary className="studio-settings-summary studio-settings-summary--sub">
+            <h4 id="studio-settings-instructor-rights-heading" className="studio-settings-summary-title">
+              Rechte Kursleitung
+            </h4>
+          </summary>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Steuert, was die Rolle Kursleitung darf. Admin ist davon unberührt. Weitere Rechte
+            (Termine, Kursmitglieder, …) kommen schrittweise hinzu (#141).
+          </p>
+          <div
+            className="studio-settings-grid"
+            role="group"
+            aria-labelledby="studio-settings-instructor-rights-heading"
+          >
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="Schaltet den Vertretungsmodus für Kursleitung frei. Standard an. Unabhängig von Gäste-/Teilnehmerlisten-Rechten.">
+                <input
+                  type="checkbox"
+                  checked={instructorCanUseDelegation}
+                  onChange={(e) => setInstructorCanUseDelegation(e.target.checked)}
+                  disabled={saving}
+                />{" "}
+                Fremdverwaltung (Vertretung) freischalten
+              </FieldLabelWithTooltip>
+            </label>
+
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="Wenn am Kurs keine Kursleitung eingetragen ist: darf Kursleitung dort trotzdem vertreten? Standard an (Übergang). Bei gepflegter Zuordnung gilt weiterhin: nur die eingetragene Leitung.">
+                <input
+                  type="checkbox"
+                  checked={instructorCanManageDelegationWithoutCourseAssignment}
+                  onChange={(e) =>
+                    setInstructorCanManageDelegationWithoutCourseAssignment(e.target.checked)
+                  }
+                  disabled={saving || !instructorCanUseDelegation}
+                />{" "}
+                Fremdverwaltung auch ohne Kurszuordnung
+              </FieldLabelWithTooltip>
+            </label>
+
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="In der Vertretung auch Mitglieder mit Status aktiv/registriert bedienen. Standard an. Eingeladene und ohne Login sind immer erlaubt.">
+                <input
+                  type="checkbox"
+                  checked={delegationCanManageActiveParticipants}
+                  onChange={(e) => setDelegationCanManageActiveParticipants(e.target.checked)}
+                  disabled={saving || !instructorCanUseDelegation}
+                />{" "}
+                In Vertretung auch aktive Mitglieder verwalten
+              </FieldLabelWithTooltip>
+            </label>
+          </div>
+        </details>
 
         <hr className="studio-settings-divider" />
 

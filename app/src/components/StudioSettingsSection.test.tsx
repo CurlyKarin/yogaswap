@@ -53,6 +53,10 @@ function getNotificationsDetails(): HTMLDetailsElement {
   return getSubdetails(/e-mail-benachrichtigungen/i);
 }
 
+function getInstructorRightsDetails(): HTMLDetailsElement {
+  return getSubdetails(/rechte kursleitung/i);
+}
+
 function expandStudioSettings() {
   const details = getStudioDetails();
   if (!details.open) {
@@ -76,6 +80,10 @@ function expandNotifications() {
   expandSubdetails(getNotificationsDetails);
 }
 
+function expandInstructorRights() {
+  expandSubdetails(getInstructorRightsDetails);
+}
+
 describe("StudioSettingsSection", () => {
   beforeEach(() => {
     mockedUpdateTenantSettings.mockReset();
@@ -89,8 +97,14 @@ describe("StudioSettingsSection", () => {
 
     expandStudioSettings();
     expect(getStudioDetails().open).toBe(true);
+    expect(getInstructorRightsDetails().open).toBe(false);
     expect(getNotificationsDetails().open).toBe(false);
     expect(getRollingDetails().open).toBe(false);
+    expect(
+      screen.getByRole("checkbox", {
+        name: /fremdverwaltung \(vertretung\) freischalten/i,
+      }),
+    ).not.toBeVisible();
     expect(
       screen.getByRole("checkbox", {
         name: /kursleitung bei stamm-änderungen informieren/i,
@@ -141,6 +155,9 @@ describe("StudioSettingsSection", () => {
           notifyInstructorsOnTermParticipationChange: false,
           instructorTermNotifyFromHoursBeforeStart: null,
           instructorTermNotifyUntilMinutesBeforeStart: null,
+          instructorCanUseDelegation: true,
+          instructorCanManageDelegationWithoutCourseAssignment: true,
+          delegationCanManageActiveParticipants: true,
         }),
       );
     });
@@ -215,12 +232,14 @@ describe("StudioSettingsSection", () => {
     expect(screen.getByRole("textbox", { name: /studioname/i })).toBeVisible();
   });
 
-  it("gruppiert Felder in Allgemein, E-Mail-Benachrichtigungen und Durchlaufende Kurse", () => {
+  it("gruppiert Felder in Allgemein, Rechte Kursleitung, E-Mail und Durchlaufende Kurse", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expandInstructorRights();
     expandNotifications();
     expandRollingCourses();
 
     expect(screen.getByRole("heading", { level: 4, name: /allgemein/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: /rechte kursleitung/i })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 4, name: /e-mail-benachrichtigungen/i }),
     ).toBeInTheDocument();
@@ -228,6 +247,7 @@ describe("StudioSettingsSection", () => {
       screen.getByRole("heading", { level: 4, name: /durchlaufende kurse/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /allgemein/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /rechte kursleitung/i })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /e-mail-benachrichtigungen/i })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /durchlaufende kurse/i })).toBeInTheDocument();
 
@@ -237,6 +257,23 @@ describe("StudioSettingsSection", () => {
     expect(generalGroup).not.toContainElement(
       screen.getByRole("checkbox", {
         name: /kursleitung bei stamm-änderungen informieren/i,
+      }),
+    );
+
+    const instructorRightsGroup = screen.getByRole("group", { name: /rechte kursleitung/i });
+    expect(instructorRightsGroup).toContainElement(
+      within(instructorRightsGroup).getByRole("checkbox", {
+        name: /fremdverwaltung \(vertretung\) freischalten/i,
+      }),
+    );
+    expect(instructorRightsGroup).toContainElement(
+      within(instructorRightsGroup).getByRole("checkbox", {
+        name: /fremdverwaltung auch ohne kurszuordnung/i,
+      }),
+    );
+    expect(instructorRightsGroup).toContainElement(
+      within(instructorRightsGroup).getByRole("checkbox", {
+        name: /in vertretung auch aktive mitglieder verwalten/i,
       }),
     );
 
@@ -255,6 +292,47 @@ describe("StudioSettingsSection", () => {
       within(rollingGroup).getByLabelText(/tauschfenster: frühestens/i),
     );
     expect(rollingGroup).not.toContainElement(getCutoffInput());
+  });
+
+  it("sendet Fremdverwaltung-Flags im Patch und deaktiviert abhängige Checkboxen (#141)", async () => {
+    mockedUpdateTenantSettings.mockResolvedValue(
+      makeTenant({ instructorCanUseDelegation: false }),
+    );
+    render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
+    expandInstructorRights();
+
+    const useDelegation = screen.getByRole("checkbox", {
+      name: /fremdverwaltung \(vertretung\) freischalten/i,
+    });
+    const withoutAssignment = screen.getByRole("checkbox", {
+      name: /fremdverwaltung auch ohne kurszuordnung/i,
+    });
+    const activeParticipants = screen.getByRole("checkbox", {
+      name: /in vertretung auch aktive mitglieder verwalten/i,
+    });
+
+    expect(useDelegation).toBeChecked();
+    expect(withoutAssignment).toBeChecked();
+    expect(activeParticipants).toBeChecked();
+    expect(withoutAssignment).not.toBeDisabled();
+    expect(activeParticipants).not.toBeDisabled();
+
+    fireEvent.click(useDelegation);
+    expect(useDelegation).not.toBeChecked();
+    expect(withoutAssignment).toBeDisabled();
+    expect(activeParticipants).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /studio-einstellungen speichern/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateTenantSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instructorCanUseDelegation: false,
+          instructorCanManageDelegationWithoutCourseAssignment: true,
+          delegationCanManageActiveParticipants: true,
+        }),
+      );
+    });
   });
 
   it("erhöht Absagefrist in 15-Minuten-Schritten", () => {

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
 import { getActingForUserId, setActingForUserId, setActorUserId } from "./api/delegation";
-import { canManageParticipants } from "shared/permissions";
+import { canUseDelegation } from "shared/permissions";
 
 const coursesShellMock = vi.fn<(props: unknown) => void>();
 
@@ -113,7 +113,7 @@ vi.mock("shared/lib/storage", () => ({
 
 vi.mock("shared/permissions", () => ({
   canInviteParticipants: vi.fn(() => true),
-  canManageParticipants: vi.fn(() => true),
+  canUseDelegation: vi.fn(() => true),
 }));
 
 async function renderLoggedInAdmin() {
@@ -220,7 +220,7 @@ describe("App shell a11y", () => {
     cleanup();
     vi.clearAllMocks();
     coursesShellMock.mockClear();
-    vi.mocked(canManageParticipants).mockReturnValue(true);
+    vi.mocked(canUseDelegation).mockReturnValue(true);
     setActingForUserId(null);
     setActorUserId(null);
     const { useAppAuth } = await import("./auth/useAppAuth");
@@ -324,7 +324,7 @@ describe("App delegation mode", () => {
     cleanup();
     vi.clearAllMocks();
     coursesShellMock.mockClear();
-    vi.mocked(canManageParticipants).mockReturnValue(true);
+    vi.mocked(canUseDelegation).mockReturnValue(true);
     setActingForUserId(null);
     setActorUserId(null);
   });
@@ -432,7 +432,7 @@ describe("App delegation mode", () => {
   it("does not show delegation entry when user cannot delegate", async () => {
     const { fetchAuthSession } = await import("aws-amplify/auth");
     const { getTenantContext } = await import("./api/tenantContext");
-    const { canManageParticipants } = await import("shared/permissions");
+    const { canUseDelegation } = await import("shared/permissions");
 
     vi.mocked(fetchAuthSession).mockResolvedValue({
       tokens: {
@@ -451,7 +451,7 @@ describe("App delegation mode", () => {
       membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
     } as unknown as never);
 
-    vi.mocked(canManageParticipants).mockReturnValue(false);
+    vi.mocked(canUseDelegation).mockReturnValue(false);
 
     render(
       <MemoryRouter>
