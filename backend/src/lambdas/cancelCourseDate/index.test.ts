@@ -622,5 +622,93 @@ describe("cancelCourseDate Lambda", () => {
     expect(cancelledOverrideState?.swapped?.L ?? []).toEqual([]);
     expect(cancelledOverrideState?.waitlist?.L ?? []).toEqual([]);
   });
+
+  test("allows assigned instructor to cancel when term management is enabled (#141)", async () => {
+    process.env.TENANTS_TABLE = "test-tenants";
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "instructor" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          status: { S: "active" },
+          participants: { L: [] },
+          instructors: { L: [{ S: "admin1" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          settings: { M: {} },
+        },
+      })
+      .mockResolvedValueOnce({ Item: undefined })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(200);
+  });
+
+  test("rejects instructor without course assignment (#141)", async () => {
+    process.env.TENANTS_TABLE = "test-tenants";
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "instructor" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          status: { S: "active" },
+          participants: { L: [] },
+          instructors: { L: [{ S: "other-instructor" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          settings: { M: {} },
+        },
+      });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(403);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+  });
+
+  test("rejects instructor when term management setting is off (#141)", async () => {
+    process.env.TENANTS_TABLE = "test-tenants";
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "instructor" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          courseId: { S: "1" },
+          name: { S: "Kurs A" },
+          status: { S: "active" },
+          participants: { L: [] },
+          instructors: { L: [{ S: "admin1" }] },
+          excludedDates: { L: [] },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          settings: {
+            M: {
+              instructorCanManageCourseTerms: { BOOL: false },
+            },
+          },
+        },
+      });
+
+    const result = await handler(makeEvent());
+    expect(result.statusCode).toBe(403);
+    expect(PutItemCommand).not.toHaveBeenCalled();
+  });
 });
 

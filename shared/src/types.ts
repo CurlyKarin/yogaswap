@@ -204,6 +204,12 @@ export interface TenantSettings {
    */
   instructorCanUseDelegation?: boolean;
   /**
+   * Dürfen Instructor:innen Kurstermine verwalten (z. B. Termin absagen) an
+   * zugeordneten Kursen (`course.instructors`)? (#141)
+   * Default für undefined: true.
+   */
+  instructorCanManageCourseTerms?: boolean;
+  /**
    * Darf Instructor-Delegation in Kursen ohne explizite Instructor-Zuordnung
    * genutzt werden?
    *

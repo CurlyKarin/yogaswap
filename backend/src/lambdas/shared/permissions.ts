@@ -28,6 +28,20 @@ export function canUseDelegation(
   return false;
 }
 
+export function canManageCourseTerms(
+  membership: UserTenantMembership,
+  settings: TenantSettings | undefined,
+  context: {
+    course: Pick<Course, "instructors">;
+    isActorAssignedInstructor: boolean;
+  },
+): boolean {
+  if (membership.role === "admin") return true;
+  if (membership.role !== "instructor") return false;
+  if (!(settings?.instructorCanManageCourseTerms ?? true)) return false;
+  return context.isActorAssignedInstructor;
+}
+
 export function canStartDelegationForCourse(
   membership: UserTenantMembership,
   settings: TenantSettings | undefined,

@@ -41,6 +41,8 @@ type CourseDatesDialogProps = {
   enrollments?: CourseEnrollment[];
   swaps: Swap[];
   canManageCourses: boolean;
+  /** Zugeordnete Kursleitung: Termin absagen, ohne Serienplanung (#141). */
+  canCancelCourseTerms?: boolean;
   tenantSettings?: TenantSettings;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
@@ -189,6 +191,7 @@ export default function CourseDatesDialog({
   enrollments = [],
   swaps,
   canManageCourses,
+  canCancelCourseTerms = false,
   tenantSettings,
   onClose,
   onSaved,
@@ -269,7 +272,9 @@ export default function CourseDatesDialog({
     compareIsoDate(datesState.seriesStartDate, datesState.seriesEndDate) <= 0;
   const isInactiveScheduleLocked = course?.status === "inactive";
   const canEditSchedule = canManageCourses && !isInactiveScheduleLocked;
-  const isActiveCancellationMode = course?.status === "active";
+  const cancelOnly = canCancelCourseTerms && !canManageCourses;
+  const canUseCancellationActions = canManageCourses || canCancelCourseTerms;
+  const isActiveCancellationMode = course?.status === "active" && canUseCancellationActions;
   const isRollingActiveMode = isActiveCancellationMode && datesState?.planningMode === "rolling_continuous";
   const isActiveBounded = isActiveCancellationMode && datesState?.planningMode === "bounded_series";
   const isRollingDraftPlanning =
@@ -738,7 +743,7 @@ export default function CourseDatesDialog({
   };
 
   const toggleCancellationDate = (isoDate: string) => {
-    if (saving) return;
+    if (saving || !canUseCancellationActions) return;
     if (!fullPlannedDatesForActiveCancellation.includes(isoDate)) return;
     const rollingLocked =
       datesState?.planningMode === "rolling_continuous" &&
@@ -746,7 +751,8 @@ export default function CourseDatesDialog({
       compareIsoDate(isoDate, rollingPlanningLockRange.start) >= 0 &&
       compareIsoDate(isoDate, rollingPlanningLockRange.end) <= 0;
     const isExcluded = datesState?.excludedDates.includes(isoDate) ?? false;
-    if (rollingLocked || datesState?.planningMode === "bounded_series") {
+    // Kursleitung: nur Absage via cancelCourseDate (kein excludedDates/updateCourse).
+    if (cancelOnly || rollingLocked || datesState?.planningMode === "bounded_series") {
       if (isExcluded) return;
       setSelectedCancellationDate((prev) => (prev === isoDate ? null : isoDate));
       setActiveCalendarAction((prev) =>
@@ -792,7 +798,7 @@ export default function CourseDatesDialog({
   };
 
   const submitCancellation = async () => {
-    if (!course || !selectedCancellationDate) return;
+    if (!course || !selectedCancellationDate || !canUseCancellationActions) return;
     setSaving(true);
     setFormError(null);
     setFormNotices([]);
@@ -1176,9 +1182,11 @@ export default function CourseDatesDialog({
                   : "Terminkalender zur Übersicht und Absage"}
               </strong>
               <p className="course-editor-note">
-                {isRollingActiveMode
-                  ? `Es werden alle geplanten Serientermine angezeigt. Innerhalb der nächsten ${rollingPlanningHorizonWeeks} Wochen nur Absage; danach auch Ausschließen möglich.`
-                  : "Es werden alle geplanten Serientermine angezeigt. Ausgeschlossene Termine sind markiert und nicht auswählbar."}
+                {cancelOnly
+                  ? "Es werden alle geplanten Serientermine angezeigt. Wähle einen Termin zur Absage."
+                  : isRollingActiveMode
+                    ? `Es werden alle geplanten Serientermine angezeigt. Innerhalb der nächsten ${rollingPlanningHorizonWeeks} Wochen nur Absage; danach auch Ausschließen möglich.`
+                    : "Es werden alle geplanten Serientermine angezeigt. Ausgeschlossene Termine sind markiert und nicht auswählbar."}
               </p>
               <div className="course-editor-inline-row">
                 <button
@@ -1259,12 +1267,12 @@ export default function CourseDatesDialog({
                           title={
                             isCancelledDate
                               ? (
-                                  isRollingActiveMode && !rollingLocked
+                                  isRollingActiveMode && !rollingLocked && !cancelOnly
                                     ? "Ausschluss rückgängig machen"
                                     : "Termin ist bereits ausgeschlossen oder abgesagt"
                                 )
                               : isSelectable
-                                ? (rollingLocked
+                                ? (cancelOnly || rollingLocked
                                   ? "Nur Absage möglich"
                                   : (datesState.planningMode === "rolling_continuous"
                                     ? "Termin ausschließen"

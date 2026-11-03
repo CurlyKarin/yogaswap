@@ -156,6 +156,7 @@ describe("StudioSettingsSection", () => {
           instructorTermNotifyFromHoursBeforeStart: null,
           instructorTermNotifyUntilMinutesBeforeStart: null,
           instructorCanUseDelegation: true,
+          instructorCanManageCourseTerms: true,
           instructorCanManageDelegationWithoutCourseAssignment: true,
           delegationCanManageActiveParticipants: true,
         }),
@@ -261,6 +262,11 @@ describe("StudioSettingsSection", () => {
     );
 
     const instructorRightsGroup = screen.getByRole("group", { name: /rechte kursleitung/i });
+    expect(instructorRightsGroup).toContainElement(
+      within(instructorRightsGroup).getByRole("checkbox", {
+        name: /kursterminverwaltung freischalten/i,
+      }),
+    );
     expect(instructorRightsGroup).toContainElement(
       within(instructorRightsGroup).getByRole("checkbox", {
         name: /fremdverwaltung \(vertretung\) freischalten/i,

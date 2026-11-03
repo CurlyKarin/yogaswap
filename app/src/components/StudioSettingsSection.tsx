@@ -7,6 +7,7 @@ import {
   resolveInstructorTermNotifyFromHoursBeforeStart,
   resolveInstructorTermNotifyUntilMinutesBeforeStart,
   resolveDelegationCanManageActiveParticipants,
+  resolveInstructorCanManageCourseTerms,
   resolveInstructorCanManageDelegationWithoutCourseAssignment,
   resolveInstructorCanUseDelegation,
   resolveNotifyInstructorsOnStemChange,
@@ -67,6 +68,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const fromHoursDefault = resolveInstructorTermNotifyFromHoursBeforeStart(tenant.settings);
   const untilMinutesDefault = resolveInstructorTermNotifyUntilMinutesBeforeStart(tenant.settings);
   const instructorDelegationDefault = resolveInstructorCanUseDelegation(tenant.settings);
+  const instructorCourseTermsDefault = resolveInstructorCanManageCourseTerms(tenant.settings);
   const delegationWithoutAssignmentDefault =
     resolveInstructorCanManageDelegationWithoutCourseAssignment(tenant.settings);
   const delegationActiveParticipantsDefault =
@@ -93,6 +95,9 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   );
   const [instructorCanUseDelegation, setInstructorCanUseDelegation] = useState(
     instructorDelegationDefault,
+  );
+  const [instructorCanManageCourseTerms, setInstructorCanManageCourseTerms] = useState(
+    instructorCourseTermsDefault,
   );
   const [instructorCanManageDelegationWithoutCourseAssignment, setInstructorCanManageDelegationWithoutCourseAssignment] =
     useState(delegationWithoutAssignmentDefault);
@@ -125,6 +130,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setTermNotifyUntilEnabled(untilMinutes != null);
     setTermNotifyUntilMinutes(String(untilMinutes ?? cutoff));
     setInstructorCanUseDelegation(resolveInstructorCanUseDelegation(tenant.settings));
+    setInstructorCanManageCourseTerms(resolveInstructorCanManageCourseTerms(tenant.settings));
     setInstructorCanManageDelegationWithoutCourseAssignment(
       resolveInstructorCanManageDelegationWithoutCourseAssignment(tenant.settings),
     );
@@ -156,6 +162,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           ? Number.parseInt(termNotifyUntilMinutes, 10)
           : null,
       instructorCanUseDelegation,
+      instructorCanManageCourseTerms,
       instructorCanManageDelegationWithoutCourseAssignment,
       delegationCanManageActiveParticipants,
     };
@@ -262,13 +269,25 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           </summary>
           <p className="muted small" style={{ marginTop: 0 }}>
             Steuert, was die Rolle Kursleitung darf. Admin ist davon unberührt. Weitere Rechte
-            (Termine, Kursmitglieder, …) kommen schrittweise hinzu (#141).
+            (Kursmitglieder, …) kommen schrittweise hinzu (#141).
           </p>
           <div
             className="studio-settings-grid"
             role="group"
             aria-labelledby="studio-settings-instructor-rights-heading"
           >
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="An zugeordneten Kursen Termine absagen (Studio-Entfall). Standard an. Volle Serienplanung bleibt Admin.">
+                <input
+                  type="checkbox"
+                  checked={instructorCanManageCourseTerms}
+                  onChange={(e) => setInstructorCanManageCourseTerms(e.target.checked)}
+                  disabled={saving}
+                />{" "}
+                Kursterminverwaltung freischalten
+              </FieldLabelWithTooltip>
+            </label>
+
             <label className="dialog-field studio-settings-checkbox-field">
               <FieldLabelWithTooltip tooltip="Schaltet den Vertretungsmodus für Kursleitung frei. Standard an. Unabhängig von Gäste-/Teilnehmerlisten-Rechten.">
                 <input

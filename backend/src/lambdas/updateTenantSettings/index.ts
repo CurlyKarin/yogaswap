@@ -28,6 +28,7 @@ const BOOLEAN_SETTINGS_KEYS = [
   "notifyInstructorsOnStemChange",
   "notifyInstructorsOnTermParticipationChange",
   "instructorCanUseDelegation",
+  "instructorCanManageCourseTerms",
   "instructorCanManageDelegationWithoutCourseAssignment",
   "delegationCanManageActiveParticipants",
 ] as const;

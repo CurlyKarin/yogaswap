@@ -17,6 +17,7 @@ export type StudioSettingsPatch = {
   instructorTermNotifyFromHoursBeforeStart?: number | null;
   instructorTermNotifyUntilMinutesBeforeStart?: number | null;
   instructorCanUseDelegation?: boolean;
+  instructorCanManageCourseTerms?: boolean;
   instructorCanManageDelegationWithoutCourseAssignment?: boolean;
   delegationCanManageActiveParticipants?: boolean;
 };
@@ -95,6 +96,11 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
   if (Object.prototype.hasOwnProperty.call(patch, "instructorCanUseDelegation")) {
     if (typeof patch.instructorCanUseDelegation !== "boolean") {
       return "Fremdverwaltung für Kursleitung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanManageCourseTerms")) {
+    if (typeof patch.instructorCanManageCourseTerms !== "boolean") {
+      return "Kursterminverwaltung für Kursleitung muss ein Schalter (ja/nein) sein.";
     }
   }
   if (Object.prototype.hasOwnProperty.call(patch, "instructorCanManageDelegationWithoutCourseAssignment")) {

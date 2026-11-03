@@ -7,6 +7,7 @@ import {
   canSeeAllCourses,
   canSeeCourse,
   canShowParticipantCourseCard,
+  canManageCourseTerms,
   canUseDelegation,
   isActiveCourseForWeekView,
 } from "shared/permissions";
@@ -154,6 +155,50 @@ describe("permissions", () => {
 
     it("verbietet Participant die Fremdverwaltung", () => {
       expect(canUseDelegation(participantMembership, defaultSettings)).toBe(false);
+    });
+  });
+
+  describe("canManageCourseTerms", () => {
+    const courseWithInstructors: Pick<Course, "instructors"> = { instructors: ["instructor-user"] };
+
+    it("erlaubt Admins immer", () => {
+      expect(
+        canManageCourseTerms(adminMembership, { instructorCanManageCourseTerms: false }, {
+          course: courseWithInstructors,
+          isActorAssignedInstructor: false,
+        }),
+      ).toBe(true);
+    });
+
+    it("erlaubt zugeordnete Kursleitung per Default", () => {
+      expect(
+        canManageCourseTerms(instructorMembership, undefined, {
+          course: courseWithInstructors,
+          isActorAssignedInstructor: true,
+        }),
+      ).toBe(true);
+    });
+
+    it("blockiert ohne Kurszuordnung", () => {
+      expect(
+        canManageCourseTerms(instructorMembership, defaultSettings, {
+          course: courseWithInstructors,
+          isActorAssignedInstructor: false,
+        }),
+      ).toBe(false);
+    });
+
+    it("respektiert studioweiten Schalter aus", () => {
+      expect(
+        canManageCourseTerms(
+          instructorMembership,
+          { ...defaultSettings, instructorCanManageCourseTerms: false },
+          {
+            course: courseWithInstructors,
+            isActorAssignedInstructor: true,
+          },
+        ),
+      ).toBe(false);
     });
   });
 

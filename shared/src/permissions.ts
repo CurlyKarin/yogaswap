@@ -71,6 +71,27 @@ export function canUseDelegation(
 }
 
 /**
+ * Darf diese Membership Kurstermine verwalten (z. B. Termin absagen)? (#141)
+ * - Admin: immer ja
+ * - Instructor: Studio-Freigabe `instructorCanManageCourseTerms` (Default true)
+ *   und Zuordnung am Kurs (`course.instructors`)
+ * - Participant: nie
+ */
+export function canManageCourseTerms(
+  membership: UserTenantMembership,
+  settings: TenantSettings | undefined,
+  context: {
+    course: Pick<Course, "instructors">;
+    isActorAssignedInstructor: boolean;
+  },
+): boolean {
+  if (membership.role === "admin") return true;
+  if (membership.role !== "instructor") return false;
+  if (!(settings?.instructorCanManageCourseTerms ?? true)) return false;
+  return context.isActorAssignedInstructor;
+}
+
+/**
  * Darf ein Actor den Vertretungsmodus fuer einen Kurs starten?
  *
  * Regeln (MVP-kompatibel):

@@ -469,9 +469,46 @@ describe("CourseList", () => {
     ).toBe(true);
     expect(
       screen
-        .getAllByRole("button", { name: /termine bearbeiten kurs a/i })
+        .getAllByRole("button", { name: /termin(e bearbeiten| absagen) kurs a/i })
         .some((button) => button.hasAttribute("disabled")),
     ).toBe(true);
+  });
+
+  it("erlaubt zugeordnete Kursleitung Terminabsage (#141)", async () => {
+    const instructorMembership: UserTenantMembership = {
+      ...baseMembership,
+      userId: "Maya",
+      role: "instructor",
+    };
+    const instructorUser: User = {
+      ...baseUser,
+      nickname: "Maya",
+      role: "instructor",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        participants: [],
+        instructors: ["Maya"],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    renderList({
+      courses: mockCourses,
+      membership: instructorMembership,
+      currentUser: instructorUser,
+    });
+
+    expect(
+      await screen.findByRole("button", { name: /termin absagen kurs a/i }),
+    ).not.toHaveAttribute("disabled");
   });
 
   it("blendet Kursverwaltung im Vertretungsmodus aus und zeigt Kurse der vertretenen Person", async () => {

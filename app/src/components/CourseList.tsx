@@ -26,7 +26,10 @@ import {
   PLANNED_END_INVALID_MESSAGE,
   ROLLING_INACTIVE_USE_PLANNED_END_MESSAGE,
 } from "shared/courseEditPolicy";
-import { resolveRollingPlanningHorizonWeeks } from "shared/tenantSettings";
+import {
+  resolveInstructorCanManageCourseTerms,
+  resolveRollingPlanningHorizonWeeks,
+} from "shared/tenantSettings";
 import { resolveMaxCapacity, validateOverbookLimit } from "shared/courseCapacity";
 import { getCourseDates } from "../lib/dates";
 import { courseDatesForMembersDialog } from "../lib/courseMembersDialogModel";
@@ -39,7 +42,11 @@ import {
 import type { ParticipantRosterEntry } from "../api/participants";
 import { getParticipants } from "../api/participants";
 import type { InstructorCandidate } from "./CourseInstructorsField";
-import { canSeeCourse, canShowParticipantCourseCard } from "shared/permissions";
+import {
+  canManageCourseTerms,
+  canSeeCourse,
+  canShowParticipantCourseCard,
+} from "shared/permissions";
 import { isActorOnCourseStem, type EnrollmentChange } from "shared/courseEnrollment";
 import {
   looksLikeAutomaticallyInactive,
@@ -285,6 +292,17 @@ export default function CourseList({
   const participantNameByRef = useMemo(
     () => buildParticipantNameByRefMap(participantRoster),
     [participantRoster],
+  );
+
+  const canCancelTermsForCourse = useCallback(
+    (course: Course) =>
+      canManageCourseTerms(membershipForPermissions, tenant?.settings, {
+        course,
+        isActorAssignedInstructor: (course.instructors ?? []).some(
+          (entry) => entry.toLowerCase() === actor.nickname.toLowerCase(),
+        ),
+      }),
+    [membershipForPermissions, tenant?.settings, actor.nickname],
   );
 
   const refreshAfterMutation = useCallback(async () => {
@@ -845,18 +863,24 @@ export default function CourseList({
                       <button
                         type="button"
                         title={
-                          !canManageCourses
-                            ? "Nur Admin kann Termine bearbeiten"
+                          !(canManageCourses || canCancelTermsForCourse(course))
+                            ? resolveInstructorCanManageCourseTerms(tenant?.settings)
+                              ? "Termine nur an eigenen Kursen (Kursleitung zuordnen)"
+                              : "Kursterminverwaltung ist studioweit aus"
                             : (course.status ?? "active") === "inactive"
                               ? "Termine ansehen (nur lesbar — für Änderungen Status auf In Planung setzen)"
-                              : "Termine bearbeiten"
+                              : canManageCourses
+                                ? "Termine bearbeiten"
+                                : "Termin absagen"
                         }
                         aria-label={
                           (course.status ?? "active") === "inactive"
                             ? `Termine ansehen ${course.name}`
-                            : `Termine bearbeiten ${course.name}`
+                            : canManageCourses
+                              ? `Termine bearbeiten ${course.name}`
+                              : `Termin absagen ${course.name}`
                         }
-                        disabled={!canManageCourses || saving}
+                        disabled={!(canManageCourses || canCancelTermsForCourse(course)) || saving}
                         onClick={() => openDatesModal(course.id)}
                       >
                         <CalendarDays size={14} aria-hidden="true" />
@@ -1009,6 +1033,9 @@ export default function CourseList({
         enrollments={enrollments}
         swaps={swaps}
         canManageCourses={canManageCourses}
+        canCancelCourseTerms={
+          !!datesTargetCourse && canCancelTermsForCourse(datesTargetCourse)
+        }
         tenantSettings={tenant?.settings}
         onClose={closeDatesModal}
         onSaved={refreshAfterMutation}
