@@ -260,7 +260,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           </summary>
           <p className="muted small" style={{ marginTop: 0 }}>
             Steuert, was die Rolle Kursleitung darf. Admin ist davon unberührt. Weitere Rechte
-            (Kursmitglieder, …) kommen schrittweise hinzu (#141).
+            und die Anbindung an Tauschgruppen (#300) kommen schrittweise (#141).
           </p>
           <div
             className="studio-settings-grid"
