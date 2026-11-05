@@ -158,7 +158,10 @@ describe("updateCourse Lambda", () => {
   });
 
   test("returns 403 for non-admin", async () => {
-    mockSend.mockResolvedValueOnce({ Item: { role: { S: "instructor" } } });
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "instructor" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({ Item: baseCourseItem("active") });
     const result = await handler(makeEvent({ name: "Neu" }));
     expect(result.statusCode).toBe(403);
     expect(GetItemCommand).toHaveBeenCalled();
@@ -183,9 +186,29 @@ describe("updateCourse Lambda", () => {
   });
 
   test("instructor cannot patch fields other than overbookLimit", async () => {
-    mockSend.mockResolvedValueOnce({ Item: { role: { S: "instructor" } } });
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "instructor" } } })
+      .mockResolvedValueOnce(tenantSettingsLoadResponse)
+      .mockResolvedValueOnce({ Item: baseCourseItem("active") });
     const result = await handler(makeEvent({ overbookLimit: 1, name: "Neu" }));
     expect(result.statusCode).toBe(403);
+  });
+
+  test("unrestricted instructor can patch course name (#141)", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { role: { S: "instructor" } } })
+      .mockResolvedValueOnce({
+        Item: {
+          settings: {
+            M: { instructorHasCourseManagementRestrictions: { BOOL: false } },
+          },
+        },
+      })
+      .mockResolvedValueOnce({ Item: baseCourseItem("active") });
+
+    const result = await handler(makeEvent({ name: "Neu" }));
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).name).toBe("Neu");
   });
 
   test("rejects participants above maxCapacity", async () => {

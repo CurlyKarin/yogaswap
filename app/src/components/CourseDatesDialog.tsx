@@ -43,6 +43,8 @@ type CourseDatesDialogProps = {
   canManageCourses: boolean;
   /** Zugeordnete Kursleitung: Termin absagen, ohne Serienplanung (#141). */
   canCancelCourseTerms?: boolean;
+  /** Zugeordnete Kursleitung: Terminplanung an durchlaufenden Kursen (#141). */
+  canPlanRollingCourseTerms?: boolean;
   tenantSettings?: TenantSettings;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
@@ -192,6 +194,7 @@ export default function CourseDatesDialog({
   swaps,
   canManageCourses,
   canCancelCourseTerms = false,
+  canPlanRollingCourseTerms = false,
   tenantSettings,
   onClose,
   onSaved,
@@ -271,8 +274,12 @@ export default function CourseDatesDialog({
     isValidIsoDateOnly(datesState.seriesEndDate) &&
     compareIsoDate(datesState.seriesStartDate, datesState.seriesEndDate) <= 0;
   const isInactiveScheduleLocked = course?.status === "inactive";
-  const canEditSchedule = canManageCourses && !isInactiveScheduleLocked;
-  const cancelOnly = canCancelCourseTerms && !canManageCourses;
+  const canEditRollingSchedule =
+    canPlanRollingCourseTerms && datesState?.planningMode === "rolling_continuous";
+  const canEditSchedule =
+    (canManageCourses || canEditRollingSchedule) && !isInactiveScheduleLocked;
+  const cancelOnly =
+    canCancelCourseTerms && !canManageCourses && !canEditRollingSchedule;
   const canUseCancellationActions = canManageCourses || canCancelCourseTerms;
   const isActiveCancellationMode = course?.status === "active" && canUseCancellationActions;
   const isRollingActiveMode = isActiveCancellationMode && datesState?.planningMode === "rolling_continuous";

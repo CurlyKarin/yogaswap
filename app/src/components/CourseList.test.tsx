@@ -507,8 +507,64 @@ describe("CourseList", () => {
     });
 
     expect(
-      await screen.findByRole("button", { name: /termin absagen kurs a/i }),
+      await screen.findByRole("button", {
+        name: /termine? (bearbeiten|absagen) kurs a/i,
+      }),
     ).not.toHaveAttribute("disabled");
+  });
+
+  it("gibt Kursleitung ohne Einschränkungen volle Kursverwaltung (#141)", async () => {
+    const instructorMembership: UserTenantMembership = {
+      ...baseMembership,
+      userId: "Maya",
+      role: "instructor",
+    };
+    const instructorUser: User = {
+      ...baseUser,
+      nickname: "Maya",
+      role: "instructor",
+    };
+    const mockCourses: Course[] = [
+      {
+        tenantId: "default-tenant",
+        id: 1,
+        name: "Kurs A",
+        weekday: "Mon",
+        time: "10:00",
+        capacity: 10,
+        status: "active",
+        participants: [],
+        instructors: ["Maya"],
+        dates: ["2099-06-16"],
+      },
+    ];
+
+    renderList({
+      courses: mockCourses,
+      membership: instructorMembership,
+      currentUser: instructorUser,
+      tenant: {
+        ...baseTenant,
+        settings: { instructorHasCourseManagementRestrictions: false },
+      },
+    });
+
+    expect(
+      screen
+        .getAllByRole("button", { name: /kurs anlegen/i })
+        .some((button) => !button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      await screen.findByRole("button", { name: /termine bearbeiten kurs a/i }),
+    ).not.toHaveAttribute("disabled");
+    expect(
+      screen.getByRole("button", { name: /kurs bearbeiten kurs a/i }),
+    ).not.toHaveAttribute("disabled");
+    expect(
+      screen
+        .getAllByRole("button", { name: /kurs löschen kurs a/i })
+        .some((button) => !button.hasAttribute("disabled")),
+    ).toBe(true);
   });
 
   it("blendet Kursverwaltung im Vertretungsmodus aus und zeigt Kurse der vertretenen Person", async () => {

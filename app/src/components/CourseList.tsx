@@ -28,6 +28,8 @@ import {
 } from "shared/courseEditPolicy";
 import {
   resolveInstructorCanManageCourseTerms,
+  resolveInstructorCanPlanRollingCourseTerms,
+  resolveInstructorHasCourseManagementRestrictions,
   resolveRollingPlanningHorizonWeeks,
 } from "shared/tenantSettings";
 import { resolveMaxCapacity, validateOverbookLimit } from "shared/courseCapacity";
@@ -280,8 +282,12 @@ export default function CourseList({
   const resolvedRole = effectiveMembership?.role ?? currentUser.role;
   const isAdmin = resolvedRole === "admin";
   const isInstructor = resolvedRole === "instructor";
+  const hasCourseMgmtRestrictions = resolveInstructorHasCourseManagementRestrictions(
+    tenant?.settings,
+  );
   const canSeeCourseManagement = isAdmin || isInstructor;
-  const canManageCourses = isAdmin;
+  // Ohne Einschränkungen: Kursleitung verwaltet Kurse voll (wie Admin).
+  const canManageCourses = isAdmin || (isInstructor && !hasCourseMgmtRestrictions);
   const canConfigureOverbooking = isAdmin || isInstructor;
   const editOverbookingOnly = canConfigureOverbooking && !canManageCourses;
 
@@ -294,15 +300,47 @@ export default function CourseList({
     [participantRoster],
   );
 
-  const canCancelTermsForCourse = useCallback(
+  const isAssignedInstructor = useCallback(
     (course: Course) =>
-      canManageCourseTerms(membershipForPermissions, tenant?.settings, {
+      (course.instructors ?? []).some(
+        (entry) => entry.toLowerCase() === actor.nickname.toLowerCase(),
+      ),
+    [actor.nickname],
+  );
+
+  const canCancelTermsForCourse = useCallback(
+    (course: Course) => {
+      if (canManageCourses) return true;
+      if (!hasCourseMgmtRestrictions) return false;
+      if (!resolveInstructorCanManageCourseTerms(tenant?.settings)) return false;
+      return canManageCourseTerms(membershipForPermissions, tenant?.settings, {
         course,
-        isActorAssignedInstructor: (course.instructors ?? []).some(
-          (entry) => entry.toLowerCase() === actor.nickname.toLowerCase(),
-        ),
-      }),
-    [membershipForPermissions, tenant?.settings, actor.nickname],
+        isActorAssignedInstructor: isAssignedInstructor(course),
+      });
+    },
+    [
+      canManageCourses,
+      hasCourseMgmtRestrictions,
+      membershipForPermissions,
+      tenant?.settings,
+      isAssignedInstructor,
+    ],
+  );
+
+  const canPlanRollingTermsForCourse = useCallback(
+    (course: Course) => {
+      if (canManageCourses) return true;
+      if (!hasCourseMgmtRestrictions) return false;
+      if (!resolveInstructorCanPlanRollingCourseTerms(tenant?.settings)) return false;
+      return isInstructor && isAssignedInstructor(course);
+    },
+    [
+      canManageCourses,
+      hasCourseMgmtRestrictions,
+      tenant?.settings,
+      isInstructor,
+      isAssignedInstructor,
+    ],
   );
 
   const refreshAfterMutation = useCallback(async () => {
@@ -863,24 +901,35 @@ export default function CourseList({
                       <button
                         type="button"
                         title={
-                          !(canManageCourses || canCancelTermsForCourse(course))
-                            ? resolveInstructorCanManageCourseTerms(tenant?.settings)
+                          !(
+                            canManageCourses ||
+                            canCancelTermsForCourse(course) ||
+                            canPlanRollingTermsForCourse(course)
+                          )
+                            ? resolveInstructorCanManageCourseTerms(tenant?.settings) ||
+                              resolveInstructorCanPlanRollingCourseTerms(tenant?.settings)
                               ? "Termine nur an eigenen Kursen (Kursleitung zuordnen)"
                               : "Kursterminverwaltung ist studioweit aus"
                             : (course.status ?? "active") === "inactive"
                               ? "Termine ansehen (nur lesbar — für Änderungen Status auf In Planung setzen)"
-                              : canManageCourses
+                              : canManageCourses || canPlanRollingTermsForCourse(course)
                                 ? "Termine bearbeiten"
                                 : "Termin absagen"
                         }
                         aria-label={
                           (course.status ?? "active") === "inactive"
                             ? `Termine ansehen ${course.name}`
-                            : canManageCourses
+                            : canManageCourses || canPlanRollingTermsForCourse(course)
                               ? `Termine bearbeiten ${course.name}`
                               : `Termin absagen ${course.name}`
                         }
-                        disabled={!(canManageCourses || canCancelTermsForCourse(course)) || saving}
+                        disabled={
+                          !(
+                            canManageCourses ||
+                            canCancelTermsForCourse(course) ||
+                            canPlanRollingTermsForCourse(course)
+                          ) || saving
+                        }
                         onClick={() => openDatesModal(course.id)}
                       >
                         <CalendarDays size={14} aria-hidden="true" />
@@ -1035,6 +1084,9 @@ export default function CourseList({
         canManageCourses={canManageCourses}
         canCancelCourseTerms={
           !!datesTargetCourse && canCancelTermsForCourse(datesTargetCourse)
+        }
+        canPlanRollingCourseTerms={
+          !!datesTargetCourse && canPlanRollingTermsForCourse(datesTargetCourse)
         }
         tenantSettings={tenant?.settings}
         onClose={closeDatesModal}

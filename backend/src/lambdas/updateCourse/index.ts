@@ -73,10 +73,23 @@ import {
 } from "../shared/overrideReactivation";
 
 const INSTRUCTOR_OVERBOOK_ONLY_KEYS = new Set(["overbookLimit"]);
+/** Bei eingeschränkter Kursverwaltung: Terminplanung an durchlaufenden Kursen (#141). */
+const INSTRUCTOR_ROLLING_PLAN_KEYS = new Set([
+  "excludedDates",
+  "includedDates",
+  "plannedEndDate",
+  "visibleFrom",
+  "visibleUntil",
+]);
 
 function isInstructorOverbookOnlyPatch(body: UpdateCourseBody): boolean {
   const keys = Object.keys(body).filter((key) => Object.prototype.hasOwnProperty.call(body, key));
   return keys.length > 0 && keys.every((key) => INSTRUCTOR_OVERBOOK_ONLY_KEYS.has(key));
+}
+
+function isInstructorRollingPlanPatch(body: UpdateCourseBody): boolean {
+  const keys = Object.keys(body).filter((key) => Object.prototype.hasOwnProperty.call(body, key));
+  return keys.length > 0 && keys.every((key) => INSTRUCTOR_ROLLING_PLAN_KEYS.has(key));
 }
 
 const client = dynamoClient;
@@ -458,10 +471,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     );
     const actorRole = membershipResp.Item?.role?.S;
-    const instructorOverbookOnly = actorRole === "instructor" && isInstructorOverbookOnlyPatch(body);
-    if (actorRole !== "admin" && !instructorOverbookOnly) {
-      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
-    }
 
     let rollingPlanningHorizonWeeks = 5;
     let tenantSettings;
@@ -485,6 +494,32 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const item = courseResp.Item;
     if (!item) {
       return { statusCode: 404, body: JSON.stringify({ error: "Course not found" }) };
+    }
+
+    const existingInstructors =
+      item.instructors?.L?.map((entry) => entry.S ?? "").filter((entry) => entry.length > 0) ?? [];
+    const isAssignedInstructor =
+      actorRole === "instructor" &&
+      existingInstructors.some((entry) => entry.toLowerCase() === actorUserId.toLowerCase());
+    const hasCourseMgmtRestrictions =
+      tenantSettings?.instructorHasCourseManagementRestrictions !== false;
+    const instructorOverbookOnly = actorRole === "instructor" && isInstructorOverbookOnlyPatch(body);
+    const instructorRollingPlanPatch =
+      actorRole === "instructor" &&
+      hasCourseMgmtRestrictions &&
+      (tenantSettings?.instructorCanPlanRollingCourseTerms ?? true) &&
+      isAssignedInstructor &&
+      isInstructorRollingPlanPatch(body) &&
+      (item.planningMode?.S ?? "bounded_series") === "rolling_continuous";
+    const instructorUnrestricted = actorRole === "instructor" && !hasCourseMgmtRestrictions;
+
+    if (
+      actorRole !== "admin" &&
+      !instructorOverbookOnly &&
+      !instructorRollingPlanPatch &&
+      !instructorUnrestricted
+    ) {
+      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
 
     // Canonical nickname casing from profiles (ines → Ines) for enrollment SK / instructor refs.

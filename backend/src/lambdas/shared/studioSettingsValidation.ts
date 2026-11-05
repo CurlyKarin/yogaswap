@@ -17,9 +17,12 @@ export type StudioSettingsPatch = {
   instructorTermNotifyFromHoursBeforeStart?: number | null;
   instructorTermNotifyUntilMinutesBeforeStart?: number | null;
   instructorCanUseDelegation?: boolean;
+  instructorHasCourseManagementRestrictions?: boolean;
   instructorCanManageCourseTerms?: boolean;
+  instructorCanPlanRollingCourseTerms?: boolean;
   instructorCanManageDelegationWithoutCourseAssignment?: boolean;
   delegationCanManageActiveParticipants?: boolean;
+  instructorCanDelegateStudioWide?: boolean;
 };
 
 const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -98,9 +101,19 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
       return "Fremdverwaltung für Kursleitung muss ein Schalter (ja/nein) sein.";
     }
   }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorHasCourseManagementRestrictions")) {
+    if (typeof patch.instructorHasCourseManagementRestrictions !== "boolean") {
+      return "Einschränkungen bei der Kursverwaltung muss ein Schalter (ja/nein) sein.";
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(patch, "instructorCanManageCourseTerms")) {
     if (typeof patch.instructorCanManageCourseTerms !== "boolean") {
-      return "Kursterminverwaltung für Kursleitung muss ein Schalter (ja/nein) sein.";
+      return "Kurstermine absagen für Kursleitung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanPlanRollingCourseTerms")) {
+    if (typeof patch.instructorCanPlanRollingCourseTerms !== "boolean") {
+      return "Kurstermine planen für Kursleitung muss ein Schalter (ja/nein) sein.";
     }
   }
   if (Object.prototype.hasOwnProperty.call(patch, "instructorCanManageDelegationWithoutCourseAssignment")) {
@@ -111,6 +124,11 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
   if (Object.prototype.hasOwnProperty.call(patch, "delegationCanManageActiveParticipants")) {
     if (typeof patch.delegationCanManageActiveParticipants !== "boolean") {
       return "Vertretung aktiver Mitglieder muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanDelegateStudioWide")) {
+    if (typeof patch.instructorCanDelegateStudioWide !== "boolean") {
+      return "Studio-weite Fremdverwaltung muss ein Schalter (ja/nein) sein.";
     }
   }
   if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyFromHoursBeforeStart")) {

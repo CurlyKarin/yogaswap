@@ -204,16 +204,26 @@ export interface TenantSettings {
    */
   instructorCanUseDelegation?: boolean;
   /**
-   * Dürfen Instructor:innen Kurstermine verwalten (z. B. Termin absagen) an
-   * zugeordneten Kursen (`course.instructors`)? (#141)
+   * Hat Kursleitung Einschränkungen bei der Kursverwaltung? (#141)
+   * Default für undefined: true (eingeschränkt). false = volle Kursverwaltung wie Admin.
+   */
+  instructorHasCourseManagementRestrictions?: boolean;
+  /**
+   * Dürfen Instructor:innen Kurstermine absagen an zugeordneten Kursen? (#141)
+   * Nur relevant, wenn instructorHasCourseManagementRestrictions nicht false ist.
    * Default für undefined: true.
    */
   instructorCanManageCourseTerms?: boolean;
   /**
+   * Dürfen Instructor:innen an zugeordneten durchlaufenden Kursen Termine planen
+   * (z. B. Ausschlüsse außerhalb der Sperre)? (#141)
+   * Nur relevant bei Einschränkungen. Default für undefined: true.
+   */
+  instructorCanPlanRollingCourseTerms?: boolean;
+  /**
    * Legacy (#141): Delegation in Kursen ohne `instructors`-Liste.
    * Nicht mehr in Studio-UI; Flag bleibt für API/Permission-Helfer.
-   * Nachfolger-Konzept: Filter über Tauschgruppen (#300 / #429), ggf. Regel
-   * für Kurse/Mitglieder ohne Gruppe — nicht dieses Flag umdeuten.
+   * Nachfolger-Konzept: Filter über Tauschgruppen (#300 / #429).
    *
    * Default (wenn undefined): true.
    */
@@ -222,9 +232,13 @@ export interface TenantSettings {
    * Duerfen registrierte/aktive Teilnehmer im Vertretungsmodus verwaltet werden?
    *
    * Default (wenn undefined): true (MVP).
-   * Geplante Nachschaerfung nach Rollout via Tenant-Policy.
    */
   delegationCanManageActiveParticipants?: boolean;
+  /**
+   * Darf Kursleitung Teilnehmer über das ganze Studio in Fremdverwaltung vertreten?
+   * Default für undefined: false. Erst mit mehreren Tauschgruppen wirksam (#300).
+   */
+  instructorCanDelegateStudioWide?: boolean;
   /**
    * Kalendertage nach dem letzten sichtbaren Kursende: inaktive Kurse bleiben fuer
    * Teilnehmer:innen in Listen sichtbar (Swap-/Nachlauf-Fenster). Vergleich erfolgt

@@ -54,7 +54,7 @@ function getNotificationsDetails(): HTMLDetailsElement {
 }
 
 function getInstructorRightsDetails(): HTMLDetailsElement {
-  return getSubdetails(/rechte kursleitung/i);
+  return getSubdetails(/rolle kursleitung/i);
 }
 
 function expandStudioSettings() {
@@ -102,7 +102,7 @@ describe("StudioSettingsSection", () => {
     expect(getRollingDetails().open).toBe(false);
     expect(
       screen.getByRole("checkbox", {
-        name: /fremdverwaltung \(vertretung\) freischalten/i,
+        name: /hat einschränkungen bei der kursverwaltung/i,
       }),
     ).not.toBeVisible();
     expect(
@@ -155,9 +155,12 @@ describe("StudioSettingsSection", () => {
           notifyInstructorsOnTermParticipationChange: false,
           instructorTermNotifyFromHoursBeforeStart: null,
           instructorTermNotifyUntilMinutesBeforeStart: null,
-          instructorCanUseDelegation: true,
+          instructorHasCourseManagementRestrictions: true,
           instructorCanManageCourseTerms: true,
+          instructorCanPlanRollingCourseTerms: true,
+          instructorCanUseDelegation: true,
           delegationCanManageActiveParticipants: true,
+          instructorCanDelegateStudioWide: false,
         }),
       );
     });
@@ -232,14 +235,14 @@ describe("StudioSettingsSection", () => {
     expect(screen.getByRole("textbox", { name: /studioname/i })).toBeVisible();
   });
 
-  it("gruppiert Felder in Allgemein, Rechte Kursleitung, E-Mail und Durchlaufende Kurse", () => {
+  it("gruppiert Felder in Allgemein, Rolle Kursleitung, E-Mail und Durchlaufende Kurse", () => {
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
     expandInstructorRights();
     expandNotifications();
     expandRollingCourses();
 
     expect(screen.getByRole("heading", { level: 4, name: /allgemein/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 4, name: /rechte kursleitung/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: /rolle kursleitung/i })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 4, name: /e-mail-benachrichtigungen/i }),
     ).toBeInTheDocument();
@@ -247,7 +250,7 @@ describe("StudioSettingsSection", () => {
       screen.getByRole("heading", { level: 4, name: /durchlaufende kurse/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /allgemein/i })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: /rechte kursleitung/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /rolle kursleitung/i })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /e-mail-benachrichtigungen/i })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /durchlaufende kurse/i })).toBeInTheDocument();
 
@@ -260,15 +263,25 @@ describe("StudioSettingsSection", () => {
       }),
     );
 
-    const instructorRightsGroup = screen.getByRole("group", { name: /rechte kursleitung/i });
+    const instructorRightsGroup = screen.getByRole("group", { name: /rolle kursleitung/i });
     expect(instructorRightsGroup).toContainElement(
       within(instructorRightsGroup).getByRole("checkbox", {
-        name: /kursterminverwaltung freischalten/i,
+        name: /hat einschränkungen bei der kursverwaltung/i,
       }),
     );
     expect(instructorRightsGroup).toContainElement(
       within(instructorRightsGroup).getByRole("checkbox", {
-        name: /fremdverwaltung \(vertretung\) freischalten/i,
+        name: /darf kurstermine absagen/i,
+      }),
+    );
+    expect(instructorRightsGroup).toContainElement(
+      within(instructorRightsGroup).getByRole("checkbox", {
+        name: /darf kurstermine planen \(durchlaufende kurse\)/i,
+      }),
+    );
+    expect(instructorRightsGroup).toContainElement(
+      within(instructorRightsGroup).getByRole("checkbox", {
+        name: /darf für teilnehmer in fremdverwaltung \(vertretung\) kurstermine absagen oder tauschen/i,
       }),
     );
     expect(
@@ -276,7 +289,12 @@ describe("StudioSettingsSection", () => {
     ).not.toBeInTheDocument();
     expect(instructorRightsGroup).toContainElement(
       within(instructorRightsGroup).getByRole("checkbox", {
-        name: /in vertretung auch aktive mitglieder verwalten/i,
+        name: /darf aktive\/registrierte teilnehmer in fremdverwaltung vertreten/i,
+      }),
+    );
+    expect(instructorRightsGroup).toContainElement(
+      within(instructorRightsGroup).getByRole("checkbox", {
+        name: /darf teilnehmer über das ganze studio in fremdverwaltung vertreten/i,
       }),
     );
 
@@ -297,35 +315,76 @@ describe("StudioSettingsSection", () => {
     expect(rollingGroup).not.toContainElement(getCutoffInput());
   });
 
-  it("sendet Fremdverwaltung-Flags im Patch und deaktiviert abhängige Checkboxen (#141)", async () => {
+  it("sendet hierarchische Kursleitungs-Flags und blendet abhängige Checkboxen (#141)", async () => {
     mockedUpdateTenantSettings.mockResolvedValue(
-      makeTenant({ instructorCanUseDelegation: false }),
+      makeTenant({
+        instructorHasCourseManagementRestrictions: false,
+        instructorCanUseDelegation: false,
+      }),
     );
     render(<StudioSettingsSection tenant={makeTenant()} onSaved={vi.fn()} />);
     expandInstructorRights();
 
+    const hasRestrictions = screen.getByRole("checkbox", {
+      name: /hat einschränkungen bei der kursverwaltung/i,
+    });
+    const cancelTerms = screen.getByRole("checkbox", {
+      name: /darf kurstermine absagen/i,
+    });
+    const planRolling = screen.getByRole("checkbox", {
+      name: /darf kurstermine planen \(durchlaufende kurse\)/i,
+    });
     const useDelegation = screen.getByRole("checkbox", {
-      name: /fremdverwaltung \(vertretung\) freischalten/i,
+      name: /darf für teilnehmer in fremdverwaltung \(vertretung\) kurstermine absagen oder tauschen/i,
     });
     const activeParticipants = screen.getByRole("checkbox", {
-      name: /in vertretung auch aktive mitglieder verwalten/i,
+      name: /darf aktive\/registrierte teilnehmer in fremdverwaltung vertreten/i,
+    });
+    const studioWide = screen.getByRole("checkbox", {
+      name: /darf teilnehmer über das ganze studio in fremdverwaltung vertreten/i,
     });
 
+    expect(hasRestrictions).toBeChecked();
+    expect(cancelTerms).toBeChecked();
+    expect(planRolling).toBeChecked();
     expect(useDelegation).toBeChecked();
     expect(activeParticipants).toBeChecked();
+    expect(studioWide).not.toBeChecked();
     expect(activeParticipants).not.toBeDisabled();
+
+    fireEvent.click(hasRestrictions);
+    expect(hasRestrictions).not.toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: /darf kurstermine absagen/i })).toBeNull();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /darf kurstermine planen \(durchlaufende kurse\)/i,
+      }),
+    ).toBeNull();
 
     fireEvent.click(useDelegation);
     expect(useDelegation).not.toBeChecked();
-    expect(activeParticipants).toBeDisabled();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /darf aktive\/registrierte teilnehmer in fremdverwaltung vertreten/i,
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /darf teilnehmer über das ganze studio in fremdverwaltung vertreten/i,
+      }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /studio-einstellungen speichern/i }));
 
     await waitFor(() => {
       expect(mockedUpdateTenantSettings).toHaveBeenCalledWith(
         expect.objectContaining({
+          instructorHasCourseManagementRestrictions: false,
+          instructorCanManageCourseTerms: true,
+          instructorCanPlanRollingCourseTerms: true,
           instructorCanUseDelegation: false,
           delegationCanManageActiveParticipants: true,
+          instructorCanDelegateStudioWide: false,
         }),
       );
       expect(mockedUpdateTenantSettings.mock.calls[0][0]).not.toHaveProperty(
