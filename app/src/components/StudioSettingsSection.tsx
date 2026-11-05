@@ -6,6 +6,12 @@ import {
   resolveInactiveGraceDays,
   resolveInstructorTermNotifyFromHoursBeforeStart,
   resolveInstructorTermNotifyUntilMinutesBeforeStart,
+  resolveDelegationCanManageActiveParticipants,
+  resolveInstructorCanDelegateStudioWide,
+  resolveInstructorCanManageCourseTerms,
+  resolveInstructorCanPlanRollingCourseTerms,
+  resolveInstructorCanUseDelegation,
+  resolveInstructorHasCourseManagementRestrictions,
   resolveNotifyInstructorsOnStemChange,
   resolveNotifyInstructorsOnTermParticipationChange,
   resolveRollingPlanningHorizonWeeks,
@@ -63,6 +69,14 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const termNotifyDefault = resolveNotifyInstructorsOnTermParticipationChange(tenant.settings);
   const fromHoursDefault = resolveInstructorTermNotifyFromHoursBeforeStart(tenant.settings);
   const untilMinutesDefault = resolveInstructorTermNotifyUntilMinutesBeforeStart(tenant.settings);
+  const hasCourseMgmtRestrictionsDefault =
+    resolveInstructorHasCourseManagementRestrictions(tenant.settings);
+  const instructorCourseTermsDefault = resolveInstructorCanManageCourseTerms(tenant.settings);
+  const instructorPlanRollingDefault = resolveInstructorCanPlanRollingCourseTerms(tenant.settings);
+  const instructorDelegationDefault = resolveInstructorCanUseDelegation(tenant.settings);
+  const delegationActiveParticipantsDefault =
+    resolveDelegationCanManageActiveParticipants(tenant.settings);
+  const delegateStudioWideDefault = resolveInstructorCanDelegateStudioWide(tenant.settings);
 
   const [name, setName] = useState(tenant.name);
   const [contactEmail, setContactEmail] = useState(tenant.settings?.contactEmail ?? "");
@@ -82,6 +96,23 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const [termNotifyUntilEnabled, setTermNotifyUntilEnabled] = useState(untilMinutesDefault != null);
   const [termNotifyUntilMinutes, setTermNotifyUntilMinutes] = useState(
     String(untilMinutesDefault ?? cutoffDefault),
+  );
+  const [instructorHasCourseManagementRestrictions, setInstructorHasCourseManagementRestrictions] =
+    useState(hasCourseMgmtRestrictionsDefault);
+  const [instructorCanManageCourseTerms, setInstructorCanManageCourseTerms] = useState(
+    instructorCourseTermsDefault,
+  );
+  const [instructorCanPlanRollingCourseTerms, setInstructorCanPlanRollingCourseTerms] = useState(
+    instructorPlanRollingDefault,
+  );
+  const [instructorCanUseDelegation, setInstructorCanUseDelegation] = useState(
+    instructorDelegationDefault,
+  );
+  const [delegationCanManageActiveParticipants, setDelegationCanManageActiveParticipants] = useState(
+    delegationActiveParticipantsDefault,
+  );
+  const [instructorCanDelegateStudioWide, setInstructorCanDelegateStudioWide] = useState(
+    delegateStudioWideDefault,
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +139,18 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setTermNotifyFromHours(String(fromHours ?? DEFAULT_INSTRUCTOR_TERM_NOTIFY_FROM_HOURS));
     setTermNotifyUntilEnabled(untilMinutes != null);
     setTermNotifyUntilMinutes(String(untilMinutes ?? cutoff));
+    setInstructorHasCourseManagementRestrictions(
+      resolveInstructorHasCourseManagementRestrictions(tenant.settings),
+    );
+    setInstructorCanManageCourseTerms(resolveInstructorCanManageCourseTerms(tenant.settings));
+    setInstructorCanPlanRollingCourseTerms(
+      resolveInstructorCanPlanRollingCourseTerms(tenant.settings),
+    );
+    setInstructorCanUseDelegation(resolveInstructorCanUseDelegation(tenant.settings));
+    setDelegationCanManageActiveParticipants(
+      resolveDelegationCanManageActiveParticipants(tenant.settings),
+    );
+    setInstructorCanDelegateStudioWide(resolveInstructorCanDelegateStudioWide(tenant.settings));
     setError(null);
     setSuccess(null);
   }, [tenant]);
@@ -132,6 +175,12 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
         notifyInstructorsOnTermParticipationChange && termNotifyUntilEnabled
           ? Number.parseInt(termNotifyUntilMinutes, 10)
           : null,
+      instructorHasCourseManagementRestrictions,
+      instructorCanManageCourseTerms,
+      instructorCanPlanRollingCourseTerms,
+      instructorCanUseDelegation,
+      delegationCanManageActiveParticipants,
+      instructorCanDelegateStudioWide,
     };
     const validationError = validateStudioSettingsPatch(patch);
     if (validationError) {
@@ -225,6 +274,105 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
             />
           </label>
         </div>
+
+        <hr className="studio-settings-divider" />
+
+        <details className="studio-settings-subdetails">
+          <summary className="studio-settings-summary studio-settings-summary--sub">
+            <h4 id="studio-settings-instructor-rights-heading" className="studio-settings-summary-title">
+              Rolle Kursleitung
+            </h4>
+          </summary>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Steuert, was die Rolle Kursleitung darf. Admin ist davon unberührt. Die Anbindung an
+            Tauschgruppen folgt mit #300.
+          </p>
+          <div
+            className="studio-settings-grid"
+            role="group"
+            aria-labelledby="studio-settings-instructor-rights-heading"
+          >
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="Wenn an: Kursleitung darf nur die freigeschalteten Teilrechte. Wenn aus: Kursleitung kann Kurse komplett mit allen Optionen planen. Standard an.">
+                <input
+                  type="checkbox"
+                  checked={instructorHasCourseManagementRestrictions}
+                  onChange={(e) => setInstructorHasCourseManagementRestrictions(e.target.checked)}
+                  disabled={saving}
+                />{" "}
+                Hat Einschränkungen bei der Kursverwaltung
+              </FieldLabelWithTooltip>
+            </label>
+
+            {instructorHasCourseManagementRestrictions && (
+              <div className="studio-settings-notify-refinements">
+                <label className="dialog-field studio-settings-checkbox-field">
+                  <FieldLabelWithTooltip tooltip="An zugeordneten Kursen Termine absagen (Studio-Entfall). Standard an.">
+                    <input
+                      type="checkbox"
+                      checked={instructorCanManageCourseTerms}
+                      onChange={(e) => setInstructorCanManageCourseTerms(e.target.checked)}
+                      disabled={saving}
+                    />{" "}
+                    Darf Kurstermine absagen
+                  </FieldLabelWithTooltip>
+                </label>
+
+                <label className="dialog-field studio-settings-checkbox-field">
+                  <FieldLabelWithTooltip tooltip="An zugeordneten durchlaufenden Kursen Termine planen (z. B. Ausschlüsse außerhalb der Sperre). Standard an. Fürs Pilotstudio meist nicht relevant.">
+                    <input
+                      type="checkbox"
+                      checked={instructorCanPlanRollingCourseTerms}
+                      onChange={(e) => setInstructorCanPlanRollingCourseTerms(e.target.checked)}
+                      disabled={saving}
+                    />{" "}
+                    Darf Kurstermine planen (durchlaufende Kurse)
+                  </FieldLabelWithTooltip>
+                </label>
+              </div>
+            )}
+
+            <label className="dialog-field studio-settings-checkbox-field">
+              <FieldLabelWithTooltip tooltip="Schaltet den Vertretungsmodus frei: für Teilnehmer Kurstermine absagen oder tauschen. Standard an.">
+                <input
+                  type="checkbox"
+                  checked={instructorCanUseDelegation}
+                  onChange={(e) => setInstructorCanUseDelegation(e.target.checked)}
+                  disabled={saving}
+                />{" "}
+                Darf für Teilnehmer in Fremdverwaltung (Vertretung) Kurstermine absagen oder tauschen
+              </FieldLabelWithTooltip>
+            </label>
+
+            {instructorCanUseDelegation && (
+              <div className="studio-settings-notify-refinements">
+                <label className="dialog-field studio-settings-checkbox-field">
+                  <FieldLabelWithTooltip tooltip="Steuert die Vertretungs-Auswahl: bei aus sind nur Mitglieder mit Status eingeladen oder ohne Login wählbar; aktive/registrierte fehlen in der Liste. Standard an.">
+                    <input
+                      type="checkbox"
+                      checked={delegationCanManageActiveParticipants}
+                      onChange={(e) => setDelegationCanManageActiveParticipants(e.target.checked)}
+                      disabled={saving}
+                    />{" "}
+                    Darf aktive/registrierte Teilnehmer in Fremdverwaltung vertreten
+                  </FieldLabelWithTooltip>
+                </label>
+
+                <label className="dialog-field studio-settings-checkbox-field">
+                  <FieldLabelWithTooltip tooltip="Studio-weite Vertretung über alle Tauschgruppen. Standard aus. Erst mit mehreren Tauschgruppen wirksam (#300).">
+                    <input
+                      type="checkbox"
+                      checked={instructorCanDelegateStudioWide}
+                      onChange={(e) => setInstructorCanDelegateStudioWide(e.target.checked)}
+                      disabled={saving}
+                    />{" "}
+                    Darf Teilnehmer über das ganze Studio in Fremdverwaltung vertreten
+                  </FieldLabelWithTooltip>
+                </label>
+              </div>
+            )}
+          </div>
+        </details>
 
         <hr className="studio-settings-divider" />
 

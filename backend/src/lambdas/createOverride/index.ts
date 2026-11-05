@@ -5,6 +5,7 @@ import type { CourseDateOverride } from '@yogaswap/shared';
 import { getTenantContext } from '../shared/tenantContext';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
+import { getDelegationSubjectPolicyErrorResponse } from '../shared/delegationSubjectPolicy';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
 import { mapOverrideItem, mapStringList, anonymousTrialCountAttribute } from '../shared/overrideDynamo';
 import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../shared/courseCapacityDynamo';
@@ -37,6 +38,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     actingForUserId,
   });
   if (delegationErrorResponse) return delegationErrorResponse;
+  const subjectPolicyError = await getDelegationSubjectPolicyErrorResponse({
+    client,
+    tenantsTable: process.env.TENANTS_TABLE,
+    participantsTable: process.env.PARTICIPANTS_TABLE,
+    tenantId,
+    actingForUserId,
+  });
+  if (subjectPolicyError) return subjectPolicyError;
   const tableName = process.env.OVERRIDES_TABLE;
   const coursesTable = process.env.COURSES_TABLE;
   const override = JSON.parse(event.body || '{}');

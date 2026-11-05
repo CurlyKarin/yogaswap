@@ -192,9 +192,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     );
     const actorRole = membershipResp.Item?.role?.S;
-    if (actorRole !== "admin") {
-      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
-    }
 
     let rollingPlanningHorizonWeeks = 5;
     let tenantSettings;
@@ -203,6 +200,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       rollingPlanningHorizonWeeks = resolveRollingPlanningHorizonWeeks(tenantSettings);
     } catch (error) {
       console.error("Failed to load tenant settings for rolling planning horizon:", error);
+    }
+
+    const hasCourseMgmtRestrictions =
+      tenantSettings?.instructorHasCourseManagementRestrictions !== false;
+    const instructorUnrestricted = actorRole === "instructor" && !hasCourseMgmtRestrictions;
+    if (actorRole !== "admin" && !instructorUnrestricted) {
+      return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
 
     const prunedExceptions = pruneScheduleExceptions({

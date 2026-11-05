@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
 import { getActingForUserId, setActingForUserId, setActorUserId } from "./api/delegation";
-import { canManageParticipants } from "shared/permissions";
+import { canUseDelegation } from "shared/permissions";
 
 const coursesShellMock = vi.fn<(props: unknown) => void>();
 
@@ -111,10 +111,14 @@ vi.mock("shared/lib/storage", () => ({
   clearCurrentUser: vi.fn(),
 }));
 
-vi.mock("shared/permissions", () => ({
-  canInviteParticipants: vi.fn(() => true),
-  canManageParticipants: vi.fn(() => true),
-}));
+vi.mock("shared/permissions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("shared/permissions")>();
+  return {
+    ...actual,
+    canInviteParticipants: vi.fn(() => true),
+    canUseDelegation: vi.fn(() => true),
+  };
+});
 
 async function renderLoggedInAdmin() {
   const { fetchAuthSession } = await import("aws-amplify/auth");
@@ -220,7 +224,7 @@ describe("App shell a11y", () => {
     cleanup();
     vi.clearAllMocks();
     coursesShellMock.mockClear();
-    vi.mocked(canManageParticipants).mockReturnValue(true);
+    vi.mocked(canUseDelegation).mockReturnValue(true);
     setActingForUserId(null);
     setActorUserId(null);
     const { useAppAuth } = await import("./auth/useAppAuth");
@@ -324,7 +328,7 @@ describe("App delegation mode", () => {
     cleanup();
     vi.clearAllMocks();
     coursesShellMock.mockClear();
-    vi.mocked(canManageParticipants).mockReturnValue(true);
+    vi.mocked(canUseDelegation).mockReturnValue(true);
     setActingForUserId(null);
     setActorUserId(null);
   });
@@ -432,7 +436,7 @@ describe("App delegation mode", () => {
   it("does not show delegation entry when user cannot delegate", async () => {
     const { fetchAuthSession } = await import("aws-amplify/auth");
     const { getTenantContext } = await import("./api/tenantContext");
-    const { canManageParticipants } = await import("shared/permissions");
+    const { canUseDelegation } = await import("shared/permissions");
 
     vi.mocked(fetchAuthSession).mockResolvedValue({
       tokens: {
@@ -451,7 +455,7 @@ describe("App delegation mode", () => {
       membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
     } as unknown as never);
 
-    vi.mocked(canManageParticipants).mockReturnValue(false);
+    vi.mocked(canUseDelegation).mockReturnValue(false);
 
     render(
       <MemoryRouter>
@@ -508,6 +512,60 @@ describe("App delegation mode", () => {
 
     expect(screen.queryByText(/vertretung aktiv:/i)).not.toBeInTheDocument();
     expect(getActingForUserId()).toBeNull();
+  });
+
+  it("hides active participants in picker when studio setting is off (#141)", async () => {
+    const { fetchAuthSession } = await import("aws-amplify/auth");
+    const { getTenantContext } = await import("./api/tenantContext");
+    const { getParticipants } = await import("./api/participants");
+
+    vi.mocked(fetchAuthSession).mockResolvedValue({
+      tokens: {
+        idToken: {
+          payload: {
+            nickname: "admin",
+            email: "admin@example.com",
+            "custom:role": "admin",
+          },
+        },
+      },
+    } as unknown as never);
+
+    vi.mocked(getTenantContext).mockResolvedValue({
+      tenant: {
+        tenantId: "default-tenant",
+        name: "Default",
+        settings: { delegationCanManageActiveParticipants: false },
+      },
+      membership: { tenantId: "default-tenant", userId: "admin", participantId: "admin", role: "admin" },
+    } as unknown as never);
+
+    vi.mocked(getParticipants).mockResolvedValue([
+      { userId: "maya", participantId: "maya", status: "active", role: "participant", tenantId: "default-tenant" },
+      { userId: "luca", participantId: "luca", status: "invited", role: "participant", tenantId: "default-tenant" },
+      {
+        userId: "nina",
+        participantId: "nina",
+        status: "no_login",
+        role: "participant",
+        tenantId: "default-tenant",
+      },
+    ] as unknown as never);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/hi, admin/i)).toBeInTheDocument();
+    });
+
+    await userEvent.click(await screen.findByRole("button", { name: /^vertretung$/i }));
+    expect(await screen.findByRole("option", { name: /luca/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /nina/i })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /maya/i })).not.toBeInTheDocument();
   });
 
   it("supports switching delegation from one participant to another", async () => {

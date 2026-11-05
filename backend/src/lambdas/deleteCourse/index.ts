@@ -12,6 +12,7 @@ import {
   hasBlockingUpcomingCourseDates,
   overrideBlocksCourseLifecycle,
 } from "../shared/courseLifecycle";
+import { loadTenantSettings } from "../shared/tenantSettingsLoader";
 
 const client = dynamoClient;
 
@@ -20,6 +21,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
   const overridesTable = process.env.OVERRIDES_TABLE;
   const swapsTable = process.env.SWAPS_TABLE;
+  const tenantsTable = process.env.TENANTS_TABLE;
   if (!coursesTable || !membershipsTable || !overridesTable || !swapsTable) {
     return {
       statusCode: 500,
@@ -63,7 +65,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }),
     );
     const actorRole = membershipResp.Item?.role?.S;
-    if (actorRole !== "admin") {
+    let hasCourseMgmtRestrictions = true;
+    if (tenantsTable) {
+      try {
+        const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+        hasCourseMgmtRestrictions =
+          tenantSettings?.instructorHasCourseManagementRestrictions !== false;
+      } catch (error) {
+        console.error("Failed to load tenant settings for course delete auth:", error);
+      }
+    }
+    const instructorUnrestricted = actorRole === "instructor" && !hasCourseMgmtRestrictions;
+    if (actorRole !== "admin" && !instructorUnrestricted) {
       return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
     }
 

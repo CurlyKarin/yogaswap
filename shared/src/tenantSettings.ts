@@ -128,7 +128,66 @@ export type StudioSettingsPatch = {
   instructorTermNotifyFromHoursBeforeStart?: number | null;
   /** Bis-Fenster Minuten; null = entfernen. */
   instructorTermNotifyUntilMinutesBeforeStart?: number | null;
+  /** Fremdverwaltung (Vertretung) für Kursleitung (#141). Default true. */
+  instructorCanUseDelegation?: boolean;
+  /** Einschränkungen bei Kursverwaltung? (#141). Default true. */
+  instructorHasCourseManagementRestrictions?: boolean;
+  /** Darf Kurstermine absagen (#141). Default true. Nur bei Einschränkungen. */
+  instructorCanManageCourseTerms?: boolean;
+  /** Darf durchlaufende Kurse planen (#141). Default true. Nur bei Einschränkungen. */
+  instructorCanPlanRollingCourseTerms?: boolean;
+  /** Legacy: Fremdverwaltung ohne Kurszuordnung (#141). Default true. Nicht in UI. */
+  instructorCanManageDelegationWithoutCourseAssignment?: boolean;
+  /** Auch aktive Mitglieder in Vertretung (#141). Default true. */
+  delegationCanManageActiveParticipants?: boolean;
+  /** Studio-weite Fremdverwaltung (#141/#300). Default false. */
+  instructorCanDelegateStudioWide?: boolean;
 };
+
+/** Fremdverwaltung für Kursleitung (#141). Default an. */
+export function resolveInstructorCanUseDelegation(settings?: TenantSettings): boolean {
+  return settings?.instructorCanUseDelegation !== false;
+}
+
+/** Einschränkungen bei Kursverwaltung (#141). Default an (eingeschränkt). */
+export function resolveInstructorHasCourseManagementRestrictions(
+  settings?: TenantSettings,
+): boolean {
+  return settings?.instructorHasCourseManagementRestrictions !== false;
+}
+
+/** Darf Kurstermine absagen (#141). Default an. */
+export function resolveInstructorCanManageCourseTerms(settings?: TenantSettings): boolean {
+  return settings?.instructorCanManageCourseTerms !== false;
+}
+
+/** Darf durchlaufende Kurse planen (#141). Default an. */
+export function resolveInstructorCanPlanRollingCourseTerms(
+  settings?: TenantSettings,
+): boolean {
+  return settings?.instructorCanPlanRollingCourseTerms !== false;
+}
+
+/** Legacy: Fremdverwaltung ohne Kurszuordnung (#141). Default an. */
+export function resolveInstructorCanManageDelegationWithoutCourseAssignment(
+  settings?: TenantSettings,
+): boolean {
+  return settings?.instructorCanManageDelegationWithoutCourseAssignment !== false;
+}
+
+/** Aktive Mitglieder in Vertretung (#141). Default an. */
+export function resolveDelegationCanManageActiveParticipants(
+  settings?: TenantSettings,
+): boolean {
+  return settings?.delegationCanManageActiveParticipants !== false;
+}
+
+/** Studio-weite Fremdverwaltung (#141/#300). Default aus. */
+export function resolveInstructorCanDelegateStudioWide(
+  settings?: TenantSettings,
+): boolean {
+  return settings?.instructorCanDelegateStudioWide === true;
+}
 
 const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -199,6 +258,41 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
   if (Object.prototype.hasOwnProperty.call(patch, "notifyInstructorsOnTermParticipationChange")) {
     if (typeof patch.notifyInstructorsOnTermParticipationChange !== "boolean") {
       return "Mitteilung an Kursleitung bei Termin-Teilnahme muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanUseDelegation")) {
+    if (typeof patch.instructorCanUseDelegation !== "boolean") {
+      return "Fremdverwaltung für Kursleitung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorHasCourseManagementRestrictions")) {
+    if (typeof patch.instructorHasCourseManagementRestrictions !== "boolean") {
+      return "Einschränkungen bei der Kursverwaltung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanManageCourseTerms")) {
+    if (typeof patch.instructorCanManageCourseTerms !== "boolean") {
+      return "Kurstermine absagen für Kursleitung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanPlanRollingCourseTerms")) {
+    if (typeof patch.instructorCanPlanRollingCourseTerms !== "boolean") {
+      return "Kurstermine planen für Kursleitung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanManageDelegationWithoutCourseAssignment")) {
+    if (typeof patch.instructorCanManageDelegationWithoutCourseAssignment !== "boolean") {
+      return "Fremdverwaltung ohne Kurszuordnung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "delegationCanManageActiveParticipants")) {
+    if (typeof patch.delegationCanManageActiveParticipants !== "boolean") {
+      return "Vertretung aktiver Mitglieder muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "instructorCanDelegateStudioWide")) {
+    if (typeof patch.instructorCanDelegateStudioWide !== "boolean") {
+      return "Studio-weite Fremdverwaltung muss ein Schalter (ja/nein) sein.";
     }
   }
   if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyFromHoursBeforeStart")) {

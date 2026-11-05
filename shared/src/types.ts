@@ -199,20 +199,46 @@ export interface TenantSettings {
    */
   instructorCanManageParticipants?: boolean;
   /**
-   * Darf Instructor-Delegation in Kursen ohne explizite Instructor-Zuordnung
-   * genutzt werden?
+   * Dürfen Instructor:innen die Fremdverwaltung (Vertretung) nutzen? (#141)
+   * Default für undefined: true. Unabhängig von Teilnehmerprofil-Verwaltung / Gästen.
+   */
+  instructorCanUseDelegation?: boolean;
+  /**
+   * Hat Kursleitung Einschränkungen bei der Kursverwaltung? (#141)
+   * Default für undefined: true (eingeschränkt). false = volle Kursverwaltung wie Admin.
+   */
+  instructorHasCourseManagementRestrictions?: boolean;
+  /**
+   * Dürfen Instructor:innen Kurstermine absagen an zugeordneten Kursen? (#141)
+   * Nur relevant, wenn instructorHasCourseManagementRestrictions nicht false ist.
+   * Default für undefined: true.
+   */
+  instructorCanManageCourseTerms?: boolean;
+  /**
+   * Dürfen Instructor:innen an zugeordneten durchlaufenden Kursen Termine planen
+   * (z. B. Ausschlüsse außerhalb der Sperre)? (#141)
+   * Nur relevant bei Einschränkungen. Default für undefined: true.
+   */
+  instructorCanPlanRollingCourseTerms?: boolean;
+  /**
+   * Legacy (#141): Delegation in Kursen ohne `instructors`-Liste.
+   * Nicht mehr in Studio-UI; Flag bleibt für API/Permission-Helfer.
+   * Nachfolger-Konzept: Filter über Tauschgruppen (#300 / #429).
    *
-   * Default (wenn undefined): true, um aktuelles Verhalten nicht zu brechen.
-   * Nach Rollout kann dies auf false gestellt werden.
+   * Default (wenn undefined): true.
    */
   instructorCanManageDelegationWithoutCourseAssignment?: boolean;
   /**
    * Duerfen registrierte/aktive Teilnehmer im Vertretungsmodus verwaltet werden?
    *
    * Default (wenn undefined): true (MVP).
-   * Geplante Nachschaerfung nach Rollout via Tenant-Policy.
    */
   delegationCanManageActiveParticipants?: boolean;
+  /**
+   * Darf Kursleitung Teilnehmer über das ganze Studio in Fremdverwaltung vertreten?
+   * Default für undefined: false. Erst mit mehreren Tauschgruppen wirksam (#300).
+   */
+  instructorCanDelegateStudioWide?: boolean;
   /**
    * Kalendertage nach dem letzten sichtbaren Kursende: inaktive Kurse bleiben fuer
    * Teilnehmer:innen in Listen sichtbar (Swap-/Nachlauf-Fenster). Vergleich erfolgt

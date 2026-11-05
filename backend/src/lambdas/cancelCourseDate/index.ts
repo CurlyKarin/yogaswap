@@ -12,6 +12,9 @@ import { resolveLegacyCourseIdFromPathSegment } from "../shared/courseUid";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { formatSesFromAddress } from "../shared/notifications/sesFromAddress";
+import { canManageCourseTerms } from "../shared/permissions";
+import { loadTenantSettings } from "../shared/tenantSettingsLoader";
+import type { UserTenantMembership } from "@yogaswap/shared";
 
 const client = dynamoClient;
 const ses = new SESClient({});
@@ -153,6 +156,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }),
       };
     }
+
+    const courseInstructors = asStringList(courseResp.Item.instructors);
+    if (actorRole === "instructor") {
+      if (!tenantsTable) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "TENANTS_TABLE env var is not set" }),
+        };
+      }
+      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      const actorMembership: UserTenantMembership = {
+        tenantId,
+        userId: actorUserId,
+        role: "instructor",
+      };
+      const isActorAssignedInstructor = courseInstructors.some(
+        (entry) => entry.toLowerCase() === actorUserId.toLowerCase(),
+      );
+      if (
+        !canManageCourseTerms(actorMembership, tenantSettings, {
+          course: { instructors: courseInstructors },
+          isActorAssignedInstructor,
+        })
+      ) {
+        return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
+      }
+    }
+
     const courseName = courseResp.Item.name?.S ?? `Kurs ${courseId}`;
     const courseTime = courseResp.Item.time?.S ?? "";
     const staticParticipants = asStringList(courseResp.Item.participants);
