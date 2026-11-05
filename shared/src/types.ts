@@ -210,11 +210,12 @@ export interface TenantSettings {
    */
   instructorCanManageCourseTerms?: boolean;
   /**
-   * Darf Instructor-Delegation in Kursen ohne explizite Instructor-Zuordnung
-   * genutzt werden?
+   * Legacy (#141): Delegation in Kursen ohne `instructors`-Liste.
+   * Nicht mehr in Studio-UI; Flag bleibt für API/Permission-Helfer.
+   * Nachfolger-Konzept: Filter über Tauschgruppen (#300 / #429), ggf. Regel
+   * für Kurse/Mitglieder ohne Gruppe — nicht dieses Flag umdeuten.
    *
-   * Default (wenn undefined): true, um aktuelles Verhalten nicht zu brechen.
-   * Nach Rollout kann dies auf false gestellt werden.
+   * Default (wenn undefined): true.
    */
   instructorCanManageDelegationWithoutCourseAssignment?: boolean;
   /**

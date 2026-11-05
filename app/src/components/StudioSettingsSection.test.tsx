@@ -157,7 +157,6 @@ describe("StudioSettingsSection", () => {
           instructorTermNotifyUntilMinutesBeforeStart: null,
           instructorCanUseDelegation: true,
           instructorCanManageCourseTerms: true,
-          instructorCanManageDelegationWithoutCourseAssignment: true,
           delegationCanManageActiveParticipants: true,
         }),
       );
@@ -272,11 +271,9 @@ describe("StudioSettingsSection", () => {
         name: /fremdverwaltung \(vertretung\) freischalten/i,
       }),
     );
-    expect(instructorRightsGroup).toContainElement(
-      within(instructorRightsGroup).getByRole("checkbox", {
-        name: /fremdverwaltung auch ohne kurszuordnung/i,
-      }),
-    );
+    expect(
+      screen.queryByRole("checkbox", { name: /fremdverwaltung auch ohne kurszuordnung/i }),
+    ).not.toBeInTheDocument();
     expect(instructorRightsGroup).toContainElement(
       within(instructorRightsGroup).getByRole("checkbox", {
         name: /in vertretung auch aktive mitglieder verwalten/i,
@@ -310,22 +307,16 @@ describe("StudioSettingsSection", () => {
     const useDelegation = screen.getByRole("checkbox", {
       name: /fremdverwaltung \(vertretung\) freischalten/i,
     });
-    const withoutAssignment = screen.getByRole("checkbox", {
-      name: /fremdverwaltung auch ohne kurszuordnung/i,
-    });
     const activeParticipants = screen.getByRole("checkbox", {
       name: /in vertretung auch aktive mitglieder verwalten/i,
     });
 
     expect(useDelegation).toBeChecked();
-    expect(withoutAssignment).toBeChecked();
     expect(activeParticipants).toBeChecked();
-    expect(withoutAssignment).not.toBeDisabled();
     expect(activeParticipants).not.toBeDisabled();
 
     fireEvent.click(useDelegation);
     expect(useDelegation).not.toBeChecked();
-    expect(withoutAssignment).toBeDisabled();
     expect(activeParticipants).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /studio-einstellungen speichern/i }));
@@ -334,9 +325,11 @@ describe("StudioSettingsSection", () => {
       expect(mockedUpdateTenantSettings).toHaveBeenCalledWith(
         expect.objectContaining({
           instructorCanUseDelegation: false,
-          instructorCanManageDelegationWithoutCourseAssignment: true,
           delegationCanManageActiveParticipants: true,
         }),
+      );
+      expect(mockedUpdateTenantSettings.mock.calls[0][0]).not.toHaveProperty(
+        "instructorCanManageDelegationWithoutCourseAssignment",
       );
     });
   });

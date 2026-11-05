@@ -8,7 +8,6 @@ import {
   resolveInstructorTermNotifyUntilMinutesBeforeStart,
   resolveDelegationCanManageActiveParticipants,
   resolveInstructorCanManageCourseTerms,
-  resolveInstructorCanManageDelegationWithoutCourseAssignment,
   resolveInstructorCanUseDelegation,
   resolveNotifyInstructorsOnStemChange,
   resolveNotifyInstructorsOnTermParticipationChange,
@@ -69,8 +68,6 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const untilMinutesDefault = resolveInstructorTermNotifyUntilMinutesBeforeStart(tenant.settings);
   const instructorDelegationDefault = resolveInstructorCanUseDelegation(tenant.settings);
   const instructorCourseTermsDefault = resolveInstructorCanManageCourseTerms(tenant.settings);
-  const delegationWithoutAssignmentDefault =
-    resolveInstructorCanManageDelegationWithoutCourseAssignment(tenant.settings);
   const delegationActiveParticipantsDefault =
     resolveDelegationCanManageActiveParticipants(tenant.settings);
 
@@ -99,8 +96,6 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const [instructorCanManageCourseTerms, setInstructorCanManageCourseTerms] = useState(
     instructorCourseTermsDefault,
   );
-  const [instructorCanManageDelegationWithoutCourseAssignment, setInstructorCanManageDelegationWithoutCourseAssignment] =
-    useState(delegationWithoutAssignmentDefault);
   const [delegationCanManageActiveParticipants, setDelegationCanManageActiveParticipants] = useState(
     delegationActiveParticipantsDefault,
   );
@@ -131,9 +126,6 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
     setTermNotifyUntilMinutes(String(untilMinutes ?? cutoff));
     setInstructorCanUseDelegation(resolveInstructorCanUseDelegation(tenant.settings));
     setInstructorCanManageCourseTerms(resolveInstructorCanManageCourseTerms(tenant.settings));
-    setInstructorCanManageDelegationWithoutCourseAssignment(
-      resolveInstructorCanManageDelegationWithoutCourseAssignment(tenant.settings),
-    );
     setDelegationCanManageActiveParticipants(
       resolveDelegationCanManageActiveParticipants(tenant.settings),
     );
@@ -163,7 +155,6 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           : null,
       instructorCanUseDelegation,
       instructorCanManageCourseTerms,
-      instructorCanManageDelegationWithoutCourseAssignment,
       delegationCanManageActiveParticipants,
     };
     const validationError = validateStudioSettingsPatch(patch);
@@ -297,20 +288,6 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
                   disabled={saving}
                 />{" "}
                 Fremdverwaltung (Vertretung) freischalten
-              </FieldLabelWithTooltip>
-            </label>
-
-            <label className="dialog-field studio-settings-checkbox-field">
-              <FieldLabelWithTooltip tooltip="Wenn am Kurs keine Kursleitung eingetragen ist: darf Kursleitung dort trotzdem vertreten? Standard an (Übergang). Bei gepflegter Zuordnung gilt weiterhin: nur die eingetragene Leitung.">
-                <input
-                  type="checkbox"
-                  checked={instructorCanManageDelegationWithoutCourseAssignment}
-                  onChange={(e) =>
-                    setInstructorCanManageDelegationWithoutCourseAssignment(e.target.checked)
-                  }
-                  disabled={saving || !instructorCanUseDelegation}
-                />{" "}
-                Fremdverwaltung auch ohne Kurszuordnung
               </FieldLabelWithTooltip>
             </label>
 
