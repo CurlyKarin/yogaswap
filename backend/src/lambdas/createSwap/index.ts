@@ -16,6 +16,7 @@ import { getTenantContext } from '../shared/tenantContext';
 import { resolveAppBaseUrlForTenant } from '../shared/appBaseUrl';
 import { dynamoClient } from '../shared/dynamoClient';
 import { getDelegationErrorResponse } from '../shared/delegation';
+import { getDelegationSubjectPolicyErrorResponse } from '../shared/delegationSubjectPolicy';
 import { fetchCourseUidByLegacyCourseId } from '../shared/courseUid';
 import { loadTenantSettings } from '../shared/tenantSettingsLoader';
 import { mapOverrideItem, mapStringList } from '../shared/overrideDynamo';
@@ -68,6 +69,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     actingForUserId,
   });
   if (delegationErrorResponse) return delegationErrorResponse;
+  const subjectPolicyError = await getDelegationSubjectPolicyErrorResponse({
+    client,
+    tenantsTable: process.env.TENANTS_TABLE,
+    participantsTable: process.env.PARTICIPANTS_TABLE,
+    tenantId,
+    actingForUserId,
+  });
+  if (subjectPolicyError) return subjectPolicyError;
 
   const tableName = process.env.SWAPS_TABLE;
   const coursesTable = process.env.COURSES_TABLE;

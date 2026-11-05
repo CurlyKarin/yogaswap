@@ -4,6 +4,7 @@ import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getDelegationErrorResponse } from "../shared/delegation";
+import { getDelegationSubjectPolicyErrorResponse } from "../shared/delegationSubjectPolicy";
 import { notifySwapSuccess } from "../shared/notifications/swapSuccessNotification";
 import { notifyInstructorsOfActiveSwap } from "../shared/notifications/instructorSwapNotifications";
 import { resolveSwapUserKey } from "../shared/swapQueryHelpers";
@@ -19,6 +20,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     actingForUserId,
   });
   if (delegationErrorResponse) return delegationErrorResponse;
+  const subjectPolicyError = await getDelegationSubjectPolicyErrorResponse({
+    client,
+    tenantsTable: process.env.TENANTS_TABLE,
+    participantsTable: process.env.PARTICIPANTS_TABLE,
+    tenantId,
+    actingForUserId,
+  });
+  if (subjectPolicyError) return subjectPolicyError;
   const swapId = event.pathParameters?.swapId;
   const user = event.queryStringParameters?.user;
   if (!swapId || !user) {

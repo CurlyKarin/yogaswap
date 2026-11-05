@@ -23,7 +23,11 @@ import { restoreStudioUserFromSession } from "./auth/restoreSessionUser";
 import { resolveLogin } from "./api/auth";
 import { getTenantContext, TenantNotFoundError } from "./api/tenantContext";
 import UnknownStudio from "./components/UnknownStudio";
-import { canInviteParticipants, canUseDelegation } from "shared/permissions";
+import {
+  canInviteParticipants,
+  canManageParticipantStatusInDelegation,
+  canUseDelegation,
+} from "shared/permissions";
 import { getParticipants, type ParticipantWithStatus } from "./api/participants";
 import { setActingForUserId, setActorUserId } from "./api/delegation";
 import { filterParticipantsBySearch } from "./lib/participants";
@@ -308,12 +312,42 @@ function MainApp() {
     setPendingActingForUserId(nextUserId);
   };
 
+  const eligibleDelegationCandidates = useMemo(
+    () =>
+      delegationCandidates.filter((participant) =>
+        canManageParticipantStatusInDelegation(participant.status, tenant?.settings),
+      ),
+    [delegationCandidates, tenant?.settings],
+  );
+
   const filteredDelegationCandidates = useMemo(() => {
-    return filterParticipantsBySearch(delegationCandidates, delegationSearch);
-  }, [delegationCandidates, delegationSearch]);
+    return filterParticipantsBySearch(eligibleDelegationCandidates, delegationSearch);
+  }, [eligibleDelegationCandidates, delegationSearch]);
+
+  // Setting aus oder Statuswechsel: laufende Vertretung beenden, wenn Subject nicht mehr erlaubt.
+  useEffect(() => {
+    if (!actingForUserIdState) return;
+    const subject = delegationCandidates.find(
+      (participant) =>
+        participant.userId.toLowerCase() === actingForUserIdState.toLowerCase(),
+    );
+    if (!subject) return;
+    if (canManageParticipantStatusInDelegation(subject.status, tenant?.settings)) return;
+    setActingForUserIdState(null);
+    setActingForUserId(null);
+    setPendingActingForUserId(null);
+  }, [actingForUserIdState, delegationCandidates, tenant?.settings]);
 
   const confirmDelegation = () => {
     if (!pendingActingForUserId) return;
+    const subject = eligibleDelegationCandidates.find(
+      (participant) =>
+        participant.userId.toLowerCase() === pendingActingForUserId.toLowerCase(),
+    );
+    if (!subject) {
+      setPendingActingForUserId(null);
+      return;
+    }
     setActingForUserIdState(pendingActingForUserId);
     setActingForUserId(pendingActingForUserId);
     setPendingActingForUserId(null);

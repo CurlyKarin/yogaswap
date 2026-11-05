@@ -315,7 +315,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
             </label>
 
             <label className="dialog-field studio-settings-checkbox-field">
-              <FieldLabelWithTooltip tooltip="In der Vertretung auch Mitglieder mit Status aktiv/registriert bedienen. Standard an. Eingeladene und ohne Login sind immer erlaubt.">
+              <FieldLabelWithTooltip tooltip="Steuert die Vertretungs-Auswahl: bei aus sind nur Mitglieder mit Status eingeladen oder ohne Login wählbar; aktive/registrierte fehlen in der Liste. Standard an.">
                 <input
                   type="checkbox"
                   checked={delegationCanManageActiveParticipants}
