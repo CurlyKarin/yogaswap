@@ -1,14 +1,10 @@
-import type { Course, CourseEnrollment, Swap } from "shared/types";
+import type { Course, CourseEnrollment, Swap, UserRole } from "shared/types";
 import { isActorOnCourseStem } from "shared/courseEnrollment";
 import {
   matchesSwapParticipant,
   type ParticipantActor,
 } from "shared/participantActor";
 import type { WeekOccurrence } from "./courseWeekOccurrences";
-
-function equalsIgnoreCase(a: string, b: string): boolean {
-  return a.toLowerCase() === b.toLowerCase();
-}
 
 function todayIsoLocal(now: Date = new Date()): string {
   const year = now.getFullYear();
@@ -17,10 +13,44 @@ function todayIsoLocal(now: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-/** True if the user is listed as instructor on at least one course. */
-export function hasInstructorAssignment(courses: Course[], nickname: string): boolean {
+function normalizeAlias(value: string | undefined | null): string | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized ? normalized : null;
+}
+
+/**
+ * Match course.instructors against nickname, participantId and optional extras
+ * (z. B. membership.userId). #406
+ */
+export function actorMatchesInstructorList(
+  instructors: string[] | undefined,
+  actor: ParticipantActor,
+  extraAliases: Array<string | undefined | null> = [],
+): boolean {
+  const wanted = new Set<string>();
+  for (const value of [actor.nickname, actor.participantId, ...extraAliases]) {
+    const normalized = normalizeAlias(value);
+    if (normalized) wanted.add(normalized);
+  }
+  if (wanted.size === 0) return false;
+  return (instructors ?? []).some((entry) => {
+    const normalized = normalizeAlias(entry);
+    return normalized != null && wanted.has(normalized);
+  });
+}
+
+/** True if the actor is listed as instructor on at least one course (#406). */
+export function hasInstructorAssignment(
+  courses: Course[],
+  actorOrNickname: ParticipantActor | string,
+  extraAliases: Array<string | undefined | null> = [],
+): boolean {
+  const actor: ParticipantActor =
+    typeof actorOrNickname === "string"
+      ? { nickname: actorOrNickname }
+      : actorOrNickname;
   return courses.some((course) =>
-    (course.instructors ?? []).some((instructor) => equalsIgnoreCase(instructor, nickname)),
+    actorMatchesInstructorList(course.instructors, actor, extraAliases),
   );
 }
 
@@ -30,8 +60,9 @@ export function hasStemOrInstructorInvolvement(
   actor: ParticipantActor,
   enrollments?: CourseEnrollment[] | null,
   todayIso: string = todayIsoLocal(),
+  extraAliases: Array<string | undefined | null> = [],
 ): boolean {
-  if ((course.instructors ?? []).some((instructor) => equalsIgnoreCase(instructor, actor.nickname))) {
+  if (actorMatchesInstructorList(course.instructors, actor, extraAliases)) {
     return true;
   }
   return isActorOnCourseStem(course, enrollments, actor, todayIso);
@@ -46,12 +77,31 @@ export function isPersonallyInvolvedInCourse(
   actor: ParticipantActor,
   swaps: Swap[],
   enrollments?: CourseEnrollment[] | null,
+  extraAliases: Array<string | undefined | null> = [],
 ): boolean {
-  if (hasStemOrInstructorInvolvement(course, actor, enrollments)) return true;
+  if (hasStemOrInstructorInvolvement(course, actor, enrollments, todayIsoLocal(), extraAliases)) {
+    return true;
+  }
   return swaps.some(
     (swap) =>
       matchesSwapParticipant(swap, actor) &&
       (swap.fromCourseId === course.id || swap.toCourseId === course.id),
+  );
+}
+
+/**
+ * Mind. eine relevante Beteiligung für Hinweistexte (#406):
+ * Instructor-Zuweisung, Stamm oder Tausch.
+ */
+export function hasRelevantMyCoursesInvolvement(
+  courses: Course[],
+  actor: ParticipantActor,
+  swaps: Swap[],
+  enrollments?: CourseEnrollment[] | null,
+  extraAliases: Array<string | undefined | null> = [],
+): boolean {
+  return courses.some((course) =>
+    isPersonallyInvolvedInCourse(course, actor, swaps, enrollments, extraAliases),
   );
 }
 
@@ -83,8 +133,11 @@ export function narrowWeekOccurrencesForOnlyMyCourses(
   actor: ParticipantActor,
   swaps: Swap[],
   enrollments?: CourseEnrollment[] | null,
+  extraAliases: Array<string | undefined | null> = [],
 ): WeekOccurrence[] {
-  if (hasStemOrInstructorInvolvement(course, actor, enrollments)) return occurrences;
+  if (hasStemOrInstructorInvolvement(course, actor, enrollments, todayIsoLocal(), extraAliases)) {
+    return occurrences;
+  }
   const swapDates = personalSwapDateIsosForCourse(course.id, actor, swaps);
   if (swapDates.size === 0) return [];
   return occurrences.filter((occurrence) => swapDates.has(occurrence.dateIso));
@@ -98,18 +151,14 @@ export type MyCoursesToggleResolution = {
 };
 
 /**
- * Role defaults for the week-view „nur meine Kurse“ toggle.
- * Admin/instructor without instructor assignment: disabled, always all courses.
+ * Role defaults for the week-view „nur meine Kurse“ toggle (#406).
+ * - Teilnehmende: Toggle an, Default gefiltert.
+ * - Admin/Kursleitung: Toggle immer an (auch ohne erkannte Zuordnung), Default alle Kurse.
+ *   Filter wirkt über course.instructors (+ Stamm/Tausch), sobald Daten da sind.
  */
-export function resolveMyCoursesToggle(
-  role: import("shared/types").UserRole,
-  hasAssignment: boolean,
-): MyCoursesToggleResolution {
+export function resolveMyCoursesToggle(role: UserRole): MyCoursesToggleResolution {
   if (role === "participant") {
     return { canToggle: true, defaultOnlyMy: true };
   }
-  if (!hasAssignment) {
-    return { canToggle: false, defaultOnlyMy: false };
-  }
-  return { canToggle: true, defaultOnlyMy: true };
+  return { canToggle: true, defaultOnlyMy: false };
 }

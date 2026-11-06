@@ -11,10 +11,7 @@ import {
   resolveInitialWeekAnchor,
   writeStoredWeekAnchor,
 } from "../lib/weekNavPersistence";
-import {
-  hasInstructorAssignment,
-  resolveMyCoursesToggle,
-} from "../lib/weekMyCoursesFilter";
+import { resolveMyCoursesToggle } from "../lib/weekMyCoursesFilter";
 import { pickTodayFocusTarget } from "../lib/weekTodayFocus";
 import { getActorUserId } from "../api/delegation";
 import { useCoursesData } from "../hooks/useCoursesData";
@@ -65,7 +62,7 @@ export default function CoursesShell({
 
   // Role default only — not persisted (keeps the week view predictable for participants).
   const [onlyMyCourses, setOnlyMyCourses] = useState(
-    () => resolveMyCoursesToggle(resolvedRole, false).defaultOnlyMy,
+    () => resolveMyCoursesToggle(resolvedRole).defaultOnlyMy,
   );
   const [myCoursesToggleTouched, setMyCoursesToggleTouched] = useState(false);
   const [pendingTodayFocus, setPendingTodayFocus] = useState(false);
@@ -123,24 +120,16 @@ export default function CoursesShell({
     };
   }, [softRefresh]);
 
-  const hasAssignment = useMemo(
-    () => hasInstructorAssignment(courses, currentUser.nickname),
-    [courses, currentUser.nickname],
-  );
   const myCoursesToggle = useMemo(
-    () => resolveMyCoursesToggle(resolvedRole, hasAssignment),
-    [resolvedRole, hasAssignment],
+    () => resolveMyCoursesToggle(resolvedRole),
+    [resolvedRole],
   );
 
   useEffect(() => {
-    if (!myCoursesToggle.canToggle) {
-      setOnlyMyCourses(false);
-      return;
-    }
     if (!myCoursesToggleTouched) {
       setOnlyMyCourses(myCoursesToggle.defaultOnlyMy);
     }
-  }, [myCoursesToggle.canToggle, myCoursesToggle.defaultOnlyMy, myCoursesToggleTouched]);
+  }, [myCoursesToggle.defaultOnlyMy, myCoursesToggleTouched]);
 
   useEffect(() => {
     setMyCoursesToggleTouched(false);
@@ -354,14 +343,14 @@ export default function CoursesShell({
                 className={`course-week-nav-btn course-week-nav-my-courses${onlyMyCourses ? " is-active" : ""}`}
                 aria-pressed={onlyMyCourses}
                 aria-label={
-                  onlyMyCourses ? "Nur meine Kurse anzeigen (aktiv)" : "Nur meine Kurse anzeigen"
+                  onlyMyCourses
+                    ? "Nur meine Kurse anzeigen, inkl. Kursleitung (aktiv)"
+                    : "Nur meine Kurse anzeigen, inkl. Kursleitung"
                 }
                 title={
-                  !myCoursesToggle.canToggle
-                    ? "Keine Kurszuordnung — es werden immer alle Kurse gezeigt"
-                    : onlyMyCourses
-                      ? "Nur Kurse mit deiner Beteiligung — Klick zeigt alle Kurse"
-                      : "Alle Kurse der Woche — Klick filtert auf deine Beteiligung"
+                  onlyMyCourses
+                    ? "Nur Kurse mit deiner Beteiligung inkl. Kursleitung — Klick zeigt alle Kurse"
+                    : "Alle Kurse der Woche — Klick filtert auf deine Beteiligung inkl. Kursleitung"
                 }
                 disabled={!myCoursesToggle.canToggle}
                 onClick={() => {

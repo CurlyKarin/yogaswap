@@ -494,7 +494,9 @@ describe("CoursesShell", () => {
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
+    const toggle = screen.getByRole("button", {
+      name: /nur meine kurse anzeigen, inkl\. kursleitung/i,
+    });
     expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(toggle).not.toBeDisabled();
   });
@@ -509,7 +511,9 @@ describe("CoursesShell", () => {
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
+    const toggle = screen.getByRole("button", {
+      name: /nur meine kurse anzeigen, inkl\. kursleitung/i,
+    });
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-pressed", "false");
 
@@ -517,7 +521,7 @@ describe("CoursesShell", () => {
     expect(toggle).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("deaktiviert den Toggle für Admin ohne Kurszuordnung", () => {
+  it("lässt Admin den Filter auch ohne Kurszuordnung nutzen, Default alle (#406)", () => {
     render(
       <CoursesShell
         currentUser={{ ...baseUser, nickname: "admin", role: "admin" }}
@@ -526,12 +530,15 @@ describe("CoursesShell", () => {
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
-    expect(toggle).toBeDisabled();
+    const toggle = screen.getByRole("button", {
+      name: /nur meine kurse anzeigen, inkl\. kursleitung/i,
+    });
+    expect(toggle).not.toBeDisabled();
     expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("aktiviert den Toggle für Admin mit Kurszuordnung", () => {
+  it("Default für Admin und Kursleitung: alle Kurse, Filter optional (#406)", async () => {
+    const user = userEvent.setup();
     mockUseCoursesData.mockReturnValue(
       createCoursesDataMock({
         courses: [
@@ -546,6 +553,7 @@ describe("CoursesShell", () => {
             instructors: ["admin"],
           },
         ],
+        actor: { nickname: "admin" },
       }),
     );
 
@@ -557,9 +565,52 @@ describe("CoursesShell", () => {
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: /nur meine kurse anzeigen/i });
+    const toggle = screen.getByRole("button", {
+      name: /nur meine kurse anzeigen, inkl\. kursleitung/i,
+    });
     expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("Default für Kursleitung: alle Kurse, Filter optional (#406)", () => {
+    mockUseCoursesData.mockReturnValue(
+      createCoursesDataMock({
+        courses: [
+          {
+            id: 1,
+            name: "Yoga",
+            weekday: "Monday",
+            time: "10:00",
+            capacity: 10,
+            participants: [],
+            dates: ["2099-06-16"],
+            instructors: ["maya"],
+          },
+        ],
+        actor: { nickname: "maya" },
+      }),
+    );
+
+    render(
+      <CoursesShell
+        currentUser={{ ...baseUser, nickname: "maya", role: "instructor" }}
+        tenant={baseTenant}
+        membership={{
+          tenantId: "default-tenant",
+          userId: "maya",
+          role: "instructor",
+        }}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", {
+      name: /nur meine kurse anzeigen, inkl\. kursleitung/i,
+    });
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
   it("Aktualisieren-Button ruft softRefresh auf und behält die Wochenansicht (#399)", async () => {
