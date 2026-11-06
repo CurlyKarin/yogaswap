@@ -251,6 +251,26 @@ describe("App shell a11y", () => {
     expect(main).toContainElement(document.getElementById("admin-heading"));
     expect(main).toContainElement(screen.getByText("CoursesShell Mock"));
     expect(main).toContainElement(screen.getByText("AdminPanel Mock"));
+    expect(main).toContainElement(
+      screen.getByRole("region", { name: /meine einstellungen/i }),
+    );
+  });
+
+  it("öffnet persönliche Einstellungen über den Header-Button (#433)", async () => {
+    await renderLoggedInAdmin();
+    const user = userEvent.setup();
+
+    const settingsBtn = screen.getByRole("button", { name: /^einstellungen$/i });
+    expect(settingsBtn).toHaveAttribute("aria-controls", "user-settings");
+
+    const region = screen.getByRole("region", { name: /meine einstellungen/i });
+    const details = region.querySelector("details.studio-settings-details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+
+    await user.click(settingsBtn);
+    await waitFor(() => {
+      expect(details.open).toBe(true);
+    });
   });
 
   it("springt mit Leertaste zur Wochennavigation im Kursbereich", async () => {
@@ -262,7 +282,10 @@ describe("App shell a11y", () => {
     const scrollTo = vi.fn();
     const focus = vi.fn();
     window.scrollTo = scrollTo;
-    weekButton.focus = focus;
+    Object.defineProperty(weekButton, "focus", {
+      configurable: true,
+      value: focus,
+    });
 
     const skipControl = screen.getByRole("button", { name: /zum inhalt/i });
     skipControl.focus();
@@ -288,6 +311,9 @@ describe("App shell a11y", () => {
 
     await user.tab();
     expect(screen.getByRole("button", { name: /zum fußbereich/i })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: /^einstellungen$/i })).toHaveFocus();
 
     await user.tab();
     expect(screen.getByRole("button", { name: /logout/i })).toHaveFocus();

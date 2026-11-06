@@ -1,6 +1,7 @@
 // app/src/App.tsx
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Routes, Route, useNavigate } from "react-router-dom";
+import { Settings } from "lucide-react";
 import "./App.css";
 import Login from "./components/Login";
 import CoursesShell from "./components/CoursesShell";
@@ -9,6 +10,7 @@ import LegalPageFallback from "./components/LegalPageFallback";
 import Invite from "./components/Invite";
 import ForgotPassword from "./components/ForgotPassword";
 import DelegationPickerDialog from "./components/DelegationPickerDialog";
+import UserSettingsSection from "./components/UserSettingsSection";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
 import { User, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
@@ -60,7 +62,18 @@ function MainApp() {
   const [delegationPickerOpen, setDelegationPickerOpen] = useState(false);
   const [delegationSearch, setDelegationSearch] = useState("");
   const [sessionNotice, setSessionNotice] = useState(() => consumeSessionNotice());
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
   const { logout, isLoading, error } = useAppAuth();
+
+  const openUserSettings = useCallback(() => {
+    setUserSettingsOpen(true);
+    window.requestAnimationFrame(() => {
+      const section = document.getElementById("user-settings");
+      if (section) {
+        scrollIntoViewWithStickyChrome(section);
+      }
+    });
+  }, []);
 
   // Studio-Existenz vor Login prüfen (#261) — GET /tenant-context ist öffentlich.
   useEffect(() => {
@@ -423,6 +436,16 @@ function MainApp() {
             <span className="userbox-greeting">Hi, {currentUser.nickname}</span>
             <div className="header-action-group">
               <button
+                type="button"
+                className="header-action-btn header-action-btn--icon"
+                onClick={openUserSettings}
+                aria-controls="user-settings"
+                aria-label="Einstellungen"
+                title="Einstellungen"
+              >
+                <Settings size={18} aria-hidden="true" />
+              </button>
+              <button
                 id="logout-btn"
                 type="button"
                 className="header-action-btn"
@@ -501,6 +524,16 @@ function MainApp() {
               forceParticipantView={Boolean(actingForUserIdState)}
             />
           </section>
+        )}
+
+        {studioGate === "ready" && currentUser && (
+          <div className="main-section main-section-user-settings">
+            <UserSettingsSection
+              nickname={currentUser.nickname}
+              open={userSettingsOpen}
+              onOpenChange={setUserSettingsOpen}
+            />
+          </div>
         )}
 
         {studioGate === "ready" && currentUser && canInvite && !actingForUserIdState && (
