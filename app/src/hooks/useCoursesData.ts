@@ -22,6 +22,7 @@ import { canShowCourseInPastWeek, computeEarliestWeekAnchor } from "../lib/cours
 import { computeLatestWeekAnchor } from "../lib/weekViewPreview";
 import { collectWeekOccurrences, type WeekCourseRow } from "../lib/courseWeekOccurrences";
 import {
+  actorMatchesInstructorList,
   hasStemOrInstructorInvolvement,
   isPersonallyInvolvedInCourse,
   narrowWeekOccurrencesForOnlyMyCourses,
@@ -129,6 +130,11 @@ export function useCoursesData({
     () => resolveActorFromMembership(currentUser.nickname, effectiveMembership, participantRoster),
     [currentUser.nickname, effectiveMembership, participantRoster],
   );
+  /** Extra aliases for course.instructors match (membership.userId may differ from nickname). #406 */
+  const instructorMatchAliases = useMemo(
+    () => [effectiveMembership?.userId, effectiveMembership?.participantId],
+    [effectiveMembership?.userId, effectiveMembership?.participantId],
+  );
   const actorRef = useMemo(() => resolveActorParticipantRef(actor), [actor]);
   const participantNameByRef = useMemo(
     () => buildParticipantNameByRefMap(participantRoster),
@@ -145,12 +151,14 @@ export function useCoursesData({
 
   const courseContext = useCallback(
     (course: Course) => ({
-      isTaughtByUser: (course.instructors ?? []).some(
-        (p) => p.toLowerCase() === actor.nickname.toLowerCase(),
+      isTaughtByUser: actorMatchesInstructorList(
+        course.instructors,
+        actor,
+        instructorMatchAliases,
       ),
       isBookedByUser: isActorOnCourseStem(course, enrollments, actor, todayIso),
     }),
-    [actor, enrollments, todayIso],
+    [actor, enrollments, todayIso, instructorMatchAliases],
   );
 
   const fetchData = useCallback(async (options?: { soft?: boolean }) => {
@@ -280,20 +288,36 @@ export function useCoursesData({
 
       if (
         onlyMyCourses &&
-        !isPersonallyInvolvedInCourse(course, actor, swaps, enrollments)
+        !isPersonallyInvolvedInCourse(
+          course,
+          actor,
+          swaps,
+          enrollments,
+          instructorMatchAliases,
+        )
       ) {
         continue;
       }
 
       let weekOccurrences = occurrences;
       let cardDateIsos: string[] | undefined;
-      if (onlyMyCourses && !hasStemOrInstructorInvolvement(course, actor, enrollments)) {
+      if (
+        onlyMyCourses &&
+        !hasStemOrInstructorInvolvement(
+          course,
+          actor,
+          enrollments,
+          todayIso,
+          instructorMatchAliases,
+        )
+      ) {
         weekOccurrences = narrowWeekOccurrencesForOnlyMyCourses(
           course,
           occurrences,
           actor,
           swaps,
           enrollments,
+          instructorMatchAliases,
         );
         if (weekOccurrences.length === 0) continue;
         cardDateIsos = Array.from(personalSwapDateIsosForCourse(course.id, actor, swaps)).sort(
@@ -322,6 +346,8 @@ export function useCoursesData({
     actor,
     swaps,
     enrollments,
+    instructorMatchAliases,
+    todayIso,
   ]);
 
   const earliestWeekAnchor = useMemo(

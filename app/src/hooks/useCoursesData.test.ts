@@ -366,4 +366,95 @@ describe("useCoursesData", () => {
     });
     expect(result.current.loading).toBe(false);
   });
+
+  it("filtert onlyMyCourses auf eigene Kursleitung, nicht auf fremde (#406)", async () => {
+    const ownCourse: Course = {
+      ...mockCourse,
+      id: 1,
+      name: "Mein Kurs",
+      instructors: ["maya"],
+      participants: [],
+    };
+    const otherCourse: Course = {
+      ...mockCourse,
+      id: 2,
+      name: "Fremder Kurs",
+      instructors: ["ines"],
+      participants: [],
+    };
+    const unassigned: Course = {
+      ...mockCourse,
+      id: 3,
+      name: "Ohne Leitung",
+      instructors: [],
+      participants: [],
+    };
+    mockedGetCourses.mockResolvedValue([ownCourse, otherCourse, unassigned]);
+
+    const instructorMembership: UserTenantMembership = {
+      tenantId: "default-tenant",
+      userId: "maya",
+      participantId: "maya",
+      role: "instructor",
+    };
+
+    const { result } = renderHook(() =>
+      useCoursesData({
+        currentUser: { nickname: "maya", email: "", role: "instructor" },
+        membership: instructorMembership,
+        tenant: {
+          tenantId: "default-tenant",
+          name: "Studio",
+          settings: { instructorCanSeeAllCourses: true },
+        },
+        weekAnchor,
+        onlyMyCourses: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.weekCourseRows.map((row) => row.course.name)).toEqual(["Mein Kurs"]);
+  });
+
+  it("matcht Kursleitung über membership.userId Alias (#406)", async () => {
+    const ownCourse: Course = {
+      ...mockCourse,
+      id: 1,
+      name: "Admin-Kurs",
+      instructors: ["studio-admin"],
+      participants: [],
+    };
+    const otherCourse: Course = {
+      ...mockCourse,
+      id: 2,
+      name: "Kollegin",
+      instructors: ["other-admin"],
+      participants: [],
+    };
+    mockedGetCourses.mockResolvedValue([ownCourse, otherCourse]);
+
+    const { result } = renderHook(() =>
+      useCoursesData({
+        currentUser: { nickname: "Displayed", email: "", role: "admin" },
+        membership: {
+          tenantId: "default-tenant",
+          userId: "studio-admin",
+          participantId: "pid-admin",
+          role: "admin",
+        },
+        tenant: { tenantId: "default-tenant", name: "Studio", settings: {} },
+        weekAnchor,
+        onlyMyCourses: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.weekCourseRows.map((row) => row.course.name)).toEqual(["Admin-Kurs"]);
+  });
 });
