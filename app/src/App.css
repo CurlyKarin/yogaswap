@@ -699,6 +699,14 @@ body {
   white-space: nowrap;
 }
 
+.header-action-btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  min-width: 36px;
+}
+
 /* Grid der Kurskacheln */
 .grid {
   display: grid;
@@ -2206,6 +2214,10 @@ a:focus-visible {
   100% {
     background-position: -100% 0;
   }
+}
+
+.user-settings-section {
+  margin-top: 0.5rem;
 }
 
 .studio-settings-section {
