@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 import UserSettingsEmailForm from "./UserSettingsEmailForm";
+import UserSettingsPasswordForm from "./UserSettingsPasswordForm";
 
 export type UserSettingsSectionProps = {
   nickname: string;
@@ -81,9 +82,8 @@ export default function UserSettingsSection({
           <summary className="studio-settings-summary studio-settings-summary--sub">
             <h4 className="studio-settings-summary-title">Sicherheit</h4>
           </summary>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Passwort ändern folgt (#434).
-          </p>
+          {/* Only mount when outer panel is open — closed <details> stay tabbable in jsdom. */}
+          {open ? <UserSettingsPasswordForm /> : null}
         </details>
 
         <hr className="studio-settings-divider" />

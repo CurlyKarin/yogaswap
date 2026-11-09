@@ -46,7 +46,7 @@ describe("UserSettingsSection (#433)", () => {
     expect(screen.getByText(/anzeigename folgt/i)).toBeInTheDocument();
   });
 
-  it("hängt E-Mail-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind (#435)", () => {
+  it("hängt E-Mail-/Passwort-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind", () => {
     render(
       <UserSettingsSection
         nickname="Maya"
@@ -57,6 +57,14 @@ describe("UserSettingsSection (#433)", () => {
     );
 
     expect(screen.queryByRole("group", { name: /e-mail-adresse/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /passwort ändern/i })).not.toBeInTheDocument();
+  });
+
+  it("zeigt Passwort-Self-Service unter Sicherheit wenn Settings offen sind (#434)", () => {
+    render(<UserSettingsSection nickname="Maya" open />);
+
+    expect(screen.getByRole("group", { name: /passwort ändern/i })).toBeInTheDocument();
+    expect(screen.queryByText(/passwort ändern folgt/i)).not.toBeInTheDocument();
   });
 
   it("öffnet kontrolliert und meldet onOpenChange", async () => {
