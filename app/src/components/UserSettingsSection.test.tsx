@@ -61,7 +61,9 @@ describe("UserSettingsSection (#433)", () => {
   });
 
   it("zeigt Passwort-Self-Service unter Sicherheit wenn Settings offen sind (#434)", () => {
-    render(<UserSettingsSection nickname="Maya" open />);
+    render(
+      <UserSettingsSection nickname="Maya" open onPasswordChangedRequiresReauth={vi.fn()} />,
+    );
 
     expect(screen.getByRole("group", { name: /passwort ändern/i })).toBeInTheDocument();
     expect(screen.queryByText(/passwort ändern folgt/i)).not.toBeInTheDocument();

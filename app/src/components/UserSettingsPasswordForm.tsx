@@ -1,13 +1,44 @@
 import { useState } from "react";
-import { updatePassword } from "aws-amplify/auth";
+import { fetchAuthSession, updatePassword } from "aws-amplify/auth";
+import { clearCognitoSession } from "../auth/cognitoSession";
 import { mapChangePasswordError, MIN_PASSWORD_LENGTH } from "../lib/mapChangePasswordError";
 
 export type UserSettingsPasswordFormProps = {
   /** Studio-Login-Name — for password-manager autofill of current password. */
   nickname: string;
+  /** Cognito `sub` of the logged-in profile; must match the active Amplify session. */
+  authUserId?: string | null;
+  /** After success: session is cleared — parent should show login + notice. */
+  onPasswordChangedRequiresReauth: () => Promise<void> | void;
 };
 
-export default function UserSettingsPasswordForm({ nickname }: UserSettingsPasswordFormProps) {
+async function assertSessionMatchesProfile(authUserId: string | null | undefined): Promise<void> {
+  const session = await fetchAuthSession();
+  const sub = session.tokens?.idToken?.payload?.sub;
+  const sessionSub = typeof sub === "string" ? sub.trim() : "";
+  if (!sessionSub) {
+    throw Object.assign(new Error("UserNeedsToBeAuthenticatedException"), {
+      name: "UserNeedsToBeAuthenticatedException",
+    });
+  }
+  const expected = typeof authUserId === "string" ? authUserId.trim() : "";
+  if (!expected) {
+    throw new Error(
+      "Dieses Konto ist nicht sicher mit der Anmeldung verknüpft. Bitte ausloggen, neu einloggen und erneut versuchen.",
+    );
+  }
+  if (sessionSub !== expected) {
+    throw new Error(
+      "Die aktive Anmeldung gehört zu einem anderen Konto als dem angezeigten Login-Namen. Bitte ausloggen, mit diesem Login-Namen neu anmelden und das Passwort erneut ändern.",
+    );
+  }
+}
+
+export default function UserSettingsPasswordForm({
+  nickname,
+  authUserId,
+  onPasswordChangedRequiresReauth,
+}: UserSettingsPasswordFormProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -46,9 +77,30 @@ export default function UserSettingsPasswordForm({ nickname }: UserSettingsPassw
 
     setSaving(true);
     try {
+      await assertSessionMatchesProfile(authUserId);
       await updatePassword({ oldPassword: currentPassword, newPassword });
+
+      // Best-effort: Passwortmanager auf Login-Name + neues Passwort aktualisieren.
+      try {
+        const maybeCtor = (
+          window as unknown as {
+            PasswordCredential?: new (data: { id: string; password: string }) => unknown;
+          }
+        ).PasswordCredential;
+        const credsApi = (
+          navigator as Navigator & { credentials?: { store?: (credential: unknown) => Promise<unknown> } }
+        ).credentials;
+        if (maybeCtor && credsApi?.store) {
+          await credsApi.store(new maybeCtor({ id: nickname.trim(), password: newPassword }));
+        }
+      } catch {
+        // unsupported / blocked
+      }
+
       resetFields();
-      setSuccess("Passwort wurde geändert.");
+      setSuccess("Passwort wurde geändert. Du wirst abgemeldet — bitte mit dem neuen Passwort anmelden.");
+      await clearCognitoSession();
+      await onPasswordChangedRequiresReauth();
     } catch (err) {
       console.error("Failed to change password:", err);
       setError(mapChangePasswordError(err));
@@ -69,7 +121,8 @@ export default function UserSettingsPasswordForm({ nickname }: UserSettingsPassw
     >
       <p className="muted small" style={{ marginTop: 0, gridColumn: "1 / -1" }}>
         Zum Ändern brauchst du dein aktuelles Passwort — oder du gehst über den Login und wählst
-        „Passwort vergessen?“.
+        „Passwort vergessen?“. Nach dem Speichern wirst du abgemeldet und meldest dich mit dem neuen
+        Passwort an.
       </p>
 
       {/* Visible username (same as /login) so password managers pick this account, not all yogaswap entries. */}

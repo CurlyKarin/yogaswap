@@ -334,6 +334,14 @@ function MainApp() {
     setSessionNotice(consumeSessionNotice());
   };
 
+  /** Self-service password change (#434): re-login with the new password. */
+  const handlePasswordChangedRequiresReauth = async () => {
+    persistSessionNotice("Passwort geändert. Bitte mit dem neuen Passwort anmelden.");
+    setUserSettingsOpen(false);
+    await handleLogout();
+    setSessionNotice(consumeSessionNotice());
+  };
+
   const handleDelegationChange = (nextUserId: string) => {
     if (!nextUserId) {
       setActingForUserIdState(null);
@@ -559,9 +567,11 @@ function MainApp() {
             <UserSettingsSection
               nickname={currentUser.nickname}
               email={currentUser.email}
+              authUserId={currentUser.authUserId}
               open={userSettingsOpen}
               onOpenChange={setUserSettingsOpen}
               onEmailChangeRequiresReauth={handleEmailChangeRequiresReauth}
+              onPasswordChangedRequiresReauth={handlePasswordChangedRequiresReauth}
             />
           </div>
         )}

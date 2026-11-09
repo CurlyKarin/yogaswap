@@ -42,5 +42,16 @@ export function mapChangePasswordError(err: unknown): string {
   ) {
     return "Keine aktive Anmeldung. Bitte erneut einloggen und dann das Passwort ändern.";
   }
+  if (msg.trim()) {
+    // Prefer explicit German Error messages from session/profile pre-checks.
+    if (
+      /[äöüÄÖÜß]/.test(msg) ||
+      msg.includes("Login-Namen") ||
+      /konto/i.test(msg) ||
+      /anmeldung/i.test(msg)
+    ) {
+      return msg.trim();
+    }
+  }
   return "Passwort konnte nicht geändert werden. Bitte erneut versuchen.";
 }
