@@ -83,7 +83,7 @@ export default function UserSettingsSection({
             <h4 className="studio-settings-summary-title">Sicherheit</h4>
           </summary>
           {/* Only mount when outer panel is open — closed <details> stay tabbable in jsdom. */}
-          {open ? <UserSettingsPasswordForm /> : null}
+          {open ? <UserSettingsPasswordForm nickname={nickname} /> : null}
         </details>
 
         <hr className="studio-settings-divider" />

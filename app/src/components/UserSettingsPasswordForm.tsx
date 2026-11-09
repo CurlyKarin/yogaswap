@@ -2,7 +2,12 @@ import { useState } from "react";
 import { updatePassword } from "aws-amplify/auth";
 import { mapChangePasswordError, MIN_PASSWORD_LENGTH } from "../lib/mapChangePasswordError";
 
-export default function UserSettingsPasswordForm() {
+export type UserSettingsPasswordFormProps = {
+  /** Studio-Login-Name — for password-manager autofill of current password. */
+  nickname: string;
+};
+
+export default function UserSettingsPasswordForm({ nickname }: UserSettingsPasswordFormProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -53,11 +58,33 @@ export default function UserSettingsPasswordForm() {
   };
 
   return (
-    <div className="studio-settings-grid" role="group" aria-label="Passwort ändern">
+    <form
+      className="studio-settings-grid"
+      role="group"
+      aria-label="Passwort ändern"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void handleSave();
+      }}
+    >
       <p className="muted small" style={{ marginTop: 0, gridColumn: "1 / -1" }}>
-        Zum Ändern brauchst du dein aktuelles Passwort. „Passwort vergessen?“ bleibt der Weg über den
-        Login.
+        Zum Ändern brauchst du dein aktuelles Passwort — oder du gehst über den Login und wählst
+        „Passwort vergessen?“.
       </p>
+
+      {/* Visible username (same as /login) so password managers pick this account, not all yogaswap entries. */}
+      <label className="dialog-field">
+        <span className="dialog-field-label">Login-Name</span>
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          value={nickname}
+          readOnly
+          aria-readonly="true"
+          className="is-readonly-muted"
+        />
+      </label>
 
       <label className="dialog-field">
         <span className="dialog-field-label">Aktuelles Passwort</span>
@@ -67,7 +94,7 @@ export default function UserSettingsPasswordForm() {
           onChange={(e) => setCurrentPassword(e.target.value)}
           disabled={saving}
           autoComplete="current-password"
-          name="current-password"
+          name="password"
         />
       </label>
 
@@ -98,12 +125,7 @@ export default function UserSettingsPasswordForm() {
       </label>
 
       <div style={{ gridColumn: "1 / -1" }}>
-        <button
-          type="button"
-          className="modal-action-btn"
-          onClick={() => void handleSave()}
-          disabled={!canSave}
-        >
+        <button type="submit" className="modal-action-btn" disabled={!canSave}>
           {saving ? "Speichern…" : "Passwort speichern"}
         </button>
       </div>
@@ -118,6 +140,6 @@ export default function UserSettingsPasswordForm() {
           {success}
         </p>
       )}
-    </div>
+    </form>
   );
 }

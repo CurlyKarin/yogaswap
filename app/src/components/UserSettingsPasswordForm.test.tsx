@@ -35,7 +35,11 @@ describe("UserSettingsPasswordForm (#434)", () => {
     const user = userEvent.setup();
     mockedUpdatePassword.mockResolvedValue(undefined);
 
-    render(<UserSettingsPasswordForm />);
+    render(<UserSettingsPasswordForm nickname="maya" />);
+
+    expect(screen.getByLabelText(/^login-name$/i)).toHaveValue("maya");
+    expect(screen.getByLabelText(/^login-name$/i)).toHaveAttribute("readonly");
+    expect(screen.getByText(/über den login und wählst „passwort vergessen\?“/i)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/^aktuelles passwort$/i), "altpass");
     await user.type(screen.getByLabelText(/^neues passwort$/i), "neu-pass");
@@ -56,7 +60,7 @@ describe("UserSettingsPasswordForm (#434)", () => {
 
   it("lehnt Bestätigung-Mismatch ohne API-Call ab", async () => {
     const user = userEvent.setup();
-    render(<UserSettingsPasswordForm />);
+    render(<UserSettingsPasswordForm nickname="maya" />);
 
     await user.type(screen.getByLabelText(/^aktuelles passwort$/i), "altpass");
     await user.type(screen.getByLabelText(/^neues passwort$/i), "neu-pass");
@@ -75,7 +79,7 @@ describe("UserSettingsPasswordForm (#434)", () => {
       }),
     );
 
-    render(<UserSettingsPasswordForm />);
+    render(<UserSettingsPasswordForm nickname="maya" />);
 
     await user.type(screen.getByLabelText(/^aktuelles passwort$/i), "falsch");
     await user.type(screen.getByLabelText(/^neues passwort$/i), "neu-pass");
@@ -88,7 +92,7 @@ describe("UserSettingsPasswordForm (#434)", () => {
   });
 
   it("deaktiviert Speichern bei leeren Feldern", () => {
-    render(<UserSettingsPasswordForm />);
+    render(<UserSettingsPasswordForm nickname="maya" />);
     expect(screen.getByRole("button", { name: /passwort speichern/i })).toBeDisabled();
   });
 });
