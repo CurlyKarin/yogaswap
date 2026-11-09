@@ -406,12 +406,18 @@ describe("App delegation mode", () => {
     expect(screen.getByText(/vertretung aktiv:/i)).toBeInTheDocument();
     expect(screen.getByText(/du handelst im auftrag von/i)).toBeInTheDocument();
     expect(screen.queryByText(/AdminPanel Mock/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /meine einstellungen/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /einstellungen im vertretungsmodus nicht verfügbar/i }),
+    ).toBeDisabled();
     expect(coursesShellMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ forceParticipantView: true }),
     );
 
     await userEvent.click(screen.getByRole("button", { name: /vertretung beenden/i }));
     expect(screen.queryByText(/vertretung aktiv:/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /meine einstellungen/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^einstellungen$/i })).toBeEnabled();
   });
 
   it("clears delegation context on logout", async () => {
