@@ -678,6 +678,86 @@ describe("updateParticipant Lambda", () => {
     );
   });
 
+  test("allows self-service email change for active user with password reset (#435)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          role: { S: "participant" },
+        },
+      }) // actor role check (email change) — no canManage for self
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          authUserId: { S: "sub-alice" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+          cognitoUsername: { S: "Alice" },
+        },
+      }) // existing self profile
+      .mockResolvedValueOnce({}) // AUTH_TOKENS PutItem
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }) // studio mail context
+      .mockResolvedValueOnce({}); // participants PutItem
+    cognitoMockSend.mockResolvedValue({});
+    sesMockSend.mockResolvedValue({});
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({ email: "alice.new@example.com" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.email).toBe("alice.new@example.com");
+    expect(body.passwordResetTriggered).toBe(true);
+    expect(body.passwordResetEmailSent).toBe(true);
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Destination: { ToAddresses: ["alice.new@example.com"] },
+      }),
+    );
+    expect(sesMockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Destination: { ToAddresses: ["alice@example.com"] },
+      }),
+    );
+  });
+
+  test("returns 403 when participant tries to change another user's email (#435)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "bob" },
+          role: { S: "participant" },
+        },
+      }) // canManage membership — participant cannot manage
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      }); // canManage tenant
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "bob" } } as any,
+        body: JSON.stringify({ email: "alice.new@example.com" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toMatch(/Forbidden/i);
+  });
+
   test("returns 403 when non-admin requests forced password reset on email change", async () => {
     mockSend
       .mockResolvedValueOnce({

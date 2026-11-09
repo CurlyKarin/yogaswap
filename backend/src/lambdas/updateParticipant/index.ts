@@ -136,14 +136,31 @@ export const handler = async (
       Object.prototype.hasOwnProperty.call(body, "inviteCompletedAt") ||
       Object.prototype.hasOwnProperty.call(body, "role");
 
+    const requestsRoleChange = Object.prototype.hasOwnProperty.call(body, "role");
+    const requestsForcedPasswordReset =
+      body.forcePasswordResetOnEmailChange === true;
+    const requestsEmailChange = Object.prototype.hasOwnProperty.call(body, "email");
+    const isSelfTarget =
+      !!actorUserId && actorUserId.toLowerCase() === requestedUserId.toLowerCase();
+
     // Allow a participant to self-link their own Cognito `sub` once after sign-up.
     // This is required for participants created via invitation to move from "invited" -> "active".
     const isSelfAuthLink =
-      actorUserId?.toLowerCase() === requestedUserId.toLowerCase() &&
-      hasAuthUserId &&
-      !hasOtherMutationKeys;
+      isSelfTarget && hasAuthUserId && !hasOtherMutationKeys;
 
-    if (!isSelfAuthLink) {
+    // Self-service email change (#435): own profile, email-only body, same security mails as admin (#350).
+    const bodyKeys = Object.keys(body).filter((key) =>
+      Object.prototype.hasOwnProperty.call(body, key),
+    );
+    const isSelfEmailOnly =
+      isSelfTarget &&
+      requestsEmailChange &&
+      !requestsRoleChange &&
+      !requestsForcedPasswordReset &&
+      !hasAuthUserId &&
+      bodyKeys.every((key) => key === "email");
+
+    if (!isSelfAuthLink && !isSelfEmailOnly) {
       const canManage = await canActorManageParticipants({
         client,
         membershipsTable,
@@ -156,12 +173,7 @@ export const handler = async (
       }
     }
 
-    const requestsRoleChange = Object.prototype.hasOwnProperty.call(body, "role");
-    const requestsForcedPasswordReset =
-      body.forcePasswordResetOnEmailChange === true;
-
     let actorMembershipRole: string | undefined;
-    const requestsEmailChange = Object.prototype.hasOwnProperty.call(body, "email");
     if (requestsRoleChange || requestsForcedPasswordReset || requestsEmailChange) {
       const actorMembershipResp = await client.send(
         new GetItemCommand({
@@ -262,8 +274,11 @@ export const handler = async (
           body: JSON.stringify({ error: "Instructors can update participants only" }),
         };
       }
+      const isSelfEmailChange =
+        !!actorUserId && actorUserId.toLowerCase() === targetUserId.toLowerCase();
       if (
         emailChanged &&
+        !isSelfEmailChange &&
         actorMembershipRole !== "admin" &&
         (existingStatus === "active" || hasAuthLink || wasPreviouslyRegistered)
       ) {

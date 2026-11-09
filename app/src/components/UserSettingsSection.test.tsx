@@ -28,6 +28,35 @@ describe("UserSettingsSection (#433)", () => {
 
     expect(screen.getByText(/maya/i)).toBeInTheDocument();
     expect(screen.queryByText(/studio verlassen|konto löschen/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /e-mail-adresse/i })).not.toBeInTheDocument();
+  });
+
+  it("zeigt E-Mail-Self-Service im Profil wenn Reauth-Handler gesetzt ist (#435)", () => {
+    render(
+      <UserSettingsSection
+        nickname="Maya"
+        email="maya@example.com"
+        open
+        onEmailChangeRequiresReauth={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("group", { name: /e-mail-adresse/i })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("maya@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/anzeigename folgt/i)).toBeInTheDocument();
+  });
+
+  it("hängt E-Mail-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind (#435)", () => {
+    render(
+      <UserSettingsSection
+        nickname="Maya"
+        email="maya@example.com"
+        open={false}
+        onEmailChangeRequiresReauth={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("group", { name: /e-mail-adresse/i })).not.toBeInTheDocument();
   });
 
   it("öffnet kontrolliert und meldet onOpenChange", async () => {

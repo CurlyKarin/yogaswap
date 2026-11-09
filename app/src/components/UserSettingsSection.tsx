@@ -1,10 +1,14 @@
 import { useEffect, useId, useRef } from "react";
+import UserSettingsEmailForm from "./UserSettingsEmailForm";
 
 export type UserSettingsSectionProps = {
   nickname: string;
+  email?: string;
   /** Controlled open state for the outer details (Header-Einstieg). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** After self-service email change with forced password reset (#435 / #350). */
+  onEmailChangeRequiresReauth?: () => Promise<void> | void;
 };
 
 /**
@@ -13,8 +17,10 @@ export type UserSettingsSectionProps = {
  */
 export default function UserSettingsSection({
   nickname,
+  email,
   open = false,
   onOpenChange,
+  onEmailChangeRequiresReauth,
 }: UserSettingsSectionProps) {
   const headingId = useId();
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
@@ -57,8 +63,16 @@ export default function UserSettingsSection({
             <h4 className="studio-settings-summary-title">Profil</h4>
           </summary>
           <p className="muted small" style={{ marginTop: 0 }}>
-            Anzeigename und E-Mail-Adresse folgen (#436, #435). Der Login-Name bleibt unverändert.
+            Anzeigename folgt (#436). Der Login-Name bleibt unverändert.
           </p>
+          {/* Only mount when outer panel is open — closed <details> stay tabbable in jsdom. */}
+          {open && onEmailChangeRequiresReauth ? (
+            <UserSettingsEmailForm
+              nickname={nickname}
+              email={email}
+              onRequiresReauth={onEmailChangeRequiresReauth}
+            />
+          ) : null}
         </details>
 
         <hr className="studio-settings-divider" />

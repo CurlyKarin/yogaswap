@@ -19,6 +19,7 @@ import {
   SESSION_ENDED_EVENT,
   consumeSessionNotice,
   reconcileLocalUserWithCognitoSession,
+  setSessionNotice as persistSessionNotice,
   startSessionIdleWatchdog,
 } from "./auth/sessionExpiry";
 import { restoreStudioUserFromSession } from "./auth/restoreSessionUser";
@@ -65,7 +66,10 @@ function MainApp() {
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
   const { logout, isLoading, error } = useAppAuth();
 
+  const inDelegation = Boolean(actingForUserIdState);
+
   const openUserSettings = useCallback(() => {
+    if (inDelegation) return;
     setUserSettingsOpen(true);
     window.requestAnimationFrame(() => {
       const section = document.getElementById("user-settings");
@@ -73,7 +77,12 @@ function MainApp() {
         scrollIntoViewWithStickyChrome(section);
       }
     });
-  }, []);
+  }, [inDelegation]);
+
+  // Persönliche Settings gehören zum Actor — im Vertretungsmodus schließen/ausblenden.
+  useEffect(() => {
+    if (inDelegation) setUserSettingsOpen(false);
+  }, [inDelegation]);
 
   // Studio-Existenz vor Login prüfen (#261) — GET /tenant-context ist öffentlich.
   useEffect(() => {
@@ -315,6 +324,16 @@ function MainApp() {
     setCurrentUser(null);
   };
 
+  /** Self-service email change (#435): session invalid after #350 password reset. */
+  const handleEmailChangeRequiresReauth = async () => {
+    persistSessionNotice(
+      "E-Mail geändert. Bitte neues Passwort über den Link an deine neue Adresse setzen und dich danach anmelden.",
+    );
+    setUserSettingsOpen(false);
+    await handleLogout();
+    setSessionNotice(consumeSessionNotice());
+  };
+
   const handleDelegationChange = (nextUserId: string) => {
     if (!nextUserId) {
       setActingForUserIdState(null);
@@ -439,9 +458,18 @@ function MainApp() {
                 type="button"
                 className="header-action-btn header-action-btn--icon"
                 onClick={openUserSettings}
-                aria-controls="user-settings"
-                aria-label="Einstellungen"
-                title="Einstellungen"
+                disabled={inDelegation}
+                aria-controls={inDelegation ? undefined : "user-settings"}
+                aria-label={
+                  inDelegation
+                    ? "Einstellungen im Vertretungsmodus nicht verfügbar"
+                    : "Einstellungen"
+                }
+                title={
+                  inDelegation
+                    ? "Im Vertretungsmodus nicht verfügbar — zuerst Vertretung beenden"
+                    : "Einstellungen"
+                }
               >
                 <Settings size={18} aria-hidden="true" />
               </button>
@@ -526,17 +554,19 @@ function MainApp() {
           </section>
         )}
 
-        {studioGate === "ready" && currentUser && (
+        {studioGate === "ready" && currentUser && !inDelegation && (
           <div className="main-section main-section-user-settings">
             <UserSettingsSection
               nickname={currentUser.nickname}
+              email={currentUser.email}
               open={userSettingsOpen}
               onOpenChange={setUserSettingsOpen}
+              onEmailChangeRequiresReauth={handleEmailChangeRequiresReauth}
             />
           </div>
         )}
 
-        {studioGate === "ready" && currentUser && canInvite && !actingForUserIdState && (
+        {studioGate === "ready" && currentUser && canInvite && !inDelegation && (
           <section className="main-section main-section-admin" aria-labelledby="admin-heading">
             <h2 id="admin-heading" className="visually-hidden">
               Verwaltung
