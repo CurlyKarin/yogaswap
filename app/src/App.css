@@ -2347,8 +2347,10 @@ a:focus-visible {
   color-scheme: only light;
 }
 
-.studio-settings-grid > .dialog-field > input:disabled {
+.studio-settings-grid > .dialog-field > input:disabled,
+.studio-settings-grid > .dialog-field > input.is-readonly-muted {
   opacity: 0.6;
+  cursor: default;
 }
 
 .studio-number-step {

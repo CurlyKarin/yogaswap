@@ -1,14 +1,18 @@
 import { useEffect, useId, useRef } from "react";
 import UserSettingsEmailForm from "./UserSettingsEmailForm";
+import UserSettingsPasswordForm from "./UserSettingsPasswordForm";
 
 export type UserSettingsSectionProps = {
   nickname: string;
   email?: string;
+  authUserId?: string | null;
   /** Controlled open state for the outer details (Header-Einstieg). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   /** After self-service email change with forced password reset (#435 / #350). */
   onEmailChangeRequiresReauth?: () => Promise<void> | void;
+  /** After self-service password change (#434). */
+  onPasswordChangedRequiresReauth?: () => Promise<void> | void;
 };
 
 /**
@@ -18,9 +22,11 @@ export type UserSettingsSectionProps = {
 export default function UserSettingsSection({
   nickname,
   email,
+  authUserId,
   open = false,
   onOpenChange,
   onEmailChangeRequiresReauth,
+  onPasswordChangedRequiresReauth,
 }: UserSettingsSectionProps) {
   const headingId = useId();
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
@@ -81,9 +87,14 @@ export default function UserSettingsSection({
           <summary className="studio-settings-summary studio-settings-summary--sub">
             <h4 className="studio-settings-summary-title">Sicherheit</h4>
           </summary>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Passwort ändern folgt (#434).
-          </p>
+          {/* Only mount when outer panel is open — closed <details> stay tabbable in jsdom. */}
+          {open && onPasswordChangedRequiresReauth ? (
+            <UserSettingsPasswordForm
+              nickname={nickname}
+              authUserId={authUserId}
+              onPasswordChangedRequiresReauth={onPasswordChangedRequiresReauth}
+            />
+          ) : null}
         </details>
 
         <hr className="studio-settings-divider" />
