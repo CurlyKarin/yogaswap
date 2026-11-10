@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DISPLAY_NAME_MAX_LENGTH,
   DISPLAY_NAME_MIN_LENGTH,
+  formatParticipantStaffLabel,
   isUsableNicknameSuggestion,
   isValidDisplayName,
   resolveParticipantDisplayLabel,
@@ -100,5 +101,19 @@ describe("resolveParticipantDisplayLabel", () => {
   it("falls back to canonical nickname", () => {
     expect(resolveParticipantDisplayLabel({ userId: "Luna" })).toBe("Luna");
     expect(resolveParticipantDisplayLabel({ displayName: "  ", userId: "Luna" })).toBe("Luna");
+  });
+});
+
+describe("formatParticipantStaffLabel (#436)", () => {
+  it("shows display name with login name when they differ", () => {
+    expect(formatParticipantStaffLabel({ displayName: "Anna", userId: "Anja" })).toBe("Anna (Anja)");
+  });
+
+  it("omits duplicate when equal ignoring case", () => {
+    expect(formatParticipantStaffLabel({ displayName: "Anja", userId: "anja" })).toBe("Anja");
+  });
+
+  it("falls back to login name without display name", () => {
+    expect(formatParticipantStaffLabel({ userId: "Anja" })).toBe("Anja");
   });
 });

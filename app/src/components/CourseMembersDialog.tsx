@@ -434,6 +434,7 @@ export default function CourseMembersDialog({
       >
         <MemberIdentity
           userId={profile?.userId ?? row.participantId}
+          displayName={profile?.displayName}
           email={profile?.email}
           status={status}
           roleLabel={elevatedStudioRoleLabel(profile?.role)}
@@ -623,6 +624,7 @@ export default function CourseMembersDialog({
                       >
                         <MemberIdentity
                           userId={entry.userId}
+                          displayName={entry.displayName}
                           email={entry.email}
                           status={status}
                           roleLabel={elevatedStudioRoleLabel(entry.role)}
@@ -664,6 +666,7 @@ export default function CourseMembersDialog({
                     <div key={`ex-${row.participantId}`} className="course-members-row course-members-row-former">
                       <MemberIdentity
                         userId={profile?.userId ?? row.participantId}
+                        displayName={profile?.displayName}
                         email={profile?.email}
                         status={getStatusPresentation(profile?.status)}
                         roleLabel={elevatedStudioRoleLabel(profile?.role)}
@@ -712,6 +715,7 @@ export default function CourseMembersDialog({
                       <div key={operationalRef || entry.participantId} className="course-members-row">
                         <MemberIdentity
                           userId={entry.userId}
+                          displayName={entry.displayName}
                           email={entry.email}
                           status={status}
                           roleLabel={elevatedStudioRoleLabel(entry.role)}
@@ -794,18 +798,26 @@ function elevatedStudioRoleLabel(role: UserRole | string | undefined | null): st
 
 function MemberIdentity({
   userId,
+  displayName,
   email,
   status,
   roleLabel = null,
   missing = false,
 }: {
   userId: string;
+  displayName?: string | null;
   email?: string | null;
   status: ParticipantStatusPresentation;
   roleLabel?: string | null;
   missing?: boolean;
 }) {
   const subtitle = missing ? "nicht mehr vorhanden" : email?.trim() || null;
+  const trimmedDisplay = displayName?.trim() || "";
+  const showLoginBeside =
+    trimmedDisplay.length > 0 &&
+    trimmedDisplay.toLowerCase() !== userId.trim().toLowerCase();
+  const primaryLabel = trimmedDisplay || userId;
+  const title = showLoginBeside ? `${trimmedDisplay} (${userId})` : userId;
   return (
     <span className="course-members-row-identity">
       <span
@@ -815,7 +827,12 @@ function MemberIdentity({
         aria-label={status.label}
       />
       <span className="course-members-row-copy">
-        <strong>{userId}</strong>
+        <span className="course-members-row-name" title={title}>
+          <strong>{primaryLabel}</strong>
+          {showLoginBeside ? (
+            <span className="course-members-row-login"> ({userId})</span>
+          ) : null}
+        </span>
         {roleLabel ? (
           <span className="course-members-role-badge" aria-label={`Rolle ${roleLabel}`}>
             {roleLabel}

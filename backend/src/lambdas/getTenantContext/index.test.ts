@@ -38,6 +38,7 @@ describe("getTenantContext Lambda", () => {
     } as any);
 
   test("returns tenant and membership when both exist", async () => {
+    process.env.PARTICIPANTS_TABLE = "test-participants";
     mockSend
       .mockResolvedValueOnce({
         Item: {
@@ -55,6 +56,13 @@ describe("getTenantContext Lambda", () => {
           tenantId: { S: "yogaswap-demo" },
           userId: { S: "alice" },
           role: { S: "admin" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "yogaswap-demo" },
+          userId: { S: "alice" },
+          displayName: { S: "Alice Müller" },
         },
       });
 
@@ -75,8 +83,9 @@ describe("getTenantContext Lambda", () => {
       userId: "alice",
       role: "admin",
     });
+    expect(body.displayName).toBe("Alice Müller");
 
-    expect(GetItemCommand).toHaveBeenCalledTimes(2);
+    expect(GetItemCommand).toHaveBeenCalledTimes(3);
   });
 
   test("returns 500 when tables env vars are missing", async () => {

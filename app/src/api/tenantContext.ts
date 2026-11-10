@@ -6,6 +6,8 @@ export type TenantContextResponse = {
   userId: string | null;
   tenant: Tenant;
   membership: UserTenantMembership | null;
+  /** Own profile display name when authenticated (#436). */
+  displayName?: string | null;
 };
 
 export class TenantNotFoundError extends Error {

@@ -3,6 +3,7 @@ import {
   GetItemCommand,
   PutItemCommand,
   QueryCommand,
+  type AttributeValue,
 } from "@aws-sdk/client-dynamodb";
 import {
   AdminSetUserPasswordCommand,
@@ -131,6 +132,7 @@ export const handler = async (
 
     const hasOtherMutationKeys =
       Object.prototype.hasOwnProperty.call(body, "email") ||
+      Object.prototype.hasOwnProperty.call(body, "displayName") ||
       Object.prototype.hasOwnProperty.call(body, "settings") ||
       Object.prototype.hasOwnProperty.call(body, "inviteSentAt") ||
       Object.prototype.hasOwnProperty.call(body, "inviteCompletedAt") ||
@@ -140,8 +142,81 @@ export const handler = async (
     const requestsForcedPasswordReset =
       body.forcePasswordResetOnEmailChange === true;
     const requestsEmailChange = Object.prototype.hasOwnProperty.call(body, "email");
-    const isSelfTarget =
+    const requestsDisplayNameChange = Object.prototype.hasOwnProperty.call(
+      body,
+      "displayName",
+    );
+    const bodyKeys = Object.keys(body).filter((key) =>
+      Object.prototype.hasOwnProperty.call(body, key),
+    );
+    const bodyIsEmailOnly =
+      requestsEmailChange &&
+      !requestsRoleChange &&
+      !requestsForcedPasswordReset &&
+      !hasAuthUserId &&
+      bodyKeys.every((key) => key === "email");
+    const bodyIsDisplayNameOnly =
+      requestsDisplayNameChange &&
+      !requestsEmailChange &&
+      !requestsRoleChange &&
+      !requestsForcedPasswordReset &&
+      !hasAuthUserId &&
+      bodyKeys.every((key) => key === "displayName");
+
+    const jwtClaims = (event.requestContext as { authorizer?: { jwt?: { claims?: Record<string, unknown> } } })
+      ?.authorizer?.jwt?.claims;
+    const actorSub =
+      typeof jwtClaims?.sub === "string" && jwtClaims.sub.trim()
+        ? jwtClaims.sub.trim()
+        : "";
+
+    let isSelfTarget =
       !!actorUserId && actorUserId.toLowerCase() === requestedUserId.toLowerCase();
+
+    // Cognito `nickname` claim can diverge from studio login name — also match via authUserId/sub
+    // for email/displayName self-service (#435/#436).
+    let targetUserId = requestedUserId;
+    let existingItem: Record<string, AttributeValue> | undefined;
+    let existingLoadedEarly = false;
+
+    if ((bodyIsEmailOnly || bodyIsDisplayNameOnly) && !isSelfTarget && actorSub) {
+      const earlyResp = await client.send(
+        new GetItemCommand({
+          TableName: tableName,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: targetUserId },
+          },
+          ConsistentRead: true,
+        }),
+      );
+      existingItem = earlyResp.Item;
+      if (!existingItem) {
+        const queryResp = await client.send(
+          new QueryCommand({
+            TableName: tableName,
+            IndexName: PARTICIPANTS_NORMALIZED_INDEX,
+            KeyConditionExpression:
+              "tenantId = :tenantId AND userIdNormalized = :userIdNormalized",
+            ExpressionAttributeValues: {
+              ":tenantId": { S: tenantId },
+              ":userIdNormalized": { S: requestedUserId.toLowerCase() },
+            },
+            Limit: 1,
+          }),
+        );
+        const queryMatched = queryResp.Items?.[0];
+        if (queryMatched?.userId?.S) {
+          targetUserId = queryMatched.userId.S;
+          existingItem = queryMatched;
+        }
+      }
+      existingLoadedEarly = true;
+      const profileAuthUserId = existingItem?.authUserId?.S?.trim() || "";
+      if (profileAuthUserId && profileAuthUserId === actorSub) {
+        isSelfTarget = true;
+      }
+    }
 
     // Allow a participant to self-link their own Cognito `sub` once after sign-up.
     // This is required for participants created via invitation to move from "invited" -> "active".
@@ -149,18 +224,12 @@ export const handler = async (
       isSelfTarget && hasAuthUserId && !hasOtherMutationKeys;
 
     // Self-service email change (#435): own profile, email-only body, same security mails as admin (#350).
-    const bodyKeys = Object.keys(body).filter((key) =>
-      Object.prototype.hasOwnProperty.call(body, key),
-    );
-    const isSelfEmailOnly =
-      isSelfTarget &&
-      requestsEmailChange &&
-      !requestsRoleChange &&
-      !requestsForcedPasswordReset &&
-      !hasAuthUserId &&
-      bodyKeys.every((key) => key === "email");
+    const isSelfEmailOnly = isSelfTarget && bodyIsEmailOnly;
 
-    if (!isSelfAuthLink && !isSelfEmailOnly) {
+    // Self-service display name (#436): own profile, displayName-only body; #345 mail stays on.
+    const isSelfDisplayNameOnly = isSelfTarget && bodyIsDisplayNameOnly;
+
+    if (!isSelfAuthLink && !isSelfEmailOnly && !isSelfDisplayNameOnly) {
       const canManage = await canActorManageParticipants({
         client,
         membershipsTable,
@@ -202,36 +271,38 @@ export const handler = async (
       }
     }
 
-    let targetUserId = requestedUserId;
-    const existingResp = await client.send(
-      new GetItemCommand({
-        TableName: tableName,
-        Key: {
-          tenantId: { S: tenantId },
-          userId: { S: targetUserId },
-        },
-        ConsistentRead: true,
-      }),
-    );
-
-    let existingItem = existingResp.Item;
-    if (!existingItem) {
-      const queryResp = await client.send(
-        new QueryCommand({
+    if (!existingLoadedEarly) {
+      const existingResp = await client.send(
+        new GetItemCommand({
           TableName: tableName,
-          IndexName: PARTICIPANTS_NORMALIZED_INDEX,
-          KeyConditionExpression: "tenantId = :tenantId AND userIdNormalized = :userIdNormalized",
-          ExpressionAttributeValues: {
-            ":tenantId": { S: tenantId },
-            ":userIdNormalized": { S: requestedUserId.toLowerCase() },
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: targetUserId },
           },
-          Limit: 1,
+          ConsistentRead: true,
         }),
       );
-      const queryMatched = queryResp.Items?.[0];
-      if (queryMatched?.userId?.S) {
-        targetUserId = queryMatched.userId.S;
-        existingItem = queryMatched;
+
+      existingItem = existingResp.Item;
+      if (!existingItem) {
+        const queryResp = await client.send(
+          new QueryCommand({
+            TableName: tableName,
+            IndexName: PARTICIPANTS_NORMALIZED_INDEX,
+            KeyConditionExpression:
+              "tenantId = :tenantId AND userIdNormalized = :userIdNormalized",
+            ExpressionAttributeValues: {
+              ":tenantId": { S: tenantId },
+              ":userIdNormalized": { S: requestedUserId.toLowerCase() },
+            },
+            Limit: 1,
+          }),
+        );
+        const queryMatched = queryResp.Items?.[0];
+        if (queryMatched?.userId?.S) {
+          targetUserId = queryMatched.userId.S;
+          existingItem = queryMatched;
+        }
       }
     }
 
