@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { updateParticipant } from "../api/participants";
+import { apiErrorMessage } from "../lib/apiErrorMessage";
+import FieldLabelWithTooltip from "./FieldLabelWithTooltip";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -57,7 +59,7 @@ export default function UserSettingsEmailForm({
       setDraft(result.email ?? next);
     } catch (err) {
       console.error("Failed to change email:", err);
-      setError(err instanceof Error ? err.message : "E-Mail konnte nicht geändert werden.");
+      setError(apiErrorMessage(err, "E-Mail konnte nicht geändert werden."));
     } finally {
       setSaving(false);
     }
@@ -65,14 +67,10 @@ export default function UserSettingsEmailForm({
 
   return (
     <div className="studio-settings-grid" role="group" aria-label="E-Mail-Adresse">
-      <p className="muted small" style={{ marginTop: 0, gridColumn: "1 / -1" }}>
-        Login-Name <strong>{nickname}</strong> bleibt gleich. Nach dem Ändern wirst du abgemeldet und
-        musst über die neue Adresse ein neues Passwort setzen. Die alte Adresse erhält einen
-        Sicherheitshinweis.
-      </p>
-
       <label className="dialog-field">
-        <span className="dialog-field-label">E-Mail-Adresse</span>
+        <FieldLabelWithTooltip tooltip={`Login-Name ${nickname} bleibt gleich. Nach dem Ändern wirst du abgemeldet und setzt über die neue Adresse ein neues Passwort. Die alte Adresse erhält einen Sicherheitshinweis.`}>
+          E-Mail-Adresse
+        </FieldLabelWithTooltip>
         <input
           type="email"
           value={draft}
@@ -80,6 +78,7 @@ export default function UserSettingsEmailForm({
           disabled={saving}
           autoComplete="email"
           placeholder="name@example.com"
+          aria-label="E-Mail-Adresse"
         />
       </label>
 

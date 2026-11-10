@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import type { Tenant } from "shared/types";
 import {
   DEFAULT_INSTRUCTOR_TERM_NOTIFY_FROM_HOURS,
@@ -19,41 +19,8 @@ import {
   validateStudioSettingsPatch,
 } from "shared/tenantSettings";
 import { updateTenantSettings } from "../api/tenantSettings";
+import FieldLabelWithTooltip from "./FieldLabelWithTooltip";
 import NumberStepInput from "./NumberStepInput";
-
-function FieldLabelWithTooltip({ children, tooltip }: { children: ReactNode; tooltip: string }) {
-  const hintId = useId();
-  const [open, setOpen] = useState(false);
-
-  return (
-    <span className="studio-field-label-block">
-      <span className="dialog-field-label studio-field-label">
-        {children}
-        <button
-          type="button"
-          className="studio-field-hint"
-          title={tooltip}
-          aria-expanded={open}
-          aria-controls={hintId}
-          aria-label={`Hilfe: ${tooltip}`}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setOpen((prev) => !prev);
-          }}
-        >
-          ?
-        </button>
-      </span>
-      {open && (
-        <span id={hintId} role="note" className="studio-field-hint-popover">
-          {tooltip}
-        </span>
-      )}
-    </span>
-  );
-}
 
 type StudioSettingsSectionProps = {
   tenant: Tenant;

@@ -64,8 +64,8 @@ describe("UserSettingsPasswordForm (#434)", () => {
       />,
     );
 
-    expect(screen.getByLabelText(/^login-name$/i)).toHaveValue("maya");
-    expect(screen.getByLabelText(/^login-name$/i)).toHaveAttribute("readonly");
+    expect(screen.getByDisplayValue("maya")).toHaveAttribute("readonly");
+    expect(screen.getByRole("button", { name: /passwort vergessen/i })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/^aktuelles passwort$/i), "altpass");
     await user.type(screen.getByLabelText(/^neues passwort$/i), "neu-pass");

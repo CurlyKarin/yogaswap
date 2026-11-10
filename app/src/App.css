@@ -1724,6 +1724,17 @@ a:focus-visible {
   gap: 1px;
 }
 
+.course-members-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.course-members-row-login {
+  font-weight: 400;
+  color: #6b7280;
+}
+
 .course-members-role-badge {
   display: inline-block;
   align-self: flex-start;
@@ -2298,6 +2309,13 @@ a:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.75rem;
+}
+
+/* Stacked self-service forms in Profil (Anzeigename → E-Mail). */
+.studio-settings-subdetails > .studio-settings-grid + .studio-settings-grid {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e5e7eb;
 }
 
 .studio-settings-notify-refinements {

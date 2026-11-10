@@ -758,6 +758,106 @@ describe("updateParticipant Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Forbidden/i);
   });
 
+  test("allows self-service display name change with info mail (#436 / #345)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          displayName: { S: "Alice" },
+          authUserId: { S: "sub-alice" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      }) // existing self profile — no canManage / actor role for displayName-only
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }) // studio mail context
+      .mockResolvedValueOnce({}); // participants PutItem
+    sesMockSend.mockResolvedValue({});
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({ displayName: "Kaja2" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.displayName).toBe("Kaja2");
+    expect(body.displayNameChanged).toBe(true);
+    expect(body.displayNameChangedEmailSent).toBe(true);
+    expect(sesMockSend).toHaveBeenCalled();
+  });
+
+  test("allows self-service display name when JWT nickname differs but sub matches (#436)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "Anton" },
+          email: { S: "anton@example.com" },
+          displayName: { S: "Alt" },
+          authUserId: { S: "sub-anton" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      }) // early profile load for sub match
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          name: { S: "Demo" },
+        },
+      }) // studio mail
+      .mockResolvedValueOnce({}); // PutItem
+    sesMockSend.mockResolvedValue({});
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "Anton" },
+        requestContext: {
+          authorizer: {
+            principalId: "tim.tom",
+            jwt: { claims: { nickname: "tim.tom", sub: "sub-anton" } },
+          },
+        } as any,
+        body: JSON.stringify({ displayName: "Anton Neu" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).displayName).toBe("Anton Neu");
+  });
+
+  test("returns 403 when participant tries to change another user's display name (#436)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "bob" },
+          role: { S: "participant" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      });
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "bob" } } as any,
+        body: JSON.stringify({ displayName: "Kaja2" }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toMatch(/Forbidden/i);
+  });
+
   test("returns 403 when non-admin requests forced password reset on email change", async () => {
     mockSend
       .mockResolvedValueOnce({

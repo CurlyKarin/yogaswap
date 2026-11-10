@@ -84,6 +84,22 @@ export function resolveParticipantDisplayLabel(
   return profile.userId?.trim() || "";
 }
 
+/**
+ * Staff/admin list label (#436): `Anna (Anja)` when display name differs from login name.
+ * Tooltip can reuse the same string or login name alone.
+ */
+export function formatParticipantStaffLabel(profile: {
+  displayName?: string | null;
+  userId?: string | null;
+}): string {
+  const loginName = profile.userId?.trim() || "";
+  const displayName = profile.displayName?.trim() || "";
+  if (!displayName) return loginName;
+  if (!loginName) return displayName;
+  if (displayName.toLowerCase() === loginName.toLowerCase()) return displayName;
+  return `${displayName} (${loginName})`;
+}
+
 const UMLAUT_MAP: Record<string, string> = {
   ä: "ae",
   ö: "oe",

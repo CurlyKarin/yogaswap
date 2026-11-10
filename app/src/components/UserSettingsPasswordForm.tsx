@@ -2,6 +2,7 @@ import { useState } from "react";
 import { fetchAuthSession, updatePassword } from "aws-amplify/auth";
 import { clearCognitoSession } from "../auth/cognitoSession";
 import { mapChangePasswordError, MIN_PASSWORD_LENGTH } from "../lib/mapChangePasswordError";
+import FieldLabelWithTooltip from "./FieldLabelWithTooltip";
 
 export type UserSettingsPasswordFormProps = {
   /** Studio-Login-Name — for password-manager autofill of current password. */
@@ -119,15 +120,11 @@ export default function UserSettingsPasswordForm({
         void handleSave();
       }}
     >
-      <p className="muted small" style={{ marginTop: 0, gridColumn: "1 / -1" }}>
-        Zum Ändern brauchst du dein aktuelles Passwort — oder du gehst über den Login und wählst
-        „Passwort vergessen?“. Nach dem Speichern wirst du abgemeldet und meldest dich mit dem neuen
-        Passwort an.
-      </p>
-
       {/* Visible username (same as /login) so password managers pick this account, not all yogaswap entries. */}
       <label className="dialog-field">
-        <span className="dialog-field-label">Login-Name</span>
+        <FieldLabelWithTooltip tooltip="Zum Ändern brauchst du dein aktuelles Passwort — oder du gehst über den Login und wählst „Passwort vergessen?“. Nach dem Speichern wirst du abgemeldet und meldest dich mit dem neuen Passwort an.">
+          Login-Name
+        </FieldLabelWithTooltip>
         <input
           type="text"
           name="username"
@@ -136,6 +133,7 @@ export default function UserSettingsPasswordForm({
           readOnly
           aria-readonly="true"
           className="is-readonly-muted"
+          aria-label="Login-Name"
         />
       </label>
 
@@ -148,6 +146,7 @@ export default function UserSettingsPasswordForm({
           disabled={saving}
           autoComplete="current-password"
           name="password"
+          aria-label="Aktuelles Passwort"
         />
       </label>
 
@@ -161,6 +160,7 @@ export default function UserSettingsPasswordForm({
           autoComplete="new-password"
           name="new-password"
           minLength={MIN_PASSWORD_LENGTH}
+          aria-label="Neues Passwort"
         />
       </label>
 
@@ -174,6 +174,7 @@ export default function UserSettingsPasswordForm({
           autoComplete="new-password"
           name="confirm-password"
           minLength={MIN_PASSWORD_LENGTH}
+          aria-label="Neues Passwort bestätigen"
         />
       </label>
 

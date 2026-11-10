@@ -1,14 +1,17 @@
 import { useEffect, useId, useRef } from "react";
+import UserSettingsDisplayNameForm from "./UserSettingsDisplayNameForm";
 import UserSettingsEmailForm from "./UserSettingsEmailForm";
 import UserSettingsPasswordForm from "./UserSettingsPasswordForm";
 
 export type UserSettingsSectionProps = {
   nickname: string;
   email?: string;
+  displayName?: string;
   authUserId?: string | null;
   /** Controlled open state for the outer details (Header-Einstieg). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onDisplayNameSaved?: (displayName: string) => void;
   /** After self-service email change with forced password reset (#435 / #350). */
   onEmailChangeRequiresReauth?: () => Promise<void> | void;
   /** After self-service password change (#434). */
@@ -22,9 +25,11 @@ export type UserSettingsSectionProps = {
 export default function UserSettingsSection({
   nickname,
   email,
+  displayName,
   authUserId,
   open = false,
   onOpenChange,
+  onDisplayNameSaved,
   onEmailChangeRequiresReauth,
   onPasswordChangedRequiresReauth,
 }: UserSettingsSectionProps) {
@@ -68,10 +73,14 @@ export default function UserSettingsSection({
           <summary className="studio-settings-summary studio-settings-summary--sub">
             <h4 className="studio-settings-summary-title">Profil</h4>
           </summary>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Anzeigename folgt (#436). Der Login-Name bleibt unverändert.
-          </p>
           {/* Only mount when outer panel is open — closed <details> stay tabbable in jsdom. */}
+          {open ? (
+            <UserSettingsDisplayNameForm
+              nickname={nickname}
+              displayName={displayName}
+              onDisplayNameSaved={onDisplayNameSaved}
+            />
+          ) : null}
           {open && onEmailChangeRequiresReauth ? (
             <UserSettingsEmailForm
               nickname={nickname}

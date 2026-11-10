@@ -64,6 +64,7 @@ function MainApp() {
   const [delegationSearch, setDelegationSearch] = useState("");
   const [sessionNotice, setSessionNotice] = useState(() => consumeSessionNotice());
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
+  const [ownDisplayName, setOwnDisplayName] = useState("");
   const { logout, isLoading, error } = useAppAuth();
 
   const inDelegation = Boolean(actingForUserIdState);
@@ -245,6 +246,7 @@ function MainApp() {
       if (!currentUser) {
         setMembership(null);
         setCanInvite(false);
+        setOwnDisplayName("");
       }
       return;
     }
@@ -254,6 +256,7 @@ function MainApp() {
         const ctx = await getTenantContext(currentUser.nickname);
         setTenant(ctx.tenant);
         setMembership(ctx.membership);
+        setOwnDisplayName(ctx.displayName?.trim() || "");
 
         if (ctx.membership) {
           setCanInvite(
@@ -567,9 +570,11 @@ function MainApp() {
             <UserSettingsSection
               nickname={currentUser.nickname}
               email={currentUser.email}
+              displayName={ownDisplayName}
               authUserId={currentUser.authUserId}
               open={userSettingsOpen}
               onOpenChange={setUserSettingsOpen}
+              onDisplayNameSaved={setOwnDisplayName}
               onEmailChangeRequiresReauth={handleEmailChangeRequiresReauth}
               onPasswordChangedRequiresReauth={handlePasswordChangedRequiresReauth}
             />

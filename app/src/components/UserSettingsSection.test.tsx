@@ -31,22 +31,25 @@ describe("UserSettingsSection (#433)", () => {
     expect(screen.queryByRole("group", { name: /e-mail-adresse/i })).not.toBeInTheDocument();
   });
 
-  it("zeigt E-Mail-Self-Service im Profil wenn Reauth-Handler gesetzt ist (#435)", () => {
+  it("zeigt Anzeigename- und E-Mail-Self-Service im Profil wenn offen (#435/#436)", () => {
     render(
       <UserSettingsSection
         nickname="Maya"
         email="maya@example.com"
+        displayName="Maya Display"
         open
         onEmailChangeRequiresReauth={vi.fn()}
       />,
     );
 
+    expect(screen.getByRole("group", { name: /anzeigename/i })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Maya Display")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /e-mail-adresse/i })).toBeInTheDocument();
     expect(screen.getByDisplayValue("maya@example.com")).toBeInTheDocument();
-    expect(screen.getByText(/anzeigename folgt/i)).toBeInTheDocument();
+    expect(screen.queryByText(/anzeigename folgt/i)).not.toBeInTheDocument();
   });
 
-  it("hängt E-Mail-/Passwort-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind", () => {
+  it("hängt Profil-/Passwort-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind", () => {
     render(
       <UserSettingsSection
         nickname="Maya"
@@ -56,6 +59,7 @@ describe("UserSettingsSection (#433)", () => {
       />,
     );
 
+    expect(screen.queryByRole("group", { name: /anzeigename/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: /e-mail-adresse/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: /passwort ändern/i })).not.toBeInTheDocument();
   });

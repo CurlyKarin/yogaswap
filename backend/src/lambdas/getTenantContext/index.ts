@@ -12,6 +12,7 @@ export const handler = async (
 ): Promise<APIGatewayProxyResult> => {
   const tenantsTable = process.env.TENANTS_TABLE;
   const membershipsTable = process.env.MEMBERSHIPS_TABLE;
+  const participantsTable = process.env.PARTICIPANTS_TABLE;
 
   if (!tenantsTable || !membershipsTable) {
     console.error("TENANTS_TABLE or MEMBERSHIPS_TABLE env var is not set", {
@@ -63,6 +64,7 @@ export const handler = async (
 
     // Membership nur bei bekanntem User (JWT / Authorizer); ohne Auth reicht Existenz-Check.
     let membership: UserTenantMembership | null = null;
+    let displayName: string | null = null;
 
     if (userId) {
       const membershipResp = await client.send(
@@ -80,6 +82,22 @@ export const handler = async (
       membership = membershipItem
         ? (unmarshall(membershipItem) as UserTenantMembership)
         : null;
+
+      // Own profile displayName for settings self-service (#436).
+      if (participantsTable) {
+        const profileResp = await client.send(
+          new GetItemCommand({
+            TableName: participantsTable,
+            Key: {
+              tenantId: { S: tenantId },
+              userId: { S: userId },
+            },
+            ConsistentRead: true,
+          }),
+        );
+        const raw = profileResp.Item?.displayName?.S?.trim();
+        displayName = raw && raw.length > 0 ? raw : null;
+      }
     }
 
     return {
@@ -89,6 +107,7 @@ export const handler = async (
         userId: userId ?? null,
         tenant,
         membership,
+        displayName,
       }),
     };
   } catch (error) {
