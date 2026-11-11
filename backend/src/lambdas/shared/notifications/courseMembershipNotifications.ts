@@ -41,6 +41,7 @@ export async function notifyCourseMembershipAdded(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: params.participantUserIds,
+    emailNotificationCategory: "studioCourse",
     buildMail: (recipient) =>
       buildCourseMembershipMail({
         nickname: recipient.nickname,
@@ -69,6 +70,7 @@ export async function notifyCourseMembershipEvents(
     mailSentCount: 0,
     mailSkippedNoProfileCount: 0,
     mailSkippedInvitedCount: 0,
+    mailSkippedOptOutCount: 0,
     mailFailedCount: 0,
   };
   if (params.events.length === 0) return empty;
@@ -85,6 +87,7 @@ export async function notifyCourseMembershipEvents(
         sesSourceEmail: params.sesSourceEmail,
         tenantId: params.tenantId,
         participantUserIds: [event.participantId],
+        emailNotificationCategory: "studioCourse",
         buildMail: (recipient) => {
           const common = {
             nickname: recipient.nickname,
@@ -117,6 +120,7 @@ export async function notifyCourseMembershipEvents(
     totals.mailSentCount += summary.mailSentCount;
     totals.mailSkippedNoProfileCount += summary.mailSkippedNoProfileCount;
     totals.mailSkippedInvitedCount += summary.mailSkippedInvitedCount;
+    totals.mailSkippedOptOutCount += summary.mailSkippedOptOutCount;
     totals.mailFailedCount += summary.mailFailedCount;
   }
 
@@ -136,6 +140,7 @@ export async function notifyCourseActivated(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: params.participantUserIds,
+    emailNotificationCategory: "studioCourse",
     buildMail: (recipient) =>
       buildCourseActivatedMail({
         nickname: recipient.nickname,
@@ -168,6 +173,7 @@ export async function notifyInstructorParticipantListChanged(
     mailSentCount: 0,
     mailSkippedNoProfileCount: 0,
     mailSkippedInvitedCount: 0,
+    mailSkippedOptOutCount: 0,
     mailFailedCount: 0,
   };
 

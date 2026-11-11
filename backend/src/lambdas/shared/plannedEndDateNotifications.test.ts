@@ -41,6 +41,7 @@ describe("plannedEndDateNotifications", () => {
       mailSentCount: 0,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
     });
     expect(mockSend).not.toHaveBeenCalled();
@@ -77,8 +78,46 @@ describe("plannedEndDateNotifications", () => {
       mailSentCount: 1,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 1,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
     });
     expect(mockSesSend).toHaveBeenCalledTimes(1);
+  });
+
+  test("skips participant who opted out of studioCourse mails (#437)", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        email: { S: "luna@example.com" },
+        authUserId: { S: "auth-luna" },
+        settings: {
+          M: {
+            notifications: {
+              M: {
+                studioCourseEmail: { BOOL: false },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const result = await notifyParticipantsPlannedEndDate(client, {
+      participantsTable: "participants",
+      sesSourceEmail: "studio@example.com",
+      tenantId: "t1",
+      courseName: "Flow",
+      change: "set",
+      plannedEndDateIso: "2026-06-20",
+      participantUserIds: ["luna"],
+    });
+
+    expect(result).toEqual({
+      mailSentCount: 0,
+      mailSkippedNoProfileCount: 0,
+      mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 1,
+      mailFailedCount: 0,
+    });
+    expect(mockSesSend).not.toHaveBeenCalled();
   });
 });

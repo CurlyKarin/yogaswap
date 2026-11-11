@@ -30,6 +30,7 @@ export async function notifyInstructorsOfActiveSwap(params: {
     mailSentCount: 0,
     mailSkippedNoProfileCount: 0,
     mailSkippedInvitedCount: 0,
+    mailSkippedOptOutCount: 0,
     mailFailedCount: 0,
   };
   const {
@@ -86,6 +87,7 @@ export async function notifyInstructorsOfActiveSwap(params: {
     totals.mailSentCount += summary.mailSentCount;
     totals.mailSkippedNoProfileCount += summary.mailSkippedNoProfileCount;
     totals.mailSkippedInvitedCount += summary.mailSkippedInvitedCount;
+    totals.mailSkippedOptOutCount += summary.mailSkippedOptOutCount;
     totals.mailFailedCount += summary.mailFailedCount;
   }
   return totals;

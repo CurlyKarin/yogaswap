@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { ParticipantNotificationSettings } from "shared/participantNotifications";
 import type { Tenant, UserTenantMembership } from "shared/types";
 
 export type TenantContextResponse = {
@@ -8,6 +9,8 @@ export type TenantContextResponse = {
   membership: UserTenantMembership | null;
   /** Own profile display name when authenticated (#436). */
   displayName?: string | null;
+  /** Own notification prefs when authenticated (#437). */
+  notificationSettings?: ParticipantNotificationSettings | null;
 };
 
 export class TenantNotFoundError extends Error {

@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef } from "react";
+import type { ParticipantNotificationSettings } from "shared/participantNotifications";
 import UserSettingsDisplayNameForm from "./UserSettingsDisplayNameForm";
 import UserSettingsEmailForm from "./UserSettingsEmailForm";
+import UserSettingsNotificationsForm from "./UserSettingsNotificationsForm";
 import UserSettingsPasswordForm from "./UserSettingsPasswordForm";
 
 export type UserSettingsSectionProps = {
@@ -8,10 +10,12 @@ export type UserSettingsSectionProps = {
   email?: string;
   displayName?: string;
   authUserId?: string | null;
+  notificationSettings?: ParticipantNotificationSettings | null;
   /** Controlled open state for the outer details (Header-Einstieg). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onDisplayNameSaved?: (displayName: string) => void;
+  onNotificationSettingsSaved?: (settings: ParticipantNotificationSettings) => void;
   /** After self-service email change with forced password reset (#435 / #350). */
   onEmailChangeRequiresReauth?: () => Promise<void> | void;
   /** After self-service password change (#434). */
@@ -27,9 +31,11 @@ export default function UserSettingsSection({
   email,
   displayName,
   authUserId,
+  notificationSettings,
   open = false,
   onOpenChange,
   onDisplayNameSaved,
+  onNotificationSettingsSaved,
   onEmailChangeRequiresReauth,
   onPasswordChangedRequiresReauth,
 }: UserSettingsSectionProps) {
@@ -112,10 +118,13 @@ export default function UserSettingsSection({
           <summary className="studio-settings-summary studio-settings-summary--sub">
             <h4 className="studio-settings-summary-title">E-Mail-Benachrichtigungen</h4>
           </summary>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Persönliche Schalter für Kurs-/Termin-Mails folgen (#437). Zugangs- und Security-Mails
-            bleiben immer an.
-          </p>
+          {open ? (
+            <UserSettingsNotificationsForm
+              nickname={nickname}
+              notificationSettings={notificationSettings}
+              onNotificationSettingsSaved={onNotificationSettingsSaved}
+            />
+          ) : null}
         </details>
 
         <hr className="studio-settings-divider" />

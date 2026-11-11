@@ -162,6 +162,15 @@ export const handler = async (
       !requestsForcedPasswordReset &&
       !hasAuthUserId &&
       bodyKeys.every((key) => key === "displayName");
+    const requestsSettingsChange = Object.prototype.hasOwnProperty.call(body, "settings");
+    const bodyIsSettingsOnly =
+      requestsSettingsChange &&
+      !requestsEmailChange &&
+      !requestsDisplayNameChange &&
+      !requestsRoleChange &&
+      !requestsForcedPasswordReset &&
+      !hasAuthUserId &&
+      bodyKeys.every((key) => key === "settings");
 
     const jwtClaims = (event.requestContext as { authorizer?: { jwt?: { claims?: Record<string, unknown> } } })
       ?.authorizer?.jwt?.claims;
@@ -174,12 +183,16 @@ export const handler = async (
       !!actorUserId && actorUserId.toLowerCase() === requestedUserId.toLowerCase();
 
     // Cognito `nickname` claim can diverge from studio login name — also match via authUserId/sub
-    // for email/displayName self-service (#435/#436).
+    // for email/displayName/settings self-service (#435/#436/#437).
     let targetUserId = requestedUserId;
     let existingItem: Record<string, AttributeValue> | undefined;
     let existingLoadedEarly = false;
 
-    if ((bodyIsEmailOnly || bodyIsDisplayNameOnly) && !isSelfTarget && actorSub) {
+    if (
+      (bodyIsEmailOnly || bodyIsDisplayNameOnly || bodyIsSettingsOnly) &&
+      !isSelfTarget &&
+      actorSub
+    ) {
       const earlyResp = await client.send(
         new GetItemCommand({
           TableName: tableName,
@@ -229,7 +242,10 @@ export const handler = async (
     // Self-service display name (#436): own profile, displayName-only body; #345 mail stays on.
     const isSelfDisplayNameOnly = isSelfTarget && bodyIsDisplayNameOnly;
 
-    if (!isSelfAuthLink && !isSelfEmailOnly && !isSelfDisplayNameOnly) {
+    // Self-service notification prefs (#437): own profile, settings-only body.
+    const isSelfSettingsOnly = isSelfTarget && bodyIsSettingsOnly;
+
+    if (!isSelfAuthLink && !isSelfEmailOnly && !isSelfDisplayNameOnly && !isSelfSettingsOnly) {
       const canManage = await canActorManageParticipants({
         client,
         membershipsTable,
@@ -526,8 +542,56 @@ export const handler = async (
 
     if (Object.prototype.hasOwnProperty.call(body, "settings")) {
       if (body.settings && typeof body.settings === "object" && !Array.isArray(body.settings)) {
-        updated.settings = body.settings;
+        if (isSelfSettingsOnly) {
+          // Self: merge notification prefs only; keep waitlist buffer etc. (#437/#438).
+          const incomingNotifications = body.settings.notifications;
+          if (
+            !incomingNotifications ||
+            typeof incomingNotifications !== "object" ||
+            Array.isArray(incomingNotifications)
+          ) {
+            return {
+              statusCode: 400,
+              body: JSON.stringify({ error: "settings.notifications must be an object" }),
+            };
+          }
+          const allowedKeys = [
+            "studioCourseEmail",
+            "ownTermChangeEmail",
+            "waitlistPromotionEmail",
+          ] as const;
+          const sanitized: ParticipantSettings["notifications"] = {
+            ...(typeof updated.settings?.notifications === "object" &&
+            updated.settings.notifications &&
+            !Array.isArray(updated.settings.notifications)
+              ? updated.settings.notifications
+              : {}),
+          };
+          for (const key of allowedKeys) {
+            if (!Object.prototype.hasOwnProperty.call(incomingNotifications, key)) continue;
+            const value = (incomingNotifications as Record<string, unknown>)[key];
+            if (typeof value !== "boolean") {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({ error: `settings.notifications.${key} must be a boolean` }),
+              };
+            }
+            sanitized[key] = value;
+          }
+          updated.settings = {
+            ...(updated.settings && typeof updated.settings === "object" ? updated.settings : {}),
+            notifications: sanitized,
+          };
+        } else {
+          updated.settings = body.settings;
+        }
       } else if (body.settings == null) {
+        if (isSelfSettingsOnly) {
+          return {
+            statusCode: 400,
+            body: JSON.stringify({ error: "settings cannot be cleared via self-service" }),
+          };
+        }
         delete updated.settings;
       } else {
         return {

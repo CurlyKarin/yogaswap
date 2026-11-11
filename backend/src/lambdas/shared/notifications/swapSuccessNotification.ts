@@ -1,5 +1,5 @@
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import type { Swap } from "@yogaswap/shared";
+import type { ParticipantEmailNotificationCategory, Swap } from "@yogaswap/shared";
 import { buildIcsPublishEvent } from "./buildIcsPublishEvent";
 import { loadCourseSummary } from "./courseSummary";
 import { sendMailToParticipantUserIds } from "./sendParticipantEmail";
@@ -15,6 +15,11 @@ export type SwapSuccessNotificationParams = {
   loginUrl?: string;
   mailLocale?: string;
   attachIcs?: boolean;
+  /**
+   * Direkt-Tausch → ownTermChange; Ringtausch → waitlistPromotion (#437).
+   * Default: ownTermChange.
+   */
+  emailNotificationCategory?: ParticipantEmailNotificationCategory;
 };
 
 export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
@@ -27,6 +32,7 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
     sesSourceEmail,
     loginUrl,
     attachIcs = true,
+    emailNotificationCategory = "ownTermChange",
   } = params;
 
   if (!coursesTable || !participantsTable || !sesSourceEmail) {
@@ -34,6 +40,7 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
       mailSentCount: 0,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
       skippedReason: "missing_env",
     };
@@ -45,6 +52,7 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
       mailSentCount: 0,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
       skippedReason: "missing_participant_id",
     };
@@ -60,6 +68,7 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
       mailSentCount: 0,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
       skippedReason: "course_not_found",
     };
@@ -81,6 +90,7 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
     sesSourceEmail,
     tenantId,
     participantUserIds: [participantId],
+    emailNotificationCategory,
     buildMail: (recipient) => {
       const mail = buildSwapSuccessMail({
         nickname: recipient.nickname,

@@ -1,5 +1,10 @@
 import { SendEmailCommand, SendRawEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import {
+  isParticipantEmailNotificationEnabled,
+  type ParticipantEmailNotificationCategory,
+  type ParticipantSettings,
+} from "@yogaswap/shared";
 import { resolveParticipantEmail } from "../participantEmailLookup";
 import { formatSesFromAddress } from "./sesFromAddress";
 
@@ -9,6 +14,7 @@ export type MailDeliverySummary = {
   mailSentCount: number;
   mailSkippedNoProfileCount: number;
   mailSkippedInvitedCount: number;
+  mailSkippedOptOutCount: number;
   mailFailedCount: number;
 };
 
@@ -112,6 +118,7 @@ function emptySummary(): MailDeliverySummary {
     mailSentCount: 0,
     mailSkippedNoProfileCount: 0,
     mailSkippedInvitedCount: 0,
+    mailSkippedOptOutCount: 0,
     mailFailedCount: 0,
   };
 }
@@ -128,6 +135,8 @@ export async function sendMailToParticipantUserIds(
     sesSourceEmail?: string;
     tenantId: string;
     participantUserIds: string[];
+    /** Persönlicher Opt-out (#437). Ohne Kategorie: immer senden (z. B. Kursleitung/#398). */
+    emailNotificationCategory?: ParticipantEmailNotificationCategory;
     buildMail: (recipient: ParticipantMailRecipient) => {
       subject: string;
       html: string;
@@ -147,6 +156,7 @@ export async function sendMailToParticipantUserIds(
     let resolvedUserId: string | undefined;
     let displayName: string | undefined;
     let status: "no_login" | "invited" | "active" | undefined;
+    let settings: ParticipantSettings | undefined;
 
     try {
       const lookup = await resolveParticipantEmail(
@@ -159,6 +169,7 @@ export async function sendMailToParticipantUserIds(
       resolvedUserId = lookup.resolvedUserId;
       displayName = lookup.displayName;
       status = lookup.status;
+      settings = lookup.settings;
     } catch (error) {
       summary.mailSkippedNoProfileCount += 1;
       console.warn("participant mail lookup failed", { tenantId: params.tenantId, userId, error });
@@ -171,6 +182,17 @@ export async function sendMailToParticipantUserIds(
     }
     if (status === "invited") {
       summary.mailSkippedInvitedCount += 1;
+      continue;
+    }
+
+    if (
+      params.emailNotificationCategory &&
+      !isParticipantEmailNotificationEnabled(
+        settings?.notifications,
+        params.emailNotificationCategory,
+      )
+    ) {
+      summary.mailSkippedOptOutCount += 1;
       continue;
     }
 

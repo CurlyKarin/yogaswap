@@ -12,6 +12,7 @@ import ForgotPassword from "./components/ForgotPassword";
 import DelegationPickerDialog from "./components/DelegationPickerDialog";
 import UserSettingsSection from "./components/UserSettingsSection";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
+import type { ParticipantNotificationSettings } from "shared/participantNotifications";
 import { User, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
 import { fetchAuthSession } from "aws-amplify/auth";
@@ -65,6 +66,8 @@ function MainApp() {
   const [sessionNotice, setSessionNotice] = useState(() => consumeSessionNotice());
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
   const [ownDisplayName, setOwnDisplayName] = useState("");
+  const [ownNotificationSettings, setOwnNotificationSettings] =
+    useState<ParticipantNotificationSettings | null>(null);
   const { logout, isLoading, error } = useAppAuth();
 
   const inDelegation = Boolean(actingForUserIdState);
@@ -247,6 +250,7 @@ function MainApp() {
         setMembership(null);
         setCanInvite(false);
         setOwnDisplayName("");
+        setOwnNotificationSettings(null);
       }
       return;
     }
@@ -257,6 +261,7 @@ function MainApp() {
         setTenant(ctx.tenant);
         setMembership(ctx.membership);
         setOwnDisplayName(ctx.displayName?.trim() || "");
+        setOwnNotificationSettings(ctx.notificationSettings ?? null);
 
         if (ctx.membership) {
           setCanInvite(
@@ -572,9 +577,11 @@ function MainApp() {
               email={currentUser.email}
               displayName={ownDisplayName}
               authUserId={currentUser.authUserId}
+              notificationSettings={ownNotificationSettings}
               open={userSettingsOpen}
               onOpenChange={setUserSettingsOpen}
               onDisplayNameSaved={setOwnDisplayName}
+              onNotificationSettingsSaved={setOwnNotificationSettings}
               onEmailChangeRequiresReauth={handleEmailChangeRequiresReauth}
               onPasswordChangedRequiresReauth={handlePasswordChangedRequiresReauth}
             />
