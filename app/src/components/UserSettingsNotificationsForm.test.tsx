@@ -25,7 +25,8 @@ describe("UserSettingsNotificationsForm (#437)", () => {
     expect(helpButtons).toHaveLength(3);
 
     await user.click(helpButtons[0]!);
-    expect(screen.getByRole("note")).toHaveTextContent(/studio-absagen/i);
+    expect(screen.getByRole("note")).toHaveTextContent(/kursausfall/i);
+    expect(screen.getByText(/zugangs- und security-mails sind immer aktiviert/i)).toBeInTheDocument();
   });
 
   it("speichert Opt-outs über updateParticipant", async () => {

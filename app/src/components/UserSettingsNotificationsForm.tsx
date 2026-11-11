@@ -16,11 +16,11 @@ export type UserSettingsNotificationsFormProps = {
 
 const TOOLTIPS = {
   studioCourse:
-    "Mails vom Studio und zum Kursstamm: Studio-Absagen, Beitritt/Austritt, Kurs aktiv, geplantes Kursende.",
+    "Studio-E-Mails zu Kursausfall, Kursstart, Kursbeitritt oder -austritt. Empfehlung: aktiviert lassen.",
   ownTermChange:
-    "Mails zu deinen eigenen Terminänderungen: Tausch bestätigt, Termin freigegeben, Absage zurückgenommen.",
+    "E-Mails zu deinen persönlichen Änderungen wie Absage, Tauschbestätigung oder Rücknahme einer Absage.",
   waitlistPromotion:
-    "Mails beim Nachrücken über Warteliste oder Ringtausch. Unabhängig vom Schalter „Meine Terminänderungen“.",
+    "E-Mails beim Nachrücken über Wartelisten. Unter „Warteliste“ kannst du einen Zeitraum fürs Nachrücken einstellen. Empfehlung: aktiviert lassen.",
 } as const;
 
 export default function UserSettingsNotificationsForm({
@@ -86,8 +86,7 @@ export default function UserSettingsNotificationsForm({
       aria-labelledby={headingId}
     >
       <p id={headingId} className="muted small" style={{ gridColumn: "1 / -1", margin: 0 }}>
-        Zugangs- und Security-Mails (Einladung, Passwort, E-Mail-/Namensänderung, Rolle) bleiben immer
-        an.
+        Zugangs- und Security-Mails sind immer aktiviert.
       </p>
 
       <label className="dialog-field studio-settings-checkbox-field">
