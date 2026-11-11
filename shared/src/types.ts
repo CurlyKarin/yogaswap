@@ -1,3 +1,5 @@
+import type { ParticipantNotificationSettings } from "./participantNotifications";
+
 /** Standard-Tenant-ID bis Multi-Tenancy vollständig aktiv ist */
 export const DEFAULT_TENANT_ID = "default-tenant";
 
@@ -361,24 +363,17 @@ export type ParticipantStatus = "no_login" | "invited" | "active";
 /**
  * Teilnehmer-spezifische Einstellungen.
  *
- * Design-Ziel: offen für Erweiterungen, aber mit typsicheren "bekannten" Feldern,
- * sobald ihr konkrete Use-Cases (Waitlist/Notifications) implementiert.
+ * Design-Ziel: offen für Erweiterungen, aber mit typsicheren "bekannten" Feldern.
  */
 export type ParticipantSettings = {
   /**
    * Wenn gesetzt: Teilnehmer möchte nicht mehr nachrücken, wenn der Kurs weniger
-   * als X Minuten in der Zukunft liegt.
+   * als X Minuten in der Zukunft liegt (#438).
    */
   waitlistNoPromoteWithinMinutes?: number;
 
-  /** Benachrichtigungspräferenzen (MVP-freundlich, später erweiterbar). */
-  notifications?: {
-    enabled?: boolean;
-    /** z.B. "swap_active", "swap_pending", "waitlist_promoted" */
-    events?: string[];
-    /** z.B. ["email"] */
-    channels?: Array<"email">;
-  };
+  /** Persönliche E-Mail-Opt-outs (#437). Default: an. */
+  notifications?: ParticipantNotificationSettings;
 
   /** Erweiterungspunkt für zukünftige Einstellungen. */
   [key: string]: unknown;

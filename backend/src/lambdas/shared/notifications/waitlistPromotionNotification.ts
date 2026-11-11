@@ -25,6 +25,7 @@ export async function notifyWaitlistPromotion(
       mailSentCount: 0,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
       skippedReason: "missing_env",
     };
@@ -36,6 +37,7 @@ export async function notifyWaitlistPromotion(
       mailSentCount: 0,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
       skippedReason: "missing_participant_id",
     };
@@ -51,6 +53,7 @@ export async function notifyWaitlistPromotion(
       mailSentCount: 0,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
       skippedReason: "course_not_found",
     };
@@ -72,6 +75,7 @@ export async function notifyWaitlistPromotion(
     sesSourceEmail,
     tenantId,
     participantUserIds: [participantId],
+    emailNotificationCategory: "waitlistPromotion",
     buildMail: (recipient) => {
       const mail = buildWaitlistPromotionMail({
         nickname: recipient.nickname,

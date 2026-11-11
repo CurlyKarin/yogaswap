@@ -1,6 +1,7 @@
 import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { formatSesFromAddress } from "./notifications/sesFromAddress";
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { isParticipantEmailNotificationEnabled } from "@yogaswap/shared";
 import { resolveParticipantEmail } from "./participantEmailLookup";
 import {
   buildPlannedEndDateClearedMail,
@@ -15,6 +16,7 @@ export type PlannedEndDateNotificationResult = {
   mailSentCount: number;
   mailSkippedNoProfileCount: number;
   mailSkippedInvitedCount: number;
+  mailSkippedOptOutCount: number;
   mailFailedCount: number;
 };
 
@@ -40,6 +42,7 @@ export async function notifyParticipantsPlannedEndDate(
     mailSentCount: 0,
     mailSkippedNoProfileCount: 0,
     mailSkippedInvitedCount: 0,
+    mailSkippedOptOutCount: 0,
     mailFailedCount: 0,
   };
 
@@ -53,6 +56,7 @@ export async function notifyParticipantsPlannedEndDate(
     let resolvedUserId: string | undefined;
     let displayName: string | undefined;
     let status: "no_login" | "invited" | "active" | undefined;
+    let settings: Awaited<ReturnType<typeof resolveParticipantEmail>>["settings"];
     try {
       const lookup = await resolveParticipantEmail(
         client,
@@ -64,6 +68,7 @@ export async function notifyParticipantsPlannedEndDate(
       resolvedUserId = lookup.resolvedUserId;
       displayName = lookup.displayName;
       status = lookup.status;
+      settings = lookup.settings;
     } catch (error) {
       result.mailSkippedNoProfileCount += 1;
       console.warn("plannedEndDate participant lookup failed", {
@@ -80,6 +85,10 @@ export async function notifyParticipantsPlannedEndDate(
     }
     if (status === "invited") {
       result.mailSkippedInvitedCount += 1;
+      continue;
+    }
+    if (!isParticipantEmailNotificationEnabled(settings?.notifications, "studioCourse")) {
+      result.mailSkippedOptOutCount += 1;
       continue;
     }
 

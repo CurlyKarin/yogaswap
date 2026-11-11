@@ -38,6 +38,7 @@ export async function notifyStudioTermCancelled(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: params.participantUserIds,
+    emailNotificationCategory: "studioCourse",
     buildMail: (recipient) =>
       buildStudioTermCancelledMail({
         nickname: recipient.nickname,
@@ -70,6 +71,7 @@ export async function notifyParticipantTermReleased(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: [params.userId],
+    emailNotificationCategory: "ownTermChange",
     buildMail: (recipient) =>
       buildParticipantTermReleasedMail({
         nickname: recipient.nickname,
@@ -101,6 +103,7 @@ export async function notifyParticipantAbsenceWithdrawn(
     sesSourceEmail: params.sesSourceEmail,
     tenantId: params.tenantId,
     participantUserIds: [params.userId],
+    emailNotificationCategory: "ownTermChange",
     buildMail: (recipient) =>
       buildParticipantAbsenceWithdrawnMail({
         nickname: recipient.nickname,
@@ -134,6 +137,7 @@ export async function notifyInstructorsTermParticipationChanged(
       mailSentCount: 0,
       mailSkippedNoProfileCount: 0,
       mailSkippedInvitedCount: 0,
+      mailSkippedOptOutCount: 0,
       mailFailedCount: 0,
     };
   }

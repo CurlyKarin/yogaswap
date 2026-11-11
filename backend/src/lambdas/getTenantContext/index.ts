@@ -3,7 +3,11 @@ import { GetItemCommand } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { dynamoClient } from "../shared/dynamoClient";
 import { getTenantContext } from "../shared/tenantContext";
-import type { Tenant, UserTenantMembership } from "@yogaswap/shared";
+import type {
+  ParticipantNotificationSettings,
+  Tenant,
+  UserTenantMembership,
+} from "@yogaswap/shared";
 
 const client = dynamoClient;
 
@@ -65,6 +69,7 @@ export const handler = async (
     // Membership nur bei bekanntem User (JWT / Authorizer); ohne Auth reicht Existenz-Check.
     let membership: UserTenantMembership | null = null;
     let displayName: string | null = null;
+    let notificationSettings: ParticipantNotificationSettings | null = null;
 
     if (userId) {
       const membershipResp = await client.send(
@@ -83,7 +88,7 @@ export const handler = async (
         ? (unmarshall(membershipItem) as UserTenantMembership)
         : null;
 
-      // Own profile displayName for settings self-service (#436).
+      // Own profile displayName + notification prefs for settings self-service (#436/#437).
       if (participantsTable) {
         const profileResp = await client.send(
           new GetItemCommand({
@@ -97,6 +102,15 @@ export const handler = async (
         );
         const raw = profileResp.Item?.displayName?.S?.trim();
         displayName = raw && raw.length > 0 ? raw : null;
+        if (profileResp.Item) {
+          const profile = unmarshall(profileResp.Item) as {
+            settings?: { notifications?: ParticipantNotificationSettings };
+          };
+          const notifications = profile.settings?.notifications;
+          if (notifications && typeof notifications === "object" && !Array.isArray(notifications)) {
+            notificationSettings = notifications;
+          }
+        }
       }
     }
 
@@ -108,6 +122,7 @@ export const handler = async (
         tenant,
         membership,
         displayName,
+        notificationSettings,
       }),
     };
   } catch (error) {

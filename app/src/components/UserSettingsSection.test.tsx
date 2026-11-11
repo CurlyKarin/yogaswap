@@ -49,7 +49,16 @@ describe("UserSettingsSection (#433)", () => {
     expect(screen.queryByText(/anzeigename folgt/i)).not.toBeInTheDocument();
   });
 
-  it("hängt Profil-/Passwort-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind", () => {
+  it("zeigt E-Mail-Benachrichtigungen wenn Settings offen sind (#437)", () => {
+    render(<UserSettingsSection nickname="Maya" open />);
+
+    expect(screen.getByRole("checkbox", { name: /mitteilungen vom studio/i })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /meine terminänderungen/i })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /nachrücken/i })).toBeInTheDocument();
+    expect(screen.queryByText(/folgen \(#437\)/i)).not.toBeInTheDocument();
+  });
+
+  it("hängt Profil-/Passwort-/Benachrichtigungs-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind", () => {
     render(
       <UserSettingsSection
         nickname="Maya"
@@ -62,6 +71,7 @@ describe("UserSettingsSection (#433)", () => {
     expect(screen.queryByRole("group", { name: /anzeigename/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: /e-mail-adresse/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: /passwort ändern/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /mitteilungen vom studio/i })).not.toBeInTheDocument();
   });
 
   it("zeigt Passwort-Self-Service unter Sicherheit wenn Settings offen sind (#434)", () => {

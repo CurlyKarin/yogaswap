@@ -858,6 +858,81 @@ describe("updateParticipant Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Forbidden/i);
   });
 
+  test("allows self-service notification settings merge (#437)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          authUserId: { S: "sub-alice" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+          settings: {
+            M: {
+              waitlistNoPromoteWithinMinutes: { N: "60" },
+              notifications: {
+                M: {
+                  studioCourseEmail: { BOOL: true },
+                },
+              },
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({}); // PutItem
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({
+          settings: {
+            notifications: {
+              studioCourseEmail: false,
+              waitlistPromotionEmail: false,
+            },
+          },
+        }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.settings).toEqual({
+      waitlistNoPromoteWithinMinutes: 60,
+      notifications: {
+        studioCourseEmail: false,
+        waitlistPromotionEmail: false,
+      },
+    });
+  });
+
+  test("returns 403 when participant tries to change another user's settings (#437)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "bob" },
+          role: { S: "participant" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: { tenantId: { S: "default-tenant" }, name: { S: "Demo" } },
+      });
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "bob" } } as any,
+        body: JSON.stringify({
+          settings: { notifications: { studioCourseEmail: false } },
+        }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+  });
+
   test("returns 403 when non-admin requests forced password reset on email change", async () => {
     mockSend
       .mockResolvedValueOnce({

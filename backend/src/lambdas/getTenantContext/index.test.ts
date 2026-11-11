@@ -63,6 +63,16 @@ describe("getTenantContext Lambda", () => {
           tenantId: { S: "yogaswap-demo" },
           userId: { S: "alice" },
           displayName: { S: "Alice Müller" },
+          settings: {
+            M: {
+              notifications: {
+                M: {
+                  studioCourseEmail: { BOOL: false },
+                  ownTermChangeEmail: { BOOL: true },
+                },
+              },
+            },
+          },
         },
       });
 
@@ -84,6 +94,10 @@ describe("getTenantContext Lambda", () => {
       role: "admin",
     });
     expect(body.displayName).toBe("Alice Müller");
+    expect(body.notificationSettings).toEqual({
+      studioCourseEmail: false,
+      ownTermChangeEmail: true,
+    });
 
     expect(GetItemCommand).toHaveBeenCalledTimes(3);
   });

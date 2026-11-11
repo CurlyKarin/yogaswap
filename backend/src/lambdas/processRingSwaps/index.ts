@@ -219,6 +219,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               loginUrl,
               mailLocale: process.env.MAIL_LOCALE || "de",
               attachIcs: true,
+              emailNotificationCategory: "waitlistPromotion",
             });
             console.info("processRingSwaps swap success mail summary", {
               tenantId,

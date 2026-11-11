@@ -1,5 +1,7 @@
 import { GetItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { unmarshall } from "@aws-sdk/util-dynamodb";
+import type { ParticipantProfile, ParticipantSettings } from "@yogaswap/shared";
 import { deriveParticipantStatus } from "./participantStatus";
 
 export const PARTICIPANTS_NORMALIZED_INDEX = "GSI_UserIdNormalized";
@@ -15,6 +17,7 @@ export async function resolveParticipantEmail(
   displayName?: string;
   status?: "no_login" | "invited" | "active";
   lookupSource?: "exact" | "normalized";
+  settings?: ParticipantSettings;
 }> {
   const exactProfileResp = await client.send(
     new GetItemCommand({
@@ -26,22 +29,25 @@ export async function resolveParticipantEmail(
       ConsistentRead: true,
     }),
   );
-  const exactEmail = exactProfileResp.Item?.email?.S?.trim();
-  const exactDisplayName = exactProfileResp.Item?.displayName?.S?.trim() || undefined;
-  const exactStatus = exactProfileResp.Item
+  const exactItem = exactProfileResp.Item;
+  const exactEmail = exactItem?.email?.S?.trim();
+  const exactDisplayName = exactItem?.displayName?.S?.trim() || undefined;
+  const exactStatus = exactItem
     ? deriveParticipantStatus({
-        authUserId: exactProfileResp.Item.authUserId?.S,
-        inviteSentAt: exactProfileResp.Item.inviteSentAt?.S,
-        inviteCompletedAt: exactProfileResp.Item.inviteCompletedAt?.S,
+        authUserId: exactItem.authUserId?.S,
+        inviteSentAt: exactItem.inviteSentAt?.S,
+        inviteCompletedAt: exactItem.inviteCompletedAt?.S,
       })
     : undefined;
-  if (exactProfileResp.Item && exactEmail) {
+  if (exactItem && exactEmail) {
+    const profile = unmarshall(exactItem) as ParticipantProfile;
     return {
       email: exactEmail,
       resolvedUserId: requestedUserId,
       displayName: exactDisplayName,
       status: exactStatus,
       lookupSource: "exact",
+      settings: profile.settings,
     };
   }
 
@@ -80,12 +86,14 @@ export async function resolveParticipantEmail(
       })
     : undefined;
   if (normalizedItem && normalizedEmail) {
+    const profile = unmarshall(normalizedItem) as ParticipantProfile;
     return {
       email: normalizedEmail,
       resolvedUserId: normalizedUserId || requestedUserId,
       displayName: normalizedDisplayName,
       status: normalizedStatus,
       lookupSource: "normalized",
+      settings: profile.settings,
     };
   }
 
