@@ -29,7 +29,11 @@ jobs:
 
       - name: App – E2E (Playwright)
         run: |
-          cd app && npx playwright install --with-deps chromium && npm run test:e2e
+          cd app
+          # Skip --with-deps: apt against azure.archive.ubuntu.com flakes with DNS errors
+          # on GitHub runners. ubuntu-24.04 already has the Chromium system libs we need.
+          npx playwright install chromium
+          npm run test:e2e
 
       - name: Backend – install, lint, build, test
         run: |
