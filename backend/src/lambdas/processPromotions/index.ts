@@ -1,5 +1,12 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { QueryCommand, UpdateItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DeleteItemCommand,
+  GetItemCommand,
+  PutItemCommand,
+  QueryCommand,
+  UpdateItemCommand,
+} from "@aws-sdk/client-dynamodb";
+import { unmarshall } from "@aws-sdk/util-dynamodb";
 import {
   Swap,
   CourseDateOverride,
@@ -9,7 +16,9 @@ import {
   resolveCancellationSwapCutoffMinutes,
   resolveEffectiveTermOccupancy,
   resolveStemForDate,
+  resolveWaitlistNoPromoteWithinMinutes,
   withRegularCancellation,
+  type ParticipantProfile,
 } from "@yogaswap/shared";
 import { getTenantContext } from "../shared/tenantContext";
 import { resolveAppBaseUrlForTenant } from "../shared/appBaseUrl";
@@ -310,6 +319,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             : waitlistCandidates;
 
         let correspondingSwap: Swap | undefined;
+        const personalBufferCache = new Map<string, number>();
         for (const candidate of prioritizedCandidates) {
           const match = pendingSwaps.find(
             (s) =>
@@ -317,10 +327,58 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               s.toCourseId === override.courseId &&
               s.toDate === override.date,
           );
-          if (match) {
-            correspondingSwap = match;
-            break;
+          if (!match) continue;
+
+          // Persönlicher Puffer (#438): Default = Studio-Absagefrist, nur länger möglich.
+          // Studio-Cutoff filtert bereits futureOverrides; hier zusätzliche individuelle Sperre.
+          const cacheKey = normalized(candidate);
+          let effectiveBuffer = personalBufferCache.get(cacheKey);
+          if (effectiveBuffer === undefined) {
+            let personalMinutes: number | undefined;
+            const participantsTableForPrefs = process.env.PARTICIPANTS_TABLE;
+            if (participantsTableForPrefs) {
+              try {
+                const profileResp = await client.send(
+                  new GetItemCommand({
+                    TableName: participantsTableForPrefs,
+                    Key: {
+                      tenantId: { S: tenantId },
+                      userId: { S: candidate },
+                    },
+                    ConsistentRead: true,
+                  }),
+                );
+                if (profileResp.Item) {
+                  const profile = unmarshall(profileResp.Item) as ParticipantProfile;
+                  const raw = profile.settings?.waitlistNoPromoteWithinMinutes;
+                  personalMinutes = typeof raw === "number" ? raw : undefined;
+                }
+              } catch (err) {
+                console.warn("waitlist personal buffer lookup failed", {
+                  tenantId,
+                  candidate,
+                  error: err,
+                });
+              }
+            }
+            effectiveBuffer = resolveWaitlistNoPromoteWithinMinutes(
+              personalMinutes,
+              noAutomationMinutes,
+            );
+            personalBufferCache.set(cacheKey, effectiveBuffer);
           }
+          if (!isCourseInFuture(override.date, overrideCourse.time, now, effectiveBuffer)) {
+            console.log("skip waitlist promotion: personal buffer", {
+              candidate,
+              effectiveBuffer,
+              date: override.date,
+              time: overrideCourse.time,
+            });
+            continue;
+          }
+
+          correspondingSwap = match;
+          break;
         }
         console.log(
           'promotion candidate resolution:',

@@ -858,6 +858,83 @@ describe("updateParticipant Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/Forbidden/i);
   });
 
+  test("allows self-service waitlist buffer when >= studio cutoff (#438)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          email: { S: "alice@example.com" },
+          authUserId: { S: "sub-alice" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+          settings: {
+            M: {
+              notifications: {
+                M: { studioCourseEmail: { BOOL: true } },
+              },
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          settings: {
+            M: { cancellationSwapCutoffMinutesBeforeStart: { N: "60" } },
+          },
+        },
+      }) // tenant settings for cutoff floor
+      .mockResolvedValueOnce({}); // PutItem
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({
+          settings: { waitlistNoPromoteWithinMinutes: 120 },
+        }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.settings.waitlistNoPromoteWithinMinutes).toBe(120);
+    expect(body.settings.notifications).toEqual({ studioCourseEmail: true });
+  });
+
+  test("rejects self-service waitlist buffer below studio cutoff (#438)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          authUserId: { S: "sub-alice" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          settings: {
+            M: { cancellationSwapCutoffMinutesBeforeStart: { N: "120" } },
+          },
+        },
+      });
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({
+          settings: { waitlistNoPromoteWithinMinutes: 60 },
+        }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/studio cutoff/i);
+  });
+
   test("allows self-service notification settings merge (#437)", async () => {
     mockSend
       .mockResolvedValueOnce({

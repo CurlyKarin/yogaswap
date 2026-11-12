@@ -58,6 +58,13 @@ describe("UserSettingsSection (#433)", () => {
     expect(screen.queryByText(/folgen \(#437\)/i)).not.toBeInTheDocument();
   });
 
+  it("zeigt Wartelisten-Puffer wenn Settings offen sind (#438)", () => {
+    render(<UserSettingsSection nickname="Maya" open studioCutoffMinutes={90} />);
+
+    expect(screen.getByRole("spinbutton", { name: /wartelisten-zeitpuffer/i })).toHaveValue(90);
+    expect(screen.queryByText(/folgt \(#438\)/i)).not.toBeInTheDocument();
+  });
+
   it("hängt Profil-/Passwort-/Benachrichtigungs-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind", () => {
     render(
       <UserSettingsSection
@@ -72,6 +79,7 @@ describe("UserSettingsSection (#433)", () => {
     expect(screen.queryByRole("group", { name: /e-mail-adresse/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: /passwort ändern/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /mitteilungen vom studio/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: /wartelisten-zeitpuffer/i })).not.toBeInTheDocument();
   });
 
   it("zeigt Passwort-Self-Service unter Sicherheit wenn Settings offen sind (#434)", () => {
