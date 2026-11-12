@@ -2242,11 +2242,11 @@ a:focus-visible {
 }
 
 .studio-settings-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+  /* Kein flex auf summary: sonst bleibt der native Marker auf manchen Huawei/Chrome-Builds sichtbar. */
+  display: block;
   cursor: pointer;
   list-style: none;
+  list-style-type: none;
   user-select: none;
 }
 
@@ -2254,24 +2254,33 @@ a:focus-visible {
   display: none;
 }
 
+.studio-settings-summary::marker {
+  content: none;
+  display: none;
+  font-size: 0;
+}
+
 .studio-settings-summary::before {
   content: "";
   display: inline-block;
+  vertical-align: 0.15em;
   width: 0.4rem;
   height: 0.4rem;
+  margin-right: 0.45rem;
   border-right: 2px solid #555;
   border-bottom: 2px solid #555;
   transform: rotate(-45deg);
-  flex-shrink: 0;
   transition: transform 0.15s ease;
 }
 
 .studio-settings-details[open] > .studio-settings-summary::before,
 .studio-settings-subdetails[open] > .studio-settings-summary::before {
   transform: rotate(45deg);
+  vertical-align: -0.05em;
 }
 
 .studio-settings-summary-title {
+  display: inline;
   margin: 0;
   text-align: left;
 }
