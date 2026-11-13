@@ -1,7 +1,12 @@
 // lib/dates.ts
 import { CourseDateOverride, Course, CourseEnrollment, TenantSettings } from "shared/types";
 import { isAtMaxCapacity, isAtRegularCapacity } from "shared/courseCapacity";
-import { isSwapTargetInCutoffWindow } from "shared/cancellationSwapCutoff";
+import {
+  isSwapTargetInCutoffWindow,
+  isWithinCancellationSwapCutoff,
+  resolveCancellationSwapCutoffMinutes,
+} from "shared/cancellationSwapCutoff";
+import { resolveWaitlistNoPromoteWithinMinutes } from "shared/waitlistBuffer";
 import {
   includesParticipantRef,
   type ParticipantActor,
@@ -96,6 +101,8 @@ function collectCourseDates(
   tenantSettings?: TenantSettings,
   enrollments: CourseEnrollment[] = [],
   originCourse?: Course,
+  /** Cutoff-Minuten für Zieltermine; Default = Studio-Absagefrist. */
+  targetCutoffMinutes?: number,
 ) {
   if (isNaN(referenceDate.getTime())) return []; // ungültiges Datum → keine Termine
 
@@ -149,12 +156,10 @@ function collectCourseDates(
         const count = participants.length;
         const regularFull = isAtRegularCapacity(count, course, guestCount);
         const maxFull = isAtMaxCapacity(count, course, guestCount);
-        const targetInCutoff = isSwapTargetInCutoffWindow(
-          dateKey,
-          course.time,
-          tenantSettings,
-          now,
-        );
+        const targetInCutoff =
+          typeof targetCutoffMinutes === "number"
+            ? isWithinCancellationSwapCutoff(dateKey, course.time, targetCutoffMinutes, now)
+            : isSwapTargetInCutoffWindow(dateKey, course.time, tenantSettings, now);
         const stem = resolveStemForDate(course, enrollments, dateKey);
         const userAlreadyInThisCourse =
           includesParticipantRef(participants, actor) ||
@@ -227,7 +232,14 @@ export function getWaitlistDates(
   tenantSettings?: TenantSettings,
   enrollments: CourseEnrollment[] = [],
   originCourse?: Course,
+  /** Persönlicher Wartelisten-Puffer (#438); Default = Studio-Absagefrist. */
+  personalWaitlistBufferMinutes?: number | null,
 ) {
+  const studioCutoff = resolveCancellationSwapCutoffMinutes(tenantSettings);
+  const waitlistCutoff = resolveWaitlistNoPromoteWithinMinutes(
+    personalWaitlistBufferMinutes,
+    studioCutoff,
+  );
   return collectCourseDates(
     allCourses,
     overrides,
@@ -238,6 +250,7 @@ export function getWaitlistDates(
     tenantSettings,
     enrollments,
     originCourse,
+    waitlistCutoff,
   )
     .filter((entry) => isWaitlistSwapTarget(entry))
     .map(({ course, date, time }) => ({ course, date, time }));

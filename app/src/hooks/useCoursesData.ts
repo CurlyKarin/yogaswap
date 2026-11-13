@@ -79,6 +79,7 @@ type Options = {
   weekAnchor: Date;
   /** When true, week rows are limited to courses with personal involvement. */
   onlyMyCourses?: boolean;
+  waitlistNoPromoteWithinMinutes?: number | null;
 };
 
 export function useCoursesData({
@@ -88,6 +89,7 @@ export function useCoursesData({
   forceParticipantView = false,
   weekAnchor,
   onlyMyCourses = false,
+  waitlistNoPromoteWithinMinutes,
 }: Options) {
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [overrides, setOverrides] = useState<CourseDateOverride[]>([]);
@@ -251,6 +253,7 @@ export function useCoursesData({
     fetchData,
     tenant?.settings,
     enrollments,
+    waitlistNoPromoteWithinMinutes,
   );
 
   const visibleCourses = useMemo(() => {

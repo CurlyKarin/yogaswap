@@ -24,6 +24,7 @@ type Props = {
   /** Teilnehmer-Ansicht: keine neuen Absagen/Tauschanfragen bei inaktivem Kurs. */
   participantActionsLocked?: boolean;
   tenantSettings?: TenantSettings;
+  waitlistNoPromoteWithinMinutes?: number | null;
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => Promise<boolean>;
   confirmSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
   requestSwap: (fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => void;
@@ -52,6 +53,7 @@ export default function CourseCard({
   swaps,
   participantActionsLocked = false,
   tenantSettings,
+  waitlistNoPromoteWithinMinutes,
   onToggleAbsence,
   confirmSwap,
   requestSwap,
@@ -73,6 +75,7 @@ export default function CourseCard({
     swaps,
     participantActionsLocked,
     tenantSettings,
+    waitlistNoPromoteWithinMinutes,
     initialSelectedDate,
     includePastTermsInSelect,
   });

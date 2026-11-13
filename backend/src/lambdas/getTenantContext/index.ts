@@ -70,6 +70,7 @@ export const handler = async (
     let membership: UserTenantMembership | null = null;
     let displayName: string | null = null;
     let notificationSettings: ParticipantNotificationSettings | null = null;
+    let waitlistNoPromoteWithinMinutes: number | null = null;
 
     if (userId) {
       const membershipResp = await client.send(
@@ -104,11 +105,18 @@ export const handler = async (
         displayName = raw && raw.length > 0 ? raw : null;
         if (profileResp.Item) {
           const profile = unmarshall(profileResp.Item) as {
-            settings?: { notifications?: ParticipantNotificationSettings };
+            settings?: {
+              notifications?: ParticipantNotificationSettings;
+              waitlistNoPromoteWithinMinutes?: number;
+            };
           };
           const notifications = profile.settings?.notifications;
           if (notifications && typeof notifications === "object" && !Array.isArray(notifications)) {
             notificationSettings = notifications;
+          }
+          const buffer = profile.settings?.waitlistNoPromoteWithinMinutes;
+          if (typeof buffer === "number" && Number.isInteger(buffer)) {
+            waitlistNoPromoteWithinMinutes = buffer;
           }
         }
       }
@@ -123,6 +131,7 @@ export const handler = async (
         membership,
         displayName,
         notificationSettings,
+        waitlistNoPromoteWithinMinutes,
       }),
     };
   } catch (error) {

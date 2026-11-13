@@ -11,6 +11,8 @@ export type TenantContextResponse = {
   displayName?: string | null;
   /** Own notification prefs when authenticated (#437). */
   notificationSettings?: ParticipantNotificationSettings | null;
+  /** Own waitlist buffer minutes when authenticated (#438). */
+  waitlistNoPromoteWithinMinutes?: number | null;
 };
 
 export class TenantNotFoundError extends Error {

@@ -273,6 +273,23 @@ describe("App shell a11y", () => {
     });
   });
 
+  it("klappt offene Einstellungen beim Logout zu (#433)", async () => {
+    await renderLoggedInAdmin();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: /^einstellungen$/i }));
+    const region = screen.getByRole("region", { name: /meine einstellungen/i });
+    const details = region.querySelector("details.studio-settings-details") as HTMLDetailsElement;
+    await waitFor(() => {
+      expect(details.open).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: /logout/i }));
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: /meine einstellungen/i })).not.toBeInTheDocument();
+    });
+  });
+
   it("springt mit Leertaste zur Wochennavigation im Kursbereich", async () => {
     await renderLoggedInAdmin();
 

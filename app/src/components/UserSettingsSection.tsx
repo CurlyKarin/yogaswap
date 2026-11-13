@@ -4,6 +4,7 @@ import UserSettingsDisplayNameForm from "./UserSettingsDisplayNameForm";
 import UserSettingsEmailForm from "./UserSettingsEmailForm";
 import UserSettingsNotificationsForm from "./UserSettingsNotificationsForm";
 import UserSettingsPasswordForm from "./UserSettingsPasswordForm";
+import UserSettingsWaitlistForm from "./UserSettingsWaitlistForm";
 
 export type UserSettingsSectionProps = {
   nickname: string;
@@ -11,11 +12,14 @@ export type UserSettingsSectionProps = {
   displayName?: string;
   authUserId?: string | null;
   notificationSettings?: ParticipantNotificationSettings | null;
+  studioCutoffMinutes?: number;
+  waitlistNoPromoteWithinMinutes?: number | null;
   /** Controlled open state for the outer details (Header-Einstieg). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onDisplayNameSaved?: (displayName: string) => void;
   onNotificationSettingsSaved?: (settings: ParticipantNotificationSettings) => void;
+  onWaitlistBufferSaved?: (minutes: number) => void;
   /** After self-service email change with forced password reset (#435 / #350). */
   onEmailChangeRequiresReauth?: () => Promise<void> | void;
   /** After self-service password change (#434). */
@@ -32,10 +36,13 @@ export default function UserSettingsSection({
   displayName,
   authUserId,
   notificationSettings,
+  studioCutoffMinutes = 60,
+  waitlistNoPromoteWithinMinutes,
   open = false,
   onOpenChange,
   onDisplayNameSaved,
   onNotificationSettingsSaved,
+  onWaitlistBufferSaved,
   onEmailChangeRequiresReauth,
   onPasswordChangedRequiresReauth,
 }: UserSettingsSectionProps) {
@@ -133,9 +140,14 @@ export default function UserSettingsSection({
           <summary className="studio-settings-summary studio-settings-summary--sub">
             <h4 className="studio-settings-summary-title">Warteliste</h4>
           </summary>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Persönlicher Zeitpuffer fürs Nachrücken folgt (#438).
-          </p>
+          {open ? (
+            <UserSettingsWaitlistForm
+              nickname={nickname}
+              studioCutoffMinutes={studioCutoffMinutes}
+              waitlistNoPromoteWithinMinutes={waitlistNoPromoteWithinMinutes}
+              onWaitlistBufferSaved={onWaitlistBufferSaved}
+            />
+          ) : null}
         </details>
 
         <hr className="studio-settings-divider" />

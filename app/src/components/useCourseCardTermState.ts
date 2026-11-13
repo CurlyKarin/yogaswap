@@ -54,6 +54,8 @@ export type UseCourseCardTermStateParams = {
   swaps: Swap[];
   participantActionsLocked?: boolean;
   tenantSettings?: TenantSettings;
+  /** Persönlicher Wartelisten-Puffer (#438) für Zieltermin-Filter. */
+  waitlistNoPromoteWithinMinutes?: number | null;
   initialSelectedDate?: Date;
   includePastTermsInSelect?: boolean;
 };
@@ -68,6 +70,7 @@ export function useCourseCardTermState({
   swaps,
   participantActionsLocked = false,
   tenantSettings,
+  waitlistNoPromoteWithinMinutes,
   initialSelectedDate,
   includePastTermsInSelect = false,
 }: UseCourseCardTermStateParams) {
@@ -218,10 +221,22 @@ export function useCourseCardTermState({
         tenantSettings,
         enrollments,
         course,
+        waitlistNoPromoteWithinMinutes,
       )
         .filter((option) => !existingPendingTargetCourseIds.has(option.course.id))
         .sort((a, b) => a.date.getTime() - b.date.getTime()),
-    [allCourses, overrides, enrollments, actor, selectedDate, existingPendingTargetCourseIds, swapWindow, tenantSettings, course],
+    [
+      allCourses,
+      overrides,
+      enrollments,
+      actor,
+      selectedDate,
+      existingPendingTargetCourseIds,
+      swapWindow,
+      tenantSettings,
+      course,
+      waitlistNoPromoteWithinMinutes,
+    ],
   );
 
   const swapForThisTerm = useMemo(

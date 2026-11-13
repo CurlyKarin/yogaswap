@@ -20,6 +20,7 @@ import {
   removeUserCaseInsensitive,
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
+import { resolveWaitlistNoPromoteWithinMinutes } from "shared/waitlistBuffer";
 import { hasRegularBookingCapacity, resolveMaxCapacity, validateTermOccupancy } from "shared/courseCapacity";
 import { resolveEffectiveTermOccupancy, resolveStemForDate } from "shared/courseEnrollment";
 import {
@@ -205,8 +206,13 @@ export function useCourseSwaps(
   fetchData: () => Promise<void>,
   tenantSettings?: TenantSettings,
   enrollments: CourseEnrollment[] = [],
+  waitlistNoPromoteWithinMinutes?: number | null,
 ) {
   const actorRef = resolveActorParticipantRef(actor);
+  const waitlistTargetCutoffMinutes = resolveWaitlistNoPromoteWithinMinutes(
+    waitlistNoPromoteWithinMinutes,
+    resolveCancellationSwapCutoffMinutes(tenantSettings),
+  );
   const requestSwapRef = useRef<(fromCourse: Course, fromDateIso: string, toCourseId: number, toDateIso: string, userName: string) => Promise<void>>(null!);
   // Filtere Overrides für aktuelle und zukünftige Termine
   // Fallback auf leeres Array, wenn overrides undefined oder kein Array ist
@@ -953,7 +959,18 @@ export function useCourseSwaps(
           alert("Zielkurs nicht gefunden.");
           return;
         }
-        if (!assertSwapTargetNotInCutoff(targetCourse, toDateIso)) return;
+        if (
+          isWithinCancellationSwapCutoff(
+            toDateIso,
+            targetCourse.time,
+            waitlistTargetCutoffMinutes,
+          )
+        ) {
+          alert(
+            "Für diesen Zieltermin ist keine Wartelisten-Anfrage mehr möglich (persönlicher Zeitpuffer / Absagefrist).",
+          );
+          return;
+        }
 
         const existingTargetOverride = findOverrideForCourseDate(
           filteredOverrides,
@@ -1076,7 +1093,18 @@ export function useCourseSwaps(
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- actorRef intentional for refresh
-    [courses, swaps, filteredOverrides, enrollments, actorRef, fetchData, setOverrides, setSwaps, tenantSettings]
+    [
+      courses,
+      swaps,
+      filteredOverrides,
+      enrollments,
+      actorRef,
+      fetchData,
+      setOverrides,
+      setSwaps,
+      tenantSettings,
+      waitlistTargetCutoffMinutes,
+    ]
   );
 
   requestSwapRef.current = requestSwap;

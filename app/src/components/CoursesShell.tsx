@@ -27,6 +27,7 @@ type Props = {
   tenant?: Tenant;
   membership?: UserTenantMembership;
   forceParticipantView?: boolean;
+  waitlistNoPromoteWithinMinutes?: number | null;
 };
 
 export default function CoursesShell({
@@ -34,6 +35,7 @@ export default function CoursesShell({
   tenant,
   membership,
   forceParticipantView = false,
+  waitlistNoPromoteWithinMinutes,
 }: Props) {
   const effectiveMembership = useMemo(() => {
     if (!forceParticipantView) return membership;
@@ -99,6 +101,7 @@ export default function CoursesShell({
     forceParticipantView,
     weekAnchor,
     onlyMyCourses,
+    waitlistNoPromoteWithinMinutes,
   });
 
   const lastVisibilitySoftRefreshAtRef = useRef(0);
@@ -395,6 +398,7 @@ export default function CoursesShell({
             participantNameByRef={participantNameByRef}
             canSeeCourseManagement={canSeeCourseManagement}
             tenantSettings={tenant?.settings}
+            waitlistNoPromoteWithinMinutes={waitlistNoPromoteWithinMinutes}
             todayFocusRequest={todayFocusRequest}
             onToggleAbsence={onToggleAbsence}
             confirmSwap={confirmSwap}
@@ -428,6 +432,7 @@ export default function CoursesShell({
             cancelSwap={cancelSwap}
             adjustGuestCount={adjustGuestCount}
             canManageGuestSeats={canManageGuestSeats}
+            waitlistNoPromoteWithinMinutes={waitlistNoPromoteWithinMinutes}
           />
         </section>
       )}

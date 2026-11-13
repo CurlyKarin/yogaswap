@@ -19,7 +19,12 @@ import type {
   ParticipantSettings,
   UserRole,
 } from "@yogaswap/shared";
-import { generateParticipantId, validateDisplayName } from "@yogaswap/shared";
+import {
+  generateParticipantId,
+  resolveCancellationSwapCutoffMinutes,
+  resolveWaitlistNoPromoteWithinMinutes,
+  validateDisplayName,
+} from "@yogaswap/shared";
 import { dynamoClient } from "../shared/dynamoClient";
 import { canActorManageParticipants } from "../shared/participantAuthorization";
 import { deriveParticipantStatus } from "../shared/participantStatus";
@@ -35,6 +40,7 @@ import {
 import { resolveSesSourceEmail } from "../shared/notifications/sesFromAddress";
 import { loadStudioMailContext, type StudioContact } from "../shared/studioContact";
 import { resolveAuthTokenTtlSeconds } from "../shared/authTokenTtl";
+import { loadTenantSettings } from "../shared/tenantSettingsLoader";
 
 const client = dynamoClient;
 const cognito = new CognitoIdentityProviderClient({});
@@ -242,7 +248,7 @@ export const handler = async (
     // Self-service display name (#436): own profile, displayName-only body; #345 mail stays on.
     const isSelfDisplayNameOnly = isSelfTarget && bodyIsDisplayNameOnly;
 
-    // Self-service notification prefs (#437): own profile, settings-only body.
+    // Self-service settings (#437/#438): own profile, settings-only body.
     const isSelfSettingsOnly = isSelfTarget && bodyIsSettingsOnly;
 
     if (!isSelfAuthLink && !isSelfEmailOnly && !isSelfDisplayNameOnly && !isSelfSettingsOnly) {
@@ -543,45 +549,94 @@ export const handler = async (
     if (Object.prototype.hasOwnProperty.call(body, "settings")) {
       if (body.settings && typeof body.settings === "object" && !Array.isArray(body.settings)) {
         if (isSelfSettingsOnly) {
-          // Self: merge notification prefs only; keep waitlist buffer etc. (#437/#438).
-          const incomingNotifications = body.settings.notifications;
-          if (
-            !incomingNotifications ||
-            typeof incomingNotifications !== "object" ||
-            Array.isArray(incomingNotifications)
-          ) {
+          // Self: merge known prefs only; keep unrelated keys (#437/#438).
+          const incoming = body.settings;
+          const hasNotifications = Object.prototype.hasOwnProperty.call(incoming, "notifications");
+          const hasWaitlistBuffer = Object.prototype.hasOwnProperty.call(
+            incoming,
+            "waitlistNoPromoteWithinMinutes",
+          );
+          if (!hasNotifications && !hasWaitlistBuffer) {
             return {
               statusCode: 400,
-              body: JSON.stringify({ error: "settings.notifications must be an object" }),
+              body: JSON.stringify({
+                error:
+                  "settings must include notifications and/or waitlistNoPromoteWithinMinutes",
+              }),
             };
           }
-          const allowedKeys = [
-            "studioCourseEmail",
-            "ownTermChangeEmail",
-            "waitlistPromotionEmail",
-          ] as const;
-          const sanitized: ParticipantSettings["notifications"] = {
-            ...(typeof updated.settings?.notifications === "object" &&
-            updated.settings.notifications &&
-            !Array.isArray(updated.settings.notifications)
-              ? updated.settings.notifications
-              : {}),
+
+          const nextSettings: ParticipantSettings = {
+            ...(updated.settings && typeof updated.settings === "object" ? updated.settings : {}),
           };
-          for (const key of allowedKeys) {
-            if (!Object.prototype.hasOwnProperty.call(incomingNotifications, key)) continue;
-            const value = (incomingNotifications as Record<string, unknown>)[key];
-            if (typeof value !== "boolean") {
+
+          if (hasNotifications) {
+            const incomingNotifications = incoming.notifications;
+            if (
+              !incomingNotifications ||
+              typeof incomingNotifications !== "object" ||
+              Array.isArray(incomingNotifications)
+            ) {
               return {
                 statusCode: 400,
-                body: JSON.stringify({ error: `settings.notifications.${key} must be a boolean` }),
+                body: JSON.stringify({ error: "settings.notifications must be an object" }),
               };
             }
-            sanitized[key] = value;
+            const allowedKeys = [
+              "studioCourseEmail",
+              "ownTermChangeEmail",
+              "waitlistPromotionEmail",
+            ] as const;
+            const sanitized: ParticipantSettings["notifications"] = {
+              ...(typeof nextSettings.notifications === "object" &&
+              nextSettings.notifications &&
+              !Array.isArray(nextSettings.notifications)
+                ? nextSettings.notifications
+                : {}),
+            };
+            for (const key of allowedKeys) {
+              if (!Object.prototype.hasOwnProperty.call(incomingNotifications, key)) continue;
+              const value = (incomingNotifications as Record<string, unknown>)[key];
+              if (typeof value !== "boolean") {
+                return {
+                  statusCode: 400,
+                  body: JSON.stringify({
+                    error: `settings.notifications.${key} must be a boolean`,
+                  }),
+                };
+              }
+              sanitized[key] = value;
+            }
+            nextSettings.notifications = sanitized;
           }
-          updated.settings = {
-            ...(updated.settings && typeof updated.settings === "object" ? updated.settings : {}),
-            notifications: sanitized,
-          };
+
+          if (hasWaitlistBuffer) {
+            const raw = incoming.waitlistNoPromoteWithinMinutes;
+            if (typeof raw !== "number" || !Number.isInteger(raw)) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({
+                  error: "settings.waitlistNoPromoteWithinMinutes must be an integer",
+                }),
+              };
+            }
+            const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+            const studioCutoff = resolveCancellationSwapCutoffMinutes(tenantSettings);
+            if (raw < studioCutoff) {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({
+                  error: `waitlistNoPromoteWithinMinutes must be >= studio cutoff (${studioCutoff})`,
+                }),
+              };
+            }
+            nextSettings.waitlistNoPromoteWithinMinutes = resolveWaitlistNoPromoteWithinMinutes(
+              raw,
+              studioCutoff,
+            );
+          }
+
+          updated.settings = nextSettings;
         } else {
           updated.settings = body.settings;
         }

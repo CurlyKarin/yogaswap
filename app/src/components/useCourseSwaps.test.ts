@@ -249,7 +249,60 @@ describe("useCourseSwaps", () => {
     });
 
     expect(alertSpy).toHaveBeenCalledWith(
-      "Für diesen Zieltermin ist keine Tauschanfrage mehr möglich (kurz vor Kursbeginn).",
+      "Für diesen Zieltermin ist keine Wartelisten-Anfrage mehr möglich (persönlicher Zeitpuffer / Absagefrist).",
+    );
+    expect(createSwap).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("requestSwap blockiert Zieltermin im persönlichen Wartelisten-Puffer (#438)", async () => {
+    vi.useFakeTimers();
+    // 15:20, Kurs 18:00 → 160 Min.; Studio 120 erlaubt, persönlich 210 sperrt
+    vi.setSystemTime(new Date(2099, 5, 17, 15, 20));
+
+    const fetchData = vi.fn().mockResolvedValue(undefined);
+    const setOverrides = vi.fn();
+    const setSwaps = vi.fn();
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    const targetCourse: Course = {
+      ...course,
+      id: 2,
+      time: "18:00",
+      capacity: 1,
+      participants: ["bob"],
+      dates: ["2099-06-17"],
+    };
+
+    const { result } = renderHook(() =>
+      useCourseSwaps(
+        [course, targetCourse],
+        [{ ...baseOverride, date: "2099-06-20" }],
+        setOverrides as unknown as (
+          value:
+            | CourseDateOverride[]
+            | ((prev: CourseDateOverride[]) => CourseDateOverride[])
+        ) => void,
+        [],
+        setSwaps as unknown as (
+          value: Swap[] | ((prev: Swap[]) => Swap[])
+        ) => void,
+        baseUser,
+        { nickname: baseUser.nickname },
+        fetchData,
+        { cancellationSwapCutoffMinutesBeforeStart: 120 },
+        [],
+        210,
+      ),
+    );
+
+    await act(async () => {
+      await result.current.requestSwap(course, "2099-06-20", 2, "2099-06-17", baseUser.nickname);
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Für diesen Zieltermin ist keine Wartelisten-Anfrage mehr möglich (persönlicher Zeitpuffer / Absagefrist).",
     );
     expect(createSwap).not.toHaveBeenCalled();
     alertSpy.mockRestore();

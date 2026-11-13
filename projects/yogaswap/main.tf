@@ -138,11 +138,18 @@ locals {
     "delete_swap" = {
       name             = "delete-swap"
       file_name        = "deleteSwap.zip"
-      dynamodb_actions = ["dynamodb:DeleteItem", "dynamodb:GetItem"]
-      table_arns       = [module.swaps_table.table_arn, module.courses_table.table_arn]
+      dynamodb_actions = ["dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:Query"]
+      table_arns = [
+        module.swaps_table.table_arn,
+        module.courses_table.table_arn,
+        module.tenants_table.table_arn,
+        module.participants_table.table_arn,
+      ]
       tables = {
-        "SWAPS_TABLE"   = module.swaps_table.table_name
-        "COURSES_TABLE" = module.courses_table.table_name
+        "SWAPS_TABLE"        = module.swaps_table.table_name
+        "COURSES_TABLE"      = module.courses_table.table_name
+        "TENANTS_TABLE"      = module.tenants_table.table_name
+        "PARTICIPANTS_TABLE" = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -177,6 +184,7 @@ locals {
         module.courses_table.table_arn,
         module.course_enrollments_table.table_arn,
         module.tenants_table.table_arn,
+        module.participants_table.table_arn,
       ]
       dynamodb_actions = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"]
       tables = {
@@ -184,6 +192,7 @@ locals {
         "COURSES_TABLE"            = module.courses_table.table_name
         "COURSE_ENROLLMENTS_TABLE" = module.course_enrollments_table.table_name
         "TENANTS_TABLE"            = module.tenants_table.table_name
+        "PARTICIPANTS_TABLE"       = module.participants_table.table_name
       }
       s3_actions   = []
       s3_resources = []
@@ -237,7 +246,14 @@ locals {
     "process_promotions" = {
       name             = "process-promotions"
       file_name        = "processPromotions.zip"
-      table_arns       = [module.swaps_table.table_arn, module.course_overrides_table.table_arn, module.courses_table.table_arn, module.participants_table.table_arn, module.course_enrollments_table.table_arn]
+      table_arns = [
+        module.swaps_table.table_arn,
+        module.course_overrides_table.table_arn,
+        module.courses_table.table_arn,
+        module.participants_table.table_arn,
+        module.course_enrollments_table.table_arn,
+        module.tenants_table.table_arn,
+      ]
       dynamodb_actions = ["dynamodb:Scan", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:GetItem"]
       tables = {
         "SWAPS_TABLE"              = module.swaps_table.table_name
@@ -245,6 +261,7 @@ locals {
         "COURSES_TABLE"            = module.courses_table.table_name
         "PARTICIPANTS_TABLE"       = module.participants_table.table_name
         "COURSE_ENROLLMENTS_TABLE" = module.course_enrollments_table.table_name
+        "TENANTS_TABLE"            = module.tenants_table.table_name
       }
       s3_actions   = []
       s3_resources = []

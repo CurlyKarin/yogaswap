@@ -33,6 +33,7 @@ type Props = {
   participantNameByRef?: Map<string, string>;
   canSeeCourseManagement: boolean;
   tenantSettings?: TenantSettings;
+  waitlistNoPromoteWithinMinutes?: number | null;
   /** One-shot focus from „Heute“ (scroll + highlight + select occurrence). */
   todayFocusRequest?: TodayFocusRequest | null;
   onToggleAbsence: (course: Course, dateIso: string, userName: string) => Promise<boolean>;
@@ -72,6 +73,7 @@ export default function CourseWeekView({
   participantNameByRef,
   canSeeCourseManagement,
   tenantSettings,
+  waitlistNoPromoteWithinMinutes,
   todayFocusRequest = null,
   onToggleAbsence,
   confirmSwap,
@@ -198,6 +200,7 @@ export default function CourseWeekView({
                   isParticipantCourseWindDown(course, tenantSettings)
                 }
                 tenantSettings={tenantSettings}
+                waitlistNoPromoteWithinMinutes={waitlistNoPromoteWithinMinutes}
                 initialSelectedDate={initialSelectedDate}
                 highlighted={highlightedCourseId === course.id}
                 includePastTermsInSelect

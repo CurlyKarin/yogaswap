@@ -12,6 +12,7 @@ import ForgotPassword from "./components/ForgotPassword";
 import DelegationPickerDialog from "./components/DelegationPickerDialog";
 import UserSettingsSection from "./components/UserSettingsSection";
 import { loadCurrentUser, saveCurrentUser, clearCurrentUser } from "shared/lib/storage";
+import { resolveCancellationSwapCutoffMinutes } from "shared/cancellationSwapCutoff";
 import type { ParticipantNotificationSettings } from "shared/participantNotifications";
 import { User, Tenant, UserTenantMembership } from "shared/types";
 import { useAppAuth } from "./auth/useAppAuth";
@@ -68,6 +69,7 @@ function MainApp() {
   const [ownDisplayName, setOwnDisplayName] = useState("");
   const [ownNotificationSettings, setOwnNotificationSettings] =
     useState<ParticipantNotificationSettings | null>(null);
+  const [ownWaitlistBufferMinutes, setOwnWaitlistBufferMinutes] = useState<number | null>(null);
   const { logout, isLoading, error } = useAppAuth();
 
   const inDelegation = Boolean(actingForUserIdState);
@@ -87,6 +89,11 @@ function MainApp() {
   useEffect(() => {
     if (inDelegation) setUserSettingsOpen(false);
   }, [inDelegation]);
+
+  // Nach Logout/Session-Ende zugeklappt halten — sonst bleiben sie beim erneuten Login offen.
+  useEffect(() => {
+    if (!currentUser) setUserSettingsOpen(false);
+  }, [currentUser]);
 
   // Studio-Existenz vor Login prüfen (#261) — GET /tenant-context ist öffentlich.
   useEffect(() => {
@@ -251,6 +258,7 @@ function MainApp() {
         setCanInvite(false);
         setOwnDisplayName("");
         setOwnNotificationSettings(null);
+        setOwnWaitlistBufferMinutes(null);
       }
       return;
     }
@@ -262,6 +270,11 @@ function MainApp() {
         setMembership(ctx.membership);
         setOwnDisplayName(ctx.displayName?.trim() || "");
         setOwnNotificationSettings(ctx.notificationSettings ?? null);
+        setOwnWaitlistBufferMinutes(
+          typeof ctx.waitlistNoPromoteWithinMinutes === "number"
+            ? ctx.waitlistNoPromoteWithinMinutes
+            : null,
+        );
 
         if (ctx.membership) {
           setCanInvite(
@@ -316,6 +329,7 @@ function MainApp() {
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {
     setSessionNotice("");
+    setUserSettingsOpen(false);
     saveCurrentUser(loggedInUser);
     setActorUserId(loggedInUser.nickname);
     setCurrentUser(loggedInUser);
@@ -328,6 +342,7 @@ function MainApp() {
     setActorUserId(null);
     setActingForUserIdState(null);
     setPendingActingForUserId(null);
+    setUserSettingsOpen(false);
     clearCurrentUser();
     setCurrentUser(null);
   };
@@ -566,6 +581,7 @@ function MainApp() {
               tenant={tenant ?? undefined}
               membership={membership ?? undefined}
               forceParticipantView={Boolean(actingForUserIdState)}
+              waitlistNoPromoteWithinMinutes={ownWaitlistBufferMinutes}
             />
           </section>
         )}
@@ -578,10 +594,13 @@ function MainApp() {
               displayName={ownDisplayName}
               authUserId={currentUser.authUserId}
               notificationSettings={ownNotificationSettings}
+              studioCutoffMinutes={resolveCancellationSwapCutoffMinutes(tenant?.settings)}
+              waitlistNoPromoteWithinMinutes={ownWaitlistBufferMinutes}
               open={userSettingsOpen}
               onOpenChange={setUserSettingsOpen}
               onDisplayNameSaved={setOwnDisplayName}
               onNotificationSettingsSaved={setOwnNotificationSettings}
+              onWaitlistBufferSaved={setOwnWaitlistBufferMinutes}
               onEmailChangeRequiresReauth={handleEmailChangeRequiresReauth}
               onPasswordChangedRequiresReauth={handlePasswordChangedRequiresReauth}
             />

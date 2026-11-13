@@ -27,12 +27,23 @@ async function loadCourseTime(
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const { tenantId, userId, actingForUserId } = getTenantContext(event);
+  const swapId = event.pathParameters?.swapId;
+  const user = event.queryStringParameters?.user;
+  console.log("DeleteSwap params:", { swapId, user });
+  console.log("deleteSwap tenant context:", { tenantId, userId, actingForUserId });
+
   const delegationErrorResponse = getDelegationErrorResponse({
     action: "delete_swap",
     actorUserId: userId,
     actingForUserId,
   });
-  if (delegationErrorResponse) return delegationErrorResponse;
+  if (delegationErrorResponse) {
+    console.warn("deleteSwap blocked by delegation policy", {
+      statusCode: delegationErrorResponse.statusCode,
+      body: delegationErrorResponse.body,
+    });
+    return delegationErrorResponse;
+  }
   const subjectPolicyError = await getDelegationSubjectPolicyErrorResponse({
     client,
     tenantsTable: process.env.TENANTS_TABLE,
@@ -40,15 +51,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     tenantId,
     actingForUserId,
   });
-  if (subjectPolicyError) return subjectPolicyError;
+  if (subjectPolicyError) {
+    console.warn("deleteSwap blocked by subject policy", {
+      statusCode: subjectPolicyError.statusCode,
+      body: subjectPolicyError.body,
+    });
+    return subjectPolicyError;
+  }
 
-  const swapId = event.pathParameters?.swapId;
-  const user = event.queryStringParameters?.user;
   const swapsTable = process.env.SWAPS_TABLE;
   const coursesTable = process.env.COURSES_TABLE;
-
-  console.log("DeleteSwap params:", { swapId, user });
-  console.log("deleteSwap tenant context:", { tenantId, userId, actingForUserId });
 
   if (!swapId || !user) {
     return {
