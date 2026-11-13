@@ -74,6 +74,12 @@ export async function getDelegationSubjectPolicyErrorResponse(params: {
   if (!actingFor) return null;
 
   if (!params.tenantsTable || !params.participantsTable) {
+    console.error("delegation subject policy missing table env", {
+      tenantId: params.tenantId,
+      actingForUserId: actingFor,
+      hasTenantsTable: Boolean(params.tenantsTable),
+      hasParticipantsTable: Boolean(params.participantsTable),
+    });
     return {
       statusCode: 500,
       body: JSON.stringify({
