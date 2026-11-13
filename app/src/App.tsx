@@ -581,6 +581,7 @@ function MainApp() {
               tenant={tenant ?? undefined}
               membership={membership ?? undefined}
               forceParticipantView={Boolean(actingForUserIdState)}
+              waitlistNoPromoteWithinMinutes={ownWaitlistBufferMinutes}
             />
           </section>
         )}

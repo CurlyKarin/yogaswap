@@ -11,6 +11,7 @@ import {
   Swap,
   CourseDateOverride,
   Course,
+  buildCourseOccurrenceLocal,
   canPromoteFromWaitlist,
   listIncludesAnyUserRef,
   resolveCancellationSwapCutoffMinutes,
@@ -56,28 +57,29 @@ function addUserUniqueCaseInsensitive(values: string[] | undefined, user: string
   return [...base, user];
 }
 
-// Hilfsfunktion: Prüft, ob ein Kursbeginn mindestens PROMOTION_TIME_BUFFER_MINUTES in der Zukunft liegt
+/** True, wenn Kursbeginn mindestens `bufferMinutes` nach `now` liegt (Lokalzeit via TZ). */
 function isCourseInFuture(
   courseDate: string,
   courseTime: string,
   now: Date,
-  noAutomationMinutes: number,
+  bufferMinutes: number,
 ): boolean {
-  try {
-    // Kombiniere Datum (YYYY-MM-DD) und Uhrzeit (HH:mm) zu einem Date-Objekt
-    const [year, month, day] = courseDate.split('-').map(Number);
-    const [hours, minutes] = courseTime.split(':').map(Number);
-    const courseStart = new Date(year, month - 1, day, hours, minutes);
-    
-    // Aktuelle Zeit + Sperrfenster für automatische Promotion
-    const bufferTime = new Date(now.getTime() + noAutomationMinutes * 60 * 1000);
-    
-    // Prüfe, ob Kursbeginn nach bufferTime liegt
-    return courseStart >= bufferTime;
-  } catch (err) {
-    console.error('Error parsing course date/time:', { courseDate, courseTime, error: err });
-    return false; // Ignoriere ungültige Termine
+  const courseStart = buildCourseOccurrenceLocal(courseDate, courseTime);
+  if (!courseStart) {
+    console.error("Error parsing course date/time:", { courseDate, courseTime });
+    return false;
   }
+  const bufferTime = new Date(now.getTime() + bufferMinutes * 60 * 1000);
+  return courseStart >= bufferTime;
+}
+
+function coerceWaitlistBufferMinutes(raw: unknown): number | undefined {
+  if (typeof raw === "number" && Number.isFinite(raw)) return Math.trunc(raw);
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) return Math.trunc(parsed);
+  }
+  return undefined;
 }
 
 // Hilfsfunktion: Override aktualisieren (tenant-scoped)
@@ -350,8 +352,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 );
                 if (profileResp.Item) {
                   const profile = unmarshall(profileResp.Item) as ParticipantProfile;
-                  const raw = profile.settings?.waitlistNoPromoteWithinMinutes;
-                  personalMinutes = typeof raw === "number" ? raw : undefined;
+                  personalMinutes = coerceWaitlistBufferMinutes(
+                    profile.settings?.waitlistNoPromoteWithinMinutes,
+                  );
                 }
               } catch (err) {
                 console.warn("waitlist personal buffer lookup failed", {
@@ -366,6 +369,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               noAutomationMinutes,
             );
             personalBufferCache.set(cacheKey, effectiveBuffer);
+            console.log("waitlist personal buffer resolved", {
+              candidate,
+              personalMinutes: personalMinutes ?? null,
+              studioCutoff: noAutomationMinutes,
+              effectiveBuffer,
+              date: override.date,
+              time: overrideCourse.time,
+              tz: process.env.TZ ?? null,
+            });
           }
           if (!isCourseInFuture(override.date, overrideCourse.time, now, effectiveBuffer)) {
             console.log("skip waitlist promotion: personal buffer", {
@@ -373,6 +385,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               effectiveBuffer,
               date: override.date,
               time: overrideCourse.time,
+              now: now.toISOString(),
             });
             continue;
           }

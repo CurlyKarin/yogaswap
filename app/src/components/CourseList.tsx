@@ -64,6 +64,7 @@ import { courseApiPathKey } from "../lib/courseUid";
 type Props = {
   currentUser: User;
   tenant?: Tenant;
+  waitlistNoPromoteWithinMinutes?: number | null;
   membership?: UserTenantMembership;
   forceParticipantView?: boolean;
   /** Gemeinsamer Datenstand aus CoursesShell / useCoursesData (#328). */
@@ -239,6 +240,7 @@ export default function CourseList({
   cancelSwap,
   adjustGuestCount,
   canManageGuestSeats,
+  waitlistNoPromoteWithinMinutes,
 }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -983,6 +985,7 @@ export default function CourseList({
                     isParticipantCourseWindDown(course, tenant?.settings)
                   }
                   tenantSettings={tenant?.settings}
+                  waitlistNoPromoteWithinMinutes={waitlistNoPromoteWithinMinutes}
                   onToggleAbsence={onToggleAbsence}
                   confirmSwap={confirmSwap}
                   requestSwap={requestSwap}

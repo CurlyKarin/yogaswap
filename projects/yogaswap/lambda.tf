@@ -69,15 +69,18 @@ resource "aws_lambda_function" "lambda" {
   source_code_hash = sha256(join(",", [
     filebase64sha256("${path.module}/../../backend/zips/${each.value.file_name}"),
     jsonencode(merge(
+      { TZ = "Europe/Berlin" },
       each.value.tables,
       try(each.value.environment, {})
     ))
   ]))
 
   dynamic "environment" {
-    for_each = length(merge(each.value.tables, try(each.value.environment, {}))) > 0 ? [1] : []
+    for_each = [1]
     content {
       variables = merge(
+        # Kurszeiten sind Wanduhren in Studio-Lokalzeit (DE); Lambda-Runtime sonst UTC.
+        { TZ = "Europe/Berlin" },
         each.value.tables,
         try(each.value.environment, {})
       )

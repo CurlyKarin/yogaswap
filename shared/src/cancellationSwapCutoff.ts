@@ -119,8 +119,13 @@ export function isSwapTargetInCutoffWindow(
   courseTime: string,
   tenantSettings?: TenantSettings,
   now: Date = new Date(),
+  /** Optional: persönlicher Wartelisten-Puffer (#438); sonst nur Studio-Absagefrist. */
+  cutoffMinutesOverride?: number,
 ): boolean {
-  const cutoffMinutes = resolveCancellationSwapCutoffMinutes(tenantSettings);
+  const cutoffMinutes =
+    typeof cutoffMinutesOverride === "number" && Number.isFinite(cutoffMinutesOverride)
+      ? cutoffMinutesOverride
+      : resolveCancellationSwapCutoffMinutes(tenantSettings);
   return isWithinCancellationSwapCutoff(isoDate, courseTime, cutoffMinutes, now);
 }
 
