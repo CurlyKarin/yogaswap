@@ -90,6 +90,11 @@ function MainApp() {
     if (inDelegation) setUserSettingsOpen(false);
   }, [inDelegation]);
 
+  // Nach Logout/Session-Ende zugeklappt halten — sonst bleiben sie beim erneuten Login offen.
+  useEffect(() => {
+    if (!currentUser) setUserSettingsOpen(false);
+  }, [currentUser]);
+
   // Studio-Existenz vor Login prüfen (#261) — GET /tenant-context ist öffentlich.
   useEffect(() => {
     let cancelled = false;
@@ -324,6 +329,7 @@ function MainApp() {
   // Login-Handler
   const handleLogin = (loggedInUser: User) => {
     setSessionNotice("");
+    setUserSettingsOpen(false);
     saveCurrentUser(loggedInUser);
     setActorUserId(loggedInUser.nickname);
     setCurrentUser(loggedInUser);
@@ -336,6 +342,7 @@ function MainApp() {
     setActorUserId(null);
     setActingForUserIdState(null);
     setPendingActingForUserId(null);
+    setUserSettingsOpen(false);
     clearCurrentUser();
     setCurrentUser(null);
   };
