@@ -82,6 +82,154 @@ function coerceWaitlistBufferMinutes(raw: unknown): number | undefined {
   return undefined;
 }
 
+async function resolveEffectiveWaitlistBufferMinutes(
+  tenantId: string,
+  candidate: string,
+  studioCutoffMinutes: number,
+  cache: Map<string, number>,
+): Promise<number> {
+  const cacheKey = normalized(candidate);
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  let personalMinutes: number | undefined;
+  const participantsTable = process.env.PARTICIPANTS_TABLE;
+  if (participantsTable) {
+    try {
+      const profileResp = await client.send(
+        new GetItemCommand({
+          TableName: participantsTable,
+          Key: {
+            tenantId: { S: tenantId },
+            userId: { S: candidate },
+          },
+          ConsistentRead: true,
+        }),
+      );
+      if (profileResp.Item) {
+        const profile = unmarshall(profileResp.Item) as ParticipantProfile;
+        personalMinutes = coerceWaitlistBufferMinutes(
+          profile.settings?.waitlistNoPromoteWithinMinutes,
+        );
+      }
+    } catch (err) {
+      console.warn("waitlist personal buffer lookup failed", {
+        tenantId,
+        candidate,
+        error: err,
+      });
+    }
+  }
+
+  const effectiveBuffer = resolveWaitlistNoPromoteWithinMinutes(
+    personalMinutes,
+    studioCutoffMinutes,
+  );
+  cache.set(cacheKey, effectiveBuffer);
+  console.log("waitlist personal buffer resolved", {
+    candidate,
+    personalMinutes: personalMinutes ?? null,
+    studioCutoff: studioCutoffMinutes,
+    effectiveBuffer,
+    tz: process.env.TZ ?? null,
+  });
+  return effectiveBuffer;
+}
+
+async function deletePendingSwap(tenantId: string, swap: Swap): Promise<void> {
+  const participantId = swap.participantId;
+  if (!participantId || !process.env.SWAPS_TABLE) return;
+  const swapId = `${swap.fromDate}_${swap.fromCourseId}_${swap.toDate}_${swap.toCourseId}`;
+  const user_swapId = `${participantId}#${swapId}`;
+  await client.send(
+    new DeleteItemCommand({
+      TableName: process.env.SWAPS_TABLE,
+      Key: {
+        tenantId: { S: tenantId },
+        user_swapId: { S: user_swapId },
+      },
+    }),
+  );
+}
+
+/**
+ * #438: Sobald der (persönliche) Nachrück-Puffer unterschritten ist, Warteliste und
+ * pending Swap entfernen — kein „hängengebliebener“ Eintrag ohne Nachrückchance.
+ */
+async function expireWaitlistEntriesPastBuffer(params: {
+  tenantId: string;
+  overrides: CourseDateOverride[];
+  courses: Course[];
+  pendingSwaps: Swap[];
+  now: Date;
+  studioCutoffMinutes: number;
+}): Promise<{ expiredCount: number; pendingSwaps: Swap[] }> {
+  const { tenantId, overrides, courses, now, studioCutoffMinutes } = params;
+  let pendingSwaps = [...params.pendingSwaps];
+  let expiredCount = 0;
+  const personalBufferCache = new Map<string, number>();
+
+  for (const override of overrides) {
+    const waitlist = override.waitlist ?? [];
+    if (waitlist.length === 0) continue;
+    const overrideCourse = courses.find((c) => c.id === override.courseId);
+    if (!overrideCourse) continue;
+
+    let nextWaitlist = [...waitlist];
+    for (const candidate of waitlist) {
+      const effectiveBuffer = await resolveEffectiveWaitlistBufferMinutes(
+        tenantId,
+        candidate,
+        studioCutoffMinutes,
+        personalBufferCache,
+      );
+      if (isCourseInFuture(override.date, overrideCourse.time, now, effectiveBuffer)) {
+        continue;
+      }
+
+      const match = pendingSwaps.find(
+        (s) =>
+          normalized(s.participantId) === normalized(candidate) &&
+          s.toCourseId === override.courseId &&
+          s.toDate === override.date,
+      );
+      if (match) {
+        await deletePendingSwap(tenantId, match);
+        pendingSwaps = pendingSwaps.filter(
+          (s) =>
+            !(
+              normalized(s.participantId) === normalized(match.participantId) &&
+              s.fromCourseId === match.fromCourseId &&
+              s.fromDate === match.fromDate &&
+              s.toCourseId === match.toCourseId &&
+              s.toDate === match.toDate
+            ),
+        );
+      }
+
+      nextWaitlist = removeUserCaseInsensitive(nextWaitlist, candidate);
+      expiredCount += 1;
+      console.log("expire waitlist entry: personal buffer", {
+        candidate,
+        effectiveBuffer,
+        date: override.date,
+        time: overrideCourse.time,
+        hadPendingSwap: Boolean(match),
+        now: now.toISOString(),
+      });
+    }
+
+    if (nextWaitlist.length !== waitlist.length) {
+      await updateOverrideHelper(tenantId, override.courseId, override.date, {
+        waitlist: nextWaitlist,
+      });
+      override.waitlist = nextWaitlist;
+    }
+  }
+
+  return { expiredCount, pendingSwaps };
+}
+
 // Hilfsfunktion: Override aktualisieren (tenant-scoped)
 async function updateOverrideHelper(
   tenantId: string,
@@ -279,6 +427,25 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
       // Filtere Overrides: zukünftige Termine oder heutige Termine mit Puffer
       const now = new Date();
+
+      // #438: Wartelisten-Einträge außerhalb des Nachrückfensters bereinigen (vor Promotion).
+      const expired = await expireWaitlistEntriesPastBuffer({
+        tenantId,
+        overrides: allOverrides,
+        courses,
+        pendingSwaps,
+        now,
+        studioCutoffMinutes: noAutomationMinutes,
+      });
+      pendingSwaps.length = 0;
+      pendingSwaps.push(...expired.pendingSwaps);
+      if (expired.expiredCount > 0) {
+        changed = true;
+        console.log("waitlist buffer expirations applied", {
+          expiredCount: expired.expiredCount,
+        });
+      }
+
       const futureOverrides = allOverrides.filter((o) => {
         const course = courses.find((c) => c.id === o.courseId);
         if (!course) return false;
@@ -287,6 +454,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       console.log('futureOverrides:', futureOverrides);
 
       // 4) Durchsuche Overrides nach freien Plätzen mit Warteliste
+      const personalBufferCache = new Map<string, number>();
       for (const override of futureOverrides) {
         console.log('override:', override);
         const overrideCourse = courses.find((c) => c.id === override.courseId);
@@ -321,7 +489,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             : waitlistCandidates;
 
         let correspondingSwap: Swap | undefined;
-        const personalBufferCache = new Map<string, number>();
         for (const candidate of prioritizedCandidates) {
           const match = pendingSwaps.find(
             (s) =>
@@ -333,53 +500,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
           // Persönlicher Puffer (#438): Default = Studio-Absagefrist, nur länger möglich.
           // Studio-Cutoff filtert bereits futureOverrides; hier zusätzliche individuelle Sperre.
-          const cacheKey = normalized(candidate);
-          let effectiveBuffer = personalBufferCache.get(cacheKey);
-          if (effectiveBuffer === undefined) {
-            let personalMinutes: number | undefined;
-            const participantsTableForPrefs = process.env.PARTICIPANTS_TABLE;
-            if (participantsTableForPrefs) {
-              try {
-                const profileResp = await client.send(
-                  new GetItemCommand({
-                    TableName: participantsTableForPrefs,
-                    Key: {
-                      tenantId: { S: tenantId },
-                      userId: { S: candidate },
-                    },
-                    ConsistentRead: true,
-                  }),
-                );
-                if (profileResp.Item) {
-                  const profile = unmarshall(profileResp.Item) as ParticipantProfile;
-                  personalMinutes = coerceWaitlistBufferMinutes(
-                    profile.settings?.waitlistNoPromoteWithinMinutes,
-                  );
-                }
-              } catch (err) {
-                console.warn("waitlist personal buffer lookup failed", {
-                  tenantId,
-                  candidate,
-                  error: err,
-                });
-              }
-            }
-            effectiveBuffer = resolveWaitlistNoPromoteWithinMinutes(
-              personalMinutes,
-              noAutomationMinutes,
-            );
-            personalBufferCache.set(cacheKey, effectiveBuffer);
-            console.log("waitlist personal buffer resolved", {
-              candidate,
-              personalMinutes: personalMinutes ?? null,
-              studioCutoff: noAutomationMinutes,
-              effectiveBuffer,
-              date: override.date,
-              time: overrideCourse.time,
-              tz: process.env.TZ ?? null,
-            });
-          }
+          const effectiveBuffer = await resolveEffectiveWaitlistBufferMinutes(
+            tenantId,
+            candidate,
+            noAutomationMinutes,
+            personalBufferCache,
+          );
           if (!isCourseInFuture(override.date, overrideCourse.time, now, effectiveBuffer)) {
+            // Safety net — expire-Pass sollte das schon erledigt haben.
             console.log("skip waitlist promotion: personal buffer", {
               candidate,
               effectiveBuffer,

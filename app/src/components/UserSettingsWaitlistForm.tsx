@@ -99,12 +99,13 @@ export default function UserSettingsWaitlistForm({
   return (
     <div className="studio-settings-grid" role="group" aria-labelledby={headingId}>
       <p id={headingId} className="muted small" style={{ gridColumn: "1 / -1", margin: 0 }}>
-        Kein automatisches Nachrücken, wenn der Termin näher als dieser Zeitraum liegt. Minimum und
+        Kein automatisches Nachrücken und keine Wartelisten-Anfrage, wenn der Termin näher als dieser
+        Zeitraum liegt. Offene Anfragen in diesem Fenster werden zurückgenommen. Minimum und
         Vorschlag: Studio-Absagefrist ({formatWaitlistBufferDuration(min)}).
       </p>
 
       <label className="dialog-field">
-        <FieldLabelWithTooltip tooltip="Nur verlängerbar gegenüber der Absagefrist des Studios. Schritte: 15 Min. unter 2 Std., 30 Min. unter 6 Std., danach 1 Std.">
+        <FieldLabelWithTooltip tooltip="Nur verlängerbar gegenüber der Absagefrist des Studios. Im Puffer: kein Nachrücken, Anfrage wird von der Warteliste genommen. Schritte: 15 Min. unter 2 Std., 30 Min. unter 6 Std., danach 1 Std.">
           Zeitpuffer vor Terminbeginn
         </FieldLabelWithTooltip>
         <NumberStepInput
