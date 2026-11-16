@@ -935,6 +935,65 @@ describe("updateParticipant Lambda", () => {
     expect(JSON.parse(result.body).error).toMatch(/studio cutoff/i);
   });
 
+  test("allows self-service week filter default merge (#439)", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          tenantId: { S: "default-tenant" },
+          userId: { S: "alice" },
+          authUserId: { S: "sub-alice" },
+          inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+          settings: {
+            M: {
+              waitlistNoPromoteWithinMinutes: { N: "60" },
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({}); // PutItem
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({
+          settings: { weekFilterOnlyMyCoursesDefault: false },
+        }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.settings).toEqual({
+      waitlistNoPromoteWithinMinutes: 60,
+      weekFilterOnlyMyCoursesDefault: false,
+    });
+  });
+
+  test("rejects non-boolean week filter default (#439)", async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        tenantId: { S: "default-tenant" },
+        userId: { S: "alice" },
+        authUserId: { S: "sub-alice" },
+        inviteCompletedAt: { S: "2026-01-01T00:00:00.000Z" },
+      },
+    });
+
+    const result = await handler(
+      makeEvent({
+        pathParameters: { userId: "alice" },
+        requestContext: { authorizer: { principalId: "alice" } } as any,
+        body: JSON.stringify({
+          settings: { weekFilterOnlyMyCoursesDefault: "yes" },
+        }),
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/boolean/i);
+  });
+
   test("allows self-service notification settings merge (#437)", async () => {
     mockSend
       .mockResolvedValueOnce({

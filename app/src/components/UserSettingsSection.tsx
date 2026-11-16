@@ -4,22 +4,27 @@ import UserSettingsDisplayNameForm from "./UserSettingsDisplayNameForm";
 import UserSettingsEmailForm from "./UserSettingsEmailForm";
 import UserSettingsNotificationsForm from "./UserSettingsNotificationsForm";
 import UserSettingsPasswordForm from "./UserSettingsPasswordForm";
+import type { UserRole } from "shared/types";
 import UserSettingsWaitlistForm from "./UserSettingsWaitlistForm";
+import UserSettingsWeekFilterForm from "./UserSettingsWeekFilterForm";
 
 export type UserSettingsSectionProps = {
   nickname: string;
+  role?: UserRole;
   email?: string;
   displayName?: string;
   authUserId?: string | null;
   notificationSettings?: ParticipantNotificationSettings | null;
   studioCutoffMinutes?: number;
   waitlistNoPromoteWithinMinutes?: number | null;
+  weekFilterOnlyMyCoursesDefault?: boolean | null;
   /** Controlled open state for the outer details (Header-Einstieg). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onDisplayNameSaved?: (displayName: string) => void;
   onNotificationSettingsSaved?: (settings: ParticipantNotificationSettings) => void;
   onWaitlistBufferSaved?: (minutes: number) => void;
+  onWeekFilterDefaultSaved?: (value: boolean) => void;
   /** After self-service email change with forced password reset (#435 / #350). */
   onEmailChangeRequiresReauth?: () => Promise<void> | void;
   /** After self-service password change (#434). */
@@ -32,17 +37,20 @@ export type UserSettingsSectionProps = {
  */
 export default function UserSettingsSection({
   nickname,
+  role = "participant",
   email,
   displayName,
   authUserId,
   notificationSettings,
   studioCutoffMinutes = 60,
   waitlistNoPromoteWithinMinutes,
+  weekFilterOnlyMyCoursesDefault,
   open = false,
   onOpenChange,
   onDisplayNameSaved,
   onNotificationSettingsSaved,
   onWaitlistBufferSaved,
+  onWeekFilterDefaultSaved,
   onEmailChangeRequiresReauth,
   onPasswordChangedRequiresReauth,
 }: UserSettingsSectionProps) {
@@ -156,9 +164,14 @@ export default function UserSettingsSection({
           <summary className="studio-settings-summary studio-settings-summary--sub">
             <h4 className="studio-settings-summary-title">Darstellung</h4>
           </summary>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Default für den Wochenfilter „nur meine Kurse“ folgt (#439).
-          </p>
+          {open ? (
+            <UserSettingsWeekFilterForm
+              nickname={nickname}
+              role={role}
+              weekFilterOnlyMyCoursesDefault={weekFilterOnlyMyCoursesDefault}
+              onWeekFilterDefaultSaved={onWeekFilterDefaultSaved}
+            />
+          ) : null}
         </details>
       </details>
     </section>

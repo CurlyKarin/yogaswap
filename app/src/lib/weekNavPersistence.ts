@@ -57,6 +57,26 @@ export function writeStoredWeekAnchor(storageKey: string, weekAnchor: Date): voi
   }
 }
 
+/** Drop all week-nav anchors so the next login starts on the current week. */
+export function clearStoredWeekAnchors(): void {
+  if (typeof sessionStorage === "undefined") return;
+
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith(`${WEEK_ANCHOR_STORAGE_PREFIX}:`)) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Private mode — ignore.
+  }
+}
+
 export function clampWeekAnchor(
   weekAnchor: Date,
   earliestWeekAnchor: Date,

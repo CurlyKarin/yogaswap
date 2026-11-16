@@ -151,14 +151,17 @@ export type MyCoursesToggleResolution = {
 };
 
 /**
- * Role defaults for the week-view „nur meine Kurse“ toggle (#406).
+ * Defaults for the week-view „nur meine Kurse“ toggle (#406 / #439).
  * - Teilnehmende: Toggle an, Default gefiltert.
- * - Admin/Kursleitung: Toggle immer an (auch ohne erkannte Zuordnung), Default alle Kurse.
- *   Filter wirkt über course.instructors (+ Stamm/Tausch), sobald Daten da sind.
+ * - Admin/Kursleitung: Toggle an, Default alle Kurse.
+ * - Persönliche Pref (#439) überschreibt den Rollen-Default, wenn gesetzt.
  */
-export function resolveMyCoursesToggle(role: UserRole): MyCoursesToggleResolution {
-  if (role === "participant") {
-    return { canToggle: true, defaultOnlyMy: true };
-  }
-  return { canToggle: true, defaultOnlyMy: false };
+export function resolveMyCoursesToggle(
+  role: UserRole,
+  personalDefault?: boolean | null,
+): MyCoursesToggleResolution {
+  const roleDefault = role === "participant";
+  const defaultOnlyMy =
+    typeof personalDefault === "boolean" ? personalDefault : roleDefault;
+  return { canToggle: true, defaultOnlyMy };
 }

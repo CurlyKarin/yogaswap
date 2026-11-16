@@ -47,6 +47,21 @@ describe("resolveMyCoursesToggle", () => {
       defaultOnlyMy: false,
     });
   });
+
+  it("persönliche Pref überschreibt den Rollen-Default (#439)", () => {
+    expect(resolveMyCoursesToggle("participant", false)).toEqual({
+      canToggle: true,
+      defaultOnlyMy: false,
+    });
+    expect(resolveMyCoursesToggle("admin", true)).toEqual({
+      canToggle: true,
+      defaultOnlyMy: true,
+    });
+    expect(resolveMyCoursesToggle("instructor", null)).toEqual({
+      canToggle: true,
+      defaultOnlyMy: false,
+    });
+  });
 });
 
 describe("actorMatchesInstructorList (#406)", () => {

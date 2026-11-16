@@ -1,7 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { signOut } from "aws-amplify/auth";
 import { clearCurrentUser } from "shared/lib/storage";
 import { clearCognitoSession, isUserAlreadyAuthenticatedError } from "./cognitoSession";
+import {
+  buildWeekAnchorStorageKey,
+  readStoredWeekAnchor,
+  writeStoredWeekAnchor,
+} from "../lib/weekNavPersistence";
+import { startOfWeekMonday } from "../lib/courseWeek";
 
 vi.mock("aws-amplify/auth", () => ({
   signOut: vi.fn(),
@@ -37,6 +43,11 @@ describe("isUserAlreadyAuthenticatedError", () => {
 describe("clearCognitoSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    sessionStorage.clear();
   });
 
   it("ruft global signOut und clearCurrentUser auf", async () => {
@@ -50,5 +61,15 @@ describe("clearCognitoSession", () => {
     (signOut as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("no session"));
     await clearCognitoSession();
     expect(clearCurrentUser).toHaveBeenCalled();
+  });
+
+  it("löscht gespeicherte Wochen-Anker beim Logout", async () => {
+    const storageKey = buildWeekAnchorStorageKey("default-tenant", "maya");
+    writeStoredWeekAnchor(storageKey, startOfWeekMonday(new Date(2026, 5, 14)));
+    (signOut as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    await clearCognitoSession();
+
+    expect(readStoredWeekAnchor(storageKey)).toBeNull();
   });
 });
