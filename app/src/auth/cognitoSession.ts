@@ -1,5 +1,6 @@
 import { signOut } from "aws-amplify/auth";
 import { clearCurrentUser } from "shared/lib/storage";
+import { clearStoredWeekAnchors } from "../lib/weekNavPersistence";
 
 /** Amplify AuthError: name=UserAlreadyAuthenticatedException, message="There is already a signed in user." */
 export function isUserAlreadyAuthenticatedError(err: unknown): boolean {
@@ -24,4 +25,6 @@ export async function clearCognitoSession(): Promise<void> {
     // Niemand eingeloggt → No-Op.
   }
   clearCurrentUser();
+  // Week nav is session-scoped for soft refresh; reset on logout so login shows current week.
+  clearStoredWeekAnchors();
 }

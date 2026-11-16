@@ -3,6 +3,7 @@ import { startOfWeekMonday } from "./courseWeek";
 import {
   buildWeekAnchorStorageKey,
   clampWeekAnchor,
+  clearStoredWeekAnchors,
   readStoredWeekAnchor,
   resolveInitialWeekAnchor,
   writeStoredWeekAnchor,
@@ -63,5 +64,18 @@ describe("weekNavPersistence", () => {
 
     expect(resolveInitialWeekAnchor(storageKey, earliest, latest).getTime()).toBe(latest.getTime());
     expect(clampWeekAnchor(tooLate, earliest, latest).getTime()).toBe(latest.getTime());
+  });
+
+  it("clears all week-anchor keys from sessionStorage", () => {
+    const otherKey = buildWeekAnchorStorageKey("studio-b", "luna");
+    writeStoredWeekAnchor(storageKey, startOfWeekMonday(new Date(2026, 5, 14)));
+    writeStoredWeekAnchor(otherKey, startOfWeekMonday(new Date(2026, 6, 14)));
+    sessionStorage.setItem("unrelated", "keep");
+
+    clearStoredWeekAnchors();
+
+    expect(readStoredWeekAnchor(storageKey)).toBeNull();
+    expect(readStoredWeekAnchor(otherKey)).toBeNull();
+    expect(sessionStorage.getItem("unrelated")).toBe("keep");
   });
 });
