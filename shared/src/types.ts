@@ -375,6 +375,12 @@ export type ParticipantSettings = {
   /** Persönliche E-Mail-Opt-outs (#437). Default: an. */
   notifications?: ParticipantNotificationSettings;
 
+  /**
+   * Persönlicher Default für den Wochenfilter „nur meine Kurse“ (#439).
+   * Wenn nicht gesetzt: Rollen-Default aus #406.
+   */
+  weekFilterOnlyMyCoursesDefault?: boolean;
+
   /** Erweiterungspunkt für zukünftige Einstellungen. */
   [key: string]: unknown;
 };

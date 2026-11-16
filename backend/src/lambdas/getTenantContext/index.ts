@@ -71,6 +71,7 @@ export const handler = async (
     let displayName: string | null = null;
     let notificationSettings: ParticipantNotificationSettings | null = null;
     let waitlistNoPromoteWithinMinutes: number | null = null;
+    let weekFilterOnlyMyCoursesDefault: boolean | null = null;
 
     if (userId) {
       const membershipResp = await client.send(
@@ -108,6 +109,7 @@ export const handler = async (
             settings?: {
               notifications?: ParticipantNotificationSettings;
               waitlistNoPromoteWithinMinutes?: number;
+              weekFilterOnlyMyCoursesDefault?: boolean;
             };
           };
           const notifications = profile.settings?.notifications;
@@ -117,6 +119,10 @@ export const handler = async (
           const buffer = profile.settings?.waitlistNoPromoteWithinMinutes;
           if (typeof buffer === "number" && Number.isInteger(buffer)) {
             waitlistNoPromoteWithinMinutes = buffer;
+          }
+          const weekFilter = profile.settings?.weekFilterOnlyMyCoursesDefault;
+          if (typeof weekFilter === "boolean") {
+            weekFilterOnlyMyCoursesDefault = weekFilter;
           }
         }
       }
@@ -132,6 +138,7 @@ export const handler = async (
         displayName,
         notificationSettings,
         waitlistNoPromoteWithinMinutes,
+        weekFilterOnlyMyCoursesDefault,
       }),
     };
   } catch (error) {

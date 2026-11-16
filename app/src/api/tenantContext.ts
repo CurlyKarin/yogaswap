@@ -13,6 +13,8 @@ export type TenantContextResponse = {
   notificationSettings?: ParticipantNotificationSettings | null;
   /** Own waitlist buffer minutes when authenticated (#438). */
   waitlistNoPromoteWithinMinutes?: number | null;
+  /** Own week-filter default when authenticated (#439). */
+  weekFilterOnlyMyCoursesDefault?: boolean | null;
 };
 
 export class TenantNotFoundError extends Error {

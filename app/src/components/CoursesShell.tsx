@@ -28,6 +28,7 @@ type Props = {
   membership?: UserTenantMembership;
   forceParticipantView?: boolean;
   waitlistNoPromoteWithinMinutes?: number | null;
+  weekFilterOnlyMyCoursesDefault?: boolean | null;
 };
 
 export default function CoursesShell({
@@ -36,6 +37,7 @@ export default function CoursesShell({
   membership,
   forceParticipantView = false,
   waitlistNoPromoteWithinMinutes,
+  weekFilterOnlyMyCoursesDefault,
 }: Props) {
   const effectiveMembership = useMemo(() => {
     if (!forceParticipantView) return membership;
@@ -62,9 +64,13 @@ export default function CoursesShell({
   });
   const prevWeekAnchorStorageKeyRef = useRef(weekAnchorStorageKey);
 
-  // Role default only — not persisted (keeps the week view predictable for participants).
+  // Role default (#406), optional personal override (#439). Session toggle still overrides until role change.
   const [onlyMyCourses, setOnlyMyCourses] = useState(
-    () => resolveMyCoursesToggle(resolvedRole).defaultOnlyMy,
+    () =>
+      resolveMyCoursesToggle(
+        resolvedRole,
+        forceParticipantView ? null : weekFilterOnlyMyCoursesDefault,
+      ).defaultOnlyMy,
   );
   const [myCoursesToggleTouched, setMyCoursesToggleTouched] = useState(false);
   const [pendingTodayFocus, setPendingTodayFocus] = useState(false);
@@ -124,8 +130,12 @@ export default function CoursesShell({
   }, [softRefresh]);
 
   const myCoursesToggle = useMemo(
-    () => resolveMyCoursesToggle(resolvedRole),
-    [resolvedRole],
+    () =>
+      resolveMyCoursesToggle(
+        resolvedRole,
+        forceParticipantView ? null : weekFilterOnlyMyCoursesDefault,
+      ),
+    [resolvedRole, forceParticipantView, weekFilterOnlyMyCoursesDefault],
   );
 
   useEffect(() => {

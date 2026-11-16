@@ -65,6 +65,17 @@ describe("UserSettingsSection (#433)", () => {
     expect(screen.queryByText(/folgt \(#438\)/i)).not.toBeInTheDocument();
   });
 
+  it("zeigt Wochenfilter-Default wenn Settings offen sind (#439)", () => {
+    render(<UserSettingsSection nickname="Maya" role="admin" open />);
+
+    expect(
+      screen.getByRole("checkbox", {
+        name: /wochenansicht standardmäßig auf .nur meine kurse./i,
+      }),
+    ).not.toBeChecked();
+    expect(screen.queryByText(/folgt \(#439\)/i)).not.toBeInTheDocument();
+  });
+
   it("hängt Profil-/Passwort-/Benachrichtigungs-Felder nicht in die Tab-Reihenfolge wenn Settings zu sind", () => {
     render(
       <UserSettingsSection
@@ -80,6 +91,11 @@ describe("UserSettingsSection (#433)", () => {
     expect(screen.queryByRole("group", { name: /passwort ändern/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /mitteilungen vom studio/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("spinbutton", { name: /wartelisten-zeitpuffer/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /wochenansicht standardmäßig auf .nur meine kurse./i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("zeigt Passwort-Self-Service unter Sicherheit wenn Settings offen sind (#434)", () => {

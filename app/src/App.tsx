@@ -70,6 +70,9 @@ function MainApp() {
   const [ownNotificationSettings, setOwnNotificationSettings] =
     useState<ParticipantNotificationSettings | null>(null);
   const [ownWaitlistBufferMinutes, setOwnWaitlistBufferMinutes] = useState<number | null>(null);
+  const [ownWeekFilterOnlyMyCoursesDefault, setOwnWeekFilterOnlyMyCoursesDefault] = useState<
+    boolean | null
+  >(null);
   const { logout, isLoading, error } = useAppAuth();
 
   const inDelegation = Boolean(actingForUserIdState);
@@ -259,6 +262,7 @@ function MainApp() {
         setOwnDisplayName("");
         setOwnNotificationSettings(null);
         setOwnWaitlistBufferMinutes(null);
+        setOwnWeekFilterOnlyMyCoursesDefault(null);
       }
       return;
     }
@@ -273,6 +277,11 @@ function MainApp() {
         setOwnWaitlistBufferMinutes(
           typeof ctx.waitlistNoPromoteWithinMinutes === "number"
             ? ctx.waitlistNoPromoteWithinMinutes
+            : null,
+        );
+        setOwnWeekFilterOnlyMyCoursesDefault(
+          typeof ctx.weekFilterOnlyMyCoursesDefault === "boolean"
+            ? ctx.weekFilterOnlyMyCoursesDefault
             : null,
         );
 
@@ -582,6 +591,7 @@ function MainApp() {
               membership={membership ?? undefined}
               forceParticipantView={Boolean(actingForUserIdState)}
               waitlistNoPromoteWithinMinutes={ownWaitlistBufferMinutes}
+              weekFilterOnlyMyCoursesDefault={ownWeekFilterOnlyMyCoursesDefault}
             />
           </section>
         )}
@@ -590,17 +600,20 @@ function MainApp() {
           <div className="main-section main-section-user-settings">
             <UserSettingsSection
               nickname={currentUser.nickname}
+              role={membership?.role ?? currentUser.role}
               email={currentUser.email}
               displayName={ownDisplayName}
               authUserId={currentUser.authUserId}
               notificationSettings={ownNotificationSettings}
               studioCutoffMinutes={resolveCancellationSwapCutoffMinutes(tenant?.settings)}
               waitlistNoPromoteWithinMinutes={ownWaitlistBufferMinutes}
+              weekFilterOnlyMyCoursesDefault={ownWeekFilterOnlyMyCoursesDefault}
               open={userSettingsOpen}
               onOpenChange={setUserSettingsOpen}
               onDisplayNameSaved={setOwnDisplayName}
               onNotificationSettingsSaved={setOwnNotificationSettings}
               onWaitlistBufferSaved={setOwnWaitlistBufferMinutes}
+              onWeekFilterDefaultSaved={setOwnWeekFilterOnlyMyCoursesDefault}
               onEmailChangeRequiresReauth={handleEmailChangeRequiresReauth}
               onPasswordChangedRequiresReauth={handlePasswordChangedRequiresReauth}
             />

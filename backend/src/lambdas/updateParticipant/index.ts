@@ -556,12 +556,16 @@ export const handler = async (
             incoming,
             "waitlistNoPromoteWithinMinutes",
           );
-          if (!hasNotifications && !hasWaitlistBuffer) {
+          const hasWeekFilterDefault = Object.prototype.hasOwnProperty.call(
+            incoming,
+            "weekFilterOnlyMyCoursesDefault",
+          );
+          if (!hasNotifications && !hasWaitlistBuffer && !hasWeekFilterDefault) {
             return {
               statusCode: 400,
               body: JSON.stringify({
                 error:
-                  "settings must include notifications and/or waitlistNoPromoteWithinMinutes",
+                  "settings must include notifications, waitlistNoPromoteWithinMinutes, and/or weekFilterOnlyMyCoursesDefault",
               }),
             };
           }
@@ -634,6 +638,19 @@ export const handler = async (
               raw,
               studioCutoff,
             );
+          }
+
+          if (hasWeekFilterDefault) {
+            const raw = incoming.weekFilterOnlyMyCoursesDefault;
+            if (typeof raw !== "boolean") {
+              return {
+                statusCode: 400,
+                body: JSON.stringify({
+                  error: "settings.weekFilterOnlyMyCoursesDefault must be a boolean",
+                }),
+              };
+            }
+            nextSettings.weekFilterOnlyMyCoursesDefault = raw;
           }
 
           updated.settings = nextSettings;
