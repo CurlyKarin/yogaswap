@@ -251,7 +251,12 @@ export default function CoursesShell({
 
   return (
     <>
-      <div id="course-toolbar" className="course-views-toolbar">
+      <div
+        id="course-toolbar"
+        className={`course-views-toolbar${
+          canSeeCourseManagement ? " course-views-toolbar--with-toggle" : ""
+        }`}
+      >
         {canSeeCourseManagement && (
           <div className="course-views-toggle" role="group" aria-label="Kursansicht">
             <button
