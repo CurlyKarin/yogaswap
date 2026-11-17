@@ -1,4 +1,5 @@
 import { useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { focusModalOnOpen } from "../lib/focusWithVisibleRing";
 
@@ -28,7 +29,9 @@ export default function CourseModalFrame({
     focusModalOnOpen(modalNode, { preferInput: preferInputFocus });
   }, [modalRef, preferInputFocus]);
 
-  return (
+  // Portal to body (#445): fixed overlays inside course cards / scroll roots are
+  // clipped or mis-positioned on some Huawei/Android Chrome builds.
+  return createPortal(
     <div
       className="modal-backdrop"
       role="dialog"
@@ -42,6 +45,7 @@ export default function CourseModalFrame({
         </div>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -193,6 +193,7 @@ describe("CoursesShell", () => {
     );
     const toolbar = document.getElementById("course-toolbar");
     expect(toolbar).toHaveClass("course-views-toolbar");
+    expect(toolbar).not.toHaveClass("course-views-toolbar--with-toggle");
   });
 
   it("lets admin switch between week and course overview", async () => {
@@ -203,6 +204,10 @@ describe("CoursesShell", () => {
         tenant={baseTenant}
         membership={adminMembership}
       />,
+    );
+
+    expect(document.getElementById("course-toolbar")).toHaveClass(
+      "course-views-toolbar--with-toggle",
     );
 
     const weekToggle = screen.getByRole("button", { name: /wochenansicht/i });

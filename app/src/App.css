@@ -2607,8 +2607,11 @@ a:focus-visible {
     padding: 6px 10px;
     font-size: 13px;
   }
-  /* Admin/Leitung mobil: Zeile 1 = Ansichts-Toggle + Icons; Zeile 2 = KW-Nav inkl. Heute */
-  .course-views-toolbar:has(.course-views-toggle) {
+  /*
+   * Admin/Leitung mobil: Zeile 1 = Ansichts-Toggle + Icons; Zeile 2 = KW-Nav inkl. Heute.
+   * Klasse statt :has() — ältere Huawei/Chrome-Builds droppen sonst den ganzen Block (#445).
+   */
+  .course-views-toolbar--with-toggle {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto auto;
@@ -2616,34 +2619,34 @@ a:focus-visible {
     column-gap: 8px;
     row-gap: 10px;
   }
-  .course-views-toolbar:has(.course-views-toggle) .course-views-toggle {
+  .course-views-toolbar--with-toggle .course-views-toggle {
     grid-column: 1;
     grid-row: 1;
   }
-  .course-views-toolbar:has(.course-views-toggle) .course-week-nav {
+  .course-views-toolbar--with-toggle .course-week-nav {
     display: contents;
   }
-  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-icons {
+  .course-views-toolbar--with-toggle .course-week-nav-icons {
     grid-column: 2;
     grid-row: 1;
     justify-self: end;
   }
-  .course-views-toolbar:has(.course-views-toggle) > .course-views-refresh-btn {
+  .course-views-toolbar--with-toggle > .course-views-refresh-btn {
     grid-column: 2;
     grid-row: 1;
     justify-self: end;
   }
-  .course-views-toolbar:has(.course-views-toggle) .course-week-nav-primary {
+  .course-views-toolbar--with-toggle .course-week-nav-primary {
     grid-column: 1 / -1;
     grid-row: 2;
     justify-content: center;
     width: 100%;
   }
-  .course-views-toolbar:not(:has(.course-views-toggle)) .course-week-nav {
+  .course-views-toolbar:not(.course-views-toolbar--with-toggle) .course-week-nav {
     width: 100%;
     justify-content: center;
   }
-  .course-views-toolbar:not(:has(.course-views-toggle)) .course-week-nav-icons {
+  .course-views-toolbar:not(.course-views-toolbar--with-toggle) .course-week-nav-icons {
     order: -1;
   }
   .course-week-nav-label {

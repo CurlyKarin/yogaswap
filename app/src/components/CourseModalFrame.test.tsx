@@ -22,7 +22,9 @@ describe("CourseModalFrame", () => {
       </CourseModalFrame>,
     );
 
-    expect(screen.getByRole("dialog", { name: "Test Modal" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Test Modal" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.parentElement).toBe(document.body);
     expect(screen.getByRole("heading", { name: "Test Titel" })).toBeInTheDocument();
     expect(screen.getByText("Inhalt")).toBeInTheDocument();
     expect(document.querySelector(".modal-header")).toBeInTheDocument();
