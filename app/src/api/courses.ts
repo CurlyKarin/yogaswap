@@ -16,6 +16,7 @@ function mapApiCourseToCourse(item: ApiCourse): Course {
     name: item.name,
     weekday: item.weekday,
     time: item.time,
+    ...(typeof item.durationMinutes === "number" ? { durationMinutes: item.durationMinutes } : {}),
     capacity: item.capacity,
     overbookLimit: item.overbookLimit ?? 0,
     status: item.status ?? "active",
@@ -43,6 +44,7 @@ export type CreateCourseRequest = {
   name: string;
   weekday: string;
   time: string;
+  durationMinutes?: number;
   capacity: number;
   overbookLimit?: number;
   status?: CourseStatus;

@@ -1,6 +1,8 @@
 import { buildCourseOccurrenceLocal } from "../courseDates";
 
-const DEFAULT_DURATION_MINUTES = 90; // Follow-up: pro Kurs in Kurseinstellungen (#239)
+import { DEFAULT_COURSE_DURATION_MINUTES } from "@yogaswap/shared";
+
+const DEFAULT_DURATION_MINUTES = DEFAULT_COURSE_DURATION_MINUTES;
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");

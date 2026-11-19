@@ -6,6 +6,8 @@ export type CourseSummary = {
   time: string;
   weekday?: string;
   instructors: string[];
+  /** Missing on legacy courses — callers should resolve via resolveCourseDurationMinutes. */
+  durationMinutes?: number;
 };
 
 export async function loadCourseSummary(
@@ -32,10 +34,15 @@ export async function loadCourseSummary(
   const instructors =
     resp.Item?.instructors?.L?.map((entry) => entry.S?.trim() ?? "").filter(Boolean) ?? [];
 
+  const durationRaw = resp.Item?.durationMinutes?.N
+    ? Number.parseInt(resp.Item.durationMinutes.N, 10)
+    : undefined;
+
   return {
     name,
     time,
     weekday: resp.Item?.weekday?.S,
     instructors,
+    ...(Number.isFinite(durationRaw) ? { durationMinutes: durationRaw } : {}),
   };
 }

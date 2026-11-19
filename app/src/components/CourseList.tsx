@@ -33,6 +33,12 @@ import {
   resolveRollingPlanningHorizonWeeks,
 } from "shared/tenantSettings";
 import { resolveMaxCapacity, validateOverbookLimit } from "shared/courseCapacity";
+import {
+  DEFAULT_COURSE_DURATION_MINUTES,
+  MAX_COURSE_DURATION_MINUTES,
+  MIN_COURSE_DURATION_MINUTES,
+  parseCourseDurationMinutesInput,
+} from "shared/courseDuration";
 import { getCourseDates } from "../lib/dates";
 import { courseDatesForMembersDialog } from "../lib/courseMembersDialogModel";
 import { WEEKDAY_OPTIONS } from "../lib/weekdayLabels";
@@ -102,6 +108,7 @@ type CourseEditorState = {
   name: string;
   weekday: string;
   time: string;
+  durationMinutes: string;
   capacity: string;
   overbookLimit: string;
   status: CourseStatus;
@@ -114,6 +121,7 @@ type CourseCreateState = {
   name: string;
   weekday: string;
   time: string;
+  durationMinutes: string;
   capacity: string;
   overbookLimit: string;
   status: CourseStatus;
@@ -189,6 +197,7 @@ function toEditorState(course: Course): CourseEditorState {
     name: course.name,
     weekday: course.weekday,
     time: course.time,
+    durationMinutes: String(course.durationMinutes ?? DEFAULT_COURSE_DURATION_MINUTES),
     capacity: String(course.capacity),
     overbookLimit: String(course.overbookLimit ?? 0),
     status: course.status ?? "active",
@@ -212,6 +221,7 @@ function emptyCreateState(): CourseCreateState {
     name: "",
     weekday: "Mon",
     time: "18:00",
+    durationMinutes: String(DEFAULT_COURSE_DURATION_MINUTES),
     capacity: "10",
     overbookLimit: "0",
     status: "draft",
@@ -525,18 +535,28 @@ export default function CourseList({
   const createNameValid = createState.name.trim().length > 0;
   const createCapacityValid = parseCapacity(createState.capacity) != null;
   const createOverbookValid = parseOverbookLimit(createState.overbookLimit) != null;
+  const createDurationValid = parseCourseDurationMinutesInput(createState.durationMinutes) != null;
   const canSubmitCreate =
-    canManageCourses && !saving && createNameValid && createCapacityValid && createOverbookValid;
+    canManageCourses &&
+    !saving &&
+    createNameValid &&
+    createCapacityValid &&
+    createOverbookValid &&
+    createDurationValid;
 
   const editNameValid = (editState?.name.trim().length ?? 0) > 0;
   const editCapacityValid = editState ? parseCapacity(editState.capacity) != null : false;
   const editOverbookValid = editState ? parseOverbookLimit(editState.overbookLimit) != null : false;
+  const editDurationValid = editState
+    ? parseCourseDurationMinutesInput(editState.durationMinutes) != null
+    : false;
   const editChanged =
     !!editState &&
     !!editInitialState &&
     (editState.name !== editInitialState.name ||
       editState.weekday !== editInitialState.weekday ||
       editState.time !== editInitialState.time ||
+      editState.durationMinutes !== editInitialState.durationMinutes ||
       editState.capacity !== editInitialState.capacity ||
       editState.overbookLimit !== editInitialState.overbookLimit ||
       editState.status !== editInitialState.status ||
@@ -547,7 +567,13 @@ export default function CourseList({
     !!editState && !!editInitialState && editState.overbookLimit !== editInitialState.overbookLimit;
   const canSubmitEdit = editOverbookingOnly
     ? canConfigureOverbooking && !saving && !!editState && editOverbookValid && editOverbookChanged
-    : canManageCourses && !saving && !!editState && editNameValid && editCapacityValid && editChanged;
+    : canManageCourses &&
+      !saving &&
+      !!editState &&
+      editNameValid &&
+      editCapacityValid &&
+      editDurationValid &&
+      editChanged;
 
   const handleCreateDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     handleFocusTrap(event, createModalRef);
@@ -617,6 +643,13 @@ export default function CourseList({
       setFormError("Überplanung muss eine nicht-negative ganze Zahl sein.");
       return;
     }
+    const durationMinutes = parseCourseDurationMinutesInput(createState.durationMinutes);
+    if (durationMinutes == null) {
+      setFormError(
+        `Dauer muss eine ganze Zahl zwischen ${MIN_COURSE_DURATION_MINUTES} und ${MAX_COURSE_DURATION_MINUTES} Minuten sein.`,
+      );
+      return;
+    }
     const overbookError = validateOverbookLimit(capacity, overbookLimit);
     if (overbookError) {
       setFormError(overbookError);
@@ -630,6 +663,7 @@ export default function CourseList({
         name: trimmedName,
         weekday: createState.weekday,
         time: createState.time,
+        durationMinutes,
         capacity,
         overbookLimit,
         status: createState.status,
@@ -695,6 +729,13 @@ export default function CourseList({
       setFormError("Überplanung muss eine nicht-negative ganze Zahl sein.");
       return;
     }
+    const durationMinutes = parseCourseDurationMinutesInput(editState.durationMinutes);
+    if (durationMinutes == null) {
+      setFormError(
+        `Dauer muss eine ganze Zahl zwischen ${MIN_COURSE_DURATION_MINUTES} und ${MAX_COURSE_DURATION_MINUTES} Minuten sein.`,
+      );
+      return;
+    }
     const overbookError = validateOverbookLimit(capacity, overbookLimit);
     if (overbookError) {
       setFormError(overbookError);
@@ -744,6 +785,7 @@ export default function CourseList({
         name: trimmedName,
         weekday: editState.weekday,
         time: editState.time,
+        durationMinutes,
         capacity,
         overbookLimit,
         status: editState.status,

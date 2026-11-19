@@ -43,14 +43,14 @@ describe("courseCardLabels", () => {
   it("formatiert Kursrhythmus für Anzeige und ARIA", () => {
     expect(resolveCourseScheduleDisplay("Monday", "10:00")).toEqual({
       weekdayLabel: "Montag",
-      time: "10:00",
-      ariaLabel: "Montag · 10:00",
+      time: "10:00 – 11:30",
+      ariaLabel: "Montag · 10:00 – 11:30",
     });
-    expect(resolveCourseScheduleDisplay("Mon", "18:30", "Studio 1")).toEqual({
+    expect(resolveCourseScheduleDisplay("Mon", "18:30", "Studio 1", 60)).toEqual({
       weekdayLabel: "Montag",
-      time: "18:30",
+      time: "18:30 – 19:30",
       roomLabel: "Studio 1",
-      ariaLabel: "Montag · 18:30 · Studio 1",
+      ariaLabel: "Montag · 18:30 – 19:30 · Studio 1",
     });
   });
 

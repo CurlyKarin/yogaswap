@@ -108,7 +108,12 @@ export default function CourseCardDetails({
     !isPastOccurrence &&
     !!onAdjustGuestCount;
 
-  const schedule = resolveCourseScheduleDisplay(course.weekday, course.time);
+  const schedule = resolveCourseScheduleDisplay(
+    course.weekday,
+    course.time,
+    undefined,
+    course.durationMinutes,
+  );
 
   return (
     <>

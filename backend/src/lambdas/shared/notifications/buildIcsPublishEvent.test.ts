@@ -29,4 +29,28 @@ describe("buildIcsPublishEvent", () => {
       }),
     ).toBeNull();
   });
+
+  test("uses course-specific durationMinutes for DTEND (#239)", () => {
+    const ics = buildIcsPublishEvent({
+      uid: "tenant/1/2026-06-20@yogaswap",
+      summary: "Morgenyoga",
+      isoDate: "2026-06-20",
+      time: "18:00",
+      durationMinutes: 75,
+    });
+
+    expect(ics).toContain("DTSTART:20260620T180000");
+    expect(ics).toContain("DTEND:20260620T191500");
+  });
+
+  test("defaults to 90 minutes when durationMinutes omitted", () => {
+    const ics = buildIcsPublishEvent({
+      uid: "tenant/1/2026-06-20@yogaswap",
+      summary: "Morgenyoga",
+      isoDate: "2026-06-20",
+      time: "18:00",
+    });
+
+    expect(ics).toContain("DTEND:20260620T193000");
+  });
 });

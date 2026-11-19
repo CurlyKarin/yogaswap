@@ -4,8 +4,9 @@ import type { ParticipantActor } from "shared/participantActor";
 import { isPersonallyInvolvedInCourse } from "./weekMyCoursesFilter";
 import type { WeekCourseRow } from "./courseWeekOccurrences";
 
-/** Align with ICS default until per-course duration exists (#239). */
-export const DEFAULT_COURSE_DURATION_MINUTES = 90;
+import { DEFAULT_COURSE_DURATION_MINUTES } from "shared/courseDuration";
+
+export { DEFAULT_COURSE_DURATION_MINUTES };
 
 export type TodayFocusTarget = {
   courseId: number;

@@ -1,5 +1,9 @@
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import type { ParticipantEmailNotificationCategory, Swap } from "@yogaswap/shared";
+import {
+  resolveCourseDurationMinutes,
+  type ParticipantEmailNotificationCategory,
+  type Swap,
+} from "@yogaswap/shared";
 import { buildIcsPublishEvent } from "./buildIcsPublishEvent";
 import { loadCourseSummary } from "./courseSummary";
 import { sendMailToParticipantUserIds } from "./sendParticipantEmail";
@@ -82,6 +86,7 @@ export async function notifySwapSuccess(params: SwapSuccessNotificationParams) {
         description: `YogaSwap-Termin (${swap.toDate})`,
         isoDate: swap.toDate,
         time: course.time,
+        durationMinutes: resolveCourseDurationMinutes(course.durationMinutes),
       })
     : null;
 

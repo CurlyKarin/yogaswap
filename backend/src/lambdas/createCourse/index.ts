@@ -6,7 +6,12 @@ import {
   deriveVisibleDates,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
-import { shouldAutoDeactivateCourse, type Course } from "@yogaswap/shared";
+import {
+  DEFAULT_COURSE_DURATION_MINUTES,
+  isValidCourseDurationMinutes,
+  shouldAutoDeactivateCourse,
+  type Course,
+} from "@yogaswap/shared";
 import { generateCourseUid } from "../shared/courseUid";
 import {
   loadTenantSettings,
@@ -24,6 +29,7 @@ type CreateCourseBody = {
   name?: string;
   weekday?: string;
   time?: string;
+  durationMinutes?: number;
   capacity?: number;
   overbookLimit?: number;
   status?: string;
@@ -126,6 +132,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     : [];
   const capacity = Number.isFinite(body.capacity) ? Number(body.capacity) : NaN;
   const overbookLimit = Number.isFinite(body.overbookLimit) ? Number(body.overbookLimit) : 0;
+  const durationMinutesProvided = Object.prototype.hasOwnProperty.call(body, "durationMinutes");
+  const durationMinutes = durationMinutesProvided
+    ? Number(body.durationMinutes)
+    : DEFAULT_COURSE_DURATION_MINUTES;
 
   if (!name) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing course name" }) };
@@ -141,6 +151,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
   if (!Number.isInteger(overbookLimit) || overbookLimit < 0) {
     return { statusCode: 400, body: JSON.stringify({ error: "Overbook limit must be a non-negative integer" }) };
+  }
+  if (!isValidCourseDurationMinutes(durationMinutes)) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: "durationMinutes must be an integer between 15 and 420 (7 hours)",
+      }),
+    };
   }
   if (!COURSE_STATUSES.has(status)) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid status value" }) };
@@ -288,6 +306,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       name: { S: name },
       weekday: { S: weekday },
       time: { S: time },
+      durationMinutes: { N: String(durationMinutes) },
       capacity: { N: String(capacity) },
       overbookLimit: { N: String(overbookLimit) },
       status: { S: effectiveStatus },
@@ -325,6 +344,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         name,
         weekday,
         time,
+        durationMinutes,
         capacity,
         overbookLimit,
         status: effectiveStatus,
