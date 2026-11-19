@@ -153,7 +153,7 @@ Kalender-Import ist **freiwillig** (Teilnehmer:in entscheidet). Absage-**Storno*
 **Technik (implementiert):**
 
 - `buildIcsPublishEvent` — `UID` z. B. `{tenantId}/{courseId}/{date}@yogaswap`, `DTSTART`/`DTEND` aus `date` + `course.time`
-- **`DTEND` / Kursdauer:** fest **90 Minuten** → Follow-up [#239](https://github.com/CurlyKarin/yogaswap/issues/239)
+- **`DTEND` / Kursdauer:** `Course.durationMinutes` (Default **90**, Bereich 15–420 / max. 7 h) — [#239](https://github.com/CurlyKarin/yogaswap/issues/239)
 - `sendParticipantEmail` — `SendEmail` oder `SendRawEmail` (Multipart-MIME)
 - IAM: `ses:SendRawEmail` für betroffene Lambdas in `main.tf`
 
@@ -324,7 +324,7 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 | 6 | ICS bei Kursbeitritt Serienkurs | offen; Serien-ICS später |
 | 7 | ICS bei Terminabsage (Storno)? | **Nein** — out of scope |
 | 8 | ICS im MVP für neue Mails? | **Ja** — Nachrücken + Tausch erfolgreich mit `.ics`; Rest HTML |
-| 9 | Kursdauer für ICS `DTEND`? | MVP: **90 Min fest**; pro Kurs → [#239](https://github.com/CurlyKarin/yogaswap/issues/239) |
+| 9 | Kursdauer für ICS `DTEND`? | **pro Kurs** (`durationMinutes`, Default 90) — [#239](https://github.com/CurlyKarin/yogaswap/issues/239) |
 
 ---
 
@@ -342,7 +342,7 @@ Vorteil: Schalter, Locale, Metriken und Templates an einer Stelle; `STUDIO_NOTIF
 1. **Deploy + manueller Testplan** (SES Sandbox, aktive Profile)
 2. `TenantSettings.emailNotifications` + Resolver (ohne UI)
 3. Kursleitung: Bedarf klären, `course.instructors` pflegen, ggf. Digest
-4. [#239](https://github.com/CurlyKarin/yogaswap/issues/239) — Kursdauer für ICS `DTEND`
+4. ~~[#239](https://github.com/CurlyKarin/yogaswap/issues/239) — Kursdauer für ICS `DTEND`~~
 5. Zentrales `sendNotification` / Migration älterer Auth-Mails
 6. UI-Opt-out, Tauschanfrage-Mails, Erinnerungen
 

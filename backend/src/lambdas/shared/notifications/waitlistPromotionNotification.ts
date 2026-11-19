@@ -1,5 +1,5 @@
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import type { Swap } from "@yogaswap/shared";
+import { resolveCourseDurationMinutes, type Swap } from "@yogaswap/shared";
 import { buildIcsPublishEvent } from "./buildIcsPublishEvent";
 import { loadCourseSummary } from "./courseSummary";
 import { sendMailToParticipantUserIds } from "./sendParticipantEmail";
@@ -67,6 +67,7 @@ export async function notifyWaitlistPromotion(
         description: `YogaSwap-Termin (${swap.toDate})`,
         isoDate: swap.toDate,
         time: course.time,
+        durationMinutes: resolveCourseDurationMinutes(course.durationMinutes),
       })
     : null;
 

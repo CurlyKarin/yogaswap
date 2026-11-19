@@ -35,6 +35,9 @@ function mapItemToCourseResponse(
     time: item.time.S!,
     capacity: Number(item.capacity.N!),
     overbookLimit: item.overbookLimit?.N ? Number(item.overbookLimit.N) : 0,
+    ...(item.durationMinutes?.N
+      ? { durationMinutes: Number(item.durationMinutes.N) }
+      : {}),
     status: effectiveStatus,
     planningMode,
     visibilityMode,

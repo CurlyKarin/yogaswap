@@ -14,7 +14,14 @@ import {
   findNextUpcomingOccurrenceIso,
   pruneScheduleExceptions,
 } from "../shared/courseDates";
-import { shouldAutoDeactivateCourse, validateBoundedSeriesRangeEdit, boundedSeriesRangeEditErrorMessage, type Course } from "@yogaswap/shared";
+import {
+  DEFAULT_COURSE_DURATION_MINUTES,
+  isValidCourseDurationMinutes,
+  shouldAutoDeactivateCourse,
+  validateBoundedSeriesRangeEdit,
+  boundedSeriesRangeEditErrorMessage,
+  type Course,
+} from "@yogaswap/shared";
 import { overrideBlocksCourseLifecycle, hasBlockingUpcomingCourseDates } from "../shared/courseLifecycle";
 import {
   courseHasParticipants,
@@ -104,6 +111,7 @@ type UpdateCourseBody = {
   name?: string;
   weekday?: string;
   time?: string;
+  durationMinutes?: number;
   capacity?: number;
   overbookLimit?: number;
   status?: string;
@@ -393,6 +401,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     Object.prototype.hasOwnProperty.call(body, "overbookLimit") && Number.isFinite(body.overbookLimit)
       ? Number(body.overbookLimit)
       : undefined;
+  const durationMinutes =
+    Object.prototype.hasOwnProperty.call(body, "durationMinutes") && Number.isFinite(body.durationMinutes)
+      ? Number(body.durationMinutes)
+      : undefined;
 
   if (Object.prototype.hasOwnProperty.call(body, "name") && !name) {
     return { statusCode: 400, body: JSON.stringify({ error: "Missing course name" }) };
@@ -408,6 +420,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     (capacity == null || !Number.isInteger(capacity) || capacity < 0)
   ) {
     return { statusCode: 400, body: JSON.stringify({ error: "Capacity must be a non-negative integer" }) };
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(body, "durationMinutes") &&
+    (durationMinutes == null || !isValidCourseDurationMinutes(durationMinutes))
+  ) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: "durationMinutes must be an integer between 15 and 420 (7 hours)",
+      }),
+    };
   }
   if (Object.prototype.hasOwnProperty.call(body, "status")) {
     if (!status || !COURSE_STATUSES.has(status)) {
@@ -559,6 +582,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const existingOverbookLimit = item.overbookLimit?.N
       ? Number.parseInt(item.overbookLimit.N, 10)
       : 0;
+    const parsedExistingDuration = item.durationMinutes?.N
+      ? Number.parseInt(item.durationMinutes.N, 10)
+      : NaN;
+    const existingDurationMinutes = isValidCourseDurationMinutes(parsedExistingDuration)
+      ? parsedExistingDuration
+      : DEFAULT_COURSE_DURATION_MINUTES;
+    const nextDurationMinutes = durationMinutes ?? existingDurationMinutes;
 
     if (instructorOverbookOnly) {
       if (overbookLimit == null) {
@@ -1035,6 +1065,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       name: { S: nextName },
       weekday: { S: nextWeekday },
       time: { S: nextTime },
+      durationMinutes: { N: String(nextDurationMinutes) },
       capacity: { N: String(nextCapacity) },
       overbookLimit: { N: String(nextOverbookLimit) },
       status: { S: effectiveStatus },
@@ -1982,6 +2013,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         name: nextName,
         weekday: nextWeekday,
         time: nextTime,
+        durationMinutes: nextDurationMinutes,
         capacity: nextCapacity,
         overbookLimit: nextOverbookLimit,
         status: effectiveStatus,

@@ -126,6 +126,7 @@ describe("createCourse Lambda", () => {
         name: "Morgen Flow",
         weekday: "Mon",
         time: "08:30",
+        durationMinutes: 90,
         capacity: 12,
         status: "draft",
       }),
@@ -156,9 +157,49 @@ describe("createCourse Lambda", () => {
           courseUid: { S: expect.stringMatching(COURSE_UID_REGEX) },
           id: { N: "5" },
           status: { S: "draft" },
+          durationMinutes: { N: "90" },
         }),
       }),
     );
+  });
+
+  test("creates course with custom durationMinutes (#239)", async () => {
+    mockAdminMembership().mockResolvedValueOnce({ Items: [] }).mockResolvedValueOnce({});
+
+    const result = await handler(
+      makeEvent({
+        name: "Kurz",
+        weekday: "Tue",
+        time: "09:00",
+        capacity: 8,
+        durationMinutes: 75,
+      }),
+    );
+
+    expect(result.statusCode).toBe(201);
+    expect(JSON.parse(result.body).durationMinutes).toBe(75);
+    expect(PutItemCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          durationMinutes: { N: "75" },
+        }),
+      }),
+    );
+  });
+
+  test("returns 400 for invalid durationMinutes (#239)", async () => {
+    const result = await handler(
+      makeEvent({
+        name: "Yoga",
+        weekday: "Mon",
+        time: "18:00",
+        capacity: 10,
+        durationMinutes: 10,
+      }),
+    );
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).error).toMatch(/durationMinutes/);
+    expect(mockSend).not.toHaveBeenCalled();
   });
 
   test("returns 409 on id collision", async () => {

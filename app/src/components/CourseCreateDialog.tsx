@@ -1,5 +1,9 @@
 import type { KeyboardEvent, RefObject } from "react";
 import type { CoursePlanningMode, CourseStatus } from "shared/types";
+import {
+  MAX_COURSE_DURATION_MINUTES,
+  MIN_COURSE_DURATION_MINUTES,
+} from "shared/courseDuration";
 import CourseModalFrame from "./CourseModalFrame";
 import CourseCapacityFields from "./CourseCapacityFields";
 import CourseInstructorsField, { type InstructorCandidate } from "./CourseInstructorsField";
@@ -9,6 +13,7 @@ type CourseCreateState = {
   name: string;
   weekday: string;
   time: string;
+  durationMinutes: string;
   capacity: string;
   overbookLimit: string;
   status: CourseStatus;
@@ -93,6 +98,25 @@ export default function CourseCreateDialog({
             disabled={saving}
             className="dialog-field"
           />
+          <label className="dialog-field">
+            <span className="dialog-field-label">Dauer (Minuten)</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={MIN_COURSE_DURATION_MINUTES}
+              max={MAX_COURSE_DURATION_MINUTES}
+              step={5}
+              aria-label="Dauer in Minuten"
+              aria-describedby="course-create-duration-hint"
+              value={state.durationMinutes}
+              onChange={(event) => onChange({ ...state, durationMinutes: event.target.value })}
+              disabled={saving}
+            />
+          </label>
+          <p id="course-create-duration-hint" className="course-editor-inline-hint">
+            Für Kalender-Einträge und Anzeige auf der Kurskarte. Standard 90 Minuten (
+            {MIN_COURSE_DURATION_MINUTES}–{MAX_COURSE_DURATION_MINUTES}, max. 7 Stunden).
+          </p>
           <CourseCapacityFields
             capacity={state.capacity}
             overbookLimit={state.overbookLimit}

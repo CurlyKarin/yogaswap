@@ -98,10 +98,10 @@ describe("CourseCard", () => {
     expect(schedule).not.toBeNull();
     if (!schedule) return;
 
-    expect(schedule).toHaveTextContent(/Montag\s*·\s*10:00/);
-    expect(schedule).toHaveAttribute("aria-label", "Montag · 10:00");
+    expect(schedule).toHaveTextContent(/Montag\s*·\s*10:00\s*–\s*11:30/);
+    expect(schedule).toHaveAttribute("aria-label", "Montag · 10:00 – 11:30");
     expect(schedule.querySelector(".course-schedule-weekday")).toHaveTextContent("Montag");
-    expect(schedule.querySelector(".course-schedule-time")).toHaveTextContent("10:00");
+    expect(schedule.querySelector(".course-schedule-time")).toHaveTextContent("10:00 – 11:30");
   });
 
   it("verknüpft Terminauswahl mit kursbezogenem Label", () => {

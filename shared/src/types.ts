@@ -79,6 +79,8 @@ export type Course = {
   name: string;
   weekday: string; // z.B. "Mon", "Tue", ...
   time: string;    // z.B. "18:30"
+  /** Dauer eines Termins in Minuten (Default 90, max. 420 / 7h). Für ICS DTEND und Kartenanzeige (#239). */
+  durationMinutes?: number;
   capacity: number;
   /** Zusätzliche Plätze über regulärer capacity (nur Admin/Trainerin). max = capacity + overbookLimit. */
   overbookLimit?: number;

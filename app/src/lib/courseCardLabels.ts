@@ -1,4 +1,5 @@
 import { formatCourseIsoDateDe } from "shared/courseStatus";
+import { formatCourseTimeRange } from "shared/courseDuration";
 import { weekdayLabelDe } from "./weekdayLabels";
 
 /** Zentraler Textkatalog für CourseCard — später i18n-fähig machen. */
@@ -26,18 +27,20 @@ export type CourseScheduleDisplay = {
   ariaLabel: string;
 };
 
-/** Anzeige für Kursrhythmus (Wochentag, Uhrzeit, optional Raum) — später locale/i18n. */
+/** Anzeige für Kursrhythmus (Wochentag, Zeitspanne, optional Raum) — später locale/i18n. */
 export function resolveCourseScheduleDisplay(
   weekday: string,
   time: string,
   roomLabel?: string,
+  durationMinutes?: number,
 ): CourseScheduleDisplay {
   const weekdayLabel = weekdayLabelDe(weekday);
-  const segments = [weekdayLabel, time];
+  const timeRange = formatCourseTimeRange(time, durationMinutes);
+  const segments = [weekdayLabel, timeRange];
   if (roomLabel) segments.push(roomLabel);
   return {
     weekdayLabel,
-    time,
+    time: timeRange,
     ...(roomLabel ? { roomLabel } : {}),
     ariaLabel: segments.join(" · "),
   };
