@@ -56,6 +56,7 @@ const swapHandlers = {
   requestSwap: vi.fn(),
   cancelSwap: vi.fn(),
   adjustGuestCount: vi.fn(async () => undefined),
+  promoteWaitlistPerson: vi.fn(async () => undefined),
 };
 
 type ListProps = React.ComponentProps<typeof CourseList>;

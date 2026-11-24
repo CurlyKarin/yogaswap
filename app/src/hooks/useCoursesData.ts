@@ -387,6 +387,7 @@ export function useCoursesData({
     cancelSwap: swapHandlers.cancelSwap,
     onToggleAbsence: swapHandlers.onToggleAbsence,
     adjustGuestCount: swapHandlers.adjustGuestCount,
+    promoteWaitlistPerson: swapHandlers.promoteWaitlistPerson,
     canManageGuestSeats: canManageParticipants(membershipForPermissions, tenant?.settings),
     actor,
     actorRef,

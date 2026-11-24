@@ -39,6 +39,11 @@ type Props = {
   highlighted?: boolean;
   canManageGuestSeats?: boolean;
   onAdjustGuestCount?: (course: Course, dateIso: string, delta: 1 | -1) => Promise<void>;
+  onPromoteWaitlistPerson?: (
+    course: Course,
+    dateIso: string,
+    participantId: string,
+  ) => Promise<void>;
 };
 
 export default function CourseCard({
@@ -64,6 +69,7 @@ export default function CourseCard({
   highlighted = false,
   canManageGuestSeats = false,
   onAdjustGuestCount,
+  onPromoteWaitlistPerson,
 }: Props) {
   const termState = useCourseCardTermState({
     course,
@@ -101,6 +107,7 @@ export default function CourseCard({
   const restoreAbsenceFocusRef = useRef(false);
 
   const [guestSeatSaving, setGuestSeatSaving] = useState(false);
+  const [waitlistPromoteSaving, setWaitlistPromoteSaving] = useState(false);
 
   const handleAdjustGuestCount = useCallback(
     async (delta: 1 | -1) => {
@@ -113,6 +120,19 @@ export default function CourseCard({
       }
     },
     [course, guestSeatSaving, onAdjustGuestCount, selectedDateKey],
+  );
+
+  const handlePromoteWaitlistPerson = useCallback(
+    async (participantId: string) => {
+      if (!onPromoteWaitlistPerson || waitlistPromoteSaving) return;
+      setWaitlistPromoteSaving(true);
+      try {
+        await onPromoteWaitlistPerson(course, selectedDateKey, participantId);
+      } finally {
+        setWaitlistPromoteSaving(false);
+      }
+    },
+    [course, onPromoteWaitlistPerson, selectedDateKey, waitlistPromoteSaving],
   );
 
   // Kursverwaltung: Tausch-Linien im Fußbereich (#414) — kein Teilnehmer-Fußhinweis.
@@ -222,6 +242,10 @@ export default function CourseCard({
         canManageGuestSeats={canManageGuestSeats}
         guestSeatSaving={guestSeatSaving}
         onAdjustGuestCount={onAdjustGuestCount ? handleAdjustGuestCount : undefined}
+        waitlistPromoteSaving={waitlistPromoteSaving}
+        onPromoteWaitlistPerson={
+          onPromoteWaitlistPerson ? handlePromoteWaitlistPerson : undefined
+        }
         includePastTermsInSelect={includePastTermsInSelect}
         tenantSettings={tenantSettings}
         termState={termState}

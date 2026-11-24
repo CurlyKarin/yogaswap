@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   canPromoteFromWaitlist,
+  evaluateStaffOccupancy,
   hasBookingCapacity,
   hasRegularBookingCapacity,
   isAtRegularCapacity,
+  isStaffOccupancyAllowed,
   resolveEffectiveOccupancy,
   resolveGuestCount,
   resolveMaxCapacity,
   resolveOverbookLimit,
+  resolveStaffOverCapacityMode,
   validateAnonymousTrialCount,
   validateOverbookLimit,
   validateParticipantListSize,
@@ -82,5 +85,21 @@ describe("courseCapacity", () => {
     expect(validateParticipantListSize(7, small)).toMatch(/Maximal 6/);
     expect(validateTermOccupancy(5, small, 1)).toBeNull();
     expect(validateTermOccupancy(5, small, 2)).toMatch(/Maximal 6/);
+  });
+
+  it("resolveStaffOverCapacityMode defaults to warn", () => {
+    expect(resolveStaffOverCapacityMode(undefined)).toBe("warn");
+    expect(resolveStaffOverCapacityMode({})).toBe("warn");
+    expect(resolveStaffOverCapacityMode({ staffOverCapacityMode: "block" })).toBe("block");
+    expect(resolveStaffOverCapacityMode({ staffOverCapacityMode: "warn" })).toBe("warn");
+  });
+
+  it("evaluateStaffOccupancy warns or blocks only beyond maxCapacity", () => {
+    const small = { capacity: 4, overbookLimit: 2 };
+    expect(evaluateStaffOccupancy(6, small, 0, "warn").status).toBe("ok");
+    expect(evaluateStaffOccupancy(6, small, 1, "warn").status).toBe("needs_confirm");
+    expect(evaluateStaffOccupancy(6, small, 1, "block").status).toBe("blocked");
+    expect(isStaffOccupancyAllowed(evaluateStaffOccupancy(6, small, 1, "warn"), false)).toBe(false);
+    expect(isStaffOccupancyAllowed(evaluateStaffOccupancy(6, small, 1, "warn"), true)).toBe(true);
   });
 });

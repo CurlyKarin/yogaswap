@@ -178,6 +178,63 @@ describe('createOverride Lambda', () => {
     expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(0);
   });
 
+  it('should return 409 for guest-only exceed without confirm (warn mode)', async () => {
+    const fullCourse = {
+      ...mockCourseItem,
+      capacity: { N: '2' },
+      overbookLimit: { N: '0' },
+      participants: { L: [{ S: 'A' }, { S: 'B' }] },
+    };
+    dynamoMock.on(GetItemCommand).resolves({ Item: fullCourse });
+
+    const event: Partial<APIGatewayProxyEvent> = {
+      body: JSON.stringify({
+        courseId: 1,
+        date: '2025-10-01',
+        participants: [],
+        swapped: [],
+        waitlist: [],
+        anonymousTrialCount: 1,
+      }),
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+    expect(result.statusCode).toBe(409);
+    expect(JSON.parse(result.body).code).toBe('capacity_exceeded_needs_confirm');
+    expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(0);
+  });
+
+  it('should allow guest-only exceed with confirmExceedMaxCapacity', async () => {
+    const fullCourse = {
+      ...mockCourseItem,
+      capacity: { N: '2' },
+      overbookLimit: { N: '0' },
+      participants: { L: [{ S: 'A' }, { S: 'B' }] },
+    };
+    dynamoMock
+      .on(GetItemCommand)
+      .resolvesOnce({ Item: fullCourse })
+      .resolvesOnce({ Item: undefined })
+      .resolvesOnce({ Item: fullCourse });
+    dynamoMock.on(PutItemCommand).resolves({});
+
+    const event: Partial<APIGatewayProxyEvent> = {
+      body: JSON.stringify({
+        courseId: 1,
+        date: '2025-10-01',
+        participants: [],
+        swapped: [],
+        waitlist: [],
+        anonymousTrialCount: 1,
+        confirmExceedMaxCapacity: true,
+      }),
+    };
+
+    const result = await handler(event as APIGatewayProxyEvent);
+    expect(result.statusCode).toBe(200);
+    expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(1);
+  });
+
   it('should allow waitlist enrollment when roster matches course participants above capacity', async () => {
     dynamoMock
       .on(GetItemCommand)

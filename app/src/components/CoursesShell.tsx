@@ -95,6 +95,7 @@ export default function CoursesShell({
     cancelSwap,
     onToggleAbsence,
     adjustGuestCount,
+    promoteWaitlistPerson,
     canManageGuestSeats,
     earliestWeekAnchor,
     latestWeekAnchor,
@@ -421,6 +422,7 @@ export default function CoursesShell({
             cancelSwap={cancelSwap}
             canManageGuestSeats={canManageGuestSeats}
             onAdjustGuestCount={adjustGuestCount}
+            onPromoteWaitlistPerson={promoteWaitlistPerson}
           />
         </section>
       )}
@@ -446,6 +448,7 @@ export default function CoursesShell({
             requestSwap={requestSwap}
             cancelSwap={cancelSwap}
             adjustGuestCount={adjustGuestCount}
+            promoteWaitlistPerson={promoteWaitlistPerson}
             canManageGuestSeats={canManageGuestSeats}
             waitlistNoPromoteWithinMinutes={waitlistNoPromoteWithinMinutes}
           />

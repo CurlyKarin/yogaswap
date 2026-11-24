@@ -28,6 +28,7 @@ vi.mock("../components/useCourseSwaps", () => ({
     cancelSwap: vi.fn(),
     onToggleAbsence: vi.fn(),
     adjustGuestCount: vi.fn(),
+    promoteWaitlistPerson: vi.fn(),
   }),
 }));
 

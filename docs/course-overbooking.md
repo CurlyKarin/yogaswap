@@ -14,15 +14,16 @@ Anzeige in der Kurskarte: `Teilnehmer/regulär` und für Management optional `(+
 
 - **Tausch (Self-Service):** nur reguläre Plätze (`capacity`); Überplanungszone nicht als Ziel wählbar (App: `hasRegularBookingCapacity`, `getAvailableDates`; API: `createSwap` active).
 - **Raumgrenze / Admin-Zuweisung:** bis `maxCapacity` (API: `validateParticipantListSize`, App: `hasBookingCapacity`).
-- **Wartelisten-Nachrücken:** nur wenn `participants.length < capacity` und noch unter `maxCapacity` (`canPromoteFromWaitlist`).
+- **Wartelisten-Nachrücken (automatisch):** nur wenn `participants.length < capacity` und noch unter `maxCapacity` (`canPromoteFromWaitlist`).
+- **Staff-Übernahme von der Warteliste (#427):** gezielt eine WL-Person am Termin → pending Swap aktivieren. Bis `maxCapacity` ohne Extra-Warnung; darüber Studio-Setting `staffOverCapacityMode` (`warn` Default / `block`). Auch im Cutoff mit Extra-Bestätigung.
 - **Ringtausch:** unverändert; Zieltermine unterliegen derselben Obergrenze.
 - **Teilnehmer (Stammdaten):** Admin-Mitglieder-Dialog begrenzt auf `maxCapacity`.
 
 ## Code
 
-- `shared/src/courseCapacity.ts` — zentrale Helfer
-- Backend: `createCourse`, `updateCourse`, `createOverride`, `updateOverride`, `processPromotions`, `createSwap` (active)
-- App: `useCourseSwaps`, `dates.ts`, `CourseCard`, Dialoge
+- `shared/src/courseCapacity.ts` — zentrale Helfer inkl. `evaluateStaffOccupancy` (#427)
+- Backend: `createCourse`, `updateCourse`, `createOverride`, `updateOverride`, `processPromotions`, `promoteWaitlist`, `createSwap` (active)
+- App: `useCourseSwaps`, `dates.ts`, `CourseCard`, Dialoge, Studio-Einstellung „Raumgrenze überschreiten (Staff)“
 
 ## Follow-ups
 

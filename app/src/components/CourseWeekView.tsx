@@ -54,6 +54,11 @@ type Props = {
   cancelSwap: (swap: Swap, clickedCourseId: number) => void;
   canManageGuestSeats?: boolean;
   onAdjustGuestCount?: (course: Course, dateIso: string, delta: 1 | -1) => Promise<void>;
+  onPromoteWaitlistPerson?: (
+    course: Course,
+    dateIso: string,
+    participantId: string,
+  ) => Promise<void>;
 };
 
 export default function CourseWeekView({
@@ -81,6 +86,7 @@ export default function CourseWeekView({
   cancelSwap,
   canManageGuestSeats = false,
   onAdjustGuestCount,
+  onPromoteWaitlistPerson,
 }: Props) {
   const cardHostRefs = useRef(new Map<number, HTMLDivElement>());
   const [highlightedCourseId, setHighlightedCourseId] = useState<number | null>(null);
@@ -191,6 +197,7 @@ export default function CourseWeekView({
                 showOverbookingDetails={canSeeCourseManagement}
                 canManageGuestSeats={canManageGuestSeats}
                 onAdjustGuestCount={onAdjustGuestCount}
+                onPromoteWaitlistPerson={onPromoteWaitlistPerson}
                 dates={cardDates}
                 overrides={overrides}
                 enrollments={enrollments}

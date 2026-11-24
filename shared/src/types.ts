@@ -181,6 +181,9 @@ export interface Tenant {
 
 // Tenant-weite Einstellungen für Sichtbarkeit & Berechtigungen.
 // Alle Felder sind optional, damit bestehende Tenants ohne Migration funktionieren.
+/** Studio-Einstellung #427: Soft-Überschreiten der Raumgrenze durch Staff. */
+export type StaffOverCapacityMode = "warn" | "block";
+
 export interface TenantSettings {
   /**
    * Dürfen Instructor:innen standardmäßig alle Kurse des Tenants sehen?
@@ -302,6 +305,13 @@ export interface TenantSettings {
    * Fehlt = kein Bis-Fenster (bis Terminstart, sofern Master an und Start erlaubt).
    */
   instructorTermNotifyUntilMinutesBeforeStart?: number;
+  /**
+   * Staff (Kursleitung/Admin): Verhalten beim Überschreiten der Raumgrenze (`maxCapacity`,
+   * bzw. `capacity` ohne Überplanung) bei Gast ± und WL-Übernahme (#427).
+   * Default (undefined): `"warn"` — Warnung + bewusste Bestätigung.
+   * `"block"` — Aktion ablehnen.
+   */
+  staffOverCapacityMode?: StaffOverCapacityMode;
 }
 
 // Verknüpfung zwischen User und Tenant inkl. Rolle und optionalen Overrides.

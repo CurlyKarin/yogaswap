@@ -100,6 +100,11 @@ type Props = {
   ) => void;
   cancelSwap: (swap: Swap, clickedCourseId: number) => void;
   adjustGuestCount: (course: Course, dateIso: string, delta: 1 | -1) => Promise<void>;
+  promoteWaitlistPerson: (
+    course: Course,
+    dateIso: string,
+    participantId: string,
+  ) => Promise<void>;
   canManageGuestSeats: boolean;
 };
 
@@ -249,6 +254,7 @@ export default function CourseList({
   requestSwap,
   cancelSwap,
   adjustGuestCount,
+  promoteWaitlistPerson,
   canManageGuestSeats,
   waitlistNoPromoteWithinMinutes,
 }: Props) {
@@ -1018,6 +1024,7 @@ export default function CourseList({
                   showOverbookingDetails={canSeeCourseManagement}
                   canManageGuestSeats={canManageGuestSeats}
                   onAdjustGuestCount={adjustGuestCount}
+                  onPromoteWaitlistPerson={promoteWaitlistPerson}
                   dates={dates}
                   overrides={overrides}
                   enrollments={enrollments}

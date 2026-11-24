@@ -23,6 +23,7 @@ import {
 } from '@yogaswap/shared';
 import type { TenantSettings } from '@yogaswap/shared';
 import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
+import { gateStaffOccupancy } from '../shared/staffCapacityGate';
 import { resolveSelfServiceAbsenceKind } from '../shared/notifications/resolveSelfServiceAbsenceKind';
 import { detectInstructorTermParticipationEvents } from '../shared/notifications/detectInstructorTermParticipationEvents';
 import {
@@ -238,7 +239,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         merged.anonymousTrialCount ?? 0,
       );
       if (capacityError) {
-        return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+        // Soft-Überschreiten nur für Gast ± (#427); Roster-Updates bleiben hart an maxCapacity.
+        const guestOnlySoftPath =
+          updates.anonymousTrialCount !== undefined &&
+          updates.participants === undefined &&
+          updates.cancelledParticipants === undefined &&
+          updates.swapped === undefined;
+        if (!guestOnlySoftPath) {
+          return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+        }
+        const previousGuests = before?.anonymousTrialCount ?? 0;
+        const nextGuests = merged.anonymousTrialCount ?? 0;
+        // Verringern (oder gleich) immer erlauben — auch wenn danach noch über maxCapacity.
+        const isGuestIncrease = nextGuests > previousGuests;
+        if (isGuestIncrease) {
+          if (!tenantSettings && tenantsTable) {
+            tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+          }
+          const gate = gateStaffOccupancy({
+            participantCount: effective.participants.length,
+            course: capacityFields,
+            guestCount: nextGuests,
+            tenantSettings,
+            confirmExceedMaxCapacity: updates.confirmExceedMaxCapacity === true,
+          });
+          if (!gate.ok) {
+            return { statusCode: gate.statusCode, body: JSON.stringify(gate.body) };
+          }
+        }
       }
     }
 

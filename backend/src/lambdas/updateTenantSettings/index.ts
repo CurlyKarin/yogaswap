@@ -36,6 +36,8 @@ const BOOLEAN_SETTINGS_KEYS = [
   "instructorCanDelegateStudioWide",
 ] as const;
 
+const ENUM_SETTINGS_KEYS = ["staffOverCapacityMode"] as const;
+
 /** Optional windows: null clears the key (#398). */
 const CLEARABLE_NUMBER_SETTINGS_KEYS = [
   "instructorTermNotifyFromHoursBeforeStart",
@@ -70,6 +72,11 @@ function mergeTenantSettings(
       (next as Record<string, boolean>)[key] = patch[key] as boolean;
     }
   }
+  for (const key of ENUM_SETTINGS_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(patch, key)) {
+      (next as Record<string, string>)[key] = patch[key] as string;
+    }
+  }
   for (const key of CLEARABLE_NUMBER_SETTINGS_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
     const raw = patch[key];
@@ -97,6 +104,7 @@ function hasUpdatablePatch(patch: StudioSettingsPatch): boolean {
     Object.prototype.hasOwnProperty.call(patch, "name") ||
     MVP_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
     BOOLEAN_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
+    ENUM_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
     CLEARABLE_NUMBER_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key)) ||
     CONTACT_SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key))
   );
