@@ -1,7 +1,14 @@
 import { useId } from "react";
 import { CalendarRange, CalendarX, Clock3, History } from "lucide-react";
 import type { Course, TenantSettings } from "shared/types";
-import { resolveGuestCount, resolveMaxCapacity, resolveOverbookLimit, resolveEffectiveOccupancy, validateTermOccupancy } from "shared/courseCapacity";
+import {
+  evaluateStaffOccupancy,
+  resolveGuestCount,
+  resolveMaxCapacity,
+  resolveOverbookLimit,
+  resolveEffectiveOccupancy,
+  resolveStaffOverCapacityMode,
+} from "shared/courseCapacity";
 import { toDateKey } from "../lib/dates";
 import {
   excludedTermOptionSuffix,
@@ -26,6 +33,7 @@ import type { CourseCardTermState } from "./useCourseCardTermState";
 import { displayNameForParticipantRef } from "../lib/participants";
 import { matchesParticipantRef } from "shared/participantActor";
 import GuestSeatControls from "./GuestSeatControls";
+import WaitlistPromoteControls from "./WaitlistPromoteControls";
 import TermDateSelect from "./TermDateSelect";
 
 type CourseCardDetailsProps = {
@@ -35,6 +43,8 @@ type CourseCardDetailsProps = {
   canManageGuestSeats?: boolean;
   guestSeatSaving?: boolean;
   onAdjustGuestCount?: (delta: 1 | -1) => void;
+  waitlistPromoteSaving?: boolean;
+  onPromoteWaitlistPerson?: (participantId: string) => void | Promise<void>;
   includePastTermsInSelect: boolean;
   tenantSettings?: TenantSettings;
   termState: CourseCardTermState;
@@ -52,6 +62,8 @@ export default function CourseCardDetails({
   canManageGuestSeats = false,
   guestSeatSaving = false,
   onAdjustGuestCount,
+  waitlistPromoteSaving = false,
+  onPromoteWaitlistPerson,
   includePastTermsInSelect,
   tenantSettings,
   termState,
@@ -97,8 +109,13 @@ export default function CourseCardDetails({
   const visibleFreeSpots = showOverbookingDetails
     ? regularFreeSpots + overbookFreeSpots
     : regularFreeSpots;
-  const canAddGuest =
-    validateTermOccupancy(participants.length, course, guestCount + 1) === null;
+  const addGuestEvaluation = evaluateStaffOccupancy(
+    participants.length,
+    course,
+    guestCount + 1,
+    resolveStaffOverCapacityMode(tenantSettings),
+  );
+  const canAddGuest = addGuestEvaluation.status !== "blocked";
   const canRemoveGuest = guestCount > 0;
   const showGuestControls =
     canManageGuestSeats &&
@@ -107,6 +124,14 @@ export default function CourseCardDetails({
     !hasNoUpcomingDates &&
     !isPastOccurrence &&
     !!onAdjustGuestCount;
+  const showWaitlistPromote =
+    canManageGuestSeats &&
+    !showExcludedTermMarker &&
+    !showPreviewMarker &&
+    !hasNoUpcomingDates &&
+    !isPastOccurrence &&
+    !!onPromoteWaitlistPerson &&
+    waitlist.length > 0;
 
   const schedule = resolveCourseScheduleDisplay(
     course.weekday,
@@ -391,29 +416,39 @@ export default function CourseCardDetails({
         <div id={waitlistLabelId} className="label muted">
           Warteliste
         </div>
-        <ul className="chips" aria-labelledby={waitlistLabelId}>
-          {showExcludedTermMarker ? (
-            <li className="chip muted small" aria-label="Keine Warteliste, Termin entfällt">
-              —
-            </li>
-          ) : waitlist.length === 0 ? (
-            <li className="chip muted small">Keine Anfragen</li>
-          ) : (
-            waitlist.map((name) => {
-              const displayName = displayNameForParticipantRef(name, participantNameByRef);
-              const isSelf = matchesParticipantRef(name, actor);
-              return (
-                <li
-                  className={`chip wait${isSelf ? " chip-self" : ""}`}
-                  key={name}
-                  aria-label={waitlistChipAriaLabel(displayName, isSelf)}
-                >
-                  {displayName}
-                </li>
-              );
-            })
+        <div className="waitlist-row-content">
+          <ul className="chips" aria-labelledby={waitlistLabelId}>
+            {showExcludedTermMarker ? (
+              <li className="chip muted small" aria-label="Keine Warteliste, Termin entfällt">
+                —
+              </li>
+            ) : waitlist.length === 0 ? (
+              <li className="chip muted small">Keine Anfragen</li>
+            ) : (
+              waitlist.map((name) => {
+                const displayName = displayNameForParticipantRef(name, participantNameByRef);
+                const isSelf = matchesParticipantRef(name, actor);
+                return (
+                  <li
+                    className={`chip wait${isSelf ? " chip-self" : ""}`}
+                    key={name}
+                    aria-label={waitlistChipAriaLabel(displayName, isSelf)}
+                  >
+                    {displayName}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+          {showWaitlistPromote && (
+            <WaitlistPromoteControls
+              waitlist={waitlist}
+              displayNameFor={(ref) => displayNameForParticipantRef(ref, participantNameByRef)}
+              saving={waitlistPromoteSaving}
+              onPromote={(participantId) => onPromoteWaitlistPerson!(participantId)}
+            />
           )}
-        </ul>
+        </div>
       </div>
     </>
   );

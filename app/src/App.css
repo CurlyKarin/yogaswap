@@ -1169,6 +1169,31 @@ body {
   padding-top: 0;
 }
 
+.waitlist-row-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.waitlist-promote-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.waitlist-promote-select {
+  min-width: 10rem;
+  max-width: 100%;
+  flex: 1 1 10rem;
+}
+
+.waitlist-promote-btn {
+  flex: 0 0 auto;
+}
+
 .guest-seat-controls {
   display: inline-flex;
   align-items: center;

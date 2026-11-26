@@ -1,5 +1,11 @@
 import { buildCourseOccurrenceLocal, DEFAULT_INACTIVE_GRACE_DAYS_AFTER_END } from "./courseStatus";
-import type { TenantSettings } from "./types";
+import type { StaffOverCapacityMode, TenantSettings } from "./types";
+import {
+  DEFAULT_STAFF_OVER_CAPACITY_MODE,
+  resolveStaffOverCapacityMode,
+} from "./courseCapacity";
+
+export { DEFAULT_STAFF_OVER_CAPACITY_MODE, resolveStaffOverCapacityMode };
 
 export const DEFAULT_SWAP_MIN_OFFSET_DAYS = -7;
 export const DEFAULT_SWAP_MAX_OFFSET_DAYS = 7;
@@ -142,6 +148,8 @@ export type StudioSettingsPatch = {
   delegationCanManageActiveParticipants?: boolean;
   /** Studio-weite Fremdverwaltung (#141/#300). Default false. */
   instructorCanDelegateStudioWide?: boolean;
+  /** Staff: Raumgrenze überschreiten warn|block (#427). Default warn. */
+  staffOverCapacityMode?: StaffOverCapacityMode;
 };
 
 /** Fremdverwaltung für Kursleitung (#141). Default an. */
@@ -293,6 +301,12 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
   if (Object.prototype.hasOwnProperty.call(patch, "instructorCanDelegateStudioWide")) {
     if (typeof patch.instructorCanDelegateStudioWide !== "boolean") {
       return "Studio-weite Fremdverwaltung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "staffOverCapacityMode")) {
+    const mode = patch.staffOverCapacityMode;
+    if (mode !== "warn" && mode !== "block") {
+      return "Überschreiten der Raumgrenze muss „warn“ oder „block“ sein.";
     }
   }
   if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyFromHoursBeforeStart")) {

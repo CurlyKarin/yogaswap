@@ -21,7 +21,12 @@ import {
   resolveCancellationSwapCutoffMinutes,
 } from "shared/cancellationSwapCutoff";
 import { resolveWaitlistNoPromoteWithinMinutes } from "shared/waitlistBuffer";
-import { hasRegularBookingCapacity, resolveMaxCapacity, validateTermOccupancy } from "shared/courseCapacity";
+import {
+  evaluateStaffOccupancy,
+  hasRegularBookingCapacity,
+  resolveMaxCapacity,
+  resolveStaffOverCapacityMode,
+} from "shared/courseCapacity";
 import { resolveEffectiveTermOccupancy, resolveStemForDate } from "shared/courseEnrollment";
 import {
   resolveEffectiveTermParticipants,
@@ -30,6 +35,11 @@ import {
 } from "shared/overrideOccupancy";
 import { createSwap, deleteSwap, processPromotions, processRingSwaps } from "../api/swaps";
 import { createOverride, updateOverride } from "../api/overrides";
+import {
+  promoteWaitlistPerson as promoteWaitlistPersonApi,
+  type PromoteWaitlistApiError,
+} from "../api/promoteWaitlist";
+import { apiErrorCode, apiErrorMessage } from "../lib/apiErrorMessage";
 
 function overrideMatchesCourseDate(
   override: CourseDateOverride,
@@ -1123,10 +1133,25 @@ export function useCourseSwaps(
       const nextGuests = currentGuests + delta;
       if (nextGuests < 0) return;
 
-      const capacityError = validateTermOccupancy(effectiveNamed.length, course, nextGuests);
-      if (capacityError) {
-        alert(capacityError);
-        return;
+      let confirmExceedMaxCapacity = false;
+      if (delta > 0) {
+        const evaluation = evaluateStaffOccupancy(
+          effectiveNamed.length,
+          course,
+          nextGuests,
+          resolveStaffOverCapacityMode(tenantSettings),
+        );
+        if (evaluation.status === "blocked") {
+          alert(evaluation.message);
+          return;
+        }
+        if (evaluation.status === "needs_confirm") {
+          const ok = window.confirm(
+            `${evaluation.message}\n\nTrotzdem Gastplatz hinzufügen?`,
+          );
+          if (!ok) return;
+          confirmExceedMaxCapacity = true;
+        }
       }
 
       const nextOverride: CourseDateOverride = {
@@ -1141,9 +1166,15 @@ export function useCourseSwaps(
 
       try {
         if (existing) {
-          await updateOverride(course.id, dateIso, { anonymousTrialCount: nextGuests });
+          await updateOverride(course.id, dateIso, {
+            anonymousTrialCount: nextGuests,
+            ...(confirmExceedMaxCapacity ? { confirmExceedMaxCapacity: true } : {}),
+          });
         } else {
-          await createOverride(nextOverride);
+          await createOverride({
+            ...nextOverride,
+            ...(confirmExceedMaxCapacity ? { confirmExceedMaxCapacity: true } : {}),
+          });
         }
 
         if (delta < 0) {
@@ -1158,11 +1189,125 @@ export function useCourseSwaps(
         }
       } catch (err) {
         console.error("Error adjusting guest count:", err);
-        alert("Gastplatz konnte nicht gespeichert werden. Daten werden neu geladen.");
+        const code = apiErrorCode(err);
+        if (code === "capacity_exceeded_needs_confirm") {
+          alert(apiErrorMessage(err, "Raumgrenze würde überschritten."));
+        } else if (code === "capacity_exceeded_blocked") {
+          alert(apiErrorMessage(err, "Raumgrenze erreicht — Aktion blockiert."));
+        } else {
+          alert("Gastplatz konnte nicht gespeichert werden. Daten werden neu geladen.");
+        }
         await fetchData();
       }
     },
-    [filteredOverrides, enrollments, fetchData, setOverrides],
+    [filteredOverrides, enrollments, fetchData, setOverrides, tenantSettings],
+  );
+
+  const promoteWaitlistPerson = useCallback(
+    async (course: Course, dateIso: string, participantId: string) => {
+      const trimmed = participantId.trim();
+      if (!trimmed) return;
+
+      const existingIndex = findOverrideIndex(filteredOverrides, course.id, dateIso);
+      const existing = existingIndex >= 0 ? filteredOverrides[existingIndex] : null;
+      const effectiveNamed = resolveEffectiveTermOccupancy(
+        course,
+        existing,
+        enrollments,
+        dateIso,
+      ).participants;
+      const guestCount = existing?.anonymousTrialCount ?? 0;
+      const mode = resolveStaffOverCapacityMode(tenantSettings);
+
+      let confirmExceedMaxCapacity = false;
+      const evaluation = evaluateStaffOccupancy(
+        effectiveNamed.length + 1,
+        course,
+        guestCount,
+        mode,
+      );
+      if (evaluation.status === "blocked") {
+        alert(evaluation.message);
+        return;
+      }
+      if (evaluation.status === "needs_confirm") {
+        const ok = window.confirm(
+          `${evaluation.message}\n\nTrotzdem von der Warteliste übernehmen?`,
+        );
+        if (!ok) return;
+        confirmExceedMaxCapacity = true;
+      }
+
+      let acknowledgeCutoff = false;
+      if (isSwapTargetInCutoffWindow(dateIso, course.time, tenantSettings)) {
+        const ok = window.confirm(
+          "Dieser Termin liegt kurz vor Kursbeginn (Absagefrist).\n\nTrotzdem übernehmen?",
+        );
+        if (!ok) return;
+        acknowledgeCutoff = true;
+      }
+
+      try {
+        const response = await promoteWaitlistPersonApi(course.id, dateIso, {
+          participantId: trimmed,
+          ...(confirmExceedMaxCapacity ? { confirmExceedMaxCapacity: true } : {}),
+          ...(acknowledgeCutoff ? { acknowledgeCutoff: true } : {}),
+        });
+        if (response.overrides) {
+          setOverrides((prev) => mergeOverridesPreservingShortNotice(prev, response.overrides));
+        }
+        if (response.swaps) {
+          setSwaps(response.swaps);
+        } else {
+          await fetchData();
+        }
+      } catch (err) {
+        console.error("Error promoting waitlist person:", err);
+        const apiErr = err as PromoteWaitlistApiError;
+        const code = apiErr.code ?? apiErrorCode(err);
+        if (code === "capacity_exceeded_needs_confirm" || code === "cutoff_needs_ack") {
+          // Server verlangt Bestätigung, die lokal fehlte — einmal nachfragen und retry.
+          const confirmCapacity = code === "capacity_exceeded_needs_confirm"
+            ? window.confirm(
+                `${apiErrorMessage(err, "Raumgrenze würde überschritten.")}\n\nTrotzdem übernehmen?`,
+              )
+            : true;
+          const confirmCutoff = code === "cutoff_needs_ack"
+            ? window.confirm(
+                `${apiErrorMessage(err, "Kurz vor Kursbeginn.")}\n\nTrotzdem übernehmen?`,
+              )
+            : true;
+          if (!confirmCapacity || !confirmCutoff) return;
+          try {
+            const response = await promoteWaitlistPersonApi(course.id, dateIso, {
+              participantId: trimmed,
+              confirmExceedMaxCapacity:
+                confirmExceedMaxCapacity || code === "capacity_exceeded_needs_confirm",
+              acknowledgeCutoff: acknowledgeCutoff || code === "cutoff_needs_ack",
+            });
+            if (response.overrides) {
+              setOverrides((prev) =>
+                mergeOverridesPreservingShortNotice(prev, response.overrides),
+              );
+            }
+            if (response.swaps) {
+              setSwaps(response.swaps);
+            } else {
+              await fetchData();
+            }
+            return;
+          } catch (retryErr) {
+            console.error("Retry promote waitlist failed:", retryErr);
+            alert(apiErrorMessage(retryErr, "Wartelisten-Übernahme fehlgeschlagen."));
+            await fetchData();
+            return;
+          }
+        }
+        alert(apiErrorMessage(err, "Wartelisten-Übernahme fehlgeschlagen."));
+        await fetchData();
+      }
+    },
+    [filteredOverrides, enrollments, fetchData, setOverrides, setSwaps, tenantSettings],
   );
 
   console.log("return useCourseSwaps");
@@ -1175,6 +1320,7 @@ export function useCourseSwaps(
     cancelSwap,
     onToggleAbsence,
     adjustGuestCount,
+    promoteWaitlistPerson,
   };
 
 }

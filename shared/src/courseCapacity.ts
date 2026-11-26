@@ -1,6 +1,61 @@
-import type { Course } from "./types";
+import type { Course, StaffOverCapacityMode, TenantSettings } from "./types";
 
 export type CourseCapacityFields = Pick<Course, "capacity" | "overbookLimit">;
+
+/** Default #427: Warnung + Bestätigen, nicht hart blockieren. */
+export const DEFAULT_STAFF_OVER_CAPACITY_MODE: StaffOverCapacityMode = "warn";
+
+export function resolveStaffOverCapacityMode(
+  settings?: TenantSettings,
+): StaffOverCapacityMode {
+  return settings?.staffOverCapacityMode === "block" ? "block" : DEFAULT_STAFF_OVER_CAPACITY_MODE;
+}
+
+/**
+ * Staff-Aktion (Gast ± / WL-Übernahme) gegen die Raumgrenze (`maxCapacity`).
+ * Bis zur Grenze: ok. Darüber: warn (Bestätigung nötig) oder block.
+ */
+export type StaffOccupancyEvaluation =
+  | { status: "ok" }
+  | {
+      status: "needs_confirm";
+      message: string;
+      limit: number;
+      nextOccupancy: number;
+    }
+  | {
+      status: "blocked";
+      message: string;
+      limit: number;
+      nextOccupancy: number;
+    };
+
+export function evaluateStaffOccupancy(
+  participantCount: number,
+  course: CourseCapacityFields,
+  guestCount: number,
+  mode: StaffOverCapacityMode = DEFAULT_STAFF_OVER_CAPACITY_MODE,
+): StaffOccupancyEvaluation {
+  const limit = resolveMaxCapacity(course);
+  const guests = resolveGuestCount(guestCount);
+  const nextOccupancy = resolveEffectiveOccupancy(participantCount, guests);
+  if (nextOccupancy <= limit) return { status: "ok" };
+  const message = `Die Raumgrenze (${limit} Plätze) würde überschritten (${nextOccupancy}).`;
+  if (mode === "block") {
+    return { status: "blocked", message, limit, nextOccupancy };
+  }
+  return { status: "needs_confirm", message, limit, nextOccupancy };
+}
+
+/** true, wenn Staff-Aktion mit optionaler Bestätigung erlaubt ist. */
+export function isStaffOccupancyAllowed(
+  evaluation: StaffOccupancyEvaluation,
+  confirmExceedMaxCapacity = false,
+): boolean {
+  if (evaluation.status === "ok") return true;
+  if (evaluation.status === "needs_confirm" && confirmExceedMaxCapacity) return true;
+  return false;
+}
 
 export function resolveOverbookLimit(course: CourseCapacityFields): number {
   const value = course.overbookLimit;

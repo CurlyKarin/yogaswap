@@ -13,6 +13,8 @@ export type OverrideUpdateBody = {
   waitlist?: string[];
   shortNoticeCancellations?: string[];
   anonymousTrialCount?: number;
+  /** Request-only (#427): Staff bestätigt Soft-Überschreiten der Raumgrenze. */
+  confirmExceedMaxCapacity?: boolean;
 };
 
 export function mergeOverrideUpdate(

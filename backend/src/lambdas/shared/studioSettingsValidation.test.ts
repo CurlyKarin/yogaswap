@@ -21,4 +21,12 @@ describe("validateStudioSettingsPatch", () => {
       "Absagefrist für Mitglieder muss eine ganze Zahl zwischen 0 und 1440 sein.",
     );
   });
+
+  it("akzeptiert staffOverCapacityMode warn|block", () => {
+    expect(validateStudioSettingsPatch({ staffOverCapacityMode: "warn" })).toBeNull();
+    expect(validateStudioSettingsPatch({ staffOverCapacityMode: "block" })).toBeNull();
+    expect(validateStudioSettingsPatch({ staffOverCapacityMode: "soft" as "warn" })).toMatch(
+      /warn|block/,
+    );
+  });
 });

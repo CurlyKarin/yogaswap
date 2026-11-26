@@ -23,6 +23,7 @@ export type StudioSettingsPatch = {
   instructorCanManageDelegationWithoutCourseAssignment?: boolean;
   delegationCanManageActiveParticipants?: boolean;
   instructorCanDelegateStudioWide?: boolean;
+  staffOverCapacityMode?: "warn" | "block";
 };
 
 const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -129,6 +130,12 @@ export function validateStudioSettingsPatch(patch: StudioSettingsPatch): string 
   if (Object.prototype.hasOwnProperty.call(patch, "instructorCanDelegateStudioWide")) {
     if (typeof patch.instructorCanDelegateStudioWide !== "boolean") {
       return "Studio-weite Fremdverwaltung muss ein Schalter (ja/nein) sein.";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "staffOverCapacityMode")) {
+    const mode = patch.staffOverCapacityMode;
+    if (mode !== "warn" && mode !== "block") {
+      return "Überschreiten der Raumgrenze muss „warn“ oder „block“ sein.";
     }
   }
   if (Object.prototype.hasOwnProperty.call(patch, "instructorTermNotifyFromHoursBeforeStart")) {

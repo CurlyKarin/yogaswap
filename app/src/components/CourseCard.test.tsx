@@ -220,6 +220,38 @@ describe("CourseCard", () => {
     expect(screen.queryByRole("group", { name: /Gastplätze verwalten/i })).not.toBeInTheDocument();
   });
 
+  it("zeigt Wartelisten-Übernahme für Management und ruft Handler auf", async () => {
+    const onPromoteWaitlistPerson = vi.fn().mockResolvedValue(undefined);
+    const overrideWithWaitlist: CourseDateOverride = {
+      ...baseOverride,
+      waitlist: ["carol", "dana"],
+    };
+    renderCourseCard({
+      canManageGuestSeats: true,
+      onPromoteWaitlistPerson,
+      overrides: [overrideWithWaitlist],
+    });
+
+    expect(screen.getByRole("group", { name: /Warteliste übernehmen/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Person von der Warteliste wählen/i), {
+      target: { value: "carol" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Übernehmen$/i }));
+    expect(onPromoteWaitlistPerson).toHaveBeenCalledWith(baseCourse, "2099-06-16", "carol");
+  });
+
+  it("blendet Wartelisten-Übernahme für Teilnehmer aus", () => {
+    const overrideWithWaitlist: CourseDateOverride = {
+      ...baseOverride,
+      waitlist: ["carol"],
+    };
+    renderCourseCard({
+      canManageGuestSeats: false,
+      overrides: [overrideWithWaitlist],
+    });
+    expect(screen.queryByRole("group", { name: /Warteliste übernehmen/i })).not.toBeInTheDocument();
+  });
+
   it("blendet Gast-Steuerung im Nachlauf aus", () => {
     renderCourseCard(
       {

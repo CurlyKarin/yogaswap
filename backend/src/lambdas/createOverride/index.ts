@@ -12,6 +12,7 @@ import { courseCapacityFromDynamoItem, validateParticipantsForCourse } from '../
 import { resolveEffectiveTermOccupancy, resolveStemForDate, validateAnonymousTrialCount } from '@yogaswap/shared';
 import { queryCourseEnrollments } from '../shared/courseEnrollmentDynamo';
 import { loadTenantSettings } from '../shared/tenantSettingsLoader';
+import { gateStaffOccupancy } from '../shared/staffCapacityGate';
 import {
   validateSelfServiceOverrideTransition,
   validateShortNoticeParticipantsInvariant,
@@ -144,14 +145,35 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       swapped.length === 0 &&
       (cancelledParticipants?.length ?? 0) === 0 &&
       sameParticipantRoster(effective.participants, stemOnDate);
+    const guestOnlySoftPath =
+      anonymousTrialCount > 0 &&
+      participants.length === 0 &&
+      swapped.length === 0 &&
+      (cancelledParticipants?.length ?? 0) === 0;
+    let tenantSettings =
+      tenantsTable ? await loadTenantSettings(client, tenantsTable, tenantId) : undefined;
     if (capacityError && !waitlistEnrollmentOnly) {
-      return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+      if (!guestOnlySoftPath) {
+        return { statusCode: 400, body: JSON.stringify({ error: capacityError }) };
+      }
+      const gate = gateStaffOccupancy({
+        participantCount: effective.participants.length,
+        course: capacityFields,
+        guestCount: anonymousTrialCount,
+        tenantSettings,
+        confirmExceedMaxCapacity: override.confirmExceedMaxCapacity === true,
+      });
+      if (!gate.ok) {
+        return { statusCode: gate.statusCode, body: JSON.stringify(gate.body) };
+      }
     }
 
     // Parität zu updateOverride: Cutoff/SN auch beim ersten Write (#414 Folge / Staging-Bug).
     const subjectNickname = actingForUserId ?? userId;
     if (subjectNickname && tenantsTable) {
-      const tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      if (!tenantSettings) {
+        tenantSettings = await loadTenantSettings(client, tenantsTable, tenantId);
+      }
       const after: CourseDateOverride = {
         courseId: Number(legacyCourseId),
         date: override.date,

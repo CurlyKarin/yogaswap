@@ -393,6 +393,44 @@ locals {
         TENANT_BASE_HOST           = local.tenant_base_host
       }
     },
+    "promote_waitlist" = {
+      name             = "promote-waitlist"
+      file_name        = "promoteWaitlist.zip"
+      timeout          = 15
+      table_arns = [
+        module.courses_table.table_arn,
+        module.memberships_table.table_arn,
+        module.course_overrides_table.table_arn,
+        module.swaps_table.table_arn,
+        module.participants_table.table_arn,
+        module.tenants_table.table_arn,
+        module.course_enrollments_table.table_arn,
+      ]
+      dynamodb_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query"]
+      tables = {
+        "COURSES_TABLE"            = module.courses_table.table_name
+        "MEMBERSHIPS_TABLE"        = module.memberships_table.table_name
+        "OVERRIDES_TABLE"          = module.course_overrides_table.table_name
+        "SWAPS_TABLE"              = module.swaps_table.table_name
+        "PARTICIPANTS_TABLE"       = module.participants_table.table_name
+        "TENANTS_TABLE"            = module.tenants_table.table_name
+        "COURSE_ENROLLMENTS_TABLE" = module.course_enrollments_table.table_name
+      }
+      s3_actions   = []
+      s3_resources = []
+      additional_policies = [
+        {
+          Effect   = "Allow"
+          Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+          Resource = "*"
+        }
+      ]
+      environment = {
+        SES_SOURCE_EMAIL = local.ses_from_address
+        BASE_URL         = local.cloudfront_apex_alias != "" ? "https://${local.cloudfront_apex_alias}" : module.cloudfront_spa.distribution_url
+        TENANT_BASE_HOST = local.tenant_base_host
+      }
+    },
     "delete_course" = {
       name             = "delete-course"
       file_name        = "deleteCourse.zip"
@@ -776,6 +814,7 @@ locals {
     "POST /courses"                                = "create_course"
     "PUT /courses/{courseId}"                      = "update_course"
     "POST /courses/{courseId}/dates/{date}/cancel" = "cancel_course_date"
+    "POST /courses/{courseId}/dates/{date}/promote-waitlist" = "promote_waitlist"
     "DELETE /courses/{courseId}"                   = "delete_course"
     "GET /participants"                            = "get_participants"
     "GET /participants/identity-candidates"        = "list_identity_candidates"
@@ -816,6 +855,7 @@ module "yogaswap_api" {
     "POST /courses",
     "PUT /courses/{courseId}",
     "POST /courses/{courseId}/dates/{date}/cancel",
+    "POST /courses/{courseId}/dates/{date}/promote-waitlist",
     "DELETE /courses/{courseId}",
     # GET /tenant-context bewusst öffentlich (#261): Studio-Existenz vor Login prüfen.
     # Membership kommt nur mit JWT/User-Kontext; ohne Auth nur tenant-Lookup.

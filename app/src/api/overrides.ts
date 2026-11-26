@@ -14,10 +14,15 @@ export async function getOverrides(sinceDate?: string): Promise<CourseDateOverri
   }
 }
 
+export type OverrideWriteExtras = {
+  /** Staff bestätigt Soft-Überschreiten der Raumgrenze (#427). */
+  confirmExceedMaxCapacity?: boolean;
+};
+
 export async function updateOverride(
   courseId: number | string,
   date: string,
-  updates: Partial<CourseDateOverride>,
+  updates: Partial<CourseDateOverride> & OverrideWriteExtras,
 ): Promise<void> {
   const pathCourse = encodeURIComponent(String(courseId));
   const pathDate = encodeURIComponent(date);
@@ -51,7 +56,9 @@ export async function deleteOverride(courseId: number | string, date: string): P
   }
 }
 
-export async function createOverride(newOverride: CourseDateOverride): Promise<void> {
+export async function createOverride(
+  newOverride: CourseDateOverride & OverrideWriteExtras,
+): Promise<void> {
   try {
     const headers = delegationHeaders();
     if (headers) {

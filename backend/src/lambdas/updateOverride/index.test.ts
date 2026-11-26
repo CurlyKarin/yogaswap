@@ -202,7 +202,7 @@ describe('updateOverride Lambda', () => {
     expect(call.ExpressionAttributeValues?.[':anonymousTrialCount']).toEqual({ N: '2' });
   });
 
-  it('should return 400 when guests exceed maxCapacity', async () => {
+  it('should return 409 when guests exceed maxCapacity without confirm (#427)', async () => {
     dynamoMock
       .on(GetItemCommand)
       .resolvesOnce({
@@ -242,9 +242,57 @@ describe('updateOverride Lambda', () => {
 
     const result = await handler(event);
 
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toMatch(/Maximal 4/);
+    // Guest-only Soft-Exceed (#427): Default warn → 409 needs_confirm, kein hartes 400.
+    expect(result.statusCode).toBe(409);
+    const body = JSON.parse(result.body);
+    expect(body.code).toBe('capacity_exceeded_needs_confirm');
+    expect(body.error).toMatch(/Raumgrenze|Maximal 4|überschritten/i);
     expect(dynamoMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
+  });
+
+  it('allows reducing guests while still over maxCapacity (#427)', async () => {
+    dynamoMock
+      .on(GetItemCommand)
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          courseId: { S: '1' },
+          time: { S: '10:00' },
+          capacity: { N: '4' },
+          overbookLimit: { N: '0' },
+          participants: { L: [{ S: 'Luna' }, { S: 'Kai' }, { S: 'Mia' }, { S: 'Noa' }] },
+        },
+      })
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          courseId_date: { S: '1_2025-10-01' },
+          courseId: { S: '1' },
+          date: { S: '2025-10-01' },
+          participants: { L: [{ S: 'Luna' }, { S: 'Kai' }, { S: 'Mia' }, { S: 'Noa' }] },
+          anonymousTrialCount: { N: '2' },
+        },
+      });
+    dynamoMock.on(UpdateItemCommand).resolves({});
+
+    const event: APIGatewayProxyEvent = {
+      pathParameters: { courseId: '1', date: '2025-10-01' },
+      body: JSON.stringify({ anonymousTrialCount: 1 }),
+      headers: {},
+      multiValueHeaders: {},
+      httpMethod: 'PUT',
+      isBase64Encoded: false,
+      path: '/overrides/1/2025-10-01',
+      queryStringParameters: null,
+      multiValueQueryStringParameters: null,
+      stageVariables: null,
+      resource: '',
+      requestContext: {} as any,
+    };
+
+    const result = await handler(event);
+    expect(result.statusCode).toBe(200);
+    expect(dynamoMock.commandCalls(UpdateItemCommand)).toHaveLength(1);
   });
 
   it('should handle DynamoDB errors gracefully', async () => {

@@ -15,9 +15,11 @@ import {
   resolveNotifyInstructorsOnStemChange,
   resolveNotifyInstructorsOnTermParticipationChange,
   resolveRollingPlanningHorizonWeeks,
+  resolveStaffOverCapacityMode,
   resolveSwapWindow,
   validateStudioSettingsPatch,
 } from "shared/tenantSettings";
+import type { StaffOverCapacityMode } from "shared/types";
 import { updateTenantSettings } from "../api/tenantSettings";
 import FieldLabelWithTooltip from "./FieldLabelWithTooltip";
 import NumberStepInput from "./NumberStepInput";
@@ -44,6 +46,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   const delegationActiveParticipantsDefault =
     resolveDelegationCanManageActiveParticipants(tenant.settings);
   const delegateStudioWideDefault = resolveInstructorCanDelegateStudioWide(tenant.settings);
+  const staffOverCapacityModeDefault = resolveStaffOverCapacityMode(tenant.settings);
 
   const [name, setName] = useState(tenant.name);
   const [contactEmail, setContactEmail] = useState(tenant.settings?.contactEmail ?? "");
@@ -80,6 +83,9 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
   );
   const [instructorCanDelegateStudioWide, setInstructorCanDelegateStudioWide] = useState(
     delegateStudioWideDefault,
+  );
+  const [staffOverCapacityMode, setStaffOverCapacityMode] = useState<StaffOverCapacityMode>(
+    staffOverCapacityModeDefault,
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +124,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
       resolveDelegationCanManageActiveParticipants(tenant.settings),
     );
     setInstructorCanDelegateStudioWide(resolveInstructorCanDelegateStudioWide(tenant.settings));
+    setStaffOverCapacityMode(resolveStaffOverCapacityMode(tenant.settings));
     setError(null);
     setSuccess(null);
   }, [tenant]);
@@ -148,6 +155,7 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
       instructorCanUseDelegation,
       delegationCanManageActiveParticipants,
       instructorCanDelegateStudioWide,
+      staffOverCapacityMode,
     };
     const validationError = validateStudioSettingsPatch(patch);
     if (validationError) {
@@ -239,6 +247,23 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
               onChange={setCancellationSwapCutoffMinutes}
               disabled={saving}
             />
+          </label>
+
+          <label className="dialog-field">
+            <FieldLabelWithTooltip tooltip="Gilt für Gastplätze und Wartelisten-Übernahme durch Kursleitung/Admin. Bis zur Raumgrenze (Kapazität + Überplanung) ohne Extra-Warnung. Darüber: Warnung mit Bestätigung oder harte Sperre.">
+              Raumgrenze überschreiten (Staff)
+            </FieldLabelWithTooltip>
+            <select
+              value={staffOverCapacityMode}
+              onChange={(e) =>
+                setStaffOverCapacityMode(e.target.value === "block" ? "block" : "warn")
+              }
+              disabled={saving}
+              aria-label="Raumgrenze überschreiten durch Staff"
+            >
+              <option value="warn">Mit Warnung (Bestätigen möglich)</option>
+              <option value="block">Streng (blockieren)</option>
+            </select>
           </label>
         </div>
 

@@ -69,6 +69,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     cancelSwap: ReturnType<typeof vi.fn>;
     onToggleAbsence: ReturnType<typeof vi.fn>;
     adjustGuestCount: ReturnType<typeof vi.fn>;
+    promoteWaitlistPerson: ReturnType<typeof vi.fn>;
     canManageGuestSeats: boolean;
     earliestWeekAnchor: Date;
     latestWeekAnchor: Date;
@@ -95,6 +96,7 @@ const { mockUseCoursesData, createCoursesDataMock, lastWeekViewProps } = vi.hois
     cancelSwap: vi.fn(),
     onToggleAbsence: vi.fn(),
     adjustGuestCount: vi.fn(),
+    promoteWaitlistPerson: vi.fn(),
     canManageGuestSeats: false,
     earliestWeekAnchor: new Date(2026, 0, 5),
     latestWeekAnchor: new Date(2027, 0, 4),
