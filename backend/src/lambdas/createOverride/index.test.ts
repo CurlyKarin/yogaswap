@@ -178,7 +178,7 @@ describe('createOverride Lambda', () => {
     expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(0);
   });
 
-  it('should return 409 for guest-only exceed without confirm (warn mode)', async () => {
+  it('should return 400 for guest-only exceed with default block (#455)', async () => {
     const fullCourse = {
       ...mockCourseItem,
       capacity: { N: '2' },
@@ -199,12 +199,13 @@ describe('createOverride Lambda', () => {
     };
 
     const result = await handler(event as APIGatewayProxyEvent);
-    expect(result.statusCode).toBe(409);
-    expect(JSON.parse(result.body).code).toBe('capacity_exceeded_needs_confirm');
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body).code).toBe('capacity_exceeded_blocked');
     expect(dynamoMock.commandCalls(PutItemCommand)).toHaveLength(0);
   });
 
-  it('should allow guest-only exceed with confirmExceedMaxCapacity', async () => {
+  it('should allow guest-only exceed with confirm when studio mode is warn', async () => {
+    process.env.TENANTS_TABLE = 'tenants';
     const fullCourse = {
       ...mockCourseItem,
       capacity: { N: '2' },
@@ -214,6 +215,12 @@ describe('createOverride Lambda', () => {
     dynamoMock
       .on(GetItemCommand)
       .resolvesOnce({ Item: fullCourse })
+      .resolvesOnce({
+        Item: {
+          tenantId: { S: 'default-tenant' },
+          settings: { M: { staffOverCapacityMode: { S: 'warn' } } },
+        },
+      })
       .resolvesOnce({ Item: undefined })
       .resolvesOnce({ Item: fullCourse });
     dynamoMock.on(PutItemCommand).resolves({});

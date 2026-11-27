@@ -148,7 +148,7 @@ export type StudioSettingsPatch = {
   delegationCanManageActiveParticipants?: boolean;
   /** Studio-weite Fremdverwaltung (#141/#300). Default false. */
   instructorCanDelegateStudioWide?: boolean;
-  /** Staff: Raumgrenze überschreiten warn|block (#427). Default warn. */
+  /** Staff: Raumgrenze überschreiten warn|block (#427). Default block (#455). */
   staffOverCapacityMode?: StaffOverCapacityMode;
 };
 

@@ -250,19 +250,19 @@ export default function StudioSettingsSection({ tenant, onSaved }: StudioSetting
           </label>
 
           <label className="dialog-field">
-            <FieldLabelWithTooltip tooltip="Gilt für Gastplätze und Wartelisten-Übernahme durch Kursleitung/Admin. Bis zur Raumgrenze (Kapazität + Überplanung) ohne Extra-Warnung. Darüber: Warnung mit Bestätigung oder harte Sperre.">
+            <FieldLabelWithTooltip tooltip="Gilt für Gastplätze und Wartelisten-Übernahme durch Kursleitung/Admin. Bis zur Raumgrenze (Kapazität + Überplanung) ohne Extra-Warnung. Darüber standardmäßig sperren; optional Warnung mit Bestätigung. Standard: streng.">
               Raumgrenze überschreiten (Staff)
             </FieldLabelWithTooltip>
             <select
               value={staffOverCapacityMode}
               onChange={(e) =>
-                setStaffOverCapacityMode(e.target.value === "block" ? "block" : "warn")
+                setStaffOverCapacityMode(e.target.value === "warn" ? "warn" : "block")
               }
               disabled={saving}
               aria-label="Raumgrenze überschreiten durch Staff"
             >
-              <option value="warn">Mit Warnung (Bestätigen möglich)</option>
               <option value="block">Streng (blockieren)</option>
+              <option value="warn">Mit Warnung (Bestätigen möglich)</option>
             </select>
           </label>
         </div>

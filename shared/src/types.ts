@@ -308,8 +308,8 @@ export interface TenantSettings {
   /**
    * Staff (Kursleitung/Admin): Verhalten beim Überschreiten der Raumgrenze (`maxCapacity`,
    * bzw. `capacity` ohne Überplanung) bei Gast ± und WL-Übernahme (#427).
-   * Default (undefined): `"warn"` — Warnung + bewusste Bestätigung.
-   * `"block"` — Aktion ablehnen.
+   * Default (undefined): `"block"` — Aktion ablehnen (#455).
+   * `"warn"` — Warnung + bewusste Bestätigung.
    */
   staffOverCapacityMode?: StaffOverCapacityMode;
 }

@@ -87,9 +87,9 @@ describe("courseCapacity", () => {
     expect(validateTermOccupancy(5, small, 2)).toMatch(/Maximal 6/);
   });
 
-  it("resolveStaffOverCapacityMode defaults to warn", () => {
-    expect(resolveStaffOverCapacityMode(undefined)).toBe("warn");
-    expect(resolveStaffOverCapacityMode({})).toBe("warn");
+  it("resolveStaffOverCapacityMode defaults to block (#455)", () => {
+    expect(resolveStaffOverCapacityMode(undefined)).toBe("block");
+    expect(resolveStaffOverCapacityMode({})).toBe("block");
     expect(resolveStaffOverCapacityMode({ staffOverCapacityMode: "block" })).toBe("block");
     expect(resolveStaffOverCapacityMode({ staffOverCapacityMode: "warn" })).toBe("warn");
   });

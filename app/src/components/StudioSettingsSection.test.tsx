@@ -161,7 +161,7 @@ describe("StudioSettingsSection", () => {
           instructorCanUseDelegation: true,
           delegationCanManageActiveParticipants: true,
           instructorCanDelegateStudioWide: false,
-          staffOverCapacityMode: "warn",
+          staffOverCapacityMode: "block",
         }),
       );
     });

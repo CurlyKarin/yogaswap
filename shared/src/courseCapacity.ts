@@ -2,13 +2,15 @@ import type { Course, StaffOverCapacityMode, TenantSettings } from "./types";
 
 export type CourseCapacityFields = Pick<Course, "capacity" | "overbookLimit">;
 
-/** Default #427: Warnung + Bestätigen, nicht hart blockieren. */
-export const DEFAULT_STAFF_OVER_CAPACITY_MODE: StaffOverCapacityMode = "warn";
+/** Default #455: hart blockieren; Studios können bewusst auf warn umstellen. */
+export const DEFAULT_STAFF_OVER_CAPACITY_MODE: StaffOverCapacityMode = "block";
 
 export function resolveStaffOverCapacityMode(
   settings?: TenantSettings,
 ): StaffOverCapacityMode {
-  return settings?.staffOverCapacityMode === "block" ? "block" : DEFAULT_STAFF_OVER_CAPACITY_MODE;
+  if (settings?.staffOverCapacityMode === "warn") return "warn";
+  if (settings?.staffOverCapacityMode === "block") return "block";
+  return DEFAULT_STAFF_OVER_CAPACITY_MODE;
 }
 
 /**

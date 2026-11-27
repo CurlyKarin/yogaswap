@@ -15,7 +15,7 @@ Anzeige in der Kurskarte: `Teilnehmer/regulär` und für Management optional `(+
 - **Tausch (Self-Service):** nur reguläre Plätze (`capacity`); Überplanungszone nicht als Ziel wählbar (App: `hasRegularBookingCapacity`, `getAvailableDates`; API: `createSwap` active).
 - **Raumgrenze / Admin-Zuweisung:** bis `maxCapacity` (API: `validateParticipantListSize`, App: `hasBookingCapacity`).
 - **Wartelisten-Nachrücken (automatisch):** nur wenn `participants.length < capacity` und noch unter `maxCapacity` (`canPromoteFromWaitlist`).
-- **Staff-Übernahme von der Warteliste (#427):** gezielt eine WL-Person am Termin → pending Swap aktivieren. Bis `maxCapacity` ohne Extra-Warnung; darüber Studio-Setting `staffOverCapacityMode` (`warn` Default / `block`). Auch im Cutoff mit Extra-Bestätigung.
+- **Staff-Übernahme von der Warteliste (#427):** gezielt eine WL-Person am Termin → pending Swap aktivieren. Bis `maxCapacity` ohne Extra-Warnung; darüber Studio-Setting `staffOverCapacityMode` (`block` Default / `warn`, #455). Auch im Cutoff mit Extra-Bestätigung.
 - **Ringtausch:** unverändert; Zieltermine unterliegen derselben Obergrenze.
 - **Teilnehmer (Stammdaten):** Admin-Mitglieder-Dialog begrenzt auf `maxCapacity`.
 

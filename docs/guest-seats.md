@@ -13,7 +13,7 @@
 - Gäste können **nicht** auf die Warteliste — nur `anonymousTrialCount` am Override.
 - **Wartelisten-Nachrücken:** nur wenn `participants.length < capacity` und effektive Belegung (Teilnehmer + Gäste) unter `capacity` liegt; Nachrücken über `processPromotions`.
 - **Self-Service-Tausch:** reguläre Vollheit und Raumgrenze berücksichtigen Gäste (`hasRegularBookingCapacity`, `validateTermOccupancy`).
-- **Staff Gast ± über `maxCapacity` (#427):** Studio-Setting `staffOverCapacityMode` (`warn` = Bestätigung, `block` = Sperre). Bis zur Raumgrenze keine Extra-Warnung nur wegen Überplanungszone. Soft-Überschreiten: Request-Flag `confirmExceedMaxCapacity` an `createOverride` / `updateOverride`. **Verringern** von Gästen ist immer erlaubt (auch wenn danach noch über der Grenze).
+- **Staff Gast ± über `maxCapacity` (#427/#455):** Studio-Setting `staffOverCapacityMode` (`block` Default = Sperre, `warn` = Bestätigung). Bis zur Raumgrenze keine Extra-Warnung nur wegen Überplanungszone. Soft-Überschreiten: Request-Flag `confirmExceedMaxCapacity` an `createOverride` / `updateOverride` (nur bei `warn`). **Verringern** von Gästen ist immer erlaubt (auch wenn danach noch über der Grenze).
 
 ## Abgrenzung
 

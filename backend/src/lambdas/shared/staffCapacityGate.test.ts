@@ -53,4 +53,18 @@ describe("gateStaffOccupancy", () => {
       expect(result.body.code).toBe("capacity_exceeded_blocked");
     }
   });
+
+  it("defaults to block when settings unset (#455)", () => {
+    const result = gateStaffOccupancy({
+      participantCount: 6,
+      course,
+      guestCount: 1,
+      confirmExceedMaxCapacity: true,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.statusCode).toBe(400);
+      expect(result.body.code).toBe("capacity_exceeded_blocked");
+    }
+  });
 });

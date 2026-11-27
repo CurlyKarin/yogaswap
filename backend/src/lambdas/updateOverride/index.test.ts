@@ -202,7 +202,7 @@ describe('updateOverride Lambda', () => {
     expect(call.ExpressionAttributeValues?.[':anonymousTrialCount']).toEqual({ N: '2' });
   });
 
-  it('should return 409 when guests exceed maxCapacity without confirm (#427)', async () => {
+  it('should return 400 when guests exceed maxCapacity with default block (#455)', async () => {
     dynamoMock
       .on(GetItemCommand)
       .resolvesOnce({
@@ -242,10 +242,10 @@ describe('updateOverride Lambda', () => {
 
     const result = await handler(event);
 
-    // Guest-only Soft-Exceed (#427): Default warn → 409 needs_confirm, kein hartes 400.
-    expect(result.statusCode).toBe(409);
+    // Guest-only Soft-Exceed (#427/#455): Default block → 400, kein Soft-Confirm.
+    expect(result.statusCode).toBe(400);
     const body = JSON.parse(result.body);
-    expect(body.code).toBe('capacity_exceeded_needs_confirm');
+    expect(body.code).toBe('capacity_exceeded_blocked');
     expect(body.error).toMatch(/Raumgrenze|Maximal 4|überschritten/i);
     expect(dynamoMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
   });
